@@ -181,23 +181,56 @@ async function logout() {
 async function initDrive() {
   if (!window.GDrive?.isConfigured()) return;
   try {
+    // init() restaura token do sessionStorage sem abrir nenhum popup
     driveOk = await GDrive.init();
     updateDriveBadge();
-    if (driveOk && user) await pullFromDrive();
-  } catch (e) { console.warn('Drive init:', e); }
+    if (driveOk && user) {
+      await pullFromDrive();
+    } else if (!driveOk && GDrive.isConfigured()) {
+      // Drive configurado mas não conectado — mostra banner sutil
+      _mostrarBannerDrive();
+    }
+  } catch (e) { console.warn('Drive init:', e.message); }
+}
+
+function _mostrarBannerDrive() {
+  // banner descartável no topo do conteúdo
+  const existing = $('drive-invite-banner');
+  if (existing) return;
+  const b = document.createElement('div');
+  b.id = 'drive-invite-banner';
+  b.style.cssText = 'background:#1B4332;color:#fff;font-size:13px;padding:10px 16px;'
+    + 'display:flex;align-items:center;gap:10px;flex-shrink:0;';
+  b.innerHTML = `
+    <span style="flex:1">☁️ Conecte o Google Drive para salvar seus dados na nuvem</span>
+    <button onclick="connectDrive()" style="background:var(--acc);color:var(--p);border:none;
+      border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
+      Conectar
+    </button>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
+      font-size:18px;cursor:pointer;line-height:1;padding:0 4px">×</button>`;
+  const content = $('app-content');
+  if (content) content.parentElement.insertBefore(b, content);
 }
 
 async function connectDrive() {
+  // remove banner se existir
+  $('drive-invite-banner')?.remove();
   setLoading(true);
   try {
     await GDrive.requestAccess();
     driveOk = true;
     updateDriveBadge();
     await pullFromDrive();
-    toast('Google Drive conectado!');
-    renderPerfil();
+    toast('✅ Google Drive conectado!');
+    if (viewAtual === 'perfil') renderPerfil();
   } catch (e) {
-    toast('Erro ao conectar Drive: ' + (e.message || e), 'err');
+    const msg = e.message || 'Erro desconhecido';
+    if (msg.includes('negado') || msg.includes('denied')) {
+      toast('Acesso negado — autorize o app no Google', 'err');
+    } else {
+      toast('Drive: ' + msg, 'err');
+    }
   } finally { setLoading(false); }
 }
 
@@ -227,22 +260,22 @@ async function pullFromDrive() {
     await DB.upsertFromDrive('notas',    remote.notas);
     await DB.upsertFromDrive('repasses', remote.repasses);
     await carregarDadosLocais();
-    if (viewAtual === 'notas')  renderNotas();
-    if (viewAtual === 'saldo')  renderSaldo();
-  } catch (e) { console.warn('Drive pull:', e); }
+    if (viewAtual === 'notas') renderNotas();
+    if (viewAtual === 'saldo') renderSaldo();
+  } catch (e) { console.warn('Drive pull:', e.message); }
 }
 
 async function syncToDrive() {
-  if (!driveOk || !user) return;
+  if (!driveOk || !user || !GDrive.isConnected()) return;
   syncBadge(true);
   try {
     await GDrive.syncNotas(user.id, notas, repasses);
-    syncBadge(false);
   } catch (e) {
-    syncBadge(false);
-    console.error('Drive sync:', e);
-    toast('Drive: ' + (e.message || 'Erro ao salvar'), 'err');
-  }
+    console.error('Drive sync:', e.message);
+    toast('Drive: ' + e.message, 'err');
+    // se expirou, marca como desconectado
+    if (!GDrive.isConnected()) { driveOk = false; updateDriveBadge(); }
+  } finally { syncBadge(false); }
 }
 
 function updateDriveBadge() {
@@ -250,9 +283,11 @@ function updateDriveBadge() {
   if (!badge) return;
   if (!window.GDrive?.isConfigured()) { badge.style.display = 'none'; return; }
   badge.style.display = 'flex';
-  const connected = driveOk && GDrive.isConnected();
-  $('drive-dot').style.background = connected ? '#74C69D' : '#E63946';
-  $('drive-txt').textContent       = connected ? 'Drive' : 'Drive off';
+  const ok  = driveOk && GDrive.isConnected();
+  const min = ok ? GDrive.minutosRestantes() : 0;
+  $('drive-dot').style.background = ok ? '#74C69D' : '#94A3B8';
+  $('drive-txt').textContent       = ok ? `Drive (${min}min)` : 'Drive';
+  badge.title = ok ? `Drive conectado — sessão expira em ${min} min` : 'Drive desconectado — clique para conectar';
 }
 
 /* ── Navegação ───────────────────────────────────────────── */
@@ -447,21 +482,30 @@ function renderPerfil() {
   <div class="perfil-actions">
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
-    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-      <p class="lbl" style="margin-bottom:8px">Google Drive</p>
-      ${driveOk && GDrive.isConnected()
-        ? `<p style="font-size:13px;color:var(--text2);margin-bottom:4px">✅ Conectado como:</p>
-           <p style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:10px;word-break:break-all">${esc(GDrive.getEmail()||'')}</p>
-           <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar conexão</button>
-           <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
-        : `<p style="font-size:13px;color:var(--text2);margin-bottom:10px">
-             Conecte sua conta Google para salvar notas, repasses e fotos automaticamente no Drive.
-           </p>
-           <button class="btn btn-primary btn-full" onclick="connectDrive()">
-             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z"/><path d="M12 8v4l3 3"/></svg>
-             Conectar Google Drive
-           </button>`
-      }
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
+      ${driveOk && GDrive.isConnected() ? `
+        <div style="background:#F0FBF4;border:1.5px solid #74C69D;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:9px;height:9px;border-radius:50%;background:#40916C;flex-shrink:0;display:inline-block"></span>
+            <span style="font-size:13px;font-weight:700;color:#1B4332">Conectado</span>
+            <span style="margin-left:auto;font-size:11px;color:#5A6E60">Expira em ${GDrive.minutosRestantes()} min</span>
+          </div>
+          <p style="font-size:12px;color:#5A6E60">Notas e fotos sincronizando automaticamente</p>
+        </div>
+        <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar acesso à pasta</button>
+        <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>
+      ` : `
+        <div style="background:#F8FAF9;border:1.5px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">☁️</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6">
+            Salve notas, repasses e fotos automaticamente no Google Drive compartilhado.
+          </p>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="connectDrive()">
+          Entrar com Google Drive
+        </button>
+      `}
     </div>
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
