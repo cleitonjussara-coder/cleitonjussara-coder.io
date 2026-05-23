@@ -477,9 +477,15 @@ select.inp{cursor:pointer}
   <div id="demo-banner">⚠️ Modo demonstração — dados salvos apenas neste dispositivo</div>
   <header id="app-header">
     <div class="hdr-logo">Petermann <span>App</span></div>
-    <div class="sync-indicator">
-      <div class="sync-dot online" id="sync-dot"></div>
-      <span id="sync-txt">online</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="sync-indicator">
+        <div class="sync-dot online" id="sync-dot"></div>
+        <span id="sync-txt">online</span>
+      </div>
+      <div id="drive-badge" class="sync-indicator" style="display:none;cursor:pointer" onclick="switchView('perfil')" title="Google Drive">
+        <span id="drive-dot" style="width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0"></span>
+        <span id="drive-txt" style="font-size:11px">Drive</span>
+      </div>
     </div>
   </header>
 
@@ -693,6 +699,7 @@ select.inp{cursor:pointer}
 <script src="js/ocr.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/gestor.js"></script>
+<script src="js/gdrive.js"></script>
 <script src="js/app.js"></script>
 
 <!-- Service Worker -->

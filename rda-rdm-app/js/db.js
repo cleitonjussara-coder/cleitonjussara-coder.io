@@ -146,6 +146,17 @@ window.DB = (() => {
     if (r) await _put('repasses', { ...r, deleted: true, synced: false, updated_at: new Date().toISOString() });
   }
 
+  /* ── Merge dados vindos do Drive (Drive vence se mais recente) */
+  async function upsertFromDrive(store, records) {
+    for (const rec of (records || [])) {
+      if (!rec.id) continue;
+      const local = await _get(store, rec.id);
+      if (!local || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
+        await _put(store, { ...rec, synced: true, foto_local: local?.foto_local ?? null });
+      }
+    }
+  }
+
   /* ── SYNC ────────────────────────────────────────────── */
   let _running = false;
 
@@ -245,6 +256,7 @@ window.DB = (() => {
     saveNota, getNotasUser, softDeleteNota,
     saveFotoLocal, getFotoLocal,
     saveRepasse, getRepassesUser, softDeleteRepasse,
+    upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta,
   };
 })();

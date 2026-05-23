@@ -13,6 +13,7 @@ let sb        = null;
 let user      = null;   // { id, email, nome, role, nucleo }
 let notas     = [];
 let repasses  = [];
+let driveOk   = false;
 let viewAtual = 'notas';
 let filMes    = new Date().getMonth() + 1;
 let filAno    = new Date().getFullYear();
@@ -78,6 +79,7 @@ async function init() {
     switchView('notas');
   }
 
+  initDrive();
   window.addEventListener('online',  () => { syncBadge(false); if(sb&&user) DB.sync(sb,user.id); });
   window.addEventListener('offline', () => syncBadge(false));
   window.addEventListener('db-synced', async e => {
@@ -173,6 +175,66 @@ async function logout() {
   if (sb) await sb.auth.signOut();
   user = null; notas = []; repasses = [];
   showTela('auth'); renderAuth();
+}
+
+/* ── Google Drive ────────────────────────────────────────── */
+async function initDrive() {
+  if (!window.GDrive?.isConfigured()) return;
+  try {
+    driveOk = await GDrive.init();
+    updateDriveBadge();
+    if (driveOk && user) await pullFromDrive();
+  } catch (e) { console.warn('Drive init:', e); }
+}
+
+async function connectDrive() {
+  setLoading(true);
+  try {
+    await GDrive.requestAccess();
+    driveOk = true;
+    updateDriveBadge();
+    await pullFromDrive();
+    toast('Google Drive conectado!');
+    renderPerfil();
+  } catch (e) {
+    toast('Erro ao conectar Drive: ' + (e.message || e), 'err');
+  } finally { setLoading(false); }
+}
+
+function disconnectDrive() {
+  GDrive.disconnect();
+  driveOk = false;
+  updateDriveBadge();
+  toast('Drive desconectado');
+  renderPerfil();
+}
+
+async function pullFromDrive() {
+  if (!driveOk || !user) return;
+  try {
+    const remote = await GDrive.loadNotas(user.id);
+    if (!remote) return;
+    await DB.upsertFromDrive('notas',    remote.notas);
+    await DB.upsertFromDrive('repasses', remote.repasses);
+    await carregarDadosLocais();
+    if (viewAtual === 'notas')  renderNotas();
+    if (viewAtual === 'saldo')  renderSaldo();
+  } catch (e) { console.warn('Drive pull:', e); }
+}
+
+async function syncToDrive() {
+  if (!driveOk || !user) return;
+  try { await GDrive.syncNotas(user.id, notas, repasses); } catch (e) { console.warn('Drive sync:', e); }
+}
+
+function updateDriveBadge() {
+  const badge = $('drive-badge');
+  if (!badge) return;
+  if (!window.GDrive?.isConfigured()) { badge.style.display = 'none'; return; }
+  badge.style.display = 'flex';
+  const connected = driveOk && GDrive.isConnected();
+  $('drive-dot').style.background = connected ? '#74C69D' : '#E63946';
+  $('drive-txt').textContent       = connected ? 'Drive' : 'Drive off';
 }
 
 /* ── Navegação ───────────────────────────────────────────── */
@@ -367,6 +429,16 @@ function renderPerfil() {
   <div class="perfil-actions">
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
+    ${window.GDrive?.isConfigured() ? `
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+      <p class="lbl" style="margin-bottom:8px">Google Drive</p>
+      ${driveOk && GDrive.isConnected()
+        ? `<p style="font-size:13px;color:var(--text2);margin-bottom:8px">✅ Conectado — dados sincronizados automaticamente</p>
+           <button class="btn btn-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
+        : `<p style="font-size:13px;color:var(--text2);margin-bottom:8px">Conecte para salvar notas e fotos no seu Google Drive.</p>
+           <button class="btn btn-primary btn-full" onclick="connectDrive()">🔗 Conectar Google Drive</button>`
+      }
+    </div>` : ''}
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
 }
@@ -584,11 +656,15 @@ async function salvarNota() {
   setLoading(true);
   try {
     const saved = await DB.saveNota(payload, user.id);
-    if (fotoBlob) await DB.saveFotoLocal(saved.id, fotoBlob);
+    if (fotoBlob) {
+      await DB.saveFotoLocal(saved.id, fotoBlob);
+      GDrive.uploadFoto(fotoBlob, saved.id).catch(() => {});
+    }
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
     toast('Nota salva!');
+    syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
   } finally { setLoading(false); }
 }
@@ -604,6 +680,7 @@ async function excluirNota(id) {
   await DB.softDeleteNota(id);
   await carregarDadosLocais();
   renderNotas();
+  syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
   toast('Nota excluída');
 }
@@ -611,14 +688,13 @@ async function excluirNota(id) {
 async function verFoto(id) {
   const n = notas.find(x=>x.id===id);
   if (!n) return;
-  // tenta foto local primeiro
+  // 1. foto local (IndexedDB)
   const local = await DB.getFotoLocal(id);
-  if (local?.blob) {
-    const url = URL.createObjectURL(local.blob);
-    window.open(url, '_blank');
-    return;
-  }
-  // tenta signed URL do Supabase
+  if (local?.blob) { window.open(URL.createObjectURL(local.blob), '_blank'); return; }
+  // 2. Google Drive
+  const driveUrl = GDrive.getFotoUrl?.(id);
+  if (driveUrl) { window.open(driveUrl, '_blank'); return; }
+  // 3. Supabase Storage
   if (n.foto_path && sb) {
     const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
     if (data?.signedUrl) window.open(data.signedUrl, '_blank');
@@ -648,6 +724,7 @@ async function salvarRepasse() {
   await carregarDadosLocais();
   renderSaldo();
   toast('Repasse lançado!');
+  syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
 }
 
@@ -656,6 +733,7 @@ async function excluirRepasse(id) {
   await DB.softDeleteRepasse(id);
   await carregarDadosLocais();
   renderSaldo();
+  syncToDrive().catch(() => {});
   toast('Repasse excluído');
 }
 
