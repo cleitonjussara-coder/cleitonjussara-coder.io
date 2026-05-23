@@ -212,6 +212,16 @@ function disconnectDrive() {
   renderPerfil();
 }
 
+async function testarDrive() {
+  setLoading(true);
+  try {
+    const ok = await GDrive.testarConexao();
+    toast(ok ? '✅ Pasta acessível! Drive funcionando.' : '❌ Pasta não encontrada — verifique o compartilhamento.', ok ? 'ok' : 'err');
+  } catch (e) {
+    toast('Erro: ' + e.message, 'err');
+  } finally { setLoading(false); }
+}
+
 async function pullFromDrive() {
   if (!driveOk || !user) return;
   try {
@@ -227,7 +237,15 @@ async function pullFromDrive() {
 
 async function syncToDrive() {
   if (!driveOk || !user) return;
-  try { await GDrive.syncNotas(user.id, notas, repasses); } catch (e) { console.warn('Drive sync:', e); }
+  syncBadge(true);
+  try {
+    await GDrive.syncNotas(user.id, notas, repasses);
+    syncBadge(false);
+  } catch (e) {
+    syncBadge(false);
+    console.error('Drive sync:', e);
+    toast('Drive: ' + (e.message || 'Erro ao salvar'), 'err');
+  }
 }
 
 function updateDriveBadge() {
@@ -437,7 +455,8 @@ function renderPerfil() {
       ${driveOk && GDrive.isConnected()
         ? `<p style="font-size:13px;color:var(--text2);margin-bottom:4px">✅ Conectado como:</p>
            <p style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:10px;word-break:break-all">${esc(GDrive.getEmail()||'')}</p>
-           <button class="btn btn-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
+           <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar conexão</button>
+           <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
         : `<p style="font-size:13px;color:var(--text2);margin-bottom:10px">
              Faça upload do arquivo <strong>JSON da Conta de Serviço</strong> do Google para sincronizar notas e fotos no Drive.
            </p>
@@ -666,7 +685,10 @@ async function salvarNota() {
     const saved = await DB.saveNota(payload, user.id);
     if (fotoBlob) {
       await DB.saveFotoLocal(saved.id, fotoBlob);
-      GDrive.uploadFoto(fotoBlob, saved.id).catch(() => {});
+      // upload da foto com todos os dados da nota como metadados no Drive
+      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id })
+        .then(() => toast('Foto salva no Drive ☁️'))
+        .catch(e => toast('Drive foto: ' + e.message, 'err'));
     }
     fecharFormNota();
     await carregarDadosLocais();
