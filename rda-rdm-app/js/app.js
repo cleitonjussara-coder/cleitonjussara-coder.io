@@ -187,17 +187,20 @@ async function initDrive() {
   } catch (e) { console.warn('Drive init:', e); }
 }
 
-async function connectDrive() {
+async function onUploadSA(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
   setLoading(true);
   try {
-    await GDrive.requestAccess();
+    await GDrive.loadFromFile(file);
     driveOk = true;
     updateDriveBadge();
     await pullFromDrive();
     toast('Google Drive conectado!');
     renderPerfil();
-  } catch (e) {
-    toast('Erro ao conectar Drive: ' + (e.message || e), 'err');
+  } catch (err) {
+    toast('Erro: ' + (err.message || err), 'err');
   } finally { setLoading(false); }
 }
 
@@ -429,16 +432,21 @@ function renderPerfil() {
   <div class="perfil-actions">
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
-    ${window.GDrive?.isConfigured() ? `
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">Google Drive</p>
       ${driveOk && GDrive.isConnected()
-        ? `<p style="font-size:13px;color:var(--text2);margin-bottom:8px">✅ Conectado — dados sincronizados automaticamente</p>
+        ? `<p style="font-size:13px;color:var(--text2);margin-bottom:4px">✅ Conectado como:</p>
+           <p style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:10px;word-break:break-all">${esc(GDrive.getEmail()||'')}</p>
            <button class="btn btn-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
-        : `<p style="font-size:13px;color:var(--text2);margin-bottom:8px">Conecte para salvar notas e fotos no seu Google Drive.</p>
-           <button class="btn btn-primary btn-full" onclick="connectDrive()">🔗 Conectar Google Drive</button>`
+        : `<p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+             Faça upload do arquivo <strong>JSON da Conta de Serviço</strong> do Google para sincronizar notas e fotos no Drive.
+           </p>
+           <input type="file" id="f-sa-json" accept=".json,application/json" style="display:none" onchange="onUploadSA(event)">
+           <button class="btn btn-primary btn-full" onclick="$('f-sa-json').click()">
+             ☁️ Upload JSON da Conta de Serviço
+           </button>`
       }
-    </div>` : ''}
+    </div>
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
 }

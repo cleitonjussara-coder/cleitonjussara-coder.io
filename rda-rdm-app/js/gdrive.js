@@ -1,117 +1,120 @@
 'use strict';
 /* ─────────────────────────────────────────────────────────────
-   gdrive.js — Google Drive como banco de dados (Petermann App)
+   gdrive.js — Google Drive via Conta de Serviço (Service Account)
 
-   CONFIGURAÇÃO (Google Console → console.cloud.google.com):
-     1. Ative: APIs & Services → Enable APIs → "Google Drive API"
-     2. Crie: APIs & Services → Credentials → OAuth 2.0 Client ID
-        • Application type: Web application
-        • Authorized JavaScript origins:
-            https://cleitonjussara-coder.github.io
-            http://localhost:8080  (para testes locais)
-     3. Cole o Client ID abaixo (NÃO a API Key — não serve para Drive)
+   COMO USAR:
+   1. Google Console → IAM & Admin → Contas de Serviço
+   2. Crie uma conta → Gerar chave → JSON → Baixar arquivo
+   3. Ative Google Drive API no projeto
+   4. O usuário faz upload desse JSON no app (aba Perfil)
+   5. O app assina um JWT e troca por access token automaticamente
+   6. Token é renovado silenciosamente a cada hora
 ───────────────────────────────────────────────────────────── */
 window.GDrive = (() => {
-  const GDRIVE_CLIENT_ID = 'SEU_CLIENT_ID_AQUI.apps.googleusercontent.com';
   const SCOPE       = 'https://www.googleapis.com/auth/drive.file';
-  const FOLDER_NAME = 'Petermann App';
+  const TOKEN_URI   = 'https://oauth2.googleapis.com/token';
   const FILES_API   = 'https://www.googleapis.com/drive/v3/files';
   const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3/files';
+  const FOLDER_NAME = 'Petermann App';
+  const LS_KEY      = 'gdrive_sa_v1'; // chave no localStorage
 
-  let tokenClient = null;
+  let creds       = null;  // JSON da conta de serviço
   let accessToken = null;
   let tokenExpiry = 0;
   let folderId    = null;
-  let fileIndex   = {}; // filename → fileId
+  let fileIndex   = {};    // filename → fileId
 
-  /* ── Carrega Google Identity Services ─────────────────── */
-  function _loadGIS() {
-    if (window.google?.accounts?.oauth2) return Promise.resolve();
-    return new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src     = 'https://accounts.google.com/gsi/client';
-      s.onload  = res;
-      s.onerror = () => rej(new Error('Falha ao carregar Google Identity Services'));
-      document.head.appendChild(s);
-    });
+  /* ── Upload do JSON pelo usuário ────────────────────── */
+  async function loadFromFile(file) {
+    const text = await file.text();
+    let json;
+    try { json = JSON.parse(text); } catch (_) { throw new Error('Arquivo JSON inválido.'); }
+    if (json.type !== 'service_account') throw new Error('O arquivo não é uma Conta de Serviço do Google.');
+    if (!json.private_key || !json.client_email) throw new Error('Arquivo incompleto — private_key ou client_email ausente.');
+    creds = json;
+    localStorage.setItem(LS_KEY, text);
+    await _authenticate();
+    await _ensureFolder();
+    return true;
   }
 
-  /* ── Inicialização: tenta restaurar sessão salva ───────── */
+  /* ── Restaurar de localStorage ao abrir o app ───────── */
   async function init() {
-    if (!isConfigured()) return false;
-    try { await _loadGIS(); } catch (e) { console.warn('GDrive: GIS não carregou', e); return false; }
+    const saved = localStorage.getItem(LS_KEY);
+    if (!saved) return false;
+    try {
+      creds = JSON.parse(saved);
+      await _authenticate();
+      await _ensureFolder();
+      return true;
+    } catch (e) {
+      console.warn('GDrive init falhou:', e.message);
+      return false;  // não remove — pode ser erro de rede
+    }
+  }
 
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GDRIVE_CLIENT_ID,
+  /* ── JWT → Access Token (Google OAuth2) ─────────────── */
+  async function _authenticate() {
+    if (isConnected()) return;
+    const now  = Math.floor(Date.now() / 1000);
+    const head = _b64url(JSON.stringify({ alg:'RS256', typ:'JWT', kid: creds.private_key_id }));
+    const body = _b64url(JSON.stringify({
+      iss: creds.client_email,
       scope: SCOPE,
-      callback: () => {},
+      aud: TOKEN_URI,
+      iat: now,
+      exp: now + 3600,
+    }));
+    const unsigned = `${head}.${body}`;
+    const key = await _importKey(creds.private_key);
+    const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
+    const jwt = `${unsigned}.${_b64urlBytes(sig)}`;
+
+    const res = await fetch(TOKEN_URI, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt,
+      }),
     });
-
-    const saved = sessionStorage.getItem('gdrive_tok');
-    if (saved) {
-      try {
-        const { tok, exp } = JSON.parse(saved);
-        if (Date.now() < exp) {
-          accessToken = tok;
-          tokenExpiry = exp;
-          await _ensureFolder();
-          return true;
-        }
-      } catch (_) {}
-      sessionStorage.removeItem('gdrive_tok');
-      // Token expirou — tenta refresh silencioso
-      try { await _silentRefresh(); return true; } catch (_) {}
-    }
-    return false;
+    const data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+    accessToken = data.access_token;
+    tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
   }
 
-  /* ── Refresh silencioso (sem popup se já consentido) ───── */
-  function _silentRefresh() {
-    return new Promise((resolve, reject) => {
-      tokenClient.callback = async resp => {
-        if (resp.error) { reject(new Error(resp.error)); return; }
-        _saveToken(resp);
-        try { await _ensureFolder(); resolve(); } catch (e) { reject(e); }
-      };
-      tokenClient.requestAccessToken({ prompt: '' });
-    });
+  /* ── Importar chave privada PEM (PKCS8) ─────────────── */
+  async function _importKey(pem) {
+    const b64  = pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
+    const bin  = atob(b64);
+    const buf  = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return crypto.subtle.importKey(
+      'pkcs8', buf.buffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false, ['sign']
+    );
   }
 
-  /* ── Solicita acesso (popup Google consentimento) ──────── */
-  function requestAccess() {
-    return new Promise((resolve, reject) => {
-      tokenClient.callback = async resp => {
-        if (resp.error) { reject(new Error(resp.error_description || resp.error)); return; }
-        _saveToken(resp);
-        try { await _ensureFolder(); resolve(true); } catch (e) { reject(e); }
-      };
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    });
+  /* ── Helpers base64url ──────────────────────────────── */
+  const _b64url      = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const _b64urlBytes = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+
+  /* ── Auto-refresh antes de qualquer chamada ─────────── */
+  async function _ensureToken() {
+    if (!isConnected()) await _authenticate();
   }
 
-  function _saveToken(resp) {
-    accessToken = resp.access_token;
-    tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-    sessionStorage.setItem('gdrive_tok', JSON.stringify({ tok: accessToken, exp: tokenExpiry }));
-  }
-
-  /* ── Desconectar ────────────────────────────────────────── */
-  function disconnect() {
-    if (accessToken && window.google?.accounts?.oauth2) {
-      google.accounts.oauth2.revoke(accessToken, () => {});
-    }
-    accessToken = null; tokenExpiry = 0; folderId = null; fileIndex = {};
-    sessionStorage.removeItem('gdrive_tok');
-  }
-
-  /* ── Fetch autenticado ──────────────────────────────────── */
+  /* ── Fetch autenticado ──────────────────────────────── */
   async function _req(url, opts = {}) {
+    await _ensureToken();
     const headers = { Authorization: `Bearer ${accessToken}`, ...(opts.headers || {}) };
     if (opts.json) headers['Content-Type'] = 'application/json';
     const res = await fetch(url, {
-      method : opts.method || 'GET',
+      method: opts.method || 'GET',
       headers,
-      body   : opts.json ? JSON.stringify(opts.json) : (opts.body ?? undefined),
+      body: opts.json ? JSON.stringify(opts.json) : (opts.body ?? undefined),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -121,7 +124,7 @@ window.GDrive = (() => {
     return res.headers.get('content-type')?.includes('json') ? res.json() : res;
   }
 
-  /* ── Pasta "Petermann App" ──────────────────────────────── */
+  /* ── Pasta "Petermann App" ──────────────────────────── */
   async function _ensureFolder() {
     const q = `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
     const { files } = await _req(`${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)`);
@@ -130,7 +133,7 @@ window.GDrive = (() => {
     } else {
       const f = await _req(`${FILES_API}?fields=id`, {
         method: 'POST',
-        json  : { name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
+        json: { name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
       });
       folderId = f.id;
     }
@@ -139,15 +142,14 @@ window.GDrive = (() => {
 
   async function _refreshIndex() {
     const q = `'${folderId}' in parents and trashed=false`;
-    const { files } = await _req(
-      `${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1000`
-    );
+    const { files } = await _req(`${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1000`);
     fileIndex = {};
     (files || []).forEach(f => { fileIndex[f.name] = f.id; });
   }
 
-  /* ── Salvar JSON no Drive ───────────────────────────────── */
+  /* ── Salvar JSON no Drive ───────────────────────────── */
   async function saveJSON(filename, data) {
+    await _ensureToken();
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     if (fileIndex[filename]) {
       await fetch(`${UPLOAD_API}/${fileIndex[filename]}?uploadType=media`, {
@@ -157,9 +159,7 @@ window.GDrive = (() => {
       });
     } else {
       const form = new FormData();
-      form.append('metadata', new Blob(
-        [JSON.stringify({ name: filename, parents: [folderId] })], { type: 'application/json' }
-      ));
+      form.append('metadata', new Blob([JSON.stringify({ name: filename, parents: [folderId] })], { type: 'application/json' }));
       form.append('file', blob);
       const res = await fetch(`${UPLOAD_API}?uploadType=multipart&fields=id`, {
         method : 'POST',
@@ -171,25 +171,27 @@ window.GDrive = (() => {
     }
   }
 
-  /* ── Ler JSON do Drive ──────────────────────────────────── */
+  /* ── Ler JSON do Drive ──────────────────────────────── */
   async function loadJSON(filename) {
     if (!fileIndex[filename]) return null;
+    await _ensureToken();
     const res = await fetch(`${FILES_API}/${fileIndex[filename]}?alt=media`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     return res.ok ? res.json() : null;
   }
 
-  /* ── Upload foto ────────────────────────────────────────── */
+  /* ── Upload de foto ─────────────────────────────────── */
   async function uploadFoto(blob, notaId) {
     if (!isConnected()) return null;
+    await _ensureToken();
     const filename   = `foto-${notaId}.jpg`;
     const existingId = fileIndex[filename];
-    const meta       = existingId ? {} : { name: filename, parents: [folderId] };
-    const form       = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(
+      existingId ? {} : { name: filename, parents: [folderId] }
+    )], { type: 'application/json' }));
     form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: 'image/jpeg' }));
-
     const url = existingId
       ? `${UPLOAD_API}/${existingId}?uploadType=multipart&fields=id`
       : `${UPLOAD_API}?uploadType=multipart&fields=id`;
@@ -203,23 +205,23 @@ window.GDrive = (() => {
     return fileIndex[filename];
   }
 
-  /* ── URL da foto (para visualização) ───────────────────── */
+  /* ── URL de foto para visualização ─────────────────── */
   function getFotoUrl(notaId) {
     const fid = fileIndex[`foto-${notaId}.jpg`];
     if (!fid || !isConnected()) return null;
     return `${FILES_API}/${fid}?alt=media&access_token=${encodeURIComponent(accessToken)}`;
   }
 
-  /* ── Sync completo notas + repasses ────────────────────── */
-  async function syncNotas(userId, ns, rs) {
+  /* ── Sync completo (notas + repasses) ───────────────── */
+  async function syncNotas(userId, notas, repasses) {
     if (!isConnected()) return;
     await Promise.all([
-      saveJSON(`notas-${userId}.json`,    ns),
-      saveJSON(`repasses-${userId}.json`, rs),
+      saveJSON(`notas-${userId}.json`,    notas),
+      saveJSON(`repasses-${userId}.json`, repasses),
     ]);
   }
 
-  /* ── Carregar dados do Drive ────────────────────────────── */
+  /* ── Carregar dados do Drive ────────────────────────── */
   async function loadNotas(userId) {
     if (!isConnected()) return null;
     const [ns, rs] = await Promise.all([
@@ -229,13 +231,20 @@ window.GDrive = (() => {
     return { notas: ns || [], repasses: rs || [] };
   }
 
+  /* ── Desconectar / remover credenciais ──────────────── */
+  function disconnect() {
+    accessToken = null; tokenExpiry = 0; folderId = null; fileIndex = {}; creds = null;
+    localStorage.removeItem(LS_KEY);
+  }
+
   function isConnected()  { return !!accessToken && Date.now() < tokenExpiry; }
-  function isConfigured() { return !GDRIVE_CLIENT_ID.includes('SEU_CLIENT'); }
+  function isConfigured() { return !!creds || !!localStorage.getItem(LS_KEY); }
+  function getEmail()     { return creds?.client_email ?? JSON.parse(localStorage.getItem(LS_KEY) || '{}').client_email ?? null; }
 
   return {
-    init, requestAccess, disconnect,
+    init, loadFromFile, disconnect,
     syncNotas, loadNotas,
     uploadFoto, getFotoUrl,
-    isConnected, isConfigured,
+    isConnected, isConfigured, getEmail,
   };
 })();
