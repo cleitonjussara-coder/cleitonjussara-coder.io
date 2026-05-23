@@ -215,10 +215,10 @@ function disconnectDrive() {
 async function testarDrive() {
   setLoading(true);
   try {
-    const ok = await GDrive.testarConexao();
-    toast(ok ? '✅ Pasta acessível! Drive funcionando.' : '❌ Pasta não encontrada — verifique o compartilhamento.', ok ? 'ok' : 'err');
+    const r = await GDrive.testarConexao();
+    toast(`✅ Drive OK — pasta "${r.nome}" acessível!`);
   } catch (e) {
-    toast('Erro: ' + e.message, 'err');
+    toast(e.message, 'err');
   } finally { setLoading(false); }
 }
 

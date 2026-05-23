@@ -115,8 +115,14 @@ window.GDrive = (() => {
       body: opts.json ? JSON.stringify(opts.json) : (opts.body ?? undefined),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Drive ${res.status} ${res.statusText}`);
+      const body = await res.json().catch(() => ({}));
+      const reason  = body.error?.errors?.[0]?.reason || '';
+      const message = body.error?.message || `Drive ${res.status}`;
+      const hint =
+        res.status === 403 && reason === 'notFound'      ? ' — pasta não encontrada' :
+        res.status === 403                                ? ' — verifique: 1) Drive API ativada no Console  2) Pasta compartilhada com a conta de serviço como Editor' :
+        res.status === 401                                ? ' — token inválido, faça upload do JSON novamente' : '';
+      throw new Error(message + hint);
     }
     if (res.status === 204) return null;
     return res.headers.get('content-type')?.includes('json') ? res.json() : res;
@@ -272,8 +278,20 @@ window.GDrive = (() => {
   /* ── Testar conexão ─────────────────────────────────── */
   async function testarConexao() {
     await _ensureToken();
-    const res = await _req(`${FILES_API}/${FOLDER_ID}?fields=id,name`);
-    return res?.id === FOLDER_ID;
+    // 1. verifica se o token é válido
+    const me = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + accessToken);
+    if (!me.ok) throw new Error('Token inválido — faça upload do JSON novamente');
+    // 2. verifica acesso à pasta
+    const res = await fetch(`${FILES_API}/${FOLDER_ID}?fields=id,name,capabilities`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 404) throw new Error('Pasta não encontrada — verifique o ID da pasta');
+    if (res.status === 403) throw new Error('Sem permissão na pasta — compartilhe com a conta de serviço como Editor');
+    if (!res.ok) throw new Error(`Erro ${res.status} ao acessar pasta`);
+    const data = await res.json();
+    const podeEditar = data.capabilities?.canAddChildren;
+    if (!podeEditar) throw new Error('Conta de serviço não tem permissão de Editor na pasta');
+    return { ok: true, nome: data.name };
   }
 
   function disconnect() {
