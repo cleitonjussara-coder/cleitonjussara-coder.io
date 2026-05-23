@@ -11,11 +11,11 @@
    6. Token é renovado silenciosamente a cada hora
 ───────────────────────────────────────────────────────────── */
 window.GDrive = (() => {
-  const SCOPE       = 'https://www.googleapis.com/auth/drive.file';
+  const SCOPE       = 'https://www.googleapis.com/auth/drive';
   const TOKEN_URI   = 'https://oauth2.googleapis.com/token';
   const FILES_API   = 'https://www.googleapis.com/drive/v3/files';
   const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3/files';
-  const FOLDER_NAME = 'Petermann App';
+  const FOLDER_ID   = '14vXW3SJqPp3fOhW4p4xOU7Y5AB_sWi6L'; // pasta fixa no Drive
   const LS_KEY      = 'gdrive_sa_v1'; // chave no localStorage
 
   let creds       = null;  // JSON da conta de serviço
@@ -34,7 +34,8 @@ window.GDrive = (() => {
     creds = json;
     localStorage.setItem(LS_KEY, text);
     await _authenticate();
-    await _ensureFolder();
+    folderId = FOLDER_ID;
+    await _refreshIndex();
     return true;
   }
 
@@ -45,11 +46,12 @@ window.GDrive = (() => {
     try {
       creds = JSON.parse(saved);
       await _authenticate();
-      await _ensureFolder();
+      folderId = FOLDER_ID;
+      await _refreshIndex();
       return true;
     } catch (e) {
       console.warn('GDrive init falhou:', e.message);
-      return false;  // não remove — pode ser erro de rede
+      return false;
     }
   }
 
@@ -122,22 +124,6 @@ window.GDrive = (() => {
     }
     if (res.status === 204) return null;
     return res.headers.get('content-type')?.includes('json') ? res.json() : res;
-  }
-
-  /* ── Pasta "Petermann App" ──────────────────────────── */
-  async function _ensureFolder() {
-    const q = `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-    const { files } = await _req(`${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)`);
-    if (files?.length) {
-      folderId = files[0].id;
-    } else {
-      const f = await _req(`${FILES_API}?fields=id`, {
-        method: 'POST',
-        json: { name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
-      });
-      folderId = f.id;
-    }
-    await _refreshIndex();
   }
 
   async function _refreshIndex() {
