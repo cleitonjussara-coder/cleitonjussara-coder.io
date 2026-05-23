@@ -153,7 +153,7 @@ window.GDrive = (() => {
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: blob,
       });
-      if (!res.ok) throw new Error(`Drive: falha ao atualizar ${filename} (${res.status})`);
+      if (!res.ok) await _throwUploadError(res, filename);
     } else {
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify({
@@ -165,10 +165,20 @@ window.GDrive = (() => {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: form,
       });
-      if (!res.ok) throw new Error(`Drive: falha ao criar ${filename} (${res.status})`);
+      if (!res.ok) await _throwUploadError(res, filename);
       const { id } = await res.json();
       fileIndex[filename] = id;
     }
+  }
+
+  async function _throwUploadError(res, filename) {
+    const body   = await res.json().catch(() => ({}));
+    const msg    = body.error?.message || `HTTP ${res.status}`;
+    const reason = body.error?.errors?.[0]?.reason || '';
+    const dica   = res.status === 403
+      ? '\n→ Pasta não compartilhada como Editor com a conta de serviço'
+      : '';
+    throw new Error(`Drive (${filename}): ${msg}${dica} [${reason}]`);
   }
 
   async function loadJSON(filename) {
