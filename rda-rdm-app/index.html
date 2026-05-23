@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2D6A4F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Petermann">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.svg">
+  <title>Petermann</title>
+<style>
+/* ─────────────────────────────────────────────
+   RESET + VARIÁVEIS
+──────────────────────────────────────────────*/
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --primary:     #2D6A4F;
+  --primary-l:   #40916C;
+  --primary-d:   #1B4332;
+  --secondary:   #74C69D;
+  --accent:      #F4A261;
+  --accent-d:    #E76F51;
+  --danger:      #D62828;
+  --warning:     #FFB703;
+  --bg:          #F0F4F1;
+  --surface:     #FFFFFF;
+  --surface2:    #F8FAF9;
+  --text:        #1C2B20;
+  --text2:       #5A6E60;
+  --border:      #D4E2D8;
+  --shadow:      0 2px 10px rgba(0,0,0,.08);
+  --radius:      12px;
+  --radius-sm:   8px;
+  --nav-h:       60px;
+  --hdr-h:       52px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     color:var(--text);font-size:15px;-webkit-tap-highlight-color:transparent}
+
+/* ─────────────────────────────────────────────
+   TELAS
+──────────────────────────────────────────────*/
+.screen{position:absolute;inset:0}
+
+/* ─────────────────────────────────────────────
+   AUTH
+──────────────────────────────────────────────*/
+#auth-screen{display:flex;align-items:center;justify-content:center;background:var(--primary-d)}
+.auth-wrap{width:100%;max-width:380px;padding:24px}
+.auth-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:32px}
+.auth-logo svg{width:64px;height:64px}
+.auth-logo-text{color:#fff;font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:10px}
+.auth-logo-text span{color:var(--secondary)}
+.auth-title{color:#fff;font-size:20px;font-weight:700;margin-bottom:18px}
+#auth-body{display:flex;flex-direction:column;gap:10px}
+#auth-body .inp{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff}
+#auth-body .inp::placeholder{color:rgba(255,255,255,.5)}
+.auth-switch{color:rgba(255,255,255,.7);font-size:13.5px;margin-top:6px;text-align:center}
+.auth-switch a{color:var(--secondary);font-weight:600;cursor:pointer;text-decoration:underline}
+
+/* ─────────────────────────────────────────────
+   APP SHELL
+──────────────────────────────────────────────*/
+#app-screen{display:flex;flex-direction:column}
+
+/* Header */
+#app-header{
+  height:var(--hdr-h);flex-shrink:0;
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;z-index:10;
+  padding-top:env(safe-area-inset-top,0)
+}
+.hdr-logo{font-weight:800;font-size:18px;letter-spacing:-.3px}
+.hdr-logo span{color:var(--secondary)}
+.sync-indicator{display:flex;align-items:center;gap:5px;font-size:12px;opacity:.9}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0}
+.sync-dot.online{background:#74C69D}
+.sync-dot.offline{background:#E63946}
+.sync-dot.syncing{background:var(--warning);animation:pulse 1s infinite}
+
+/* Content */
+#app-content{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding:0 0 calc(var(--nav-h) + var(--safe-bottom) + 8px);
+  background:var(--bg);
+}
+#app-content::-webkit-scrollbar{display:none}
+
+/* Bottom nav */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(var(--nav-h) + var(--safe-bottom));
+  padding-bottom:var(--safe-bottom);
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  display:flex;align-items:center;
+  box-shadow:0 -2px 12px rgba(0,0,0,.06);
+  z-index:20;
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;border:none;background:transparent;cursor:pointer;
+  color:var(--text2);font-size:11px;font-weight:500;padding:6px 2px;
+  transition:color .15s;height:100%;
+}
+.nav-btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+.nav-btn.active{color:var(--primary);font-weight:700}
+.nav-btn.active svg{stroke:var(--primary)}
+.nav-capture{
+  flex:0 0 60px;
+}
+.nav-capture-inner{
+  width:52px;height:52px;border-radius:50%;
+  background:var(--primary);color:#fff;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 14px rgba(45,106,79,.5);
+  font-size:26px;line-height:1;
+  transition:background .15s,transform .1s;
+}
+.nav-capture-inner:active{transform:scale(.94);background:var(--primary-d)}
+
+/* Demo banner */
+#demo-banner{
+  display:none;background:#F59E0B;color:#1C2B20;
+  text-align:center;font-size:12px;font-weight:600;padding:6px 12px;
+  flex-shrink:0;
+}
+
+/* ─────────────────────────────────────────────
+   COMPONENTES BASE
+──────────────────────────────────────────────*/
+.inp{
+  display:block;width:100%;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  padding:10px 12px;font-size:15px;color:var(--text);font-family:inherit;
+  outline:none;transition:border-color .15s;
+}
+.inp:focus{border-color:var(--primary)}
+.inp::placeholder{color:#9BB3A0}
+textarea.inp{resize:none}
+select.inp{cursor:pointer}
+.lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+     color:var(--text2);margin-bottom:4px;display:block}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 16px;border-radius:var(--radius-sm);border:1.5px solid transparent;
+  font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:all .15s;user-select:none;
+}
+.btn-full{width:100%}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:active{background:var(--primary-d)}
+.btn-outline{background:transparent;color:var(--primary);border-color:var(--primary)}
+.btn-outline:active{background:#e8f5ee}
+.btn-danger-outline{background:transparent;color:var(--danger);border-color:var(--danger)}
+.btn-icon-sm{background:none;border:none;cursor:pointer;font-size:16px;padding:4px 5px;
+             border-radius:6px;transition:background .1s;line-height:1}
+.btn-icon-sm:active{background:var(--bg)}
+.btn-icon-sm.danger{color:var(--danger)}
+
+/* ─────────────────────────────────────────────
+   VIEWS — cabeçalho comum
+──────────────────────────────────────────────*/
+.page-hd{
+  padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;
+  gap:8px;flex-wrap:wrap;
+}
+.page-hd h2{font-size:20px;font-weight:800;color:var(--primary-d)}
+
+.mes-nav{display:flex;align-items:center;gap:10px}
+.mes-label{font-size:16px;font-weight:700;min-width:90px;text-align:center}
+.btn-mes-nav{background:none;border:none;font-size:22px;cursor:pointer;color:var(--primary);
+             padding:2px 4px;border-radius:6px;line-height:1}
+.btn-mes-nav:active{background:var(--bg)}
+
+.fil-tipo{display:flex;gap:6px}
+.chip{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;
+      border:1.5px solid var(--border);background:var(--surface);cursor:pointer;color:var(--text2)}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+/* ─────────────────────────────────────────────
+   LISTA DE NOTAS
+──────────────────────────────────────────────*/
+.notas-list{display:flex;flex-direction:column;gap:10px;padding:4px 14px 16px}
+.nota-card{
+  background:var(--surface);border-radius:var(--radius);
+  box-shadow:var(--shadow);overflow:hidden;
+  border-left:4px solid var(--border);
+}
+.nota-card[data-tipo="RDA"]{border-left-color:#40916C}
+.nota-card[data-tipo="RDM"]{border-left-color:var(--accent)}
+.nota-head{display:flex;align-items:center;gap:6px;padding:10px 12px 6px;flex-wrap:wrap}
+.nota-body{padding:0 12px 6px;font-size:13.5px}
+.nota-empresa{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nota-cnpj,.nota-obs{color:var(--text2);font-size:12.5px;margin-top:2px}
+.nota-foot{display:flex;align-items:center;justify-content:space-between;
+           padding:6px 12px 10px;border-top:1px solid var(--border)}
+.nota-valor{font-size:17px;font-weight:800;color:var(--primary-d)}
+.nota-actions{display:flex;gap:2px}
+.nota-data{font-size:12.5px;color:var(--text2);margin-left:auto}
+.sync-pending{font-size:13px}
+
+.tipo-badge{
+  font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;
+  text-transform:uppercase;letter-spacing:.3px;flex-shrink:0;
+}
+.tipo-RDA{background:#D1FAE5;color:#065F46}
+.tipo-RDM{background:#FEF3C7;color:#92400E}
+.subtipo-tag{font-size:11px;color:var(--text2);background:var(--bg);padding:2px 6px;border-radius:4px}
+
+/* ─────────────────────────────────────────────
+   SALDO
+──────────────────────────────────────────────*/
+.saldo-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 14px 12px}
+.saldo-card{
+  background:var(--surface);border-radius:var(--radius);
+  padding:14px;box-shadow:var(--shadow);
+}
+.saldo-card.neg{border-top:3px solid var(--danger)}
+.saldo-card:not(.neg){border-top:3px solid var(--primary)}
+.saldo-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
+.saldo-val{font-size:22px;font-weight:800;margin:4px 0;color:var(--primary-d)}
+.saldo-card.neg .saldo-val{color:var(--danger)}
+.saldo-detail{font-size:11.5px;color:var(--text2);display:flex;flex-direction:column;gap:2px}
+.sub-breakdown{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
+.sub-row{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:2px}
+
+.section-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px 6px;font-size:14px;font-weight:700;color:var(--primary-d)
+}
+.rep-list{padding:0 14px 16px;display:flex;flex-direction:column;gap:8px}
+.rep-item{
+  background:var(--surface);border-radius:var(--radius-sm);padding:10px 12px;
+  display:flex;align-items:center;gap:8px;box-shadow:var(--shadow)
+}
+.rep-desc{flex:1;font-size:13.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-val{font-size:15px;font-weight:700;color:var(--primary);flex-shrink:0}
+.export-btns{display:flex;gap:6px}
+.muted-p{color:var(--text2);font-size:13px;padding:8px 0}
+
+/* ─────────────────────────────────────────────
+   PERFIL
+──────────────────────────────────────────────*/
+.perfil-card{
+  background:var(--surface);margin:8px 14px;border-radius:var(--radius);
+  padding:20px;text-align:center;box-shadow:var(--shadow)
+}
+.perfil-avatar{
+  width:72px;height:72px;border-radius:50%;background:var(--primary);color:#fff;
+  font-size:28px;font-weight:800;display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px
+}
+.perfil-nome{font-size:18px;font-weight:800;color:var(--primary-d)}
+.perfil-email{font-size:13px;color:var(--text2);margin-top:2px}
+.perfil-meta{display:flex;gap:6px;justify-content:center;margin-top:10px}
+.role-pill{font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px}
+.role-colaborador{background:#DBEAFE;color:#1E40AF}
+.role-gestor{background:#FEF9C3;color:#78350F}
+.role-admin{background:#FCE7F3;color:#9D174D}
+.nucleo-pill{font-size:11px;padding:3px 8px;border-radius:10px;background:#D1FAE5;color:#065F46;font-weight:600}
+.perfil-form{background:var(--surface);margin:0 14px 12px;border-radius:var(--radius);
+             padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+.perfil-actions{padding:0 14px 16px;display:flex;flex-direction:column;gap:8px}
+
+/* ─────────────────────────────────────────────
+   EQUIPE (Gestor)
+──────────────────────────────────────────────*/
+.nucleo-block{padding:0 14px 12px}
+.nucleo-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0 8px;border-bottom:2px solid var(--primary);margin-bottom:10px
+}
+.nucleo-nome{font-size:16px;font-weight:800;color:var(--primary-d)}
+.nucleo-tots{display:flex;gap:12px;font-size:13px;color:var(--text2)}
+.nucleo-tots b{color:var(--text)}
+.colab-list{display:flex;flex-direction:column;gap:8px}
+.colab-card{background:var(--surface);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.colab-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.avatar{
+  width:40px;height:40px;border-radius:50%;background:var(--primary);color:#fff;
+  font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.colab-info{flex:1;min-width:0}
+.colab-nome{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.colab-email{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.colab-bal{display:flex;gap:8px}
+.bal-box{flex:1;padding:8px 10px;border-radius:var(--radius-sm);background:var(--bg)}
+.bal-box.neg{background:#FFF0F0}
+.bal-box.pos{background:#F0FBF4}
+.bal-type{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);display:block}
+.bal-val{font-size:16px;font-weight:800;display:block;color:var(--primary-d)}
+.bal-box.neg .bal-val{color:var(--danger)}
+.bal-detail{font-size:11px;color:var(--text2);display:block}
+.pill-mes{background:var(--primary);color:#fff;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700}
+
+/* ─────────────────────────────────────────────
+   CAPTURE SHEET (bottom)
+──────────────────────────────────────────────*/
+.bottom-sheet{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(0,0,0,.45);
+  display:none;align-items:flex-end;
+}
+.bottom-sheet.open{display:flex}
+.sheet-card{
+  width:100%;background:var(--surface);
+  border-radius:20px 20px 0 0;
+  padding:20px 20px calc(20px + var(--safe-bottom));
+}
+.sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 16px}
+.sheet-title{font-size:17px;font-weight:800;color:var(--primary-d);margin-bottom:16px;text-align:center}
+.capture-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cap-opt{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  background:var(--surface2);border-radius:var(--radius);border:1.5px solid var(--border);
+  padding:20px 12px;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.cap-opt:active{background:#e8f5ee;border-color:var(--primary)}
+.cap-icon{font-size:32px}
+.cap-label{font-size:13.5px;font-weight:700;color:var(--text);text-align:center}
+.cap-desc{font-size:11.5px;color:var(--text2);text-align:center}
+
+/* ─────────────────────────────────────────────
+   QR OVERLAY
+──────────────────────────────────────────────*/
+#qr-overlay{
+  position:fixed;inset:0;z-index:80;
+  background:#000;display:none;
+  flex-direction:column;align-items:center;justify-content:center;
+}
+#qr-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.qr-frame{
+  position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:16px
+}
+.qr-box{
+  width:240px;height:240px;border:3px solid var(--secondary);border-radius:16px;
+  box-shadow:0 0 0 2000px rgba(0,0,0,.5);
+}
+.qr-hint{color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+#qr-status-txt{color:var(--secondary);font-size:13px;min-height:20px}
+.btn-overlay-close{
+  position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;z-index:3;
+  background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;
+  width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+
+/* ─────────────────────────────────────────────
+   OCR OVERLAY
+──────────────────────────────────────────────*/
+#ocr-overlay{
+  position:fixed;inset:0;z-index:80;
+  background:rgba(0,0,0,.75);display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+#ocr-progress{color:#fff;font-size:15px;font-weight:600}
+.ocr-spin{width:48px;height:48px;border:4px solid rgba(255,255,255,.2);
+          border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite}
+
+/* ─────────────────────────────────────────────
+   NOTA FORM (fullscreen overlay)
+──────────────────────────────────────────────*/
+.full-overlay{
+  position:fixed;inset:0;z-index:70;
+  background:var(--bg);display:none;flex-direction:column;
+  overflow:hidden;
+}
+.form-hdr{
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;gap:8px;padding:12px 16px;
+  padding-top:calc(12px + env(safe-area-inset-top,0px));
+  flex-shrink:0;
+}
+.form-hdr h3{flex:1;font-size:17px;font-weight:800}
+.form-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.form-body::-webkit-scrollbar{display:none}
+.field-row{display:flex;gap:10px}
+.field-row .field{flex:1;min-width:0}
+.field{display:flex;flex-direction:column;gap:4px}
+.captura-badge{
+  align-self:flex-start;font-size:12px;font-weight:700;
+  background:var(--primary);color:#fff;padding:4px 10px;border-radius:6px;
+}
+.cnpj-row{position:relative}
+.cnpj-row .inp{padding-right:36px}
+#cnpj-spin{position:absolute;right:10px;top:50%;transform:translateY(-50%);
+           width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--primary);
+           border-radius:50%;animation:spin 1s linear infinite;display:none}
+.foto-area{position:relative}
+#f-foto-nota{position:absolute;inset:0;opacity:0;cursor:pointer}
+.foto-btn-wrap{
+  border:2px dashed var(--border);border-radius:var(--radius-sm);
+  padding:14px;text-align:center;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--surface2);
+}
+.foto-thumb{max-width:100%;max-height:180px;border-radius:var(--radius-sm);margin-top:8px}
+
+/* ─────────────────────────────────────────────
+   MODAL
+──────────────────────────────────────────────*/
+.modal-overlay{position:fixed;inset:0;z-index:100;
+               background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-card{background:var(--surface);border-radius:var(--radius);width:100%;max-width:400px;overflow:hidden}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;
+          padding:16px;border-bottom:1px solid var(--border);background:var(--primary);color:#fff}
+.modal-hd h3{font-size:16px;font-weight:800}
+.btn-close-modal{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:2px 6px;
+                 border-radius:6px;line-height:1}
+.modal-bd{padding:16px;display:flex;flex-direction:column;gap:10px}
+.modal-ft{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* ─────────────────────────────────────────────
+   ESTADOS VAZIOS / LOADING
+──────────────────────────────────────────────*/
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
+             gap:10px;padding:48px 24px;text-align:center}
+.empty-icon{font-size:48px}
+.empty-state p{color:var(--text2);font-size:14px}
+.loading-state{display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px 24px}
+.loading-state p{color:var(--text2);font-size:14px}
+.error-state{padding:24px;color:var(--danger);text-align:center;font-size:14px}
+.spin,.ocr-spin{animation:spin 1s linear infinite}
+.spin{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%}
+
+/* ─────────────────────────────────────────────
+   TOAST
+──────────────────────────────────────────────*/
+#toast{
+  position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 12px);left:50%;
+  transform:translateX(-50%) translateY(8px);
+  background:var(--primary-d);color:#fff;
+  padding:9px 18px;border-radius:20px;font-size:13.5px;font-weight:600;
+  opacity:0;transition:all .25s;pointer-events:none;z-index:200;white-space:nowrap;
+  max-width:90vw;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.toast-err{background:var(--danger)}
+
+/* Loading overlay */
+#loading-overlay{
+  position:fixed;inset:0;z-index:300;background:rgba(255,255,255,.6);
+  display:flex;align-items:center;justify-content:center;
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ AUTH ═══════════ -->
+<div id="auth-screen" class="screen">
+  <div class="auth-wrap">
+    <div class="auth-logo">
+      <svg viewBox="0 0 64 64" fill="none">
+        <circle cx="32" cy="32" r="32" fill="#40916C"/>
+        <path d="M16 44 C16 28 28 18 32 18 C36 18 48 28 48 44" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M22 44 C22 34 28 26 32 26 C36 26 42 34 42 44" stroke="#D8F3DC" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="32" cy="38" r="5" fill="#fff"/>
+      </svg>
+      <div class="auth-logo-text">Petermann <span>App</span></div>
+    </div>
+    <div id="auth-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div id="app-screen" class="screen" style="display:none">
+  <div id="demo-banner">⚠️ Modo demonstração — dados salvos apenas neste dispositivo</div>
+  <header id="app-header">
+    <div class="hdr-logo">Petermann <span>App</span></div>
+    <div class="sync-indicator">
+      <div class="sync-dot online" id="sync-dot"></div>
+      <span id="sync-txt">online</span>
+    </div>
+  </header>
+
+  <main id="app-content"></main>
+
+  <nav id="bottom-nav">
+    <button class="nav-btn active" data-view="notas" onclick="switchView('notas')">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Notas
+    </button>
+    <div class="nav-capture">
+      <button class="nav-capture-inner" onclick="abrirCaptura()">+</button>
+    </div>
+    <button class="nav-btn" data-view="saldo" onclick="switchView('saldo')">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Saldo
+    </button>
+    <button class="nav-btn" data-view="equipe" id="nav-equipe" style="display:none" onclick="switchView('equipe')">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Equipe
+    </button>
+    <button class="nav-btn" data-view="perfil" onclick="switchView('perfil')">
+      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Perfil
+    </button>
+  </nav>
+</div>
+
+<!-- ═══════════ CAPTURE SHEET ═══════════ -->
+<div id="capture-sheet" class="bottom-sheet" onclick="if(event.target===this)fecharCaptura()">
+  <div class="sheet-card">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Como deseja lançar?</div>
+    <div class="capture-options">
+      <div class="cap-opt" onclick="iniciarQR()">
+        <div class="cap-icon">📷</div>
+        <div class="cap-label">QR Code</div>
+        <div class="cap-desc">Ler QR da NFCe</div>
+      </div>
+      <div class="cap-opt" onclick="iniciarOCR()">
+        <div class="cap-icon">🔍</div>
+        <div class="cap-label">Foto OCR</div>
+        <div class="cap-desc">Fotografar recibo</div>
+      </div>
+      <div class="cap-opt" onclick="fecharCaptura();abrirFormNota({tipo:'RDA'})">
+        <div class="cap-icon">✏️</div>
+        <div class="cap-label">Manual</div>
+        <div class="cap-desc">Digitar dados</div>
+      </div>
+      <div class="cap-opt" onclick="fecharCaptura();abrirFormRepasse()">
+        <div class="cap-icon">💸</div>
+        <div class="cap-label">Repasse</div>
+        <div class="cap-desc">PIX / transferência</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ QR OVERLAY ═══════════ -->
+<div id="qr-overlay">
+  <video id="qr-video" playsinline muted></video>
+  <canvas id="qr-canvas" style="display:none"></canvas>
+  <div class="qr-frame">
+    <div class="qr-box"></div>
+    <p class="qr-hint">Aponte para o QR Code da NFCe</p>
+    <div id="qr-status-txt"></div>
+  </div>
+  <button class="btn-overlay-close" onclick="fecharQR()">✕</button>
+</div>
+
+<!-- ═══════════ OCR OVERLAY ═══════════ -->
+<div id="ocr-overlay">
+  <div class="ocr-spin"></div>
+  <div id="ocr-progress">Preparando OCR…</div>
+</div>
+<!-- input oculto para foto OCR -->
+<input type="file" id="f-foto-ocr" accept="image/*" capture="environment" style="display:none"
+       onchange="onFotoOCR(event)">
+
+<!-- ═══════════ NOTA FORM ═══════════ -->
+<div id="nota-form-overlay" class="full-overlay">
+  <div class="form-hdr">
+    <button class="btn-icon-sm" style="color:#fff;font-size:22px" onclick="fecharFormNota()">←</button>
+    <h3 id="nf-titulo">Nova Nota</h3>
+    <button class="btn btn-sm" style="background:#fff;color:var(--primary);border-color:#fff"
+            onclick="salvarNota()">Salvar</button>
+  </div>
+  <div class="form-body">
+    <div id="captura-badge" class="captura-badge">✏️ Manual</div>
+
+    <div class="field-row">
+      <div class="field">
+        <label class="lbl">Tipo *</label>
+        <select class="inp" id="nf-tipo" onchange="toggleSubtipo()">
+          <option value="RDA">RDA</option>
+          <option value="RDM">RDM</option>
+        </select>
+      </div>
+      <div class="field" id="nf-subtipo-group">
+        <label class="lbl">Categoria</label>
+        <select class="inp" id="nf-subtipo">
+          <option>Abastecimento</option>
+          <option>Hospedagem</option>
+          <option>Outros</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label class="lbl">Data *</label>
+        <input class="inp" id="nf-data" type="date">
+      </div>
+      <div class="field">
+        <label class="lbl">Valor (R$) *</label>
+        <input class="inp" id="nf-valor" type="number" step="0.01" min="0" placeholder="0,00">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="lbl">CNPJ</label>
+      <div class="cnpj-row">
+        <input class="inp" id="nf-cnpj" type="text" inputmode="numeric" maxlength="18"
+               placeholder="00.000.000/0001-00" oninput="onCNPJChange()">
+        <div id="cnpj-spin"></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="lbl">Razão Social</label>
+      <input class="inp" id="nf-razao" type="text" placeholder="Preenchido pelo CNPJ…">
+    </div>
+
+    <div class="field">
+      <label class="lbl">Observação</label>
+      <textarea class="inp" id="nf-obs" rows="2" placeholder="Opcional"></textarea>
+    </div>
+
+    <div class="field">
+      <label class="lbl">Foto da nota</label>
+      <div class="foto-area">
+        <input type="file" id="f-foto-nota" accept="image/*" capture="environment"
+               onchange="onFotoNotaChange(event)">
+        <div class="foto-btn-wrap" onclick="$('f-foto-nota').click()">
+          <span id="btn-foto-label">📷 Anexar foto</span>
+          <span style="font-size:11px;color:var(--text2)">Toque para abrir câmera</span>
+          <div id="foto-preview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- campos ocultos -->
+    <input type="hidden" id="nf-id">
+    <input type="hidden" id="nf-metodo" value="manual">
+    <input type="hidden" id="nf-chave">
+    <input type="hidden" id="nf-uf">
+    <input type="hidden" id="nf-mes">
+    <input type="hidden" id="nf-ano">
+  </div>
+</div>
+
+<!-- ═══════════ REPASSE FORM ═══════════ -->
+<div id="rep-overlay" class="full-overlay">
+  <div class="form-hdr">
+    <button class="btn-icon-sm" style="color:#fff;font-size:22px" onclick="fecharFormRepasse()">←</button>
+    <h3>Novo Repasse</h3>
+    <button class="btn btn-sm" style="background:#fff;color:var(--primary);border-color:#fff"
+            onclick="salvarRepasse()">Salvar</button>
+  </div>
+  <div class="form-body">
+    <div class="field">
+      <label class="lbl">Tipo *</label>
+      <select class="inp" id="rep-tipo">
+        <option value="RDA">RDA</option>
+        <option value="RDM">RDM</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label class="lbl">Data *</label>
+        <input class="inp" id="rep-data" type="date">
+      </div>
+      <div class="field">
+        <label class="lbl">Valor (R$) *</label>
+        <input class="inp" id="rep-valor" type="number" step="0.01" min="0" placeholder="0,00">
+      </div>
+    </div>
+    <div class="field">
+      <label class="lbl">Descrição</label>
+      <input class="inp" id="rep-desc" type="text" placeholder="Ex: PIX de Rayner">
+    </div>
+    <input type="hidden" id="rep-mes">
+    <input type="hidden" id="rep-ano">
+  </div>
+</div>
+
+<!-- ═══════════ LOADING / TOAST ═══════════ -->
+<div id="loading-overlay" style="display:none">
+  <div class="spin"></div>
+</div>
+<div id="toast"></div>
+
+<!-- ═══════════ SCRIPTS ═══════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="js/db.js"></script>
+<script src="js/nfce.js"></script>
+<script src="js/brasilapi.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/gestor.js"></script>
+<script src="js/app.js"></script>
+
+<!-- Service Worker -->
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>

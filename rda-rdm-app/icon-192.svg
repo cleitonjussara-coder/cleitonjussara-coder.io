@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="42" fill="#1B4332"/>
+  <circle cx="96" cy="96" r="68" fill="#2D6A4F"/>
+  <!-- folha estilizada -->
+  <path d="M60 136 C60 100 76 68 96 60 C116 68 132 100 132 136" stroke="#74C69D" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M70 136 C70 110 82 84 96 76 C110 84 122 110 122 136" stroke="#D8F3DC" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <!-- círculo central -->
+  <circle cx="96" cy="112" r="14" fill="#FFFFFF"/>
+  <!-- inicial P -->
+  <text x="96" y="118" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="16" fill="#1B4332">P</text>
+</svg>

@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notas PM</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --sb: #1E293B;
+  --sb2: #273449;
+  --sb-text: #94A3B8;
+  --accent: #3B82F6;
+  --accent2: #2563EB;
+  --panel: #F8FAFC;
+  --border: #E2E8F0;
+  --white: #FFFFFF;
+  --text: #0F172A;
+  --muted: #64748B;
+  --rda: #10B981;
+  --rdm: #F59E0B;
+  --geral: #8B5CF6;
+  --danger: #EF4444;
+}
+
+html, body { height: 100%; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; background: var(--panel); color: var(--text); }
+
+/* ─── SIDEBAR ─── */
+#sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--sb);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+.sb-head {
+  padding: 18px 16px 12px;
+  border-bottom: 1px solid #2D3748;
+}
+
+.sb-logo { font-size: 17px; font-weight: 800; color: #F1F5F9; letter-spacing: -0.5px; }
+.sb-logo span { color: var(--accent); }
+
+.btn-new {
+  margin: 10px 12px 0;
+  padding: 9px;
+  background: var(--accent); color: white;
+  border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .15s;
+}
+.btn-new:hover { background: var(--accent2); }
+
+.sb-scroll { overflow-y: auto; flex: 1; padding-bottom: 12px; }
+.sb-scroll::-webkit-scrollbar { width: 3px; }
+.sb-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+
+.sb-sec { padding: 10px 0; border-bottom: 1px solid #2D3748; }
+
+.sb-sec-title {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: #475569;
+  padding: 4px 16px 5px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.sb-sec-title button {
+  background: none; border: none; cursor: pointer;
+  color: #475569; font-size: 17px; line-height: 1;
+  transition: color .15s;
+}
+.sb-sec-title button:hover { color: #94A3B8; }
+
+.sb-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px;
+  cursor: pointer; color: var(--sb-text);
+  font-size: 13px;
+  transition: background .12s, color .12s;
+  user-select: none;
+}
+.sb-item:hover { background: var(--sb2); color: #E2E8F0; }
+.sb-item.active { background: #1E3A5F; color: #60A5FA; font-weight: 500; }
+
+.sb-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.sb-item .cnt {
+  margin-left: auto;
+  font-size: 11px;
+  background: #2D3748; color: #94A3B8;
+  padding: 1px 6px; border-radius: 10px;
+}
+.sb-item.active .cnt { background: #1D4ED8; color: #BFDBFE; }
+
+.sb-empty { padding: 5px 16px; font-size: 12px; color: #475569; }
+
+/* ─── NOTES PANEL ─── */
+#panel {
+  width: 280px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+.panel-head {
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--white);
+}
+
+.search {
+  display: flex; align-items: center; gap: 6px;
+  background: #F1F5F9; border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px;
+}
+.search input {
+  border: none; background: transparent; outline: none;
+  font-size: 13px; color: var(--text); width: 100%;
+}
+.search svg { color: #94A3B8; flex-shrink: 0; }
+
+.panel-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px 4px;
+}
+
+.panel-count { font-size: 12px; color: var(--muted); }
+
+.panel-sort {
+  border: none; background: transparent; outline: none;
+  font-size: 11.5px; color: var(--muted); cursor: pointer;
+}
+
+#notes-list { overflow-y: auto; flex: 1; }
+#notes-list::-webkit-scrollbar { width: 4px; }
+#notes-list::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+
+.note-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #F1F5F9;
+  transition: background .1s;
+  border-left: 3px solid transparent;
+}
+.note-item:hover { background: #EFF6FF; }
+.note-item.active { background: #DBEAFE; border-left-color: var(--accent); }
+
+.ni-header { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+
+.badge {
+  font-size: 9.5px; font-weight: 800;
+  padding: 1px 5px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: .3px;
+  flex-shrink: 0;
+}
+.b-rda  { background: #D1FAE5; color: #065F46; }
+.b-rdm  { background: #FEF3C7; color: #92400E; }
+.b-geral{ background: #EDE9FE; color: #4C1D95; }
+
+.ni-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+.ni-collab { font-size: 11.5px; color: var(--muted); margin-bottom: 1px; }
+.ni-preview {
+  font-size: 11.5px; color: #94A3B8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ni-date { font-size: 11px; color: #CBD5E1; margin-top: 3px; }
+
+.empty-list {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: 180px; gap: 8px;
+  color: #94A3B8; font-size: 13px;
+}
+
+/* ─── EDITOR ─── */
+#editor {
+  flex: 1; background: var(--white);
+  display: none; flex-direction: column; overflow: hidden;
+}
+
+#toolbar {
+  padding: 10px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: var(--white);
+}
+
+.btn {
+  padding: 6px 11px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  background: var(--white); color: var(--text);
+  transition: all .12s;
+}
+.btn:hover { background: var(--panel); border-color: #CBD5E1; }
+.btn-save { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-save:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn-pdf  { color: #DC2626; border-color: #FCA5A5; }
+.btn-pdf:hover  { background: #FEF2F2; }
+.btn-txt  { color: #059669; border-color: #A7F3D0; }
+.btn-txt:hover  { background: #ECFDF5; }
+.btn-all  { color: #7C3AED; border-color: #C4B5FD; }
+.btn-all:hover  { background: #F5F3FF; }
+.btn-del  { color: var(--danger); border-color: #FCA5A5; }
+.btn-del:hover  { background: #FEF2F2; }
+
+.tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
+.tb-spacer { flex: 1; }
+
+.unsaved-dot {
+  width: 7px; height: 7px;
+  background: var(--accent); border-radius: 50%;
+  visibility: hidden; flex-shrink: 0;
+}
+.is-unsaved .unsaved-dot { visibility: visible; }
+
+#editor-body {
+  flex: 1; padding: 22px 26px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+#editor-body::-webkit-scrollbar { width: 5px; }
+#editor-body::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 3px; }
+
+#note-title {
+  width: 100%; border: none; outline: none;
+  font-size: 22px; font-weight: 700; color: var(--text);
+  background: transparent; padding: 2px 0;
+  font-family: inherit;
+}
+#note-title::placeholder { color: #CBD5E1; }
+
+.field-row { display: flex; gap: 10px; align-items: flex-start; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field.grow { flex: 1; }
+
+.lbl {
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .6px;
+  color: var(--muted);
+}
+
+.inp {
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 6px 9px; font-size: 13px;
+  color: var(--text); background: #F8FAFC;
+  outline: none; font-family: inherit;
+  transition: border-color .12s;
+}
+.inp:focus { border-color: var(--accent); background: var(--white); }
+select.inp { cursor: pointer; }
+
+.tags-box {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 5px 8px; background: #F8FAFC;
+  min-height: 36px; cursor: text;
+  transition: border-color .12s;
+}
+.tags-box:focus-within { border-color: var(--accent); background: var(--white); }
+
+.tag {
+  display: flex; align-items: center; gap: 3px;
+  background: #DBEAFE; color: #1D4ED8;
+  padding: 2px 8px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 500;
+}
+.tag-x { cursor: pointer; opacity: .6; font-size: 14px; transition: opacity .1s; }
+.tag-x:hover { opacity: 1; }
+
+#tag-inp {
+  border: none; background: transparent; outline: none;
+  font-size: 13px; min-width: 90px; color: var(--text);
+  font-family: inherit;
+}
+
+#note-content {
+  flex: 1; min-height: 280px;
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 12px 14px; font-size: 14px; line-height: 1.7;
+  color: var(--text); background: #FAFAFA;
+  resize: vertical; outline: none; font-family: inherit;
+  transition: border-color .12s;
+}
+#note-content:focus { border-color: var(--accent); background: var(--white); }
+#note-content::placeholder { color: #CBD5E1; }
+
+/* ─── WELCOME ─── */
+#welcome {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--white); gap: 10px; color: #94A3B8;
+}
+#welcome h2 { color: #CBD5E1; font-size: 17px; font-weight: 600; }
+#welcome p  { font-size: 12.5px; }
+
+/* ─── MODAL ─── */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.35);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.overlay.open { display: flex; }
+
+.modal {
+  background: var(--white); border-radius: 12px;
+  padding: 22px; width: 360px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.15);
+}
+.modal h3 { font-size: 15px; margin-bottom: 12px; }
+
+.modal-inp {
+  width: 100%;
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 8px 11px; font-size: 13px; outline: none;
+  margin-bottom: 12px; font-family: inherit;
+}
+.modal-inp:focus { border-color: var(--accent); }
+
+.modal-list {
+  max-height: 200px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 7px;
+  margin-bottom: 12px;
+}
+.ml-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 11px; font-size: 13px;
+  border-bottom: 1px solid #F1F5F9;
+}
+.ml-item:last-child { border-bottom: none; }
+.ml-item button { background: none; border: none; cursor: pointer; color: var(--danger); font-size: 16px; }
+
+.modal-foot { display: flex; justify-content: flex-end; gap: 7px; }
+
+/* ─── TOAST ─── */
+#toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #1E293B; color: white;
+  padding: 9px 16px; border-radius: 8px;
+  font-size: 13px; font-weight: 500;
+  opacity: 0; transform: translateY(6px);
+  transition: all .25s; pointer-events: none; z-index: 300;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+
+/* ─── SHORTCUTS HINT ─── */
+.kbd { font-size: 10.5px; color: #475569; }
+kbd {
+  display: inline-block; padding: 1px 5px;
+  border: 1px solid #374151; border-radius: 3px;
+  background: #2D3748; color: #CBD5E1; font-size: 10px;
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sb-head">
+    <div class="sb-logo">Notas <span>PM</span></div>
+  </div>
+
+  <button class="btn-new" onclick="newNote()">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    Nova Nota
+  </button>
+
+  <div class="sb-scroll">
+    <!-- Tipo -->
+    <div class="sb-sec">
+      <div class="sb-sec-title">Tipo</div>
+      <div class="sb-item active" data-ft="all" onclick="setType('all',this)">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Todas <span class="cnt" id="ct-all">0</span>
+      </div>
+      <div class="sb-item" data-ft="RDA" onclick="setType('RDA',this)">
+        <span class="dot" style="background:var(--rda)"></span>RDA<span class="cnt" id="ct-rda">0</span>
+      </div>
+      <div class="sb-item" data-ft="RDM" onclick="setType('RDM',this)">
+        <span class="dot" style="background:var(--rdm)"></span>RDM<span class="cnt" id="ct-rdm">0</span>
+      </div>
+      <div class="sb-item" data-ft="GERAL" onclick="setType('GERAL',this)">
+        <span class="dot" style="background:var(--geral)"></span>Geral<span class="cnt" id="ct-geral">0</span>
+      </div>
+    </div>
+
+    <!-- Colaboradores -->
+    <div class="sb-sec">
+      <div class="sb-sec-title">
+        Colaboradores
+        <button onclick="openModal('modal-collab')" title="Gerenciar colaboradores">+</button>
+      </div>
+      <div id="sb-collabs"></div>
+    </div>
+
+    <!-- Tags -->
+    <div class="sb-sec">
+      <div class="sb-sec-title">Tags</div>
+      <div id="sb-tags"></div>
+    </div>
+
+    <!-- Atalhos -->
+    <div style="padding:10px 16px 0;">
+      <div class="kbd"><kbd>Ctrl</kbd>+<kbd>S</kbd> Salvar &nbsp; <kbd>Ctrl</kbd>+<kbd>N</kbd> Nova</div>
+    </div>
+  </div>
+</nav>
+
+<!-- NOTES LIST PANEL -->
+<div id="panel">
+  <div class="panel-head">
+    <div class="search">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="search-inp" placeholder="Buscar notas..." oninput="renderList()">
+    </div>
+  </div>
+  <div class="panel-meta">
+    <span class="panel-count" id="list-count">0 notas</span>
+    <select class="panel-sort" id="sort-sel" onchange="renderList()">
+      <option value="date-desc">Mais recentes</option>
+      <option value="date-asc">Mais antigas</option>
+      <option value="title">Título A–Z</option>
+      <option value="collab">Colaborador</option>
+    </select>
+  </div>
+  <div id="notes-list"></div>
+</div>
+
+<!-- EDITOR -->
+<div id="editor">
+  <div id="toolbar">
+    <div class="unsaved-dot" id="udot"></div>
+    <button class="btn btn-save" onclick="saveNote()">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Salvar
+    </button>
+    <div class="tb-sep"></div>
+    <button class="btn btn-pdf" onclick="exportPDF()">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      PDF
+    </button>
+    <button class="btn btn-txt" onclick="exportTXT(false)">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      TXT
+    </button>
+    <button class="btn btn-all" onclick="exportAll()" title="Exportar todas as notas visíveis">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar Todos
+    </button>
+    <div class="tb-spacer"></div>
+    <button class="btn btn-del" onclick="deleteNote()">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      Excluir
+    </button>
+  </div>
+
+  <div id="editor-body">
+    <input type="text" id="note-title" placeholder="Título da nota..." oninput="dirty()">
+
+    <div class="field-row">
+      <div class="field">
+        <div class="lbl">Tipo</div>
+        <select id="note-type" class="inp" onchange="dirty()">
+          <option value="RDA">RDA</option>
+          <option value="RDM">RDM</option>
+          <option value="GERAL">Geral</option>
+        </select>
+      </div>
+      <div class="field grow">
+        <div class="lbl">Colaborador</div>
+        <select id="note-collab" class="inp" onchange="dirty()">
+          <option value="">-- Selecionar --</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="lbl">Data</div>
+        <input type="date" id="note-date" class="inp" onchange="dirty()">
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="lbl">Tags <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#94A3B8">— Enter para adicionar</span></div>
+      <div class="tags-box" id="tags-box" onclick="document.getElementById('tag-inp').focus()"></div>
+    </div>
+
+    <div class="field" style="flex:1;">
+      <div class="lbl">Conteúdo</div>
+      <textarea id="note-content" placeholder="Escreva sua nota aqui..." oninput="dirty()"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- WELCOME SCREEN -->
+<div id="welcome">
+  <svg width="52" height="52" fill="none" stroke="#CBD5E1" stroke-width="1.4" viewBox="0 0 24 24">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+  <h2>Nenhuma nota selecionada</h2>
+  <p>Selecione uma nota ou crie uma nova (<kbd style="background:#E2E8F0;border:1px solid #CBD5E1;border-radius:3px;padding:1px 5px;font-size:11px;">Ctrl+N</kbd>)</p>
+</div>
+
+<!-- MODAL: Colaboradores -->
+<div id="modal-collab" class="overlay" onclick="tryCloseModal(event,'modal-collab')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>Gerenciar Colaboradores</h3>
+    <div class="modal-list" id="collab-list"></div>
+    <input class="modal-inp" id="new-collab" placeholder="Nome do colaborador..." onkeydown="if(event.key==='Enter')addCollab()">
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-collab')">Fechar</button>
+      <button class="btn btn-save" onclick="addCollab()">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let db = { notes: [], collaborators: [] };
+let currentId   = null;
+let editTags    = [];
+let fType       = 'all';
+let fCollab     = null;
+let fTag        = null;
+let isUnsaved   = false;
+
+// ═══════════════════════════════════════════════
+//  PERSISTENCE
+// ═══════════════════════════════════════════════
+function load() {
+  try { const r = localStorage.getItem('notasPM_v2'); if (r) db = JSON.parse(r); } catch(e){}
+  if (!db.notes) db.notes = [];
+  if (!db.collaborators) db.collaborators = [];
+}
+
+function persist() { localStorage.setItem('notasPM_v2', JSON.stringify(db)); }
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// ═══════════════════════════════════════════════
+//  FILTERS
+// ═══════════════════════════════════════════════
+function setType(t, el) {
+  fType = t; fCollab = null; fTag = null;
+  document.querySelectorAll('[data-ft]').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('[data-fc],[data-tag]').forEach(e => e.classList.remove('active'));
+  renderList();
+}
+
+function setCollab(c, el) {
+  fCollab = fCollab === c ? null : c;
+  document.querySelectorAll('[data-fc]').forEach(e => e.classList.remove('active'));
+  if (fCollab) el.classList.add('active');
+  renderList();
+}
+
+function setTag(t, el) {
+  fTag = fTag === t ? null : t;
+  document.querySelectorAll('[data-tag]').forEach(e => e.classList.remove('active'));
+  if (fTag) el.classList.add('active');
+  renderList();
+}
+
+function filtered() {
+  let ns = [...db.notes];
+  const q = document.getElementById('search-inp').value.trim().toLowerCase();
+  if (fType !== 'all') ns = ns.filter(n => n.type === fType);
+  if (fCollab) ns = ns.filter(n => n.collaborator === fCollab);
+  if (fTag)    ns = ns.filter(n => (n.tags||[]).includes(fTag));
+  if (q)       ns = ns.filter(n =>
+    (n.title||'').toLowerCase().includes(q) ||
+    (n.content||'').toLowerCase().includes(q) ||
+    (n.collaborator||'').toLowerCase().includes(q) ||
+    (n.tags||[]).some(t => t.toLowerCase().includes(q))
+  );
+  const sort = document.getElementById('sort-sel').value;
+  if (sort === 'date-desc') ns.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  else if (sort === 'date-asc') ns.sort((a,b) => new Date(a.updatedAt) - new Date(b.updatedAt));
+  else if (sort === 'title') ns.sort((a,b) => (a.title||'').localeCompare(b.title||'','pt'));
+  else if (sort === 'collab') ns.sort((a,b) => (a.collaborator||'').localeCompare(b.collaborator||'','pt'));
+  return ns;
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════
+function renderAll() {
+  renderSidebar();
+  renderList();
+  syncCollabSelect();
+}
+
+function renderSidebar() {
+  // counts
+  document.getElementById('ct-all').textContent   = db.notes.length;
+  document.getElementById('ct-rda').textContent   = db.notes.filter(n=>n.type==='RDA').length;
+  document.getElementById('ct-rdm').textContent   = db.notes.filter(n=>n.type==='RDM').length;
+  document.getElementById('ct-geral').textContent = db.notes.filter(n=>n.type==='GERAL').length;
+
+  // collaborators
+  const sc = document.getElementById('sb-collabs');
+  if (!db.collaborators.length) { sc.innerHTML = '<div class="sb-empty">Nenhum colaborador</div>'; }
+  else {
+    sc.innerHTML = '';
+    db.collaborators.forEach(c => {
+      const cnt = db.notes.filter(n => n.collaborator === c).length;
+      const d = document.createElement('div');
+      d.className = 'sb-item' + (fCollab === c ? ' active' : '');
+      d.setAttribute('data-fc', c);
+      d.innerHTML = `
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(c)}</span>
+        <span class="cnt">${cnt}</span>`;
+      d.onclick = () => setCollab(c, d);
+      sc.appendChild(d);
+    });
+  }
+
+  // tags
+  const st = document.getElementById('sb-tags');
+  const allTags = {};
+  db.notes.forEach(n => (n.tags||[]).forEach(t => { allTags[t] = (allTags[t]||0)+1; }));
+  const tagKeys = Object.keys(allTags);
+  if (!tagKeys.length) { st.innerHTML = '<div class="sb-empty">Nenhuma tag</div>'; }
+  else {
+    st.innerHTML = '';
+    tagKeys.sort().forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'sb-item' + (fTag === t ? ' active' : '');
+      d.setAttribute('data-tag', t);
+      d.innerHTML = `
+        <span style="font-size:11px;opacity:.7">#</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(t)}</span>
+        <span class="cnt">${allTags[t]}</span>`;
+      d.onclick = () => setTag(t, d);
+      st.appendChild(d);
+    });
+  }
+}
+
+function renderList() {
+  const ns = filtered();
+  document.getElementById('list-count').textContent = `${ns.length} nota${ns.length !== 1 ? 's' : ''}`;
+  const el = document.getElementById('notes-list');
+  if (!ns.length) {
+    el.innerHTML = '<div class="empty-list"><svg width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Nenhuma nota</div>';
+    return;
+  }
+  el.innerHTML = '';
+  ns.forEach(n => {
+    const d = document.createElement('div');
+    d.className = 'note-item' + (n.id === currentId ? ' active' : '');
+    const bc = n.type === 'RDA' ? 'b-rda' : n.type === 'RDM' ? 'b-rdm' : 'b-geral';
+    const dt = n.date ? fmtDate(n.date) : '';
+    d.innerHTML = `
+      <div class="ni-header">
+        <span class="badge ${bc}">${n.type}</span>
+        <span class="ni-title">${esc(n.title||'Sem título')}</span>
+      </div>
+      ${n.collaborator ? `<div class="ni-collab">👤 ${esc(n.collaborator)}</div>` : ''}
+      <div class="ni-preview">${esc((n.content||'').slice(0,65))||'Sem conteúdo'}</div>
+      <div class="ni-date">${dt}</div>`;
+    d.onclick = () => openNote(n.id);
+    el.appendChild(d);
+  });
+}
+
+function syncCollabSelect() {
+  const sel = document.getElementById('note-collab');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- Selecionar --</option>';
+  db.collaborators.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+  sel.value = cur;
+}
+
+// ═══════════════════════════════════════════════
+//  NOTES CRUD
+// ═══════════════════════════════════════════════
+function newNote() {
+  if (!confirmDiscard()) return;
+  const n = {
+    id: uid(), title: '', content: '',
+    type: fType !== 'all' ? fType : 'RDA',
+    collaborator: fCollab || '',
+    tags: [],
+    date: today(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  db.notes.unshift(n);
+  persist();
+  openNote(n.id);
+  renderAll();
+  document.getElementById('note-title').focus();
+}
+
+function openNote(id) {
+  if (id !== currentId && !confirmDiscard()) return;
+  const n = db.notes.find(x => x.id === id);
+  if (!n) return;
+  currentId = id;
+  editTags  = [...(n.tags||[])];
+  isUnsaved = false;
+
+  document.getElementById('note-title').value   = n.title   || '';
+  document.getElementById('note-type').value    = n.type    || 'RDA';
+  document.getElementById('note-date').value    = n.date    || '';
+  document.getElementById('note-content').value = n.content || '';
+  syncCollabSelect();
+  document.getElementById('note-collab').value  = n.collaborator || '';
+
+  renderTagsBox();
+  setDirtyUI(false);
+
+  document.getElementById('editor').style.display  = 'flex';
+  document.getElementById('welcome').style.display = 'none';
+  renderList();
+}
+
+function saveNote() {
+  if (!currentId) return;
+  const n = db.notes.find(x => x.id === currentId);
+  if (!n) return;
+  n.title       = document.getElementById('note-title').value;
+  n.type        = document.getElementById('note-type').value;
+  n.collaborator= document.getElementById('note-collab').value;
+  n.date        = document.getElementById('note-date').value;
+  n.content     = document.getElementById('note-content').value;
+  n.tags        = [...editTags];
+  n.updatedAt   = new Date().toISOString();
+  persist();
+  setDirtyUI(false);
+  renderAll();
+  toast('Nota salva');
+}
+
+function deleteNote() {
+  if (!currentId) return;
+  if (!confirm('Excluir esta nota permanentemente?')) return;
+  db.notes = db.notes.filter(n => n.id !== currentId);
+  persist();
+  currentId = null; isUnsaved = false;
+  document.getElementById('editor').style.display  = 'none';
+  document.getElementById('welcome').style.display = 'flex';
+  renderAll();
+  toast('Nota excluída');
+}
+
+// ═══════════════════════════════════════════════
+//  TAGS
+// ═══════════════════════════════════════════════
+function renderTagsBox() {
+  const box = document.getElementById('tags-box');
+  box.innerHTML = '';
+  editTags.forEach(t => {
+    const s = document.createElement('span');
+    s.className = 'tag';
+    s.innerHTML = `${esc(t)}<span class="tag-x" data-t="${esc(t)}">×</span>`;
+    s.querySelector('.tag-x').onclick = e => { e.stopPropagation(); removeTag(t); };
+    box.appendChild(s);
+  });
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.id = 'tag-inp';
+  inp.placeholder = editTags.length ? '' : 'Adicionar tag...';
+  inp.onkeydown = handleTag;
+  box.appendChild(inp);
+}
+
+function handleTag(e) {
+  const inp = document.getElementById('tag-inp');
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const v = inp.value.trim().replace(/,/g,'');
+    if (v && !editTags.includes(v)) { editTags.push(v); dirty(); renderTagsBox(); }
+    else inp.value = '';
+  } else if (e.key === 'Backspace' && !inp.value && editTags.length) {
+    editTags.pop(); dirty(); renderTagsBox();
+  }
+}
+
+function removeTag(t) { editTags = editTags.filter(x => x !== t); dirty(); renderTagsBox(); }
+
+// ═══════════════════════════════════════════════
+//  COLLABORATORS
+// ═══════════════════════════════════════════════
+function renderCollabList() {
+  const el = document.getElementById('collab-list');
+  if (!db.collaborators.length) {
+    el.innerHTML = '<div style="padding:12px;text-align:center;font-size:13px;color:#94A3B8">Nenhum colaborador cadastrado</div>';
+    return;
+  }
+  el.innerHTML = '';
+  db.collaborators.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'ml-item';
+    d.innerHTML = `<span>${esc(c)}</span><button onclick="removeCollab('${esc(c)}')" title="Remover">×</button>`;
+    el.appendChild(d);
+  });
+}
+
+function addCollab() {
+  const inp = document.getElementById('new-collab');
+  const v = inp.value.trim();
+  if (!v) return;
+  if (db.collaborators.includes(v)) { toast('Colaborador já existe'); return; }
+  db.collaborators.push(v);
+  db.collaborators.sort((a,b) => a.localeCompare(b,'pt'));
+  persist(); inp.value = '';
+  renderCollabList(); renderAll();
+}
+
+function removeCollab(c) {
+  if (!confirm(`Remover "${c}"?`)) return;
+  db.collaborators = db.collaborators.filter(x => x !== c);
+  persist(); renderCollabList(); renderAll();
+}
+
+// ═══════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════
+function exportPDF() {
+  if (!currentId) return;
+  const n = db.notes.find(x => x.id === currentId);
+  if (!n) return;
+  const clr = n.type==='RDA'?'#10B981':n.type==='RDM'?'#F59E0B':'#8B5CF6';
+  const dt  = n.date ? new Date(n.date+'T00:00:00').toLocaleDateString('pt-BR') : '';
+  const win = window.open('','_blank','width=820,height=1060');
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>${esc(n.title||'Nota')}</title>
+<style>
+  @media print { @page { margin: 18mm; } }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#0F172A; margin:0; }
+  .hd { background:#1E293B; color:#fff; padding:12px 24px; }
+  .hd-logo { font-weight:800; font-size:15px; letter-spacing:-0.3px; }
+  .hd-logo span { color:#3B82F6; }
+  .body { padding:28px 32px; }
+  .badge { display:inline-block; background:${clr}; color:#fff; padding:2px 10px; border-radius:5px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+  h1 { font-size:24px; font-weight:800; margin:0 0 14px; }
+  .meta { font-size:12px; color:#64748B; margin-bottom:3px; }
+  hr { border:none; border-top:1px solid #E2E8F0; margin:18px 0; }
+  .content { font-size:13.5px; line-height:1.75; white-space:pre-wrap; }
+  .footer { margin-top:36px; font-size:11px; color:#94A3B8; }
+  @media print { .no-print { display:none; } }
+</style></head><body>
+<div class="hd"><div class="hd-logo">Notas <span>PM</span></div></div>
+<div class="body">
+<div class="badge">${n.type}</div>
+<h1>${esc(n.title||'Sem título')}</h1>
+${n.collaborator?`<div class="meta">👤 Colaborador: <strong>${esc(n.collaborator)}</strong></div>`:''}
+${dt?`<div class="meta">📅 Data: <strong>${dt}</strong></div>`:''}
+${n.tags?.length?`<div class="meta">🏷️ Tags: ${esc(n.tags.join(', '))}</div>`:''}
+<hr>
+<div class="content">${esc(n.content||'')}</div>
+<hr>
+<div class="footer">Exportado em ${new Date().toLocaleString('pt-BR')} — Notas PM</div>
+</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+function exportTXT(silent) {
+  if (!currentId) return;
+  const n = db.notes.find(x => x.id === currentId);
+  if (!n) return;
+  const dt = n.date ? new Date(n.date+'T00:00:00').toLocaleDateString('pt-BR') : '';
+  const lines = [
+    `NOTAS PM — ${n.type}`,
+    '═'.repeat(50),
+    `Título:       ${n.title||'Sem título'}`,
+    n.collaborator ? `Colaborador:  ${n.collaborator}` : '',
+    dt ? `Data:         ${dt}` : '',
+    n.tags?.length ? `Tags:         ${n.tags.join(', ')}` : '',
+    '',
+    '─'.repeat(50),
+    '',
+    n.content||'',
+    '',
+    '─'.repeat(50),
+    `Exportado em: ${new Date().toLocaleString('pt-BR')}`,
+  ].filter(l => l !== null);
+  dl(lines.join('\n'), safeName(n.title||'nota') + `_${n.type}.txt`, 'text/plain;charset=utf-8');
+  if (!silent) toast('TXT exportado');
+}
+
+function exportAll() {
+  const ns = filtered();
+  if (!ns.length) { toast('Nenhuma nota para exportar'); return; }
+  const parts = ns.map(n => {
+    const dt = n.date ? new Date(n.date+'T00:00:00').toLocaleDateString('pt-BR') : '';
+    return [
+      `[${ n.type }] ${n.title||'Sem título'}`,
+      n.collaborator ? `Colaborador: ${n.collaborator}` : '',
+      dt ? `Data: ${dt}` : '',
+      n.tags?.length ? `Tags: ${n.tags.join(', ')}` : '',
+      '',
+      n.content||'',
+    ].filter(l => l !== null).join('\n');
+  });
+  const body = parts.join('\n\n' + '═'.repeat(50) + '\n\n');
+  const header = [
+    'NOTAS PM — Exportação Completa',
+    `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+    `Total: ${ns.length} notas`,
+    '═'.repeat(50),
+    '',
+  ].join('\n');
+  dl(header + body, `notas_pm_${today()}.txt`, 'text/plain;charset=utf-8');
+  toast(`${ns.length} notas exportadas`);
+}
+
+function dl(content, filename, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════════
+//  MODALS
+// ═══════════════════════════════════════════════
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  if (id === 'modal-collab') renderCollabList();
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function tryCloseModal(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function dirty() { isUnsaved = true; setDirtyUI(true); }
+
+function setDirtyUI(v) {
+  isUnsaved = v;
+  document.getElementById('udot').style.visibility = v ? 'visible' : 'hidden';
+}
+
+function confirmDiscard() {
+  if (isUnsaved && currentId) return confirm('Alterações não salvas serão descartadas. Continuar?');
+  return true;
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function fmtDate(d) {
+  try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'2-digit'}); }
+  catch(e){ return d; }
+}
+
+function safeName(s) { return s.replace(/[^\wÀ-ɏ\s-]/g,'_').slice(0,40); }
+
+// ═══════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveNote(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); newNote(); }
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.overlay.open').forEach(m => m.classList.remove('open'));
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════
+load();
+renderAll();
+</script>
+</body>
+</html>
