@@ -16,7 +16,7 @@
    3. Cole o Client ID abaixo (termina em .apps.googleusercontent.com)
 ───────────────────────────────────────────────────────────── */
 window.GDrive = (() => {
-  const CLIENT_ID  = 'SEU_CLIENT_ID_AQUI.apps.googleusercontent.com';
+  const CLIENT_ID  = '15986245838-lnmg53ueee1cn0dfk56fi0om7gjsp3q6.apps.googleusercontent.com';
   const SCOPE      = 'https://www.googleapis.com/auth/drive.file';
   const FOLDER_ID  = '14vXW3SJqPp3fOhW4p4xOU7Y5AB_sWi6L';
   const FILES_API  = 'https://www.googleapis.com/drive/v3/files';
