@@ -187,20 +187,17 @@ async function initDrive() {
   } catch (e) { console.warn('Drive init:', e); }
 }
 
-async function onUploadSA(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  e.target.value = '';
+async function connectDrive() {
   setLoading(true);
   try {
-    await GDrive.loadFromFile(file);
+    await GDrive.requestAccess();
     driveOk = true;
     updateDriveBadge();
     await pullFromDrive();
     toast('Google Drive conectado!');
     renderPerfil();
-  } catch (err) {
-    toast('Erro: ' + (err.message || err), 'err');
+  } catch (e) {
+    toast('Erro ao conectar Drive: ' + (e.message || e), 'err');
   } finally { setLoading(false); }
 }
 
@@ -458,11 +455,11 @@ function renderPerfil() {
            <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar conexão</button>
            <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>`
         : `<p style="font-size:13px;color:var(--text2);margin-bottom:10px">
-             Faça upload do arquivo <strong>JSON da Conta de Serviço</strong> do Google para sincronizar notas e fotos no Drive.
+             Conecte sua conta Google para salvar notas, repasses e fotos automaticamente no Drive.
            </p>
-           <input type="file" id="f-sa-json" accept=".json,application/json" style="display:none" onchange="onUploadSA(event)">
-           <button class="btn btn-primary btn-full" onclick="$('f-sa-json').click()">
-             ☁️ Upload JSON da Conta de Serviço
+           <button class="btn btn-primary btn-full" onclick="connectDrive()">
+             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z"/><path d="M12 8v4l3 3"/></svg>
+             Conectar Google Drive
            </button>`
       }
     </div>
