@@ -43,37 +43,45 @@ window.NFCE = (() => {
    *  (GO) ?chave=44digits&p=...
    */
   function parseQRUrl(url) {
-    let chave = null, valor = null;
+    let chave = null, valor = null, cnpj = null, data = null;
     try {
       const safe = url.startsWith('http') ? url : 'https://' + url.replace(/^\/\//, '');
       const u = new URL(safe);
 
-      // 1. parâmetro ?chave=
       chave = u.searchParams.get('chave') || null;
 
-      // 2. parâmetro ?p= (pipe ou raw 44)
       const p = u.searchParams.get('p');
       if (p) {
         const parts = p.split('|');
         if (parts.length === 1) {
-          // talvez seja a própria chave
           const raw = digits(parts[0]);
           if (raw.length === 44 && !chave) chave = raw;
-        } else {
-          // formato pipe — tenta reconstruir a chave a partir dos primeiros campos
-          if (!chave) {
-            // parts[0]=cUF, parts[1]=AAMM, parts[2]=CNPJ, parts[3]=mod,
-            // parts[4]=serie, parts[5]=nNF, parts[6]=tpEmis, parts[7]=cNF, parts[8]=cDV
-            const raw = digits(parts.slice(0, 9).join(''));
-            if (raw.length >= 44) chave = raw.slice(0, 44);
+        } else if (parts.length >= 3) {
+          // formato pipe: parts[0]=cUF, parts[1]=AAMM, parts[2]=CNPJ, parts[3]=mod, ...
+          // extrai CNPJ e data diretamente como fallback
+          const cnpjRaw = digits(parts[2] || '');
+          if (cnpjRaw.length === 14) cnpj = cnpjRaw;
+
+          const aamm = digits(parts[1] || '');
+          if (aamm.length === 4) {
+            const aa = 2000 + parseInt(aamm.slice(0,2), 10);
+            const mm = parseInt(aamm.slice(2), 10);
+            if (mm >= 1 && mm <= 12) data = `${aa}-${String(mm).padStart(2,'0')}-01`;
           }
-          // vNF = índice 10 na maioria das UFs
+
+          // reconstrói chave dos primeiros 9 campos
+          if (!chave) {
+            const raw = digits(parts.slice(0, 9).join(''));
+            if (raw.length === 44) chave = raw;
+          }
+
+          // vNF = índice 10
           const candidate = parts[10];
           if (candidate) {
             const v = parseFloat(digits(candidate).replace(',', '.'));
             if (!isNaN(v) && v > 0) valor = v > 99999 ? v / 100 : v;
           }
-          // busca fallback: qualquer part que seja "1234,56" ou "1234.56"
+          // fallback: qualquer valor monetário no pipe
           if (!valor) {
             parts.forEach(pt => {
               const m = pt.match(/^([0-9]{1,6})[.,]([0-9]{2})$/);
@@ -83,19 +91,25 @@ window.NFCE = (() => {
         }
       }
 
-      // 3. parâmetro ?vNF= direto
       if (!valor) {
         const vNF = u.searchParams.get('vNF') || u.searchParams.get('valor');
         if (vNF) valor = parseFloat(vNF.replace(',', '.'));
       }
     } catch (_) {
-      // não é URL — tenta como chave pura
       const raw = digits(url);
       if (raw.length === 44) chave = raw;
     }
 
     const parsed = chave ? parseChave44(chave) : null;
-    return parsed ? { ...parsed, valor: valor || null } : { valor: valor || null };
+    const result = parsed
+      ? { ...parsed, valor: valor || parsed.valor || null }
+      : { valor: valor || null };
+
+    // enriquece com fallbacks do pipe (CNPJ e data que nao vieram da chave)
+    if (cnpj && !result.cnpj) result.cnpj = cnpj;
+    if (data && !result.data) result.data = data;
+
+    return result;
   }
 
   /* Entrada genérica do scanner: URL ou chave pura */

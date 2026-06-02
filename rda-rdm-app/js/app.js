@@ -842,11 +842,11 @@ async function abrirFormNota(dados = {}) {
     atualizarPreviewFoto(null);
   }
 
-  // se vier com CNPJ, busca razão social
+  // se vier com CNPJ, busca razão social automaticamente
   if (dados.cnpj && !dados.razao_social) buscarRazaoSocial(dados.cnpj);
 
-  // enriquecimento automático via SEFAZ (chave NFCe do QR)
-  if (dados.chave && dados.chave.length === 44 && !dados.id && !dados.razao_social) {
+  // enriquecimento automático via SEFAZ (sempre que tiver chave NFCe)
+  if (dados.chave && dados.chave.length === 44 && !dados.id) {
     enriquecerViaSefaz(dados.chave);
   }
 
@@ -859,20 +859,30 @@ async function enriquecerViaSefaz(chave) {
   try {
     $('captura-badge').textContent = '🌐 Buscando dados oficiais…';
     const result = await SEFAZ.consultarChave(chave);
+    let enriquecido = false;
     if (result.razao_social) {
       $('nf-razao').value = result.razao_social;
-      $('captura-badge').textContent = '🌐 Dados oficiais SEFAZ';
+      enriquecido = true;
     }
-    if (result.valor && !$('nf-valor').value) {
+    if (result.valor) {
       $('nf-valor').value = result.valor;
+      enriquecido = true;
     }
-    if (result.data && result.data !== $('nf-data').value) {
+    if (result.data) {
       $('nf-data').value = result.data;
       $('nf-mes').value = result.mes;
       $('nf-ano').value = result.ano;
+      enriquecido = true;
     }
-    if (result.fonte && result.fonte !== 'chave') {
-      toast('Dados enriquecidos via SEFAZ');
+    if (result.cnpj && !$('nf-cnpj').value) {
+      $('nf-cnpj').value = BrasilAPI.formatar(result.cnpj);
+      enriquecido = true;
+    }
+    if (enriquecido) {
+      $('captura-badge').textContent = '🌐 Dados oficiais SEFAZ';
+      if (result.fonte && result.fonte !== 'chave') toast('Dados enriquecidos via SEFAZ');
+    } else {
+      $('captura-badge').textContent = '📷 QR Code';
     }
   } catch (_) {
     $('captura-badge').textContent = '📷 QR Code';
