@@ -246,9 +246,44 @@ select.inp{cursor:pointer}
 .export-btns{display:flex;gap:6px}
 .muted-p{color:var(--text2);font-size:13px;padding:8px 0}
 
-/* ─────────────────────────────────────────────
-   PERFIL
-──────────────────────────────────────────────*/
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 14px 10px}
+.home-card{background:var(--surface);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px}
+.home-card-icon{font-size:22px}
+.home-card-val{font-size:20px;font-weight:800;color:var(--primary-d)}
+.home-card-val.neg{color:var(--danger)}
+.home-card-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.home-card-sub{font-size:11px;color:var(--text2)}
+.bar-section{padding:4px 14px 10px}
+.bar-hd{font-size:13px;font-weight:700;color:var(--primary-d);margin-bottom:8px}
+.bar-item{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bar-label{width:96px;font-size:12px;font-weight:600;color:var(--text);flex-shrink:0;text-align:right}
+.bar-track{flex:1;height:20px;background:var(--bg);border-radius:10px;overflow:hidden}
+.bar-fill{height:100%;border-radius:10px;transition:width .5s ease}
+.bar-fill.r1{background:var(--accent-d)}
+.bar-fill.r2{background:var(--accent)}
+.bar-fill.r3{background:var(--secondary)}
+.bar-val{font-size:11px;font-weight:700;color:var(--text2);width:64px;flex-shrink:0}
+.evo-section{padding:4px 14px 10px}
+.evo-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.evo-row::-webkit-scrollbar{display:none}
+.evo-card{flex:0 0 98px;background:var(--surface);border-radius:var(--radius-sm);padding:10px;text-align:center;box-shadow:var(--shadow)}
+.evo-mes{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px}
+.evo-rdm{font-size:13px;font-weight:800;color:var(--accent-d);margin-bottom:1px}
+.evo-rda{font-size:13px;font-weight:800;color:var(--primary)}
+.recent-section{padding:4px 14px 12px}
+.recent-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.recent-hd span{font-size:13px;font-weight:700;color:var(--primary-d)}
+.recent-hd a{font-size:12px;font-weight:600;color:var(--primary);cursor:pointer;text-decoration:none}
+.recent-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.recent-item:last-child{border-bottom:none}
+.recent-info{flex:1;min-width:0}
+.recent-tit{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-sub{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-val{font-size:13px;font-weight:700;flex-shrink:0}
+.recent-val.rda{color:var(--primary)}
+.recent-val.rdm{color:var(--accent-d)}
+
+/* Perfil */
 .perfil-card{
   background:var(--surface);margin:8px 14px;border-radius:var(--radius);
   padding:20px;text-align:center;box-shadow:var(--shadow)
@@ -492,7 +527,11 @@ select.inp{cursor:pointer}
   <main id="app-content"></main>
 
   <nav id="bottom-nav">
-    <button class="nav-btn active" data-view="notas" onclick="switchView('notas')">
+    <button class="nav-btn active" data-view="home" onclick="switchView('home')">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </button>
+    <button class="nav-btn" data-view="notas" onclick="switchView('notas')">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       Notas
     </button>

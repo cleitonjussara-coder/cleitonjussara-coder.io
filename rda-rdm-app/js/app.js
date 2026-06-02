@@ -13,7 +13,7 @@ let user      = null;   // { id, email, nome, role, nucleo }
 let notas     = [];
 let repasses  = [];
 let driveOk   = false;
-let viewAtual = 'notas';
+let viewAtual = 'home';
 let filMes    = new Date().getMonth() + 1;
 let filAno    = new Date().getFullYear();
 
@@ -75,7 +75,7 @@ async function init() {
     user = { id:'demo-user', email:'demo@petermann.app', nome:'Demo', role:'admin', nucleo:'Cristalina' };
     await carregarDadosLocais();
     showTela('app');
-    switchView('notas');
+    switchView('home');
   }
 
   initDrive();
@@ -96,7 +96,9 @@ async function init() {
     syncBadge(false);
     if (driveOk) await pullFromDrive().catch(() => {});
     await carregarDadosLocais();
-    if (viewAtual==='notas') renderNotas();
+    if (viewAtual==='home')   renderHome();
+  if (viewAtual==='home')  renderHome();
+  if (viewAtual==='notas') renderNotas();
     if (viewAtual==='saldo') renderSaldo();
     const {ok,pulled} = e.detail||{};
     if ((ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
@@ -120,7 +122,7 @@ async function onLogin(authUser) {
     await DB.sync(sb, user.id);
     if (driveOk) await pullFromDrive();
     showTela('app');
-    switchView('notas');
+    switchView('home');
   } finally { setLoading(false); }
 }
 
@@ -272,6 +274,7 @@ async function pullFromDrive() {
     await DB.upsertFromDrive('notas',    remote.notas);
     await DB.upsertFromDrive('repasses', remote.repasses);
     await carregarDadosLocais();
+    if (viewAtual === 'home')  renderHome();
     if (viewAtual === 'notas') renderNotas();
     if (viewAtual === 'saldo') renderSaldo();
   } catch (e) { console.warn('Drive pull:', e.message); }
@@ -309,10 +312,127 @@ function switchView(v) {
   );
   const el = $('app-content');
   el.scrollTop = 0;
-  if (v==='notas')  renderNotas();
+  if (v==='home')    renderHome();
+  else if (v==='notas')  renderNotas();
   else if (v==='saldo')  renderSaldo();
   else if (v==='equipe') renderEquipe();
   else if (v==='perfil') renderPerfil();
+}
+
+/* ── VIEW: HOME ──────────────────────────────────────────── */
+function renderHome() {
+  const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
+  const rs = repasses.filter(r => r.mes===filMes && r.ano===filAno);
+
+  const rdmG = ns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
+  const rdmR = rs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
+  const rdaG = ns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
+  const rdaR = rs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
+
+  const pendentes = ns.filter(n => n.synced===false).length;
+  const totalNotas = ns.length;
+
+  // barras RDM por categoria
+  const subs = ['Abastecimento','Hospedagem','Outros'];
+  const subVals = subs.map(s => ns.filter(n=>n.tipo==='RDM'&&n.subtipo===s).reduce((a,n)=>a+Number(n.valor||0),0));
+  const subMax  = Math.max(...subVals, 1);
+  const cores   = ['r1','r2','r3'];
+
+  let barHtml = '';
+  subs.forEach((s, i) => {
+    if (rdmG === 0 && subVals[i] === 0) return;
+    const pct = Math.round((subVals[i] / subMax) * 100);
+    barHtml += `
+    <div class="bar-item">
+      <span class="bar-label">${s}</span>
+      <div class="bar-track"><div class="bar-fill ${cores[i]}" style="width:${pct}%"></div></div>
+      <span class="bar-val">${brl(subVals[i])}</span>
+    </div>`;
+  });
+
+  // evolucao ultimos 3 meses
+  let evoHtml = '';
+  for (let i = 2; i >= 0; i--) {
+    let m = filMes - i;
+    let a = filAno;
+    if (m < 1) { m += 12; a--; }
+    const mNs = notas.filter(n=>n.mes===m&&n.ano===a);
+    const valRDM = mNs.filter(n=>n.tipo==='RDM').reduce((s,n)=>s+Number(n.valor||0),0);
+    const valRDA = mNs.filter(n=>n.tipo==='RDA').reduce((s,n)=>s+Number(n.valor||0),0);
+    evoHtml += `
+    <div class="evo-card">
+      <div class="evo-mes">${MESES[m-1]}</div>
+      <div class="evo-rdm">${brl(valRDM)}</div>
+      <div class="evo-rda">${brl(valRDA)}</div>
+    </div>`;
+  }
+
+  // ultimas 5 notas
+  const recentes = [...ns].sort((a,b) => b.data.localeCompare(a.data) || (b.created_at||'').localeCompare(a.created_at||'')).slice(0, 5);
+  let recHtml = recentes.length ? recentes.map(n => `
+    <div class="recent-item" onclick="editarNota('${n.id}')">
+      <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
+      <div class="recent-info">
+        <div class="recent-tit">${esc(n.razao_social || (n.cnpj?BrasilAPI.formatar(n.cnpj):'Sem empresa'))}</div>
+        <div class="recent-sub">${fmtData(n.data)}${n.subtipo?' · '+n.subtipo:''}</div>
+      </div>
+      <span class="recent-val ${n.tipo.toLowerCase()}">${brl(n.valor)}</span>
+    </div>`).join('') : '<p class="muted-p">Nenhuma nota lançada este mes.</p>';
+
+  $('app-content').innerHTML = `
+  <div class="page-hd">
+    <div class="mes-nav">
+      <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
+      <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
+      <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
+    </div>
+  </div>
+
+  <div class="home-grid">
+    <div class="home-card">
+      <div class="home-card-icon">⛽</div>
+      <div class="home-card-val${rdmR-rdmG<0?' neg':''}">${brl(rdmR-rdmG)}</div>
+      <div class="home-card-label">RDM</div>
+      <div class="home-card-sub">${brl(rdmG)} gasto · ${brl(rdmR)} recebido</div>
+    </div>
+    <div class="home-card">
+      <div class="home-card-icon">📋</div>
+      <div class="home-card-val${rdaR-rdaG<0?' neg':''}">${brl(rdaR-rdaG)}</div>
+      <div class="home-card-label">RDA</div>
+      <div class="home-card-sub">${brl(rdaG)} gasto · ${brl(rdaR)} recebido</div>
+    </div>
+    <div class="home-card">
+      <div class="home-card-icon">📄</div>
+      <div class="home-card-val">${totalNotas}</div>
+      <div class="home-card-label">Notas</div>
+      <div class="home-card-sub">lançadas este mês</div>
+    </div>
+    <div class="home-card">
+      <div class="home-card-icon">${pendentes?'⏳':'✅'}</div>
+      <div class="home-card-val">${pendentes||'0'}</div>
+      <div class="home-card-label">Pendentes</div>
+      <div class="home-card-sub">${pendentes?'aguardando sync':'tudo sincronizado'}</div>
+    </div>
+  </div>
+
+  ${rdmG > 0 ? `
+  <div class="bar-section">
+    <div class="bar-hd">Gastos RDM por Categoria</div>
+    ${barHtml}
+  </div>` : ''}
+
+  <div class="evo-section">
+    <div class="bar-hd">Evolução</div>
+    <div class="evo-row">${evoHtml}</div>
+  </div>
+
+  <div class="recent-section">
+    <div class="recent-hd">
+      <span>Últimos Lançamentos</span>
+      <a onclick="switchView('notas')">Ver todas →</a>
+    </div>
+    ${recHtml}
+  </div>`;
 }
 
 /* ── VIEW: NOTAS ─────────────────────────────────────────── */
