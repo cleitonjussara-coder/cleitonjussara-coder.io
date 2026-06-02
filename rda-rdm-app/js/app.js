@@ -709,6 +709,10 @@ function loopQR(ctx, video, canvas) {
     const parsed = NFCE.fromScan(code.data);
     if (parsed?.chave || parsed?.cnpj) {
       fecharQR();
+      if (parsed.chave) {
+        navigator.clipboard?.writeText(parsed.chave).catch(() => {});
+        toast('Chave NFCe copiada!');
+      }
       abrirFormNota({ ...parsed, metodo_captura:'qrcode' });
       return;
     }
