@@ -79,10 +79,20 @@ async function init() {
   }
 
   initDrive();
-  window.addEventListener('online',  () => { syncBadge(false); if(sb&&user) DB.sync(sb,user.id); });
+  _drivePullInterval = setInterval(async () => {
+    if (driveOk && user && navigator.onLine) await pullFromDrive();
+  }, 5 * 60_000);
+  window.addEventListener('online', async () => {
+    syncBadge(false);
+    if (sb && user) {
+      await DB.sync(sb, user.id);
+      if (driveOk) await pullFromDrive();
+    }
+  });
   window.addEventListener('offline', () => syncBadge(false));
   window.addEventListener('db-synced', async e => {
     syncBadge(false);
+    if (driveOk) await pullFromDrive().catch(() => {});
     await carregarDadosLocais();
     if (viewAtual==='notas') renderNotas();
     if (viewAtual==='saldo') renderSaldo();
@@ -106,6 +116,7 @@ async function onLogin(authUser) {
     DB.setupAutoSync(sb, () => user?.id);
     await carregarDadosLocais();
     await DB.sync(sb, user.id);
+    if (driveOk) await pullFromDrive();
     showTela('app');
     switchView('notas');
   } finally { setLoading(false); }
