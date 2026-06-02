@@ -620,9 +620,12 @@ async function onFotoOCR(e) {
     const result = await OCR.processar(file);
     ov.style.display = 'none';
     abrirFormNota({
-      cnpj : result.cnpj  || '',
-      valor: result.valor || '',
-      data : result.data  || hoje(),
+      cnpj         : result.cnpj  || '',
+      valor        : result.valor || '',
+      data         : result.data  || hoje(),
+      razao_social : result.razao_social || '',
+      chave        : result.chave || '',
+      uf           : result.uf    || '',
       metodo_captura: 'ocr',
     });
   } catch(err) {
