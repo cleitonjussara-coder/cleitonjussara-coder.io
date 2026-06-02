@@ -4,8 +4,7 @@
    Troque as duas linhas abaixo com suas credenciais Supabase.
 ───────────────────────────────────────────────────────────── */
 const SUPABASE_URL      = 'https://alkndoafntxzkpcgscvz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_VjKd-VNfFFeGIgeBL7Bbhg_AP28HdEJ';
-
+   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsa25kb2FmbnR4emtwY2dzY3Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjcwMDMsImV4cCI6MjA5NDk0MzAwM30.sjKOuNiGYbcHbJwPQuhO65c9apYbgA-xtOqYTfCo7UY';
 const DEMO_MODE = SUPABASE_URL.includes('COLE_SUA');
 
 /* ── Estado global ───────────────────────────────────────── */
