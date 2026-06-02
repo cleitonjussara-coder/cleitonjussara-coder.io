@@ -3,8 +3,8 @@
    app.js — Core Petermann PWA
    Troque as duas linhas abaixo com suas credenciais Supabase.
 ───────────────────────────────────────────────────────────── */
-const SUPABASE_URL      = 'COLE_SUA_URL_AQUI';
-const SUPABASE_ANON_KEY = 'COLE_SUA_ANON_KEY_AQUI';
+const SUPABASE_URL      = 'https://alkndoafntxzkpcgscvz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_VjKd-VNfFFeGIgeBL7Bbhg_AP28HdEJ';
 
 const DEMO_MODE = SUPABASE_URL.includes('COLE_SUA');
 
