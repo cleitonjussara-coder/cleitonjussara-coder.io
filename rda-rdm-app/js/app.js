@@ -735,6 +735,84 @@ function fecharQR() {
   $('qr-overlay').style.display = 'none';
 }
 
+/* ── Código de Barras (Quagga2) ───────────────────────── */
+let _barcodeRunning = false;
+
+function iniciarBarcode() {
+  fecharCaptura();
+  if (typeof Quagga === 'undefined') {
+    toast('Biblioteca de código de barras não carregada', 'err');
+    return;
+  }
+  const ov = $('qr-overlay');
+  ov.style.display = 'flex';
+  $('qr-hint').textContent = 'Aponte para o código de barras';
+  $('qr-status-txt').textContent = '';
+
+  navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
+    .then(stream => {
+      qrStream = stream;
+      const video = $('qr-video');
+      video.srcObject = stream;
+      video.play();
+      video.addEventListener('loadedmetadata', () => {
+        Quagga.init({
+          inputStream: {
+            name: 'Live',
+            type: 'LiveStream',
+            target: video,
+            constraints: { facingMode:'environment' },
+          },
+          decoder: {
+            readers: ['code_128_reader', 'ean_reader', 'ean_8_reader',
+                       'code_39_reader', 'code_39_vin_reader',
+                       'i2of5_reader'],
+          },
+          locate: true,
+        }, (err) => {
+          if (err) {
+            fecharBarcode();
+            toast('Erro no scanner: ' + err, 'err');
+            return;
+          }
+          _barcodeRunning = true;
+          Quagga.start();
+        });
+
+        Quagga.onDetected(result => {
+          if (!_barcodeRunning) return;
+          const code = result?.codeResult?.code;
+          if (code) {
+            fecharBarcode();
+            const parsed = NFCE.fromScan(code);
+            if (parsed?.chave || parsed?.cnpj || parsed?.valor) {
+              if (parsed.chave) {
+                navigator.clipboard?.writeText(parsed.chave).catch(() => {});
+                toast('Chave NFCe copiada!');
+              }
+              abrirFormNota({ ...parsed, metodo_captura:'barcode' });
+            } else {
+              toast('Código de barras não reconhecido como NFC-e', 'err');
+            }
+          }
+        });
+      });
+    })
+    .catch(e => {
+      fecharBarcode();
+      toast('Câmera indisponível: ' + e.message, 'err');
+    });
+}
+
+function fecharBarcode() {
+  _barcodeRunning = false;
+  try { Quagga?.stop(); } catch (_) {}
+  qrStream?.getTracks().forEach(t => t.stop());
+  qrStream = null;
+  $('qr-overlay').style.display = 'none';
+  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe';
+}
+
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
 function iniciarChaveNFCe() {
   const chave = prompt('Cole a chave de acesso de 44 dígitos da NFC-e:');
@@ -822,7 +900,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-ano').value = dados.ano || filAno;
 
   // badge de captura
-  const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
+  const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', barcode:'📊 Cód. Barras', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
   $('captura-badge').textContent = badges[dados.metodo_captura||'manual']||'✏️ Manual';
 
   toggleSubtipo();

@@ -584,6 +584,11 @@ select.inp{cursor:pointer}
         <div class="cap-label">Chave NFCe</div>
         <div class="cap-desc">Digitar chave de 44 dígitos</div>
       </div>
+      <div class="cap-opt" onclick="iniciarBarcode()">
+        <div class="cap-icon">📊</div>
+        <div class="cap-label">Cód. Barras</div>
+        <div class="cap-desc">Ler código de barras</div>
+      </div>
     </div>
   </div>
 </div>
@@ -597,7 +602,7 @@ select.inp{cursor:pointer}
     <p class="qr-hint">Aponte para o QR Code da NFCe</p>
     <div id="qr-status-txt"></div>
   </div>
-  <button class="btn-overlay-close" onclick="fecharQR()">✕</button>
+  <button class="btn-overlay-close" onclick="fecharQR();fecharBarcode()">✕</button>
 </div>
 
 <!-- ═══════════ OCR OVERLAY ═══════════ -->
@@ -753,6 +758,7 @@ select.inp{cursor:pointer}
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js"></script>
 <script src="js/db.js"></script>
 <script src="js/nfce.js"></script>
 <script src="js/sefaz.js"></script>
