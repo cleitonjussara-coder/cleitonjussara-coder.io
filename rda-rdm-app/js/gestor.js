@@ -158,35 +158,7 @@ window.Gestor = (() => {
 
   function exportEquipeExcel(sb, currentUser, mes, ano) {
     renderForExcel(sb, currentUser, mes, ano).then(({collabs, notas, repasses, mes: m, ano: a}) => {
-      const wb = XLSX.utils.book_new();
-      const cNome = (currentUser.nome||'equipe').replace(/\s+/g,'_');
-      const rows = [['PETERMANN — EQUIPE', '', '', '', '', '', '', ''],
-        [`Mês: ${MESES[m-1]}/${a}`, '', ''],
-        [''],
-        ['Núcleo','Colaborador','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo'],
-      ];
-      let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
-      const nucs = {};
-      collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
-      for (const [nucleo, membros] of Object.entries(nucs).sort()) {
-        const sorted = membros.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
-        sorted.forEach(c => {
-          const cns = notas.filter(n=>n.user_id===c.id);
-          const crs = repasses.filter(r=>r.user_id===c.id);
-          const rdmG = cns.filter(n=>n.tipo==='RDM').reduce((s,n)=>s+Number(n.valor||0),0);
-          const rdmR = crs.filter(r=>r.tipo==='RDM').reduce((s,r)=>s+Number(r.valor||0),0);
-          const rdaG = cns.filter(n=>n.tipo==='RDA').reduce((s,n)=>s+Number(n.valor||0),0);
-          const rdaR = crs.filter(r=>r.tipo==='RDA').reduce((s,r)=>s+Number(r.valor||0),0);
-          tRDMg+=rdmG; tRDMr+=rdmR; tRDAg+=rdaG; tRDAr+=rdaR;
-          rows.push([nucleo, c.nome||c.email, brl(rdmG), brl(rdmR), brl(rdmR-rdmG), brl(rdaG), brl(rdaR), brl(rdaR-rdaG)]);
-        });
-        rows.push(['']);
-      }
-      rows.push(['TOTAL','', brl(tRDMg), brl(tRDMr), brl(tRDMr-tRDMg), brl(tRDAg), brl(tRDAr), brl(tRDAr-tRDAg)]);
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{wch:14},{wch:22},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
-      XLSX.utils.book_append_sheet(wb, ws, 'EQUIPE');
-      XLSX.writeFile(wb, `Petermann_${cNome}_${MESES[m-1]}${a}.xlsx`);
+      Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome);
     }).catch(e => alert('Erro ao exportar: ' + e.message));
   }
 
