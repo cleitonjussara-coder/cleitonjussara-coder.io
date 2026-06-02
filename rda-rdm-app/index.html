@@ -579,6 +579,11 @@ select.inp{cursor:pointer}
         <div class="cap-label">Repasse</div>
         <div class="cap-desc">PIX / transferência</div>
       </div>
+      <div class="cap-opt" onclick="fecharCaptura();iniciarChaveNFCe()">
+        <div class="cap-icon">🔑</div>
+        <div class="cap-label">Chave NFCe</div>
+        <div class="cap-desc">Digitar chave de 44 dígitos</div>
+      </div>
     </div>
   </div>
 </div>
@@ -750,6 +755,7 @@ select.inp{cursor:pointer}
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="js/db.js"></script>
 <script src="js/nfce.js"></script>
+<script src="js/sefaz.js"></script>
 <script src="js/brasilapi.js"></script>
 <script src="js/ocr.js"></script>
 <script src="js/excel.js"></script>

@@ -723,6 +723,36 @@ function fecharQR() {
   $('qr-overlay').style.display = 'none';
 }
 
+/* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
+function iniciarChaveNFCe() {
+  const chave = prompt('Cole a chave de acesso de 44 dígitos da NFC-e:');
+  if (!chave || !chave.trim()) return;
+  onChaveNFCe(chave.trim());
+}
+
+async function onChaveNFCe(raw) {
+  setLoading(true);
+  try {
+    const result = await SEFAZ.consultarChave(raw);
+    const badges = { chave:'🔑 Chave', sefaz_json:'🌐 SEFAZ', sefaz_proxy:'🌐 SEFAZ', sefaz_html:'🌐 SEFAZ' };
+    abrirFormNota({
+      cnpj           : result.cnpj || '',
+      valor          : result.valor || '',
+      data           : result.data || hoje(),
+      razao_social   : result.razao_social || '',
+      chave          : result.chave || '',
+      uf             : result.uf || '',
+      metodo_captura : `chave_nfce_${result.fonte}`,
+      mes            : result.mes,
+      ano            : result.ano,
+    });
+    const fonte = badges[result.fonte] || result.fonte;
+    toast(`Nota encontrada via ${fonte}`);
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally { setLoading(false); }
+}
+
 /* ── OCR ─────────────────────────────────────────────────── */
 function iniciarOCR() {
   fecharCaptura();
