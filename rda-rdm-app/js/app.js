@@ -134,9 +134,13 @@ async function carregarDadosLocais() {
 
 /* ── Telas ───────────────────────────────────────────────── */
 function showTela(t) {
-  ['auth','app'].forEach(id => $(id+'-screen').style.display = t===id ? '' : 'none');
+  const authEl = $('auth-screen');
+  const appEl  = $('app-screen');
+  if (authEl) authEl.style.display = t === 'auth' ? 'flex' : 'none';
+  if (appEl)  appEl.style.display  = t === 'app'  ? 'flex' : 'none';
   if (t==='app') {
-    $('nav-equipe').style.display = (user?.role==='gestor'||user?.role==='admin') ? 'flex' : 'none';
+    const navEq = $('nav-equipe');
+    if (navEq) navEq.style.display = (user?.role==='gestor'||user?.role==='admin') ? 'flex' : 'none';
     syncBadge(false);
   }
 }
@@ -186,9 +190,13 @@ async function register() {
 }
 
 async function logout() {
-  if (sb) await sb.auth.signOut();
+  try {
+    if (sb) await sb.auth.signOut().catch(() => {});
+  } catch (_) {}
   user = null; notas = []; repasses = [];
-  showTela('auth'); renderAuth();
+  document.getElementById('demo-banner').style.display = 'none';
+  showTela('auth');
+  renderAuth('login');
 }
 
 /* ── Google Drive ────────────────────────────────────────── */
