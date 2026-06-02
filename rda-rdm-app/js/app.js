@@ -268,9 +268,7 @@ async function syncToDrive() {
   if (!driveOk || !user || !GDrive.isConnected()) return;
   syncBadge(true);
   try {
-    const nsLimpo = notas.map(n => { const { foto_local, ...rest } = n; return rest; });
-    const rsLimpo = repasses.map(r => { const { foto_local, ...rest } = r; return rest; });
-    await GDrive.syncNotas(user.id, nsLimpo, rsLimpo);
+    await GDrive.syncNotas(user.id, notas, repasses);
   } catch (e) {
     console.error('Drive sync:', e.message);
     toast('Drive: ' + e.message, 'err');
