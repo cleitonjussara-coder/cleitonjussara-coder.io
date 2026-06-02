@@ -12,15 +12,14 @@ window.Gestor = (() => {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   /* ── Dashboard principal ──────────────────────────────── */
-  async function renderDashboard(el, sb, currentUser, onRebuild) {
+  async function renderDashboard(el, sb, currentUser, onRebuild, options = {}) {
+    const mes = options.mes || new Date().getMonth() + 1;
+    const ano = options.ano || new Date().getFullYear();
+
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando equipe…</p></div>';
     try {
-      // colaboradores visíveis (RLS já filtra por nucleo para gestor)
       const { data: collabs, error: ce } = await sb.from('colaboradores').select('*').order('nome');
       if (ce) throw ce;
-
-      const ano = new Date().getFullYear();
-      const mes = new Date().getMonth() + 1;
 
       const [{ data: notas }, { data: repasses }] = await Promise.all([
         sb.from('notas').select('user_id,tipo,subtipo,valor,mes,ano,deleted').eq('ano',ano).eq('mes',mes),
@@ -35,10 +34,46 @@ window.Gestor = (() => {
       collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
 
       let html = `<div class="page-hd">
-        <h2>Equipe</h2>
-        <span class="pill-mes">${MESES[mes-1]}/${ano}</span>
+        <div class="mes-nav">
+          <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
+          <span class="mes-label">${MESES[mes-1]} ${ano}</span>
+          <button class="btn-mes-nav" onclick="mudarMesEquipe(1)">›</button>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">Excel</button>
       </div>`;
 
+      // Cards de resumo geral
+      let totalRDMg=0, totalRDMr=0, totalRDAg=0, totalRDAr=0;
+      collabs.forEach(c => {
+        const cns = ns.filter(n=>n.user_id===c.id);
+        const crs = rs.filter(r=>r.user_id===c.id);
+        totalRDMg += cns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
+        totalRDMr += crs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
+        totalRDAg += cns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
+        totalRDAr += crs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
+      });
+
+      html += `
+      <div class="saldo-grid">
+        <div class="saldo-card ${totalRDMr-totalRDMg<0?'neg':''}">
+          <div class="saldo-label">RDM Total</div>
+          <div class="saldo-val">${brl(totalRDMr-totalRDMg)}</div>
+          <div class="saldo-detail">
+            <span>Gasto <b>${brl(totalRDMg)}</b></span>
+            <span>Recebido <b>${brl(totalRDMr)}</b></span>
+          </div>
+        </div>
+        <div class="saldo-card ${totalRDAr-totalRDAg<0?'neg':''}">
+          <div class="saldo-label">RDA Total</div>
+          <div class="saldo-val">${brl(totalRDAr-totalRDAg)}</div>
+          <div class="saldo-detail">
+            <span>Gasto <b>${brl(totalRDAg)}</b></span>
+            <span>Recebido <b>${brl(totalRDAr)}</b></span>
+          </div>
+        </div>
+      </div>`;
+
+      NUCLEOS.forEach(nucleo => { if (!nucs[nucleo]) nucs[nucleo] = []; });
       for (const [nucleo, membros] of Object.entries(nucs).sort()) {
         let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
         let mHtml = '';
@@ -98,7 +133,6 @@ window.Gestor = (() => {
 
       el.innerHTML = html;
 
-      // bind botões de edição
       el.querySelectorAll('[data-eid]').forEach(btn =>
         btn.addEventListener('click', () => {
           const c = collabs.find(x=>x.id===btn.dataset.eid);
@@ -106,9 +140,54 @@ window.Gestor = (() => {
         })
       );
 
+      window._equipeCache = { collabs, notas, repasses, mes, ano };
+
     } catch(e) {
       el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>`;
     }
+  }
+
+  async function renderForExcel(sb, currentUser, mes, ano) {
+    const { data: collabs } = await sb.from('colaboradores').select('*').order('nome');
+    const [{ data: notas }, { data: repasses }] = await Promise.all([
+      sb.from('notas').select('user_id,tipo,subtipo,valor,data,cnpj,razao_social,mes,ano,deleted').eq('ano',ano).eq('mes',mes),
+      sb.from('repasses').select('user_id,tipo,valor,data,descricao,mes,ano,deleted').eq('ano',ano).eq('mes',mes),
+    ]);
+    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(r=>!r.deleted), mes, ano };
+  }
+
+  function exportEquipeExcel(sb, currentUser, mes, ano) {
+    renderForExcel(sb, currentUser, mes, ano).then(({collabs, notas, repasses, mes: m, ano: a}) => {
+      const wb = XLSX.utils.book_new();
+      const cNome = (currentUser.nome||'equipe').replace(/\s+/g,'_');
+      const rows = [['PETERMANN — EQUIPE', '', '', '', '', '', '', ''],
+        [`Mês: ${MESES[m-1]}/${a}`, '', ''],
+        [''],
+        ['Núcleo','Colaborador','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo'],
+      ];
+      let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
+      const nucs = {};
+      collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
+      for (const [nucleo, membros] of Object.entries(nucs).sort()) {
+        const sorted = membros.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+        sorted.forEach(c => {
+          const cns = notas.filter(n=>n.user_id===c.id);
+          const crs = repasses.filter(r=>r.user_id===c.id);
+          const rdmG = cns.filter(n=>n.tipo==='RDM').reduce((s,n)=>s+Number(n.valor||0),0);
+          const rdmR = crs.filter(r=>r.tipo==='RDM').reduce((s,r)=>s+Number(r.valor||0),0);
+          const rdaG = cns.filter(n=>n.tipo==='RDA').reduce((s,n)=>s+Number(n.valor||0),0);
+          const rdaR = crs.filter(r=>r.tipo==='RDA').reduce((s,r)=>s+Number(r.valor||0),0);
+          tRDMg+=rdmG; tRDMr+=rdmR; tRDAg+=rdaG; tRDAr+=rdaR;
+          rows.push([nucleo, c.nome||c.email, brl(rdmG), brl(rdmR), brl(rdmR-rdmG), brl(rdaG), brl(rdaR), brl(rdaR-rdaG)]);
+        });
+        rows.push(['']);
+      }
+      rows.push(['TOTAL','', brl(tRDMg), brl(tRDMr), brl(tRDMr-tRDMg), brl(tRDAg), brl(tRDAr), brl(tRDAr-tRDAg)]);
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:14},{wch:22},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, ws, 'EQUIPE');
+      XLSX.writeFile(wb, `Petermann_${cNome}_${MESES[m-1]}${a}.xlsx`);
+    }).catch(e => alert('Erro ao exportar: ' + e.message));
   }
 
   /* ── Modal edição de colaborador (admin only) ─────────── */
@@ -155,5 +234,5 @@ window.Gestor = (() => {
     };
   }
 
-  return { renderDashboard, showEditModal };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel };
 })();

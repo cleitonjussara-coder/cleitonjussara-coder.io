@@ -682,6 +682,22 @@ select.inp{cursor:pointer}
   </div>
 </div>
 
+<!-- ═══════════ FOTO VIEWER ═══════════ -->
+<div id="foto-viewer-overlay" onclick="if(event.target===this)fecharFotoViewer()"
+     style="display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.93);
+            flex-direction:column;align-items:center;justify-content:center;gap:14px">
+  <button onclick="fecharFotoViewer()"
+          style="position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;
+                 background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;
+                 width:44px;height:44px;font-size:22px;cursor:pointer;display:flex;
+                 align-items:center;justify-content:center">✕</button>
+  <img id="foto-viewer-img" src="" alt="Foto da nota"
+       style="max-width:95vw;max-height:78vh;object-fit:contain;border-radius:10px;
+              box-shadow:0 4px 30px rgba(0,0,0,.6)">
+  <div id="foto-viewer-info"
+       style="color:rgba(255,255,255,.75);font-size:13px;text-align:center;padding:0 16px"></div>
+</div>
+
 <!-- ═══════════ LOADING / TOAST ═══════════ -->
 <div id="loading-overlay" style="display:none">
   <div class="spin"></div>

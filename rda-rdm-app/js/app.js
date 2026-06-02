@@ -202,7 +202,7 @@ function _mostrarBannerDrive() {
     + 'display:flex;align-items:center;gap:10px;flex-shrink:0;';
   b.innerHTML = `
     <span style="flex:1">☁️ Conecte o Google Drive para salvar seus dados na nuvem</span>
-    <button onclick="connectDrive()" style="background:var(--acc);color:var(--p);border:none;
+    <button onclick="connectDrive()" style="background:var(--accent);color:var(--primary-d);border:none;
       border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
       Conectar
     </button>
@@ -268,11 +268,12 @@ async function syncToDrive() {
   if (!driveOk || !user || !GDrive.isConnected()) return;
   syncBadge(true);
   try {
-    await GDrive.syncNotas(user.id, notas, repasses);
+    const nsLimpo = notas.map(n => { const { foto_local, ...rest } = n; return rest; });
+    const rsLimpo = repasses.map(r => { const { foto_local, ...rest } = r; return rest; });
+    await GDrive.syncNotas(user.id, nsLimpo, rsLimpo);
   } catch (e) {
     console.error('Drive sync:', e.message);
     toast('Drive: ' + e.message, 'err');
-    // se expirou, marca como desconectado
     if (!GDrive.isConnected()) { driveOk = false; updateDriveBadge(); }
   } finally { syncBadge(false); }
 }
@@ -451,7 +452,18 @@ async function renderEquipe() {
     return;
   }
   const el = $('app-content');
-  await Gestor.renderDashboard(el, sb, user, () => renderEquipe());
+  await Gestor.renderDashboard(el, sb, user, () => renderEquipe(), { mes: filMes, ano: filAno });
+}
+
+function mudarMesEquipe(delta) {
+  filMes += delta;
+  if (filMes > 12) { filMes = 1;  filAno++; }
+  if (filMes < 1)  { filMes = 12; filAno--; }
+  renderEquipe();
+}
+
+function exportExcelEquipe() {
+  Gestor.exportEquipeExcel(sb, user, filMes, filAno);
 }
 
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
@@ -612,7 +624,7 @@ async function onFotoOCR(e) {
 }
 
 /* ── Form Nota ───────────────────────────────────────────── */
-function abrirFormNota(dados = {}) {
+async function abrirFormNota(dados = {}) {
   fotoBlob = null; fotoURL = null;
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
@@ -638,7 +650,21 @@ function abrirFormNota(dados = {}) {
   $('captura-badge').textContent = badges[dados.metodo_captura||'manual']||'✏️ Manual';
 
   toggleSubtipo();
-  atualizarPreviewFoto(dados.foto_path ? `supabase:${dados.foto_path}` : null);
+
+  // foto: prioriza local → Drive → Supabase
+  if (dados.id) {
+    const local = await DB.getFotoLocal(dados.id);
+    if (local?.blob) {
+      fotoBlob = local.blob;
+      fotoURL  = URL.createObjectURL(local.blob);
+      atualizarPreviewFoto(fotoURL);
+    } else {
+      const driveUrl = GDrive.getFotoUrl?.(dados.id);
+      atualizarPreviewFoto(driveUrl || (dados.foto_path ? `supabase:${dados.foto_path}` : null));
+    }
+  } else {
+    atualizarPreviewFoto(null);
+  }
 
   // se vier com CNPJ, busca razão social
   if (dados.cnpj && !dados.razao_social) buscarRazaoSocial(dados.cnpj);
@@ -758,17 +784,37 @@ async function excluirNota(id) {
 async function verFoto(id) {
   const n = notas.find(x=>x.id===id);
   if (!n) return;
+
+  let url = null;
+
   // 1. foto local (IndexedDB)
   const local = await DB.getFotoLocal(id);
-  if (local?.blob) { window.open(URL.createObjectURL(local.blob), '_blank'); return; }
+  if (local?.blob) url = URL.createObjectURL(local.blob);
+
   // 2. Google Drive
-  const driveUrl = GDrive.getFotoUrl?.(id);
-  if (driveUrl) { window.open(driveUrl, '_blank'); return; }
-  // 3. Supabase Storage
-  if (n.foto_path && sb) {
-    const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+  if (!url) {
+    const driveUrl = GDrive.getFotoUrl?.(id);
+    if (driveUrl) url = driveUrl;
   }
+
+  // 3. Supabase Storage
+  if (!url && n.foto_path && sb) {
+    const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
+    if (data?.signedUrl) url = data.signedUrl;
+  }
+
+  if (!url) { toast('Foto não encontrada', 'err'); return; }
+
+  $('foto-viewer-img').src = url;
+  $('foto-viewer-info').textContent =
+    `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;
+  $('foto-viewer-overlay').style.display = 'flex';
+}
+
+function fecharFotoViewer() {
+  const ov = $('foto-viewer-overlay');
+  ov.style.display = 'none';
+  $('foto-viewer-img').src = '';
 }
 
 /* ── Form Repasse ────────────────────────────────────────── */
@@ -815,4 +861,7 @@ function exportExcel() { Excel.exportarAnual(filAno, notas, repasses, user); }
 document.addEventListener('DOMContentLoaded', () => {
   init();
   renderAuth('login');
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') fecharFotoViewer();
+  });
 });
