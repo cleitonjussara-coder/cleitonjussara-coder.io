@@ -814,7 +814,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-ano').value = dados.ano || filAno;
 
   // badge de captura
-  const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual' };
+  const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
   $('captura-badge').textContent = badges[dados.metodo_captura||'manual']||'✏️ Manual';
 
   toggleSubtipo();
@@ -837,8 +837,38 @@ async function abrirFormNota(dados = {}) {
   // se vier com CNPJ, busca razão social
   if (dados.cnpj && !dados.razao_social) buscarRazaoSocial(dados.cnpj);
 
+  // enriquecimento automático via SEFAZ (chave NFCe do QR)
+  if (dados.chave && dados.chave.length === 44 && !dados.id && !dados.razao_social) {
+    enriquecerViaSefaz(dados.chave);
+  }
+
   // título
   $('nf-titulo').textContent = dados.id ? 'Editar Nota' : 'Nova Nota';
+}
+
+/* enriquece formulário com dados do SEFAZ em background */
+async function enriquecerViaSefaz(chave) {
+  try {
+    $('captura-badge').textContent = '🌐 Buscando dados oficiais…';
+    const result = await SEFAZ.consultarChave(chave);
+    if (result.razao_social) {
+      $('nf-razao').value = result.razao_social;
+      $('captura-badge').textContent = '🌐 Dados oficiais SEFAZ';
+    }
+    if (result.valor && !$('nf-valor').value) {
+      $('nf-valor').value = result.valor;
+    }
+    if (result.data && result.data !== $('nf-data').value) {
+      $('nf-data').value = result.data;
+      $('nf-mes').value = result.mes;
+      $('nf-ano').value = result.ano;
+    }
+    if (result.fonte && result.fonte !== 'chave') {
+      toast('Dados enriquecidos via SEFAZ');
+    }
+  } catch (_) {
+    $('captura-badge').textContent = '📷 QR Code';
+  }
 }
 
 function fecharFormNota() {
