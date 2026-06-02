@@ -56,23 +56,25 @@ window.NFCE = (() => {
         if (parts.length === 1) {
           const raw = digits(parts[0]);
           if (raw.length === 44 && !chave) chave = raw;
-        } else if (parts.length >= 3) {
+        } else {
           // formato pipe: parts[0]=cUF, parts[1]=AAMM, parts[2]=CNPJ, parts[3]=mod, ...
           // extrai CNPJ e data diretamente como fallback
-          const cnpjRaw = digits(parts[2] || '');
-          if (cnpjRaw.length === 14) cnpj = cnpjRaw;
+          if (parts.length >= 3) {
+            const cnpjRaw = digits(parts[2] || '');
+            if (cnpjRaw.length === 14) cnpj = cnpjRaw;
 
-          const aamm = digits(parts[1] || '');
-          if (aamm.length === 4) {
-            const aa = 2000 + parseInt(aamm.slice(0,2), 10);
-            const mm = parseInt(aamm.slice(2), 10);
-            if (mm >= 1 && mm <= 12) data = `${aa}-${String(mm).padStart(2,'0')}-01`;
+            const aamm = digits(parts[1] || '');
+            if (aamm.length === 4) {
+              const aa = 2000 + parseInt(aamm.slice(0,2), 10);
+              const mm = parseInt(aamm.slice(2), 10);
+              if (mm >= 1 && mm <= 12) data = `${aa}-${String(mm).padStart(2,'0')}-01`;
+            }
           }
 
           // reconstrói chave dos primeiros 9 campos
           if (!chave) {
             const raw = digits(parts.slice(0, 9).join(''));
-            if (raw.length === 44) chave = raw;
+            if (raw.length >= 44) chave = raw.slice(0, 44);
           }
 
           // vNF = índice 10
