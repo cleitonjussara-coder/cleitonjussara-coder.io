@@ -44,7 +44,17 @@ function toast(msg, tipo='ok') {
   _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-function setLoading(on) { $('loading-overlay').style.display = on ? 'flex' : 'none'; }
+let _telaAtual = 'auth';
+
+function setLoading(on) {
+  const el = $('loading-overlay');
+  if (on) {
+    el.style.display = 'flex';
+    setTimeout(() => { if (el.style.display === 'flex') el.style.display = 'none'; }, 15000);
+  } else {
+    el.style.display = 'none';
+  }
+}
 
 function syncBadge(syncing) {
   const dot = $('sync-dot');
@@ -60,9 +70,11 @@ async function init() {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     sb.auth.onAuthStateChange(async (_ev, session) => {
       if (session?.user) {
+        if (user && _telaAtual === 'app') return;
         await onLogin(session.user);
       } else {
         user = null;
+        _telaAtual = 'auth';
         showTela('auth');
       }
     });
@@ -117,11 +129,13 @@ async function onLogin(authUser) {
     await DB.open();
     DB.setupAutoSync(sb, () => user?.id);
     await carregarDadosLocais();
-    await DB.sync(sb, user.id);
-    if (driveOk) await pullFromDrive();
     showTela('app');
     switchView('home');
-  } finally { setLoading(false); }
+    setLoading(false);
+    // sync em background (não bloqueia a tela)
+    DB.sync(sb, user.id).catch(() => {});
+    if (driveOk) pullFromDrive().catch(() => {});
+  } catch (_) { setLoading(false); }
 }
 
 async function carregarDadosLocais() {
@@ -132,6 +146,7 @@ async function carregarDadosLocais() {
 
 /* ── Telas ───────────────────────────────────────────────── */
 function showTela(t) {
+  _telaAtual = t;
   const authEl = $('auth-screen');
   const appEl  = $('app-screen');
   if (authEl) authEl.style.display = t === 'auth' ? 'flex' : 'none';
