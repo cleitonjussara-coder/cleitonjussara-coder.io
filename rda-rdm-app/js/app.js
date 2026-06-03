@@ -82,8 +82,6 @@ async function init() {
   _drivePullInterval = setInterval(async () => {
     if (driveOk && user && navigator.onLine) await pullFromDrive();
   }, 5 * 60_000);
-  // pré-carrega worker OCR em background (evita delay de 2-3s ao fotografar)
-  OCR.init().catch(() => {});
   window.addEventListener('online', async () => {
     syncBadge(false);
     if (sb && user) {
