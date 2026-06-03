@@ -49,11 +49,26 @@ window.OCR = (() => {
   }
 
   /* ── Inicialização do worker Tesseract ────────────────── */
+  let _tesseractLoaded = false;
+
+  async function _ensureTesseract() {
+    if (typeof Tesseract !== 'undefined') { _tesseractLoaded = true; return; }
+    if (_tesseractLoaded) return;
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload  = () => { _tesseractLoaded = true; res(); };
+      s.onerror = () => rej(new Error('Falha ao carregar Tesseract.js'));
+      document.head.appendChild(s);
+    });
+  }
+
   async function init() {
     if (ready) return;
     if (_loading) { while (!ready) await new Promise(r => setTimeout(r, 200)); return; }
     _loading = true;
     try {
+      await _ensureTesseract();
       worker = await Tesseract.createWorker('por', 1, {
         logger(m) {
           if (m.status === 'recognizing text') {

@@ -735,13 +735,34 @@ function fecharQR() {
 
 /* ── Código de Barras (Quagga2) ───────────────────────── */
 let _barcodeRunning = false;
+let _quaggaLoaded    = false;
 
-function iniciarBarcode() {
+async function _ensureQuagga() {
+  if (typeof Quagga !== 'undefined') { _quaggaLoaded = true; return; }
+  if (_quaggaLoaded) return;
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js';
+    s.onload  = () => { _quaggaLoaded = true; res(); };
+    s.onerror = () => rej(new Error('Falha ao carregar Quagga2'));
+    document.head.appendChild(s);
+  });
+}
+
+async function iniciarBarcode() {
   fecharCaptura();
-  if (typeof Quagga === 'undefined') {
-    toast('Biblioteca de código de barras não carregada', 'err');
-    return;
+  setLoading(true);
+  try {
+    await _ensureQuagga();
+    setLoading(false);
+    iniciarBarcodeScanner();
+  } catch (e) {
+    setLoading(false);
+    toast('Erro ao carregar scanner: ' + e.message, 'err');
   }
+}
+
+function iniciarBarcodeScanner() {
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
   $('qr-hint').textContent = 'Aponte para o código de barras';
