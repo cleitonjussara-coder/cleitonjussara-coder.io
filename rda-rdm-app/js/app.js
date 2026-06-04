@@ -721,21 +721,26 @@ function iniciarQR() {
     });
 }
 
+let _qrSkip = 0;
 function loopQR(ctx, video, canvas) {
   if (!qrStream) return;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
-  if (code?.data) {
-    const parsed = NFCE.fromScan(code.data);
-    if (parsed?.chave || parsed?.cnpj) {
-      fecharQR();
-      if (parsed.chave) {
-        navigator.clipboard?.writeText(parsed.chave).catch(() => {});
-        toast('Chave NFCe copiada!');
+  // decodifica a cada 2 frames — metade do custo de CPU, scan continua fluido
+  _qrSkip = (_qrSkip + 1) % 2;
+  if (_qrSkip === 0) {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
+    if (code?.data) {
+      const parsed = NFCE.fromScan(code.data);
+      if (parsed?.chave || parsed?.cnpj) {
+        fecharQR();
+        if (parsed.chave) {
+          navigator.clipboard?.writeText(parsed.chave).catch(() => {});
+          toast('Chave NFCe copiada!');
+        }
+        abrirFormNota({ ...parsed, metodo_captura:'qrcode' });
+        return;
       }
-      abrirFormNota({ ...parsed, metodo_captura:'qrcode' });
-      return;
     }
   }
   qrFrame = requestAnimationFrame(() => loopQR(ctx, video, canvas));
