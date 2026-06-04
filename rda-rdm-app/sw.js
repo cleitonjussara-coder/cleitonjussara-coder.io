@@ -5,7 +5,7 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v6';
+const CACHE   = 'petermann-v7';
 const SHELL   = [
   '/',
   '/index.html',
@@ -26,10 +26,7 @@ const SHELL   = [
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
-  'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
-  'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js',
 ];
 
 // ── Install: pré-cache do shell ─────────────────────────────

@@ -1182,8 +1182,21 @@ async function excluirRepasse(id) {
 }
 
 /* ── Exportações ─────────────────────────────────────────── */
-function exportCSV()   { Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
-function exportExcel() { Excel.exportarAnual(filAno, notas, repasses, user); }
+let _xlsxLoaded = false;
+async function _ensureXLSX() {
+  if (typeof XLSX !== 'undefined') { _xlsxLoaded = true; return; }
+  if (_xlsxLoaded) return;
+  setLoading(true);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+    s.onload  = () => { _xlsxLoaded = true; setLoading(false); res(); };
+    s.onerror = () => { setLoading(false); rej(new Error('Falha ao carregar exportação')); };
+    document.head.appendChild(s);
+  });
+}
+async function exportCSV()   { await _ensureXLSX(); Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
+async function exportExcel() { await _ensureXLSX(); Excel.exportarAnual(filAno, notas, repasses, user); }
 
 /* ── Boot ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
