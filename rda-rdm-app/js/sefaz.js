@@ -114,27 +114,33 @@ window.SEFAZ = (() => {
 
   /* ── Tenta fetch via CORS proxy público ──────────────── */
   async function fetchViaProxy(url) {
-    // corsproxy.io virou pago (morto). allorigins é o único confiável hoje.
+    // Múltiplas pontes CORS — tenta em cascata, para na 1ª que responder.
+    // (corsproxy.io virou pago; mantemos várias alternativas como fallback)
     const proxies = [
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      { build: u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, wrap: false },
+      { build: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, wrap: true  },
+      { build: u => `https://corsproxy.org/?url=${encodeURIComponent(u)}`,         wrap: false },
+      { build: u => `https://thingproxy.freeboard.io/fetch/${u}`,                  wrap: false },
     ];
 
-    for (const pf of proxies) {
+    for (const px of proxies) {
       try {
         const ctrl = new AbortController();
-        const tid  = setTimeout(() => ctrl.abort(), 6000);
-        const resp = await fetch(pf(url), {
+        const tid  = setTimeout(() => ctrl.abort(), 5000);
+        const resp = await fetch(px.build(url), {
           signal: ctrl.signal,
           headers: { 'Accept': 'application/json, text/html' },
         });
         clearTimeout(tid);
         if (!resp.ok) continue;
 
-        const contentType = resp.headers.get('content-type') || '';
-        const text = await resp.text();
+        let text = await resp.text();
+        // allorigins /get embrulha o conteúdo em { contents: "..." }
+        if (px.wrap) { try { text = JSON.parse(text).contents || text; } catch (_) {} }
+        if (!text || !text.trim()) continue;
 
-        if (contentType.includes('json') || text.trim().startsWith('{')) {
-          try { return { type:'json', data: JSON.parse(text) }; } catch(_) {}
+        if (text.trim().startsWith('{')) {
+          try { return { type:'json', data: JSON.parse(text) }; } catch (_) {}
         }
         return { type:'html', data: text };
       } catch (_) { continue; }
