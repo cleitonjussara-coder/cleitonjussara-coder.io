@@ -1096,12 +1096,51 @@ async function buscarRazaoSocial(raw) {
   if (r?.razao_social) $('nf-razao').value = r.razao_social;
 }
 
-function onFotoNotaChange(e) {
+async function onFotoNotaChange(e) {
   const file = e.target.files[0];
   if (!file) return;
   fotoBlob = file;
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
+  // lê a própria foto anexada (OCR) e preenche os campos vazios
+  await extrairDadosDaFoto(file);
+}
+
+/* OCR da foto anexada no formulário — preenche só o que está vazio */
+async function extrairDadosDaFoto(file) {
+  const ov = $('ocr-overlay');
+  ov.style.display = 'flex';
+  $('ocr-progress').textContent = 'Lendo a foto…';
+  try {
+    const r = await OCR.processar(file);
+    const preencheu = [];
+
+    if (r.valor && !$('nf-valor').value) {
+      $('nf-valor').value = r.valor; preencheu.push('valor');
+    }
+    if (r.cnpj && !$('nf-cnpj').value) {
+      $('nf-cnpj').value = BrasilAPI.formatar(r.cnpj); preencheu.push('CNPJ');
+    }
+    if (!$('nf-razao').value) {
+      if (r.razao_social) { $('nf-razao').value = r.razao_social; preencheu.push('razão'); }
+      else if (r.cnpj)    { buscarRazaoSocial(r.cnpj); }   // tenta pelo CNPJ
+    }
+    // data: substitui só se o campo ainda estiver no padrão (hoje)
+    if (r.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
+      $('nf-data').value = r.data; preencheu.push('data');
+    }
+    if (r.chave && r.chave.length === 44 && !$('nf-chave').value) {
+      $('nf-chave').value = r.chave;
+    }
+
+    ov.style.display = 'none';
+    toast(preencheu.length
+      ? 'Foto lida: ' + preencheu.join(', ')
+      : 'Não consegui ler os dados — confira manualmente', preencheu.length ? 'ok' : 'err');
+  } catch (err) {
+    ov.style.display = 'none';
+    toast('Erro ao ler a foto: ' + err.message, 'err');
+  }
 }
 
 function atualizarPreviewFoto(url) {
