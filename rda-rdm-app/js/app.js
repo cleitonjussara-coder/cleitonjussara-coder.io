@@ -155,17 +155,33 @@ async function init() {
 async function onLogin(authUser) {
   setLoading(true);
   try {
-    if (!DEMO_MODE && sb) {
-      const { data } = await sb.from('colaboradores').select('*').eq('id', authUser.id).maybeSingle();
-      user = data || { id:authUser.id, email:authUser.email, nome:'', role:'colaborador', nucleo:'Cristalina' };
-    }
     await DB.open();
+    // perfil em cache → app abre na hora; sem cache, usa padrão
+    let perfil = null;
+    try { perfil = JSON.parse(localStorage.getItem('perfil_' + authUser.id) || 'null'); } catch (_) {}
+    user = perfil || { id:authUser.id, email:authUser.email, nome:'', role:'colaborador', nucleo:'Cristalina' };
     DB.setupAutoSync(sb, () => user?.id);
     await carregarDadosLocais();
     showTela('app');
     switchView('home');
     setLoading(false);
-    // sync em background (não bloqueia a tela)
+
+    // perfil oficial em background (não bloqueia a tela)
+    if (!DEMO_MODE && sb) {
+      sb.from('colaboradores').select('*').eq('id', authUser.id).maybeSingle()
+        .then(({ data }) => {
+          if (!data) return;
+          const mudou = JSON.stringify(data) !== JSON.stringify(perfil);
+          user = data;
+          try { localStorage.setItem('perfil_' + authUser.id, JSON.stringify(data)); } catch (_) {}
+          if (mudou) {
+            showTela('app');                       // atualiza menu Equipe conforme o cargo
+            if (viewAtual === 'perfil') renderPerfil();
+          }
+        }).catch(() => {});
+    }
+
+    // sync de dados em background
     DB.sync(sb, user.id).catch(() => {});
     if (driveOk) pullFromDrive().catch(() => {});
   } catch (_) { setLoading(false); }
