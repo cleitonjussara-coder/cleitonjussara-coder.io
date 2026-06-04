@@ -1106,37 +1106,86 @@ async function onFotoNotaChange(e) {
   await extrairDadosDaFoto(file);
 }
 
-/* OCR da foto anexada no formulário — preenche só o que está vazio */
+/* Lê um QR Code que esteja dentro de uma imagem (foto do cupom) */
+async function _lerQRdaImagem(file) {
+  try {
+    await _ensureJsQR();
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload  = () => res(im);
+      im.onerror = () => rej(new Error('img'));
+      im.src = url;
+    });
+    URL.revokeObjectURL(url);
+    // limita resolução p/ performance, mas alto o bastante p/ achar QR pequeno
+    let w = img.width, h = img.height;
+    const max = 2000;
+    if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const d = ctx.getImageData(0, 0, w, h);
+    const code = jsQR(d.data, d.width, d.height, { inversionAttempts:'attemptBoth' });
+    if (code?.data) return NFCE.fromScan(code.data);
+  } catch (_) {}
+  return null;
+}
+
+/* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
+   Combina os resultados e preenche só os campos vazios. */
 async function extrairDadosDaFoto(file) {
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
-  $('ocr-progress').textContent = 'Lendo a foto…';
+  $('ocr-progress').textContent = 'Procurando QR Code…';
   try {
-    const r = await OCR.processar(file);
-    const preencheu = [];
+    // Busca 1: QR Code dentro da imagem
+    const qr = await _lerQRdaImagem(file);
 
-    if (r.valor && !$('nf-valor').value) {
-      $('nf-valor').value = r.valor; preencheu.push('valor');
+    // Busca 2: OCR do texto impresso
+    $('ocr-progress').textContent = 'Lendo o texto…';
+    let ocr = {};
+    try { ocr = await OCR.processar(file); } catch (_) {}
+
+    // Mescla: QR tem prioridade p/ chave/CNPJ; valor = QR(pipe) → OCR
+    const dados = {
+      chave        : (qr?.chave && qr.chave.length === 44) ? qr.chave : (ocr.chave || ''),
+      cnpj         : qr?.cnpj || ocr.cnpj || '',
+      valor        : qr?.valor || ocr.valor || null,
+      data         : ocr.data || qr?.data || null,
+      razao_social : ocr.razao_social || null,
+    };
+
+    const preencheu = [];
+    if (dados.valor && !$('nf-valor').value) {
+      $('nf-valor').value = dados.valor; preencheu.push('valor');
     }
-    if (r.cnpj && !$('nf-cnpj').value) {
-      $('nf-cnpj').value = BrasilAPI.formatar(r.cnpj); preencheu.push('CNPJ');
+    if (dados.cnpj && !$('nf-cnpj').value) {
+      $('nf-cnpj').value = BrasilAPI.formatar(dados.cnpj); preencheu.push('CNPJ');
+    }
+    if (dados.chave && dados.chave.length === 44 && !$('nf-chave').value) {
+      $('nf-chave').value = dados.chave;
     }
     if (!$('nf-razao').value) {
-      if (r.razao_social) { $('nf-razao').value = r.razao_social; preencheu.push('razão'); }
-      else if (r.cnpj)    { buscarRazaoSocial(r.cnpj); }   // tenta pelo CNPJ
+      if (dados.razao_social) { $('nf-razao').value = dados.razao_social; preencheu.push('razão'); }
+      else if (dados.cnpj)    { buscarRazaoSocial(dados.cnpj); }  // Busca 3: CNPJ → BrasilAPI
     }
-    // data: substitui só se o campo ainda estiver no padrão (hoje)
-    if (r.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
-      $('nf-data').value = r.data; preencheu.push('data');
-    }
-    if (r.chave && r.chave.length === 44 && !$('nf-chave').value) {
-      $('nf-chave').value = r.chave;
+    if (dados.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
+      $('nf-data').value = dados.data; preencheu.push('data');
     }
 
     ov.style.display = 'none';
+
+    // Busca 4 (background): SEFAZ pela chave, se ainda faltar o valor
+    if (dados.chave && dados.chave.length === 44 && !$('nf-valor').value) {
+      enriquecerViaSefaz(dados.chave);
+    }
+
+    const via = qr ? ' (QR + texto)' : '';
     toast(preencheu.length
-      ? 'Foto lida: ' + preencheu.join(', ')
-      : 'Não consegui ler os dados — confira manualmente', preencheu.length ? 'ok' : 'err');
+      ? `Foto lida${via}: ${preencheu.join(', ')}`
+      : 'Não consegui ler — confira manualmente', preencheu.length ? 'ok' : 'err');
   } catch (err) {
     ov.style.display = 'none';
     toast('Erro ao ler a foto: ' + err.message, 'err');
