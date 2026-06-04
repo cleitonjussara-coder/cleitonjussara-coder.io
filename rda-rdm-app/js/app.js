@@ -34,6 +34,36 @@ const hoje = () => new Date().toISOString().split('T')[0];
 const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const $    = id => document.getElementById(id);
 const fmtData = d => { try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR'); } catch(_){return d;} };
+const _digitos = s => String(s||'').replace(/\D/g,'');
+
+/* ── Link de consulta da nota (SEFAZ) ─────────────────────── */
+async function resolverLinkConsulta(chaveRaw) {
+  const chave = _digitos(chaveRaw);
+  if (chave.length !== 44) return null;
+  let raw = null;
+  try { raw = await DB.getMeta('qr_' + chave); } catch (_) {}   // URL real do QR, se houver
+  return raw || (window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null);
+}
+
+function abrirConsultaChave(chaveRaw) {
+  if (_digitos(chaveRaw).length !== 44) { toast('Esta nota não tem chave NFC-e para consulta', 'err'); return; }
+  const w = window.open('', '_blank');           // abre já, evita bloqueio de popup
+  resolverLinkConsulta(chaveRaw).then(url => {
+    if (url) { if (w) w.location.href = url; else window.open(url, '_blank'); }
+    else { if (w) w.close(); toast('Não foi possível montar o link de consulta', 'err'); }
+  });
+}
+
+function consultarNota(id) {
+  const n = notas.find(x => x.id === id);
+  abrirConsultaChave(n?.chave_nfce || '');
+}
+
+/* guarda a URL real lida de um QR, indexada pela chave */
+function _salvarUrlQR(chave, url) {
+  const c = _digitos(chave);
+  if (c.length === 44 && url) DB.setMeta('qr_' + c, url).catch(() => {});
+}
 
 let _toastTimer;
 function toast(msg, tipo='ok') {
@@ -566,6 +596,7 @@ function renderNotas() {
         <div class="nota-foot">
           <span class="nota-valor">${brl(n.valor)}</span>
           <div class="nota-actions">
+            ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
             ${n.foto_path||n.foto_local ? `<button class="btn-icon-sm" onclick="verFoto('${n.id}')" title="Ver foto">🖼</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
@@ -802,6 +833,7 @@ function loopQR(ctx, video, canvas) {
       if (parsed?.chave || parsed?.cnpj) {
         fecharQR();
         if (parsed.chave) {
+          _salvarUrlQR(parsed.chave, code.data);   // guarda o link real da consulta
           navigator.clipboard?.writeText(parsed.chave).catch(() => {});
           toast('Chave NFCe copiada!');
         }
@@ -893,6 +925,7 @@ function iniciarBarcodeScanner() {
             const parsed = NFCE.fromScan(code);
             if (parsed?.chave || parsed?.cnpj || parsed?.valor) {
               if (parsed.chave) {
+                _salvarUrlQR(parsed.chave, code);   // guarda o link real da consulta
                 navigator.clipboard?.writeText(parsed.chave).catch(() => {});
                 toast('Chave NFCe copiada!');
               }
@@ -1034,8 +1067,24 @@ async function abrirFormNota(dados = {}) {
     enriquecerViaSefaz(dados.chave);
   }
 
+  // link de consulta no SEFAZ (quando há chave de 44 dígitos)
+  _atualizarLinkConsulta();
+
   // título
   $('nf-titulo').textContent = dados.id ? 'Editar Nota' : 'Nova Nota';
+}
+
+/* mostra/esconde o link "Consultar no SEFAZ" conforme a chave do formulário */
+function _atualizarLinkConsulta() {
+  const cl = $('nf-consulta');
+  if (!cl) return;
+  if (_digitos($('nf-chave').value).length === 44) {
+    cl.style.display = 'inline-block';
+    cl.onclick = () => abrirConsultaChave($('nf-chave').value);
+  } else {
+    cl.style.display = 'none';
+    cl.onclick = null;
+  }
 }
 
 /* enriquece formulário com dados do SEFAZ em background */
@@ -1128,7 +1177,11 @@ async function _lerQRdaImagem(file) {
     ctx.drawImage(img, 0, 0, w, h);
     const d = ctx.getImageData(0, 0, w, h);
     const code = jsQR(d.data, d.width, d.height, { inversionAttempts:'attemptBoth' });
-    if (code?.data) return NFCE.fromScan(code.data);
+    if (code?.data) {
+      const p = NFCE.fromScan(code.data);
+      if (p?.chave) _salvarUrlQR(p.chave, code.data);   // guarda o link real da consulta
+      return p;
+    }
   } catch (_) {}
   return null;
 }
@@ -1166,6 +1219,7 @@ async function extrairDadosDaFoto(file) {
     }
     if (dados.chave && dados.chave.length === 44 && !$('nf-chave').value) {
       $('nf-chave').value = dados.chave;
+      _atualizarLinkConsulta();   // revela o link de consulta
     }
     if (!$('nf-razao').value) {
       if (dados.razao_social) { $('nf-razao').value = dados.razao_social; preencheu.push('razão'); }

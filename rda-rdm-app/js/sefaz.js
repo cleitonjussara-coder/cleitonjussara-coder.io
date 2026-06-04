@@ -223,5 +223,20 @@ window.SEFAZ = (() => {
     return result;
   }
 
-  return { consultarChave, buildPipe, UF_MAP };
+  /* ── Link de consulta da nota (abre direto no navegador) ──
+     Sem o hash do CSC não dá p/ recriar o QR completo de qualquer nota,
+     mas levamos ao portal do estado certo com o pipe da chave.
+     Para notas lidas por QR, o app usa a URL real salva (tem prioridade). */
+  function linkConsulta(chave) {
+    const c = digits(chave);
+    if (c.length !== 44) return null;
+    const uf   = UF_MAP[c.slice(0,2)] || '';
+    const pipe = buildPipe(c);
+    const base = SEFAZ_URLS[uf];
+    if (base && pipe) return `${base}?p=${pipe}`;
+    // fallback: portal SVRS atende a consulta NFC-e da maioria dos estados
+    return pipe ? `https://dfe-portal.svrs.rs.gov.br/Nfce/QrCode?p=${pipe}` : null;
+  }
+
+  return { consultarChave, buildPipe, linkConsulta, UF_MAP };
 })();
