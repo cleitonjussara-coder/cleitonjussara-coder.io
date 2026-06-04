@@ -174,9 +174,9 @@ window.SEFAZ = (() => {
       fonte : 'chave',
     };
 
-    // Tenta buscar dados completos do SEFAZ
+    // Raspagem só faz sentido p/ NFC-e (modelo 65). NF-e (55) usa portal nacional.
     const pipe = buildPipe(c);
-    if (pipe && uf) {
+    if (modelo === '65' && pipe && uf) {
       const baseUrl = SEFAZ_URLS[uf];
       if (baseUrl) {
         // PR tem endpoint REST JSON
@@ -230,6 +230,12 @@ window.SEFAZ = (() => {
   function linkConsulta(chave) {
     const c = digits(chave);
     if (c.length !== 44) return null;
+    const modelo = c.slice(20, 22);
+    // NF-e (modelo 55) → Portal Nacional da NF-e
+    if (modelo === '55') {
+      return `https://www.nfe.fazenda.gov.br/portal/consultaResumo.aspx?chNFe=${c}`;
+    }
+    // NFC-e (modelo 65) → portal do estado
     const uf   = UF_MAP[c.slice(0,2)] || '';
     const pipe = buildPipe(c);
     const base = SEFAZ_URLS[uf];

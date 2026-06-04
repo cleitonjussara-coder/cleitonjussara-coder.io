@@ -954,7 +954,7 @@ function fecharBarcode() {
 
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
 function iniciarChaveNFCe() {
-  const chave = prompt('Cole a chave de acesso de 44 dígitos da NFC-e:');
+  const chave = prompt('Cole a chave de acesso de 44 dígitos (NF-e ou NFC-e):');
   if (!chave || !chave.trim()) return;
   onChaveNFCe(chave.trim());
 }
@@ -963,7 +963,7 @@ async function onChaveNFCe(raw) {
   setLoading(true);
   try {
     const result = await SEFAZ.consultarChave(raw);
-    const badges = { chave:'🔑 Chave', sefaz_json:'🌐 SEFAZ', sefaz_proxy:'🌐 SEFAZ', sefaz_html:'🌐 SEFAZ' };
+    const isNFe = result.modelo === '55';
     abrirFormNota({
       cnpj           : result.cnpj || '',
       valor          : result.valor || '',
@@ -971,12 +971,12 @@ async function onChaveNFCe(raw) {
       razao_social   : result.razao_social || '',
       chave          : result.chave || '',
       uf             : result.uf || '',
-      metodo_captura : `chave_nfce_${result.fonte}`,
+      modelo         : result.modelo,
+      metodo_captura : isNFe ? `nfe_${result.fonte}` : `chave_nfce_${result.fonte}`,
       mes            : result.mes,
       ano            : result.ano,
     });
-    const fonte = badges[result.fonte] || result.fonte;
-    toast(`Nota encontrada via ${fonte}`);
+    toast(isNFe ? 'NF-e identificada pela chave' : 'NFC-e identificada pela chave');
   } catch (e) {
     toast(e.message, 'err');
   } finally { setLoading(false); }
@@ -1040,7 +1040,10 @@ async function abrirFormNota(dados = {}) {
 
   // badge de captura
   const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', barcode:'📊 Cód. Barras', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
-  $('captura-badge').textContent = badges[dados.metodo_captura||'manual']||'✏️ Manual';
+  const _modelo = dados.modelo || (_digitos(dados.chave).length === 44 ? _digitos(dados.chave).slice(20,22) : '');
+  $('captura-badge').textContent = _modelo === '55'
+    ? '🧾 NF-e (chave)'
+    : (badges[dados.metodo_captura||'manual'] || '✏️ Manual');
 
   toggleSubtipo();
 
