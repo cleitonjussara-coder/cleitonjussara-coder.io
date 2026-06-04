@@ -64,22 +64,55 @@ function syncBadge(syncing) {
   dot.className='sync-dot online'; txt.textContent='online';
 }
 
+/* ── Loaders sob demanda (lazy) ──────────────────────────── */
+function _ensureSupabaseScript() {
+  if (typeof supabase !== 'undefined') return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    s.onload  = () => res();
+    s.onerror = () => rej(new Error('Falha ao carregar autenticação'));
+    document.head.appendChild(s);
+  });
+}
+async function _ensureSb() {
+  if (sb) return sb;
+  await _ensureSupabaseScript();
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return sb;
+}
+function _ensureJsQR() {
+  if (typeof jsQR !== 'undefined') return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s.onload  = () => res();
+    s.onerror = () => rej(new Error('Falha ao carregar leitor QR'));
+    document.head.appendChild(s);
+  });
+}
+
 /* ── Inicialização ───────────────────────────────────────── */
 async function init() {
   if (!DEMO_MODE) {
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    sb.auth.onAuthStateChange(async (_ev, session) => {
-      if (session?.user) {
-        if (user && _telaAtual === 'app') return;
-        await onLogin(session.user);
-      } else {
-        user = null;
-        _telaAtual = 'auth';
-        showTela('auth');
-      }
-    });
-    const { data:{ session } } = await sb.auth.getSession();
-    if (!session) { showTela('auth'); renderAuth(); }
+    try {
+      await _ensureSb();
+      sb.auth.onAuthStateChange(async (_ev, session) => {
+        if (session?.user) {
+          if (user && _telaAtual === 'app') return;
+          await onLogin(session.user);
+        } else {
+          user = null;
+          _telaAtual = 'auth';
+          showTela('auth');
+        }
+      });
+      const { data:{ session } } = await sb.auth.getSession();
+      if (!session) { showTela('auth'); renderAuth(); }
+    } catch (_) {
+      // sem rede no boot — mostra login mesmo assim; o botao recarrega o Supabase
+      showTela('auth'); renderAuth();
+    }
   } else {
     // modo demo sem Supabase
     $('demo-banner').style.display = 'flex';
@@ -183,6 +216,7 @@ async function login() {
   const pass  = $('a-pass').value;
   if (!email||!pass) { toast('Preencha e-mail e senha','err'); return; }
   setLoading(true);
+  try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para entrar','err'); return; }
   const { error } = await sb.auth.signInWithPassword({ email, password:pass });
   setLoading(false);
   if (error) toast(error.message,'err');
@@ -195,6 +229,7 @@ async function register() {
   if (!email||!pass) { toast('Preencha os campos','err'); return; }
   if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres','err'); return; }
   setLoading(true);
+  try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para cadastrar','err'); return; }
   const { error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
   setLoading(false);
   if (error) { toast(error.message,'err'); return; }
@@ -696,8 +731,11 @@ function fecharCaptura() {
 }
 
 /* ── QR Code ─────────────────────────────────────────────── */
-function iniciarQR() {
+async function iniciarQR() {
   fecharCaptura();
+  setLoading(true);
+  try { await _ensureJsQR(); } catch (e) { setLoading(false); toast(e.message, 'err'); return; }
+  setLoading(false);
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
   const video  = $('qr-video');
