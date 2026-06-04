@@ -59,10 +59,12 @@ function consultarNota(id) {
   abrirConsultaChave(n?.chave_nfce || '');
 }
 
-/* guarda a URL real lida de um QR, indexada pela chave */
+/* guarda a URL real lida de um QR, indexada pela chave.
+   Só salva se for mesmo uma URL (QR) — código de barras traz a chave pura,
+   que não serve como link e deixaria a montagem por modelo (NF-e/NFC-e) acontecer. */
 function _salvarUrlQR(chave, url) {
   const c = _digitos(chave);
-  if (c.length === 44 && url) DB.setMeta('qr_' + c, url).catch(() => {});
+  if (c.length === 44 && /^https?:\/\//i.test(url)) DB.setMeta('qr_' + c, url).catch(() => {});
 }
 
 let _toastTimer;
@@ -924,14 +926,15 @@ function iniciarBarcodeScanner() {
             fecharBarcode();
             const parsed = NFCE.fromScan(code);
             if (parsed?.chave || parsed?.cnpj || parsed?.valor) {
+              const isNFe = parsed.modelo === '55';
               if (parsed.chave) {
-                _salvarUrlQR(parsed.chave, code);   // guarda o link real da consulta
+                _salvarUrlQR(parsed.chave, code);   // só salva se for URL (QR); barcode = chave pura
                 navigator.clipboard?.writeText(parsed.chave).catch(() => {});
-                toast('Chave NFCe copiada!');
+                toast(isNFe ? 'Chave NF-e lida!' : 'Chave NFC-e lida!');
               }
               abrirFormNota({ ...parsed, metodo_captura:'barcode' });
             } else {
-              toast('Código de barras não reconhecido como NFC-e', 'err');
+              toast('Código de barras não reconhecido (use a chave de 44 dígitos da NF-e/NFC-e)', 'err');
             }
           }
         });
