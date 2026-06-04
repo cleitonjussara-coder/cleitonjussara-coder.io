@@ -65,31 +65,52 @@ function syncBadge(syncing) {
 }
 
 /* ── Loaders sob demanda (lazy) ──────────────────────────── */
-function _ensureSupabaseScript() {
-  if (typeof supabase !== 'undefined') return Promise.resolve();
+function _loadScript(src, erro) {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    s.src = src;
     s.onload  = () => res();
-    s.onerror = () => rej(new Error('Falha ao carregar autenticação'));
+    s.onerror = () => rej(new Error(erro));
     document.head.appendChild(s);
   });
 }
-async function _ensureSb() {
-  if (sb) return sb;
-  await _ensureSupabaseScript();
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return sb;
+
+/* Cliente Supabase singleton — UMA promessa, UM client, UM listener.
+   Evita corrida (2 cliques rápidos) que criava clients duplicados. */
+let _sbPromise = null;
+function _ensureSb() {
+  if (_sbPromise) return _sbPromise;
+  _sbPromise = (async () => {
+    if (typeof supabase === 'undefined') {
+      await _loadScript(
+        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
+        'Falha ao carregar autenticação');
+    }
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange(async (_ev, session) => {
+      if (session?.user) {
+        if (user && _telaAtual === 'app') return;
+        await onLogin(session.user);
+      } else {
+        user = null;
+        _telaAtual = 'auth';
+        showTela('auth');
+      }
+    });
+    return sb;
+  })();
+  return _sbPromise;
 }
+
+let _jsqrPromise = null;
 function _ensureJsQR() {
   if (typeof jsQR !== 'undefined') return Promise.resolve();
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-    s.onload  = () => res();
-    s.onerror = () => rej(new Error('Falha ao carregar leitor QR'));
-    document.head.appendChild(s);
-  });
+  if (!_jsqrPromise) {
+    _jsqrPromise = _loadScript(
+      'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+      'Falha ao carregar leitor QR');
+  }
+  return _jsqrPromise;
 }
 
 /* ── Inicialização ───────────────────────────────────────── */
@@ -97,16 +118,6 @@ async function init() {
   if (!DEMO_MODE) {
     try {
       await _ensureSb();
-      sb.auth.onAuthStateChange(async (_ev, session) => {
-        if (session?.user) {
-          if (user && _telaAtual === 'app') return;
-          await onLogin(session.user);
-        } else {
-          user = null;
-          _telaAtual = 'auth';
-          showTela('auth');
-        }
-      });
       const { data:{ session } } = await sb.auth.getSession();
       if (!session) { showTela('auth'); renderAuth(); }
     } catch (_) {
@@ -233,9 +244,11 @@ async function login() {
   if (!email||!pass) { toast('Preencha e-mail e senha','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para entrar','err'); return; }
-  const { error } = await sb.auth.signInWithPassword({ email, password:pass });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password:pass });
+  if (error) { setLoading(false); toast(error.message,'err'); return; }
+  // fallback: garante a entrada mesmo se o onAuthStateChange não disparar
+  if (data?.user && _telaAtual !== 'app') await onLogin(data.user);
   setLoading(false);
-  if (error) toast(error.message,'err');
 }
 
 async function register() {
