@@ -114,15 +114,15 @@ window.SEFAZ = (() => {
 
   /* ── Tenta fetch via CORS proxy público ──────────────── */
   async function fetchViaProxy(url) {
+    // corsproxy.io virou pago (morto). allorigins é o único confiável hoje.
     const proxies = [
       (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     ];
 
     for (const pf of proxies) {
       try {
         const ctrl = new AbortController();
-        const tid  = setTimeout(() => ctrl.abort(), 10000);
+        const tid  = setTimeout(() => ctrl.abort(), 6000);
         const resp = await fetch(pf(url), {
           signal: ctrl.signal,
           headers: { 'Accept': 'application/json, text/html' },
@@ -177,7 +177,7 @@ window.SEFAZ = (() => {
         if (uf === 'PR') {
           try {
             const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 10000);
+            const tid = setTimeout(() => ctrl.abort(), 6000);
             const resp = await fetch(`${baseUrl}?chave=${c}`, {
               signal: ctrl.signal,
               headers: { 'Accept': 'application/json' },
