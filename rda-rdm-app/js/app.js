@@ -183,8 +183,7 @@ async function init() {
     if (driveOk) await pullFromDrive().catch(() => {});
     await carregarDadosLocais();
     if (viewAtual==='home')   renderHome();
-  if (viewAtual==='home')  renderHome();
-  if (viewAtual==='notas') renderNotas();
+    if (viewAtual==='notas') renderNotas();
     if (viewAtual==='saldo') renderSaldo();
     const {ok,pulled} = e.detail||{};
     if ((ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
@@ -740,6 +739,7 @@ function renderPerfil() {
   </div>
 
   <div class="perfil-actions">
+    <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
@@ -1364,6 +1364,10 @@ function fecharFotoViewer() {
   ov.style.display = 'none';
   $('foto-viewer-img').src = '';
 }
+
+/* ── Ajuda / Como usar ───────────────────────────────────── */
+function abrirAjuda()  { $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
+function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */
 function abrirFormRepasse() {

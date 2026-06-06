@@ -502,6 +502,18 @@ select.inp{cursor:pointer}
   display:flex;align-items:center;justify-content:center;
 }
 
+/* Ajuda / Como usar */
+.ajuda-sec{background:var(--surface);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.ajuda-sec h4{font-size:15.5px;font-weight:800;color:var(--primary-d);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.ajuda-sec p{font-size:14px;color:var(--text);line-height:1.55;margin-bottom:6px}
+.ajuda-sec p:last-child{margin-bottom:0}
+.ajuda-sec ul{padding-left:18px;display:flex;flex-direction:column;gap:5px;margin-top:2px}
+.ajuda-sec li{font-size:14px;color:var(--text);line-height:1.5}
+.ajuda-sec b{color:var(--primary-d)}
+.ajuda-note{background:#FFF7E6;border:1px solid var(--warning);border-radius:var(--radius-sm);
+            padding:10px 12px;font-size:13px;color:#7a5a00;line-height:1.5}
+.ajuda-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -754,6 +766,83 @@ select.inp{cursor:pointer}
   </div>
 </div>
 
+<!-- ═══════════ AJUDA / COMO USAR ═══════════ -->
+<div id="ajuda-overlay" class="full-overlay">
+  <div class="form-hdr">
+    <button class="btn-icon-sm" style="color:#fff;font-size:22px" onclick="fecharAjuda()">←</button>
+    <h3>Como usar o app</h3>
+  </div>
+  <div class="form-body">
+
+    <div class="ajuda-sec">
+      <h4>📱 Instalar no celular</h4>
+      <p><b>Android (Chrome):</b> abra o link → menu (⋮) → <b>Adicionar à tela inicial</b>.</p>
+      <p><b>iPhone (Safari):</b> Compartilhar → <b>Adicionar à Tela de Início</b>.</p>
+      <p>Vira um app normal e funciona até <b>sem internet</b>. Ao usar a câmera, toque em <b>Permitir</b>.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>🔑 Entrar e perfil</h4>
+      <p>Cadastre-se com e-mail e senha (mín. 6 caracteres) e confirme pelo <b>e-mail</b>. Depois faça login.</p>
+      <p>Em <b>Perfil</b>, informe seu <b>Nome</b> e <b>Núcleo</b> e salve.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>👥 Papéis da equipe</h4>
+      <ul>
+        <li><b>Colaborador:</b> vê só as próprias notas.</li>
+        <li><b>Gestor:</b> vê todos do seu núcleo (aba <b>Equipe</b>).</li>
+        <li><b>Admin:</b> vê todos e edita papéis/núcleos.</li>
+      </ul>
+      <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>➕ Lançar uma nota</h4>
+      <p>Toque no <b>+</b> e escolha:</p>
+      <ul>
+        <li>📷 <b>QR Code</b> — cupom NFC-e</li>
+        <li>📊 <b>Cód. Barras</b> — chave da NF-e (DANFE)</li>
+        <li>🔍 <b>Foto OCR</b> — fotografa e lê valor/empresa</li>
+        <li>🔑 <b>Chave</b> — colar os 44 dígitos</li>
+        <li>✏️ <b>Manual</b> · 💸 <b>Repasse</b></li>
+      </ul>
+      <p>Ao <b>anexar a foto</b> no formulário, o app lê a foto sozinho e completa os campos vazios. Confira e toque em <b>Salvar</b>.</p>
+      <p class="ajuda-note">⚠️ O <b>valor</b> não vem da chave (padrão da nota fiscal). Use a <b>foto</b> (lê o TOTAL) ou digite.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>🔗 Consultar no SEFAZ</h4>
+      <p>Notas com chave mostram o botão <b>🔗</b> (na lista e no formulário) que abre a nota no site oficial — NF-e no Portal Nacional, NFC-e no portal do estado.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>☁️ Envio para o servidor</h4>
+      <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>.</p>
+      <p>Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b> e a cada <b>60 segundos</b>.</p>
+      <p>Indicador no topo:</p>
+      <ul>
+        <li><span class="ajuda-dot" style="background:#74C69D"></span> <b>online</b> — conectado</li>
+        <li><span class="ajuda-dot" style="background:#FFB703"></span> <b>sincronizando</b> — enviando</li>
+        <li><span class="ajuda-dot" style="background:#E63946"></span> <b>offline</b> — guardado no celular</li>
+        <li>⏳ na nota — ainda não enviada (vai sozinho quando voltar a internet)</li>
+      </ul>
+      <p>Fotos vão para o servidor e, se conectado em <b>Perfil → Google Drive</b>, também para a pasta na nuvem.</p>
+    </div>
+
+    <div class="ajuda-sec">
+      <h4>💡 Dicas</h4>
+      <ul>
+        <li>Confira o <b>valor</b> antes de salvar.</li>
+        <li>Foto boa: luz, cupom reto e enquadrado inteiro (QR/código visível).</li>
+        <li>Lançou offline? Confirme depois que o <b>⏳</b> sumiu.</li>
+        <li>Use as setas <b>‹ ›</b> para trocar de mês.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
 <!-- ═══════════ FOTO VIEWER ═══════════ -->
 <div id="foto-viewer-overlay" onclick="if(event.target===this)fecharFotoViewer()"
      style="display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.93);
@@ -777,7 +866,10 @@ select.inp{cursor:pointer}
 <div id="toast"></div>
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
-<!-- Supabase e jsQR sao carregados sob demanda (lazy) p/ nao travar a abertura -->
+<!-- Supabase e jsQR carregados no boot (essenciais) -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
 <script defer src="js/db.js"></script>
 <script defer src="js/nfce.js"></script>
 <script defer src="js/sefaz.js"></script>
