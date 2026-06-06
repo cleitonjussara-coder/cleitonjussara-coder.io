@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -867,18 +867,20 @@ async function iniciarQR() {
     if (video.readyState >= 2) { tentarPlay(); start(); }
     else video.addEventListener('loadedmetadata', () => { tentarPlay(); start(); }, { once: true });
 
-    // watchdog: se em 1,5s o vídeo continuar preto (pausado/sem frames),
-    // mostra "toque para ativar" e liga o play no toque do usuário
-    setTimeout(() => {
-      if (!qrStream) return;
-      if (video.paused || !video.videoWidth) {
-        const st = $('qr-status-txt');
-        if (st) st.textContent = '👆 Toque na tela para ativar a câmera';
-        const ov2 = $('qr-overlay');
-        const onTap = () => { tentarPlay(); if (st) st.textContent=''; ov2.removeEventListener('click', onTap); };
-        ov2.addEventListener('click', onTap);
-      }
-    }, 1500);
+    // toque na tela sempre re-tenta o play (contorna bloqueio de autoplay)
+    const ov2 = $('qr-overlay');
+    const onTap = () => tentarPlay();
+    ov2.addEventListener('click', onTap);
+
+    // MEDIDOR AO VIVO (diagnóstico) — mostra o estado real do vídeo/câmera
+    clearInterval(window._qrDiag);
+    window._qrDiag = setInterval(() => {
+      if (!qrStream) { clearInterval(window._qrDiag); return; }
+      const tr = stream.getVideoTracks()[0] || {};
+      const st = $('qr-status-txt');
+      if (st) st.textContent =
+        `${video.videoWidth||0}x${video.videoHeight||0} · play=${!video.paused} · rs=${video.readyState} · cam=${tr.readyState||'?'}/${tr.enabled?'on':'off'}${tr.muted?'/MUTED':''}`;
+    }, 500);
   };
 
   const onErro = e => {
@@ -953,6 +955,7 @@ function loopQR(ctx, video, canvas) {
 
 function fecharQR() {
   cancelAnimationFrame(qrFrame);
+  clearInterval(window._qrDiag);
   qrStream?.getTracks().forEach(t => t.stop());
   qrStream = null;
   $('qr-overlay').style.display = 'none';
