@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -968,35 +968,23 @@ function fecharQR() {
   $('qr-overlay').style.display = 'none';
 }
 
-/* Depois de ler o QR (chave), complementa com OCR do MESMO frame
-   p/ trazer valor/data/CNPJ/razão, anexa a foto e abre o formulário. */
+/* Depois de ler o QR (chave), abre a nota com a chave preenchida e
+   PEDE a foto da nota inteira (conferência + OCR do valor). */
 async function _finalizarCapturaQR(parsed, frameBlob) {
   const dados = { ...parsed, metodo_captura: 'qrcode' };
-
-  // OCR do frame capturado p/ complementar o que a chave não traz
-  if (frameBlob) {
-    const ov = $('ocr-overlay');
-    if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Lendo valor e data…'; }
-    try {
-      const r = await OCR.processar(frameBlob);
-      dados.valor        = dados.valor        || r.valor        || '';
-      dados.data         = dados.data         || r.data         || '';
-      dados.cnpj         = dados.cnpj         || r.cnpj         || '';
-      dados.razao_social = dados.razao_social || r.razao_social || '';
-    } catch (_) {}
-    if (ov) ov.style.display = 'none';
-  }
   if (!dados.data) dados.data = hoje();
 
-  toast(dados.valor ? 'Nota lida: chave + valor!' : 'Chave lida! Confira o valor.');
+  await abrirFormNota(dados);   // chave/CNPJ/UF já entram; fotoBlob fica null
 
-  await abrirFormNota(dados);
-  // anexa a foto do QR (abrirFormNota zera fotoBlob, então setamos depois)
-  if (frameBlob) {
-    fotoBlob = frameBlob;
-    fotoURL  = URL.createObjectURL(frameBlob);
-    atualizarPreviewFoto(fotoURL);
-  }
+  // destaca o botão de foto como chamada p/ ação
+  const lbl = $('btn-foto-label');
+  if (lbl) lbl.textContent = '📷 Fotografar a nota inteira (conferência)';
+
+  toast('Chave lida! 🔑 Agora fotografe a nota inteira para conferência.');
+
+  // tenta abrir a câmera da nota automaticamente (se o navegador permitir;
+  // caso bloqueie por falta de gesto, o usuário toca em "Anexar foto").
+  setTimeout(() => { try { $('f-foto-nota').click(); } catch (_) {} }, 400);
 }
 
 /* ── Código de Barras (Quagga2) ───────────────────────── */
