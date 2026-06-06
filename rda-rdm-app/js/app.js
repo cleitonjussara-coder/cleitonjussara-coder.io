@@ -827,38 +827,62 @@ async function iniciarQR() {
   const canvas = $('qr-canvas');
   const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
-  // resolução alta + foco contínuo ajudam a ler QR denso de cupom fiscal
-  navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: 'environment' },
-      width:  { ideal: 1920 },
-      height: { ideal: 1080 },
+  // checa suporte do navegador
+  if (!navigator.mediaDevices?.getUserMedia) {
+    fecharQR();
+    toast('Este navegador não permite usar a câmera. Use a opção "Chave" ou "Foto OCR".', 'err');
+    return;
+  }
+
+  const onStream = stream => {
+    qrStream = stream;
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    video.play().catch(() => {});
+    // tenta ativar foco contínuo (quando o aparelho suporta)
+    try {
+      const track = stream.getVideoTracks()[0];
+      const caps  = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }
+    } catch (_) {}
+    const start = () => {
+      canvas.width  = video.videoWidth  || 1280;
+      canvas.height = video.videoHeight || 720;
+      loopQR(ctx, video, canvas);
+    };
+    if (video.readyState >= 2) start();
+    else video.addEventListener('loadedmetadata', start, { once: true });
+  };
+
+  const onErro = e => {
+    fecharQR();
+    const nome = e?.name || '';
+    if (nome === 'NotAllowedError' || nome === 'SecurityError') {
+      toast('Permissão de câmera bloqueada. Toque no 🔒/ⓘ ao lado do endereço → Permissões → Câmera → Permitir, e tente de novo.', 'err');
+    } else if (nome === 'NotFoundError' || nome === 'OverconstrainedError') {
+      toast('Nenhuma câmera encontrada. Use a opção "Chave" ou "Foto OCR".', 'err');
+    } else if (nome === 'NotReadableError') {
+      toast('A câmera está em uso por outro app. Feche os outros apps de câmera e tente de novo.', 'err');
+    } else {
+      toast('Não foi possível abrir a câmera: ' + (e?.message || nome || 'erro'), 'err');
     }
+  };
+
+  // 1ª tentativa: câmera traseira em HD. Se falhar (constraint), cai p/ câmera simples.
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
   })
-    .then(stream => {
-      qrStream = stream;
-      video.srcObject = stream;
-      video.setAttribute('playsinline', '');
-      video.play().catch(() => {});
-      // tenta ativar foco contínuo (quando o aparelho suporta)
-      try {
-        const track = stream.getVideoTracks()[0];
-        const caps  = track.getCapabilities ? track.getCapabilities() : {};
-        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
-        }
-      } catch (_) {}
-      const start = () => {
-        canvas.width  = video.videoWidth  || 1280;
-        canvas.height = video.videoHeight || 720;
-        loopQR(ctx, video, canvas);
-      };
-      if (video.readyState >= 2) start();
-      else video.addEventListener('loadedmetadata', start, { once: true });
-    })
-    .catch(e => {
-      fecharQR();
-      toast('Câmera indisponível: ' + e.message, 'err');
+    .then(onStream)
+    .catch(err => {
+      if (err?.name === 'OverconstrainedError' || err?.name === 'NotReadableError' || err?.name === 'TypeError') {
+        // fallback: qualquer câmera, sem exigências
+        navigator.mediaDevices.getUserMedia({ video: true }).then(onStream).catch(onErro);
+      } else {
+        onErro(err);
+      }
     });
 }
 
