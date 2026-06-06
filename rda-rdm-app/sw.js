@@ -5,7 +5,7 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v27';
+const CACHE   = 'petermann-v28';
 const SHELL   = [
   '/',
   '/index.html',
@@ -29,11 +29,11 @@ const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
 ];
 
-// ── Install: pré-cache do shell ─────────────────────────────
+// ── Install: pré-cache do shell (resiliente: ignora arquivo que faltar) ──
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(SHELL))
+      .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null))))
       .then(() => self.skipWaiting())
   );
 });
@@ -66,8 +66,16 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Shell → cache first, fallback index.html
+  // Shell (HTML/JS/CSS locais) → NETWORK FIRST
+  // Sempre tenta a rede (pega código novo na hora); cache só como reserva offline.
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('/index.html')))
+    fetch(e.request)
+      .then(r => {
+        // guarda uma cópia fresca p/ uso offline
+        const copy = r.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return r;
+      })
+      .catch(() => caches.match(e.request).then(r => r || caches.match('/index.html')))
   );
 });

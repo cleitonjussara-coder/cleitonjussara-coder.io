@@ -870,20 +870,46 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js"></script>
-<script defer src="js/nfce.js"></script>
-<script defer src="js/sefaz.js"></script>
-<script defer src="js/brasilapi.js"></script>
-<script defer src="js/ocr.js"></script>
-<script defer src="js/excel.js"></script>
-<script defer src="js/gestor.js"></script>
-<script defer src="js/gdrive.js"></script>
-<script defer src="js/app.js"></script>
+<script defer src="js/db.js?v=28"></script>
+<script defer src="js/nfce.js?v=28"></script>
+<script defer src="js/sefaz.js?v=28"></script>
+<script defer src="js/brasilapi.js?v=28"></script>
+<script defer src="js/ocr.js?v=28"></script>
+<script defer src="js/excel.js?v=28"></script>
+<script defer src="js/gestor.js?v=28"></script>
+<script defer src="js/gdrive.js?v=28"></script>
+<script defer src="js/app.js?v=28"></script>
 
-<!-- Service Worker -->
+<!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // procura atualização assim que carrega e quando volta o foco
+      reg.update().catch(() => {});
+      // quando um SW novo assume o controle, recarrega a página uma vez
+      let recarregou = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (recarregou) return;
+        recarregou = true;
+        location.reload();
+      });
+      // se há um SW esperando, manda ativar já
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            // novo código pronto → ativa (skipWaiting já está no SW) e o controllerchange recarrega
+          }
+        });
+      });
+    }).catch(() => {});
+    // verifica atualização toda vez que o app volta ao primeiro plano
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {});
+      }
+    });
   }
 </script>
 </body>
