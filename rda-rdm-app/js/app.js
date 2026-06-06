@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1138,26 +1138,36 @@ function lerFotoNota() {
   $('f-foto-ocr').click();
 }
 
-/* decodifica um QR Code a partir de uma imagem estática (foto) */
+/* decodifica um QR Code a partir de uma imagem estática (foto).
+   Tenta em várias resoluções — QR pequeno numa foto grande pode falhar
+   numa escala e funcionar em outra. */
 function _lerQRDeImagem(blob) {
   return new Promise(resolve => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      let w = img.width, h = img.height;
-      const max = 1600;                       // limita p/ performance
-      if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
-      const c  = document.createElement('canvas'); c.width = w; c.height = h;
+      if (typeof jsQR === 'undefined') { resolve(null); return; }
+      const c  = document.createElement('canvas');
       const cx = c.getContext('2d', { willReadFrequently: true });
-      cx.drawImage(img, 0, 0, w, h);
-      try {
-        const d = cx.getImageData(0, 0, w, h);
-        const code = (typeof jsQR !== 'undefined')
-          ? jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' })
-          : null;
-        resolve(code?.data || null);
-      } catch (_) { resolve(null); }
+      const tentar = (maxLado) => {
+        let w = img.width, h = img.height;
+        if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
+        c.width = w; c.height = h;
+        cx.drawImage(img, 0, 0, w, h);
+        try {
+          const d = cx.getImageData(0, 0, w, h);
+          const code = jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' });
+          return code?.data || null;
+        } catch (_) { return null; }
+      };
+      // ordem: resolução cheia (até 2600) → média → menor (cobre QR grande e pequeno)
+      const escalas = [2600, 1600, 1000];
+      for (const m of escalas) {
+        const r = tentar(m);
+        if (r) { resolve(r); return; }
+      }
+      resolve(null);
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
