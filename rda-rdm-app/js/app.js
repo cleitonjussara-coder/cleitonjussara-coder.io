@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -829,10 +829,23 @@ async function iniciarQR() {
   const canvas = $('qr-canvas');
   const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
+  // ── Banner de diagnóstico GRANDE no topo (impossível não ver) ──
+  let diag = document.getElementById('qr-diag');
+  if (!diag) {
+    diag = document.createElement('div');
+    diag.id = 'qr-diag';
+    diag.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:5;'
+      + 'background:rgba(0,0,0,.78);color:#7CFC00;font-size:13px;font-weight:700;'
+      + 'padding:10px 12px;text-align:center;font-family:monospace;line-height:1.45;'
+      + 'padding-top:calc(10px + env(safe-area-inset-top,0px));';
+    $('qr-overlay').appendChild(diag);
+  }
+  const setDiag = t => { diag.textContent = `[${APP_VERSION}] ` + t; };
+  setDiag('Abrindo câmera…');
+
   // checa suporte do navegador
   if (!navigator.mediaDevices?.getUserMedia) {
-    fecharQR();
-    toast('Este navegador não permite usar a câmera. Use a opção "Chave" ou "Foto OCR".', 'err');
+    setDiag('SEM SUPORTE a câmera neste navegador. Use "Chave" ou "Foto OCR".');
     return;
   }
 
@@ -877,24 +890,15 @@ async function iniciarQR() {
     window._qrDiag = setInterval(() => {
       if (!qrStream) { clearInterval(window._qrDiag); return; }
       const tr = stream.getVideoTracks()[0] || {};
-      const st = $('qr-status-txt');
-      if (st) st.textContent =
-        `${video.videoWidth||0}x${video.videoHeight||0} · play=${!video.paused} · rs=${video.readyState} · cam=${tr.readyState||'?'}/${tr.enabled?'on':'off'}${tr.muted?'/MUTED':''}`;
-    }, 500);
+      const preto = !video.videoWidth;
+      setDiag(`${video.videoWidth||0}x${video.videoHeight||0} · play=${!video.paused} · rs=${video.readyState} · cam=${tr.readyState||'?'}/${tr.enabled?'on':'off'}${tr.muted?'/MUTED':''}`
+        + (preto ? '  ⟵ sem imagem (toque na tela)' : ''));
+    }, 400);
   };
 
   const onErro = e => {
-    fecharQR();
-    const nome = e?.name || '';
-    if (nome === 'NotAllowedError' || nome === 'SecurityError') {
-      toast('Permissão de câmera bloqueada. Toque no 🔒/ⓘ ao lado do endereço → Permissões → Câmera → Permitir, e tente de novo.', 'err');
-    } else if (nome === 'NotFoundError' || nome === 'OverconstrainedError') {
-      toast('Nenhuma câmera encontrada. Use a opção "Chave" ou "Foto OCR".', 'err');
-    } else if (nome === 'NotReadableError') {
-      toast('A câmera está em uso por outro app. Feche os outros apps de câmera e tente de novo.', 'err');
-    } else {
-      toast('Não foi possível abrir a câmera: ' + (e?.message || nome || 'erro'), 'err');
-    }
+    const nome = e?.name || e?.message || 'erro';
+    setDiag('ERRO ao abrir câmera: ' + nome + '. Toque no X e use "Chave" ou "Foto OCR".');
   };
 
   // 1ª tentativa: câmera traseira em HD. Se falhar (constraint), cai p/ câmera simples.
@@ -956,6 +960,7 @@ function loopQR(ctx, video, canvas) {
 function fecharQR() {
   cancelAnimationFrame(qrFrame);
   clearInterval(window._qrDiag);
+  document.getElementById('qr-diag')?.remove();
   qrStream?.getTracks().forEach(t => t.stop());
   qrStream = null;
   $('qr-overlay').style.display = 'none';
