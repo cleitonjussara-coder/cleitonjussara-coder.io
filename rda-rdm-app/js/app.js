@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -918,7 +918,7 @@ async function iniciarQR() {
 
 let _qrSkip = 0;
 let _qrSeen = 0;
-function loopQR(ctx, video, canvas) {
+async function loopQR(ctx, video, canvas) {
   if (!qrStream) return;
   // decodifica a cada 2 frames — equilíbrio entre CPU e velocidade de leitura
   _qrSkip = (_qrSkip + 1) % 2;
@@ -937,13 +937,15 @@ function loopQR(ctx, video, canvas) {
         if (m) parsed = NFCE.parseChave44(m[0]);
       }
       if (parsed?.chave || parsed?.cnpj) {
-        fecharQR();
+        // captura ESTE frame (que tem o QR) antes de fechar — servirá p/ OCR e foto
+        let frameBlob = null;
+        try { frameBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92)); } catch (_) {}
         if (parsed.chave) {
           _salvarUrlQR(parsed.chave, code.data);   // guarda o link real da consulta
           navigator.clipboard?.writeText(parsed.chave).catch(() => {});
-          toast('Chave NFCe copiada!');
         }
-        abrirFormNota({ ...parsed, metodo_captura:'qrcode' });
+        fecharQR();
+        await _finalizarCapturaQR(parsed, frameBlob);
         return;
       }
       // QR foi lido mas não parece ser de NFC-e — avisa em vez de ficar mudo
@@ -964,6 +966,37 @@ function fecharQR() {
   qrStream?.getTracks().forEach(t => t.stop());
   qrStream = null;
   $('qr-overlay').style.display = 'none';
+}
+
+/* Depois de ler o QR (chave), complementa com OCR do MESMO frame
+   p/ trazer valor/data/CNPJ/razão, anexa a foto e abre o formulário. */
+async function _finalizarCapturaQR(parsed, frameBlob) {
+  const dados = { ...parsed, metodo_captura: 'qrcode' };
+
+  // OCR do frame capturado p/ complementar o que a chave não traz
+  if (frameBlob) {
+    const ov = $('ocr-overlay');
+    if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Lendo valor e data…'; }
+    try {
+      const r = await OCR.processar(frameBlob);
+      dados.valor        = dados.valor        || r.valor        || '';
+      dados.data         = dados.data         || r.data         || '';
+      dados.cnpj         = dados.cnpj         || r.cnpj         || '';
+      dados.razao_social = dados.razao_social || r.razao_social || '';
+    } catch (_) {}
+    if (ov) ov.style.display = 'none';
+  }
+  if (!dados.data) dados.data = hoje();
+
+  toast(dados.valor ? 'Nota lida: chave + valor!' : 'Chave lida! Confira o valor.');
+
+  await abrirFormNota(dados);
+  // anexa a foto do QR (abrirFormNota zera fotoBlob, então setamos depois)
+  if (frameBlob) {
+    fotoBlob = frameBlob;
+    fotoURL  = URL.createObjectURL(frameBlob);
+    atualizarPreviewFoto(fotoURL);
+  }
 }
 
 /* ── Código de Barras (Quagga2) ───────────────────────── */
