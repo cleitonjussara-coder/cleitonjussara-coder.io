@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1430,10 +1430,13 @@ async function lerChaveDaFotoAnexada() {
 
 /* mostra a chave de acesso (quando preenchida) abaixo da foto */
 function _mostrarChaveNota() {
-  const el = $('nf-chave-show'); if (!el) return;
-  const c = _digitos($('nf-chave').value);
-  if (c.length === 44) { el.style.display = 'block'; el.textContent = '🔑 Chave: ' + c; }
-  else { el.style.display = 'none'; el.textContent = ''; }
+  const el = $('nf-chave-show');
+  if (el) {
+    const c = _digitos($('nf-chave').value);
+    if (c.length === 44) { el.style.display = 'block'; el.textContent = '🔑 Chave: ' + c; }
+    else { el.style.display = 'none'; el.textContent = ''; }
+  }
+  _atualizarBotaoLerChave();   // chave mudou → reavalia se mostra o botão de reserva
 }
 
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
@@ -1498,18 +1501,25 @@ async function extrairDadosDaFoto(file) {
 
 function atualizarPreviewFoto(url) {
   const prev = $('foto-preview');
-  const btnChave = $('btn-ler-chave');
   if (url) {
     const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
     prev.innerHTML = `<img src="${src}" alt="Foto" class="foto-thumb"
       onerror="this.parentElement.innerHTML='<span class=muted-p>📎 foto anexada</span>'">`;
     $('btn-foto-label').textContent = '📷 Trocar foto';
-    if (btnChave) btnChave.style.display = 'block';   // há foto → permite ler o QR dela
   } else {
     prev.innerHTML = '';
     $('btn-foto-label').textContent = '📷 Anexar foto';
-    if (btnChave) btnChave.style.display = 'none';
   }
+  _atualizarBotaoLerChave();
+}
+
+/* Botão manual de ler QR só aparece como RESERVA:
+   há foto anexada E a leitura automática NÃO pegou a chave. */
+function _atualizarBotaoLerChave() {
+  const btn = $('btn-ler-chave'); if (!btn) return;
+  const temFoto  = !!fotoBlob;
+  const temChave = _digitos($('nf-chave').value).length === 44;
+  btn.style.display = (temFoto && !temChave) ? 'block' : 'none';
 }
 
 async function salvarNota() {
