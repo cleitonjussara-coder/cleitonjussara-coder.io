@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1138,40 +1138,73 @@ function lerFotoNota() {
   $('f-foto-ocr').click();
 }
 
-/* decodifica um QR Code a partir de uma imagem estática (foto).
-   Tenta em várias resoluções — QR pequeno numa foto grande pode falhar
-   numa escala e funcionar em outra. */
-function _lerQRDeImagem(blob) {
-  return new Promise(resolve => {
-    const img = new Image();
+/* carrega um blob como <img> */
+function _blobToImg(blob) {
+  return new Promise((res, rej) => {
     const url = URL.createObjectURL(blob);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      if (typeof jsQR === 'undefined') { resolve(null); return; }
-      const c  = document.createElement('canvas');
-      const cx = c.getContext('2d', { willReadFrequently: true });
-      const tentar = (maxLado) => {
-        let w = img.width, h = img.height;
-        if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
-        c.width = w; c.height = h;
-        cx.drawImage(img, 0, 0, w, h);
-        try {
-          const d = cx.getImageData(0, 0, w, h);
-          const code = jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' });
-          return code?.data || null;
-        } catch (_) { return null; }
-      };
-      // ordem: resolução cheia (até 2600) → média → menor (cobre QR grande e pequeno)
-      const escalas = [2600, 1600, 1000];
-      for (const m of escalas) {
-        const r = tentar(m);
-        if (r) { resolve(r); return; }
-      }
-      resolve(null);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-    img.src = url;
+    const im = new Image();
+    im.onload  = () => { URL.revokeObjectURL(url); res(im); };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+    im.src = url;
   });
+}
+
+/* LEITOR DE QR ROBUSTO — extrai o texto do QR de uma imagem.
+   1) BarcodeDetector nativo (Android Chrome) — muito superior p/ QR denso
+   2) jsQR em várias resoluções + versão binarizada (preto/branco) */
+async function _qrStringFromBlob(blob) {
+  // 1) leitor nativo do navegador
+  try {
+    if ('BarcodeDetector' in window) {
+      let fmts = [];
+      try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (_) {}
+      if (!fmts.length || fmts.includes('qr_code')) {
+        const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const bmp = await createImageBitmap(blob);
+        const codes = await det.detect(bmp);
+        bmp.close && bmp.close();
+        if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue;
+      }
+    }
+  } catch (_) {}
+
+  // 2) jsQR (reserva)
+  try {
+    await _ensureJsQR();
+    if (typeof jsQR === 'undefined') return null;
+    const img = await _blobToImg(blob);
+    const c  = document.createElement('canvas');
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    const scan = (maxLado, binarizar) => {
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
+      c.width = w; c.height = h;
+      cx.drawImage(img, 0, 0, w, h);
+      try {
+        const d = cx.getImageData(0, 0, w, h);
+        if (binarizar) {
+          const a = d.data;
+          for (let i = 0; i < a.length; i += 4) {
+            const g = a[i]*0.299 + a[i+1]*0.587 + a[i+2]*0.114;
+            const v = g > 128 ? 255 : 0;
+            a[i] = a[i+1] = a[i+2] = v;
+          }
+        }
+        const code = jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' });
+        return code?.data || null;
+      } catch (_) { return null; }
+    };
+    // resolução cheia (até 4000) → médias → e versões binarizadas p/ QR pequeno/desbotado
+    const fullMax = Math.min(Math.max(img.width, img.height), 4000);
+    for (const m of [fullMax, 2400, 1600, 1100]) { const r = scan(m, false); if (r) return r; }
+    for (const m of [fullMax, 2000])             { const r = scan(m, true);  if (r) return r; }
+  } catch (_) {}
+  return null;
+}
+
+/* compat: devolve o texto do QR de uma imagem (usa o leitor robusto) */
+function _lerQRDeImagem(blob) {
+  return _qrStringFromBlob(blob);
 }
 
 async function onFotoNota(e) {
@@ -1370,43 +1403,18 @@ async function onFotoNotaChange(e) {
   await extrairDadosDaFoto(file);
 }
 
-/* Lê um QR Code que esteja dentro de uma imagem (foto do cupom).
-   Tenta em várias resoluções — QR pequeno numa foto grande pode falhar
-   numa escala e funcionar em outra. */
+/* Lê um QR Code dentro de uma imagem (foto do cupom) usando o leitor robusto
+   (BarcodeDetector nativo → jsQR). Devolve os campos da chave NFC-e. */
 async function _lerQRdaImagem(file) {
-  try {
-    await _ensureJsQR();
-    const url = URL.createObjectURL(file);
-    const img = await new Promise((res, rej) => {
-      const im = new Image();
-      im.onload  = () => res(im);
-      im.onerror = () => rej(new Error('img'));
-      im.src = url;
-    });
-    URL.revokeObjectURL(url);
-    const c = document.createElement('canvas');
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    const tentar = (maxLado) => {
-      let w = img.width, h = img.height;
-      if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
-      c.width = w; c.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      try {
-        const d = ctx.getImageData(0, 0, w, h);
-        const code = jsQR(d.data, d.width, d.height, { inversionAttempts:'attemptBoth' });
-        return code?.data || null;
-      } catch (_) { return null; }
-    };
-    for (const m of [2600, 1600, 1000]) {
-      const data = tentar(m);
-      if (data) {
-        const p = NFCE.fromScan(data);
-        if (p?.chave) _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
-        return p;
-      }
-    }
-  } catch (_) {}
-  return null;
+  const data = await _qrStringFromBlob(file);
+  if (!data) return null;
+  let p = NFCE.fromScan(data);
+  if (!(p?.chave)) {
+    const m = String(data).replace(/\D/g, '').match(/\d{44}/);
+    if (m) p = NFCE.parseChave44(m[0]);
+  }
+  if (p?.chave) _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
+  return p;
 }
 
 /* Botão "Ler QR da foto e inserir a chave" — usa a foto já anexada */
