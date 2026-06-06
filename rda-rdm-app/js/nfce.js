@@ -48,7 +48,13 @@ window.NFCE = (() => {
       const safe = url.startsWith('http') ? url : 'https://' + url.replace(/^\/\//, '');
       const u = new URL(safe);
 
-      chave = u.searchParams.get('chave') || null;
+      // estados usam nomes diferentes p/ o parâmetro da chave: chave, chNFe, chaveAcesso...
+      chave = u.searchParams.get('chave')
+           || u.searchParams.get('chNFe')
+           || u.searchParams.get('chaveAcesso')
+           || u.searchParams.get('chamada')
+           || null;
+      if (chave) { const cc = digits(chave); chave = cc.length >= 44 ? cc.slice(0,44) : null; }
 
       const p = u.searchParams.get('p');
       if (p) {
@@ -100,6 +106,12 @@ window.NFCE = (() => {
     } catch (_) {
       const raw = digits(url);
       if (raw.length === 44) chave = raw;
+    }
+
+    // último recurso: procura 44 dígitos seguidos em qualquer parte da URL
+    if (!chave) {
+      const m = String(url).replace(/[^\d]/g, '').match(/\d{44}/);
+      if (m) chave = m[0];
     }
 
     const parsed = chave ? parseChave44(chave) : null;

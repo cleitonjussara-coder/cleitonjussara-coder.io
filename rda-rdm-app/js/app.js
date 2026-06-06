@@ -820,20 +820,41 @@ async function iniciarQR() {
   setLoading(false);
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
+  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe';
+  $('qr-status-txt').textContent = '';
+  _qrSeen = 0;
   const video  = $('qr-video');
   const canvas = $('qr-canvas');
-  const ctx    = canvas.getContext('2d');
+  const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
+  // resolução alta + foco contínuo ajudam a ler QR denso de cupom fiscal
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1920 },
+      height: { ideal: 1080 },
+    }
+  })
     .then(stream => {
       qrStream = stream;
       video.srcObject = stream;
-      video.play();
-      video.addEventListener('loadedmetadata', () => {
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
+      video.setAttribute('playsinline', '');
+      video.play().catch(() => {});
+      // tenta ativar foco contínuo (quando o aparelho suporta)
+      try {
+        const track = stream.getVideoTracks()[0];
+        const caps  = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+        }
+      } catch (_) {}
+      const start = () => {
+        canvas.width  = video.videoWidth  || 1280;
+        canvas.height = video.videoHeight || 720;
         loopQR(ctx, video, canvas);
-      });
+      };
+      if (video.readyState >= 2) start();
+      else video.addEventListener('loadedmetadata', start, { once: true });
     })
     .catch(e => {
       fecharQR();
@@ -842,16 +863,25 @@ async function iniciarQR() {
 }
 
 let _qrSkip = 0;
+let _qrSeen = 0;
 function loopQR(ctx, video, canvas) {
   if (!qrStream) return;
-  // decodifica a cada 2 frames — metade do custo de CPU, scan continua fluido
+  // decodifica a cada 2 frames — equilíbrio entre CPU e velocidade de leitura
   _qrSkip = (_qrSkip + 1) % 2;
-  if (_qrSkip === 0) {
+  if (_qrSkip === 0 && video.videoWidth) {
+    if (canvas.width !== video.videoWidth)  canvas.width  = video.videoWidth;
+    if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(img.data, img.width, img.height, { inversionAttempts:'dontInvert' });
+    // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
     if (code?.data) {
-      const parsed = NFCE.fromScan(code.data);
+      // aceita pela chave/cnpj OU por qualquer sequência de 44 dígitos no conteúdo
+      let parsed = NFCE.fromScan(code.data);
+      if (!(parsed?.chave || parsed?.cnpj)) {
+        const m = code.data.replace(/\D/g, '').match(/\d{44}/);
+        if (m) parsed = NFCE.parseChave44(m[0]);
+      }
       if (parsed?.chave || parsed?.cnpj) {
         fecharQR();
         if (parsed.chave) {
@@ -861,6 +891,12 @@ function loopQR(ctx, video, canvas) {
         }
         abrirFormNota({ ...parsed, metodo_captura:'qrcode' });
         return;
+      }
+      // QR foi lido mas não parece ser de NFC-e — avisa em vez de ficar mudo
+      _qrSeen++;
+      if (_qrSeen >= 3) {
+        const st = $('qr-status-txt');
+        if (st) st.textContent = 'QR lido, mas não é de NFC-e. Use a foto (OCR) ou a chave de 44 dígitos.';
       }
     }
   }
