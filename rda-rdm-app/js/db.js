@@ -169,6 +169,7 @@ window.DB = (() => {
     for (const n of allN.filter(x => !x.synced)) {
       const payload = { ...n };
       delete payload.foto_local; // não sobe o blob
+      delete payload.synced;     // coluna só existe localmente (IndexedDB)
       try {
         const { error } = await sb.from('notas').upsert(payload);
         if (!error) { await _put('notas', { ...n, synced: true }); ok++; }
@@ -192,8 +193,10 @@ window.DB = (() => {
 
     // Repasses
     for (const r of allR.filter(x => !x.synced)) {
+      const payload = { ...r };
+      delete payload.synced;     // coluna só existe localmente (IndexedDB)
       try {
-        const { error } = await sb.from('repasses').upsert(r);
+        const { error } = await sb.from('repasses').upsert(payload);
         if (!error) { await _put('repasses', { ...r, synced: true }); ok++; }
         else fail++;
       } catch (_) { fail++; }

@@ -32,8 +32,7 @@ create table if not exists public.notas (
   data            date          not null,
   mes             smallint      not null check (mes between 1 and 12),
   ano             smallint      not null check (ano >= 2020),
-  metodo_captura  text          not null default 'manual'
-                                check (metodo_captura in ('qrcode','ocr','manual')),
+  metodo_captura  text          not null default 'manual',
   chave_nfce      char(44),
   uf              char(2),
   modelo          char(2),
