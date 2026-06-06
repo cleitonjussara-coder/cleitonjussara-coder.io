@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1291,6 +1291,7 @@ async function abrirFormNota(dados = {}) {
 /* mostra/esconde o link "Consultar no SEFAZ" conforme a chave do formulário */
 function _atualizarLinkConsulta() {
   const cl = $('nf-consulta');
+  _mostrarChaveNota();   // mostra/esconde a chave abaixo da foto
   if (!cl) return;
   if (_digitos($('nf-chave').value).length === 44) {
     cl.style.display = 'inline-block';
@@ -1369,7 +1370,9 @@ async function onFotoNotaChange(e) {
   await extrairDadosDaFoto(file);
 }
 
-/* Lê um QR Code que esteja dentro de uma imagem (foto do cupom) */
+/* Lê um QR Code que esteja dentro de uma imagem (foto do cupom).
+   Tenta em várias resoluções — QR pequeno numa foto grande pode falhar
+   numa escala e funcionar em outra. */
 async function _lerQRdaImagem(file) {
   try {
     await _ensureJsQR();
@@ -1381,23 +1384,56 @@ async function _lerQRdaImagem(file) {
       im.src = url;
     });
     URL.revokeObjectURL(url);
-    // limita resolução p/ performance, mas alto o bastante p/ achar QR pequeno
-    let w = img.width, h = img.height;
-    const max = 2000;
-    if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
     const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
-    const d = ctx.getImageData(0, 0, w, h);
-    const code = jsQR(d.data, d.width, d.height, { inversionAttempts:'attemptBoth' });
-    if (code?.data) {
-      const p = NFCE.fromScan(code.data);
-      if (p?.chave) _salvarUrlQR(p.chave, code.data);   // guarda o link real da consulta
-      return p;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const tentar = (maxLado) => {
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
+      c.width = w; c.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        const d = ctx.getImageData(0, 0, w, h);
+        const code = jsQR(d.data, d.width, d.height, { inversionAttempts:'attemptBoth' });
+        return code?.data || null;
+      } catch (_) { return null; }
+    };
+    for (const m of [2600, 1600, 1000]) {
+      const data = tentar(m);
+      if (data) {
+        const p = NFCE.fromScan(data);
+        if (p?.chave) _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
+        return p;
+      }
     }
   } catch (_) {}
   return null;
+}
+
+/* Botão "Ler QR da foto e inserir a chave" — usa a foto já anexada */
+async function lerChaveDaFotoAnexada() {
+  if (!fotoBlob) { toast('Anexe uma foto da nota primeiro', 'err'); return; }
+  const ov = $('ocr-overlay');
+  if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Procurando QR Code na foto…'; }
+  const qr = await _lerQRdaImagem(fotoBlob);
+  if (ov) ov.style.display = 'none';
+  if (qr?.chave && qr.chave.length === 44) {
+    $('nf-chave').value = qr.chave;
+    if (qr.uf && !$('nf-uf').value) $('nf-uf').value = qr.uf;
+    if (qr.cnpj && !$('nf-cnpj').value) $('nf-cnpj').value = BrasilAPI.formatar(qr.cnpj);
+    _atualizarLinkConsulta();
+    _mostrarChaveNota();
+    toast('Chave inserida pelo QR! 🔑');
+  } else {
+    toast('Não achei QR nesta foto. Use uma foto mais nítida do QR Code.', 'err');
+  }
+}
+
+/* mostra a chave de acesso (quando preenchida) abaixo da foto */
+function _mostrarChaveNota() {
+  const el = $('nf-chave-show'); if (!el) return;
+  const c = _digitos($('nf-chave').value);
+  if (c.length === 44) { el.style.display = 'block'; el.textContent = '🔑 Chave: ' + c; }
+  else { el.style.display = 'none'; el.textContent = ''; }
 }
 
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
@@ -1462,14 +1498,17 @@ async function extrairDadosDaFoto(file) {
 
 function atualizarPreviewFoto(url) {
   const prev = $('foto-preview');
+  const btnChave = $('btn-ler-chave');
   if (url) {
     const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
     prev.innerHTML = `<img src="${src}" alt="Foto" class="foto-thumb"
       onerror="this.parentElement.innerHTML='<span class=muted-p>📎 foto anexada</span>'">`;
     $('btn-foto-label').textContent = '📷 Trocar foto';
+    if (btnChave) btnChave.style.display = 'block';   // há foto → permite ler o QR dela
   } else {
     prev.innerHTML = '';
     $('btn-foto-label').textContent = '📷 Anexar foto';
+    if (btnChave) btnChave.style.display = 'none';
   }
 }
 
