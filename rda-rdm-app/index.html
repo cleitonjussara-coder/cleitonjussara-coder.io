@@ -631,7 +631,7 @@ select.inp{cursor:pointer}
   <canvas id="qr-canvas" style="display:none"></canvas>
   <div class="qr-frame">
     <div class="qr-box"></div>
-    <p class="qr-hint">Aponte para o QR Code da NFCe</p>
+    <p class="qr-hint" id="qr-hint">Aponte para o QR Code da NFCe</p>
     <div id="qr-status-txt"></div>
   </div>
   <button class="btn-overlay-close" onclick="fecharQR();fecharBarcode()">✕</button>
@@ -870,15 +870,15 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=28"></script>
-<script defer src="js/nfce.js?v=28"></script>
-<script defer src="js/sefaz.js?v=28"></script>
-<script defer src="js/brasilapi.js?v=28"></script>
-<script defer src="js/ocr.js?v=28"></script>
-<script defer src="js/excel.js?v=28"></script>
-<script defer src="js/gestor.js?v=28"></script>
-<script defer src="js/gdrive.js?v=28"></script>
-<script defer src="js/app.js?v=28"></script>
+<script defer src="js/db.js?v=29"></script>
+<script defer src="js/nfce.js?v=29"></script>
+<script defer src="js/sefaz.js?v=29"></script>
+<script defer src="js/brasilapi.js?v=29"></script>
+<script defer src="js/ocr.js?v=29"></script>
+<script defer src="js/excel.js?v=29"></script>
+<script defer src="js/gestor.js?v=29"></script>
+<script defer src="js/gdrive.js?v=29"></script>
+<script defer src="js/app.js?v=29"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -822,8 +822,8 @@ async function iniciarQR() {
   setLoading(false);
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
-  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe  ·  ' + APP_VERSION;
-  $('qr-status-txt').textContent = '';
+  const _h = $('qr-hint'); if (_h) _h.textContent = 'Aponte para o QR Code da NFCe  ·  ' + APP_VERSION;
+  const _s = $('qr-status-txt'); if (_s) _s.textContent = '';
   _qrSeen = 0;
   const video  = $('qr-video');
   const canvas = $('qr-canvas');
@@ -998,8 +998,8 @@ async function iniciarBarcode() {
 function iniciarBarcodeScanner() {
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
-  $('qr-hint').textContent = 'Aponte para o código de barras';
-  $('qr-status-txt').textContent = '';
+  { const h=$('qr-hint'); if(h) h.textContent='Aponte para o código de barras'; }
+  { const s=$('qr-status-txt'); if(s) s.textContent=''; }
 
   navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280} } })
     .then(stream => {
@@ -1064,7 +1064,7 @@ function fecharBarcode() {
   qrStream?.getTracks().forEach(t => t.stop());
   qrStream = null;
   $('qr-overlay').style.display = 'none';
-  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe';
+  { const h=$('qr-hint'); if(h) h.textContent='Aponte para o QR Code da NFCe'; }
 }
 
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
