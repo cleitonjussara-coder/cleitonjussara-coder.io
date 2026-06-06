@@ -259,6 +259,11 @@ function renderAuth(mode='login') {
     <input class="inp" id="a-pass"  type="password" placeholder="Senha" autocomplete="current-password">
     <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
     <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
+    <div style="margin-top:8px;text-align:center">
+      <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
+              onclick="usarSemConta()">Usar sem conta (modo local)</button>
+    </div>
   ` : `
     <h2 class="auth-title">Criar conta</h2>
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
@@ -266,7 +271,22 @@ function renderAuth(mode='login') {
     <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 6 caracteres)" autocomplete="new-password">
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
+    <div style="margin-top:8px;text-align:center">
+      <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
+              onclick="usarSemConta()">Usar sem conta (modo local)</button>
+    </div>
   `;
+}
+
+/* Modo local sem autenticação — acessa QR/OCR sem depender do Supabase */
+async function usarSemConta() {
+  $('demo-banner').style.display = 'flex';
+  await DB.open();
+  user = { id:'local-user', email:'local@petermann.app', nome:'Usuário Local', role:'admin', nucleo:'Cristalina' };
+  await carregarDadosLocais();
+  showTela('app');
+  switchView('home');
 }
 
 async function login() {
