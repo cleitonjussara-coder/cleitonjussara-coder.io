@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1150,55 +1150,97 @@ function _blobToImg(blob) {
 }
 
 /* LEITOR DE QR ROBUSTO — extrai o texto do QR de uma imagem.
+   Estratégia que resolve "QR pequeno na foto da nota inteira":
    1) BarcodeDetector nativo (Android Chrome) — muito superior p/ QR denso
-   2) jsQR em várias resoluções + versão binarizada (preto/branco) */
+   2) jsQR como reserva
+   3) TILING: divide a foto em pedaços com sobreposição e AMPLIA cada um,
+      procurando o QR em cada parte — um QR minúsculo vira grande o bastante. */
 async function _qrStringFromBlob(blob) {
-  // 1) leitor nativo do navegador
+  // prepara o detector nativo (se houver)
+  let detector = null;
   try {
     if ('BarcodeDetector' in window) {
       let fmts = [];
       try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (_) {}
       if (!fmts.length || fmts.includes('qr_code')) {
-        const det = new window.BarcodeDetector({ formats: ['qr_code'] });
-        const bmp = await createImageBitmap(blob);
-        const codes = await det.detect(bmp);
-        bmp.close && bmp.close();
-        if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue;
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
       }
     }
   } catch (_) {}
 
-  // 2) jsQR (reserva)
-  try {
-    await _ensureJsQR();
-    if (typeof jsQR === 'undefined') return null;
-    const img = await _blobToImg(blob);
-    const c  = document.createElement('canvas');
-    const cx = c.getContext('2d', { willReadFrequently: true });
-    const scan = (maxLado, binarizar) => {
-      let w = img.width, h = img.height;
-      if (Math.max(w, h) > maxLado) { const s = maxLado / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
-      c.width = w; c.height = h;
-      cx.drawImage(img, 0, 0, w, h);
+  let img = null;
+  try { await _ensureJsQR(); } catch (_) {}
+  try { img = await _blobToImg(blob); } catch (_) {}
+  if (!img) {
+    // sem <img> não dá p/ recortar; tenta o detector direto no blob
+    if (detector) {
       try {
-        const d = cx.getImageData(0, 0, w, h);
+        const bmp = await createImageBitmap(blob);
+        const codes = await detector.detect(bmp);
+        bmp.close && bmp.close();
+        if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  const c  = document.createElement('canvas');
+  const cx = c.getContext('2d', { willReadFrequently: true });
+
+  // roda os dois leitores no que estiver desenhado no canvas
+  const lerCanvas = async (binarizar) => {
+    if (detector) {
+      try { const codes = await detector.detect(c); if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue; } catch (_) {}
+    }
+    if (typeof jsQR !== 'undefined') {
+      try {
+        const d = cx.getImageData(0, 0, c.width, c.height);
         if (binarizar) {
           const a = d.data;
           for (let i = 0; i < a.length; i += 4) {
             const g = a[i]*0.299 + a[i+1]*0.587 + a[i+2]*0.114;
-            const v = g > 128 ? 255 : 0;
-            a[i] = a[i+1] = a[i+2] = v;
+            const v = g > 128 ? 255 : 0; a[i]=a[i+1]=a[i+2]=v;
           }
+          cx.putImageData(d, 0, 0);
         }
-        const code = jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' });
-        return code?.data || null;
-      } catch (_) { return null; }
-    };
-    // resolução cheia (até 4000) → médias → e versões binarizadas p/ QR pequeno/desbotado
-    const fullMax = Math.min(Math.max(img.width, img.height), 4000);
-    for (const m of [fullMax, 2400, 1600, 1100]) { const r = scan(m, false); if (r) return r; }
-    for (const m of [fullMax, 2000])             { const r = scan(m, true);  if (r) return r; }
-  } catch (_) {}
+        const code = jsQR(d.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+        if (code?.data) return code.data;
+      } catch (_) {}
+    }
+    return null;
+  };
+
+  // desenha um recorte (sx,sy,sw,sh) ampliado p/ ~maxLado no maior lado
+  const desenhar = (sx, sy, sw, sh, maxLado) => {
+    const scale = Math.min(maxLado / Math.max(sw, sh), 5);   // amplia até 5x
+    const dw = Math.max(1, Math.round(sw*scale)), dh = Math.max(1, Math.round(sh*scale));
+    c.width = dw; c.height = dh;
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
+  };
+
+  // 1) imagem inteira, algumas resoluções (+ uma binarizada)
+  for (const m of [Math.min(Math.max(img.width, img.height), 3000), 2000, 1400]) {
+    desenhar(0, 0, img.width, img.height, m);
+    const r = await lerCanvas(false); if (r) return r;
+  }
+  desenhar(0, 0, img.width, img.height, 2000);
+  { const r = await lerCanvas(true); if (r) return r; }
+
+  // 2) TILING — grades 2x2, 3x3 e 4x4 com 25% de sobreposição
+  for (const n of [2, 3, 4]) {
+    const tw = img.width / n, th = img.height / n, ov = 0.25;
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) {
+        const sx = Math.max(0, (col - ov) * tw);
+        const sy = Math.max(0, (row - ov) * th);
+        const sw = Math.min(img.width  - sx, tw * (1 + 2*ov));
+        const sh = Math.min(img.height - sy, th * (1 + 2*ov));
+        desenhar(sx, sy, sw, sh, 1300);
+        const r = await lerCanvas(false); if (r) return r;
+      }
+    }
+  }
   return null;
 }
 
