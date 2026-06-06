@@ -836,11 +836,19 @@ async function iniciarQR() {
 
   const onStream = stream => {
     qrStream = stream;
-    video.srcObject = stream;
+    // atributos ANTES do srcObject (exigência do iOS p/ não ficar preto)
     video.setAttribute('playsinline', '');
+    video.setAttribute('autoplay', '');
+    video.setAttribute('muted', '');
     video.muted = true;
-    video.play().catch(() => {});
-    // tenta ativar foco contínuo (quando o aparelho suporta)
+    video.playsInline = true;
+    video.srcObject = stream;
+
+    // tenta dar play; em alguns celulares o autoplay é bloqueado
+    const tentarPlay = () => video.play().catch(() => {});
+    tentarPlay();
+
+    // foco contínuo quando o aparelho suporta
     try {
       const track = stream.getVideoTracks()[0];
       const caps  = track.getCapabilities ? track.getCapabilities() : {};
@@ -848,13 +856,27 @@ async function iniciarQR() {
         track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
     } catch (_) {}
+
     const start = () => {
       canvas.width  = video.videoWidth  || 1280;
       canvas.height = video.videoHeight || 720;
       loopQR(ctx, video, canvas);
     };
-    if (video.readyState >= 2) start();
-    else video.addEventListener('loadedmetadata', start, { once: true });
+    if (video.readyState >= 2) { tentarPlay(); start(); }
+    else video.addEventListener('loadedmetadata', () => { tentarPlay(); start(); }, { once: true });
+
+    // watchdog: se em 1,5s o vídeo continuar preto (pausado/sem frames),
+    // mostra "toque para ativar" e liga o play no toque do usuário
+    setTimeout(() => {
+      if (!qrStream) return;
+      if (video.paused || !video.videoWidth) {
+        const st = $('qr-status-txt');
+        if (st) st.textContent = '👆 Toque na tela para ativar a câmera';
+        const ov2 = $('qr-overlay');
+        const onTap = () => { tentarPlay(); if (st) st.textContent=''; ov2.removeEventListener('click', onTap); };
+        ov2.addEventListener('click', onTap);
+      }
+    }, 1500);
   };
 
   const onErro = e => {
