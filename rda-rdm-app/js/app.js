@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -617,7 +617,7 @@ function renderNotas() {
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
         <div class="nota-foot">
-          <span class="nota-valor">${brl(n.valor)}</span>
+          <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
             ${n.foto_path||n.foto_local ? `<button class="btn-icon-sm" onclick="verFoto('${n.id}')" title="Ver foto">🖼</button>` : ''}
@@ -1571,9 +1571,12 @@ function _atualizarBotaoLerChave() {
 
 async function salvarNota() {
   const tipo  = $('nf-tipo').value;
-  const valor = parseFloat($('nf-valor').value);
+  let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
-  if (!tipo||!valor||!data) { toast('Tipo, valor e data são obrigatórios','err'); return; }
+  // só tipo e data são obrigatórios — sem valor, grava como "pendente" (0)
+  if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
+  const semValor = isNaN(valor) || valor <= 0;
+  if (semValor) valor = 0;
 
   const cnpjRaw = BrasilAPI.limpar($('nf-cnpj').value);
   const mes  = parseInt($('nf-mes').value, 10) || new Date(data+'T00:00:00').getMonth()+1;
@@ -1611,7 +1614,7 @@ async function salvarNota() {
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
-    toast('Nota salva!');
+    toast(semValor ? '⚠️ Nota salva SEM valor — edite para completar' : 'Nota salva!', semValor ? 'err' : 'ok');
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
   } finally { setLoading(false); }
