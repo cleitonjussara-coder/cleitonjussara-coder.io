@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1487,50 +1487,59 @@ async function extrairDadosDaFoto(file) {
     // Busca 1: QR Code dentro da imagem
     const qr = await _lerQRdaImagem(file);
 
-    // Busca 2: OCR do texto impresso
+    // chave: a do QR desta foto OU a que já está no formulário (veio do "Escanear QR")
+    let chave = (qr?.chave && qr.chave.length === 44) ? qr.chave : _digitos($('nf-chave').value);
+    if (chave.length !== 44) chave = '';
+    const daChave = chave ? NFCE.parseChave44(chave) : null;
+
+    // OCR do texto impresso — usado principalmente para o VALOR
     $('ocr-progress').textContent = 'Lendo o texto…';
     let ocr = {};
     try { ocr = await OCR.processar(file); } catch (_) {}
 
-    // Mescla: QR tem prioridade p/ chave/CNPJ; valor = QR(pipe) → OCR
-    const dados = {
-      chave        : (qr?.chave && qr.chave.length === 44) ? qr.chave : (ocr.chave || ''),
-      cnpj         : qr?.cnpj || ocr.cnpj || '',
-      valor        : qr?.valor || ocr.valor || null,
-      data         : ocr.data || qr?.data || null,
-      razao_social : ocr.razao_social || null,
-    };
-
     const preencheu = [];
-    if (dados.valor && !$('nf-valor').value) {
-      $('nf-valor').value = dados.valor; preencheu.push('valor');
+
+    if (daChave) {
+      // ✅ A CHAVE É AUTORITATIVA: CNPJ, empresa, UF, mês/ano e data vêm dela
+      if (_digitos($('nf-chave').value).length !== 44) $('nf-chave').value = chave;
+      $('nf-cnpj').value = BrasilAPI.formatar(daChave.cnpj);     // sobrescreve qualquer OCR errado
+      if ($('nf-uf'))  $('nf-uf').value  = daChave.uf || $('nf-uf').value;
+      if ($('nf-mes')) $('nf-mes').value = daChave.mes;
+      if ($('nf-ano')) $('nf-ano').value = daChave.ano;
+      _atualizarLinkConsulta();
+      buscarRazaoSocial(daChave.cnpj);                            // razão social confiável (BrasilAPI)
+      preencheu.push('CNPJ/empresa');
+
+      // data: dia exato do OCR só se cair no MESMO mês/ano da chave; senão, dia 01
+      let dataFinal = `${daChave.ano}-${String(daChave.mes).padStart(2,'0')}-01`;
+      if (ocr.data && ocr.data.slice(0,7) === dataFinal.slice(0,7)) dataFinal = ocr.data;
+      $('nf-data').value = dataFinal; preencheu.push('data');
+    } else {
+      // sem chave: tudo vem do OCR (menos confiável) — só preenche campos vazios
+      if (ocr.cnpj && !$('nf-cnpj').value) {
+        $('nf-cnpj').value = BrasilAPI.formatar(ocr.cnpj); preencheu.push('CNPJ'); buscarRazaoSocial(ocr.cnpj);
+      }
+      if (ocr.chave && ocr.chave.length === 44 && !$('nf-chave').value) {
+        $('nf-chave').value = ocr.chave; _atualizarLinkConsulta();
+      }
+      if (ocr.razao_social && !$('nf-razao').value) { $('nf-razao').value = ocr.razao_social; }
+      if (ocr.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
+        $('nf-data').value = ocr.data; preencheu.push('data');
+      }
     }
-    if (dados.cnpj && !$('nf-cnpj').value) {
-      $('nf-cnpj').value = BrasilAPI.formatar(dados.cnpj); preencheu.push('CNPJ');
-    }
-    if (dados.chave && dados.chave.length === 44 && !$('nf-chave').value) {
-      $('nf-chave').value = dados.chave;
-      _atualizarLinkConsulta();   // revela o link de consulta
-    }
-    if (!$('nf-razao').value) {
-      if (dados.razao_social) { $('nf-razao').value = dados.razao_social; preencheu.push('razão'); }
-      else if (dados.cnpj)    { buscarRazaoSocial(dados.cnpj); }  // Busca 3: CNPJ → BrasilAPI
-    }
-    if (dados.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
-      $('nf-data').value = dados.data; preencheu.push('data');
-    }
+
+    // VALOR: do OCR (ou do pipe do QR) — só se ainda estiver vazio
+    const valor = (qr?.valor) || ocr.valor || null;
+    if (valor && !$('nf-valor').value) { $('nf-valor').value = valor; preencheu.push('valor'); }
 
     ov.style.display = 'none';
 
-    // Busca 4 (background): SEFAZ pela chave, se ainda faltar o valor
-    if (dados.chave && dados.chave.length === 44 && !$('nf-valor').value) {
-      enriquecerViaSefaz(dados.chave);
-    }
+    // SEFAZ em background p/ tentar o valor, se ainda faltar
+    if (daChave && !$('nf-valor').value) enriquecerViaSefaz(chave);
 
-    const via = qr ? ' (QR + texto)' : '';
     toast(preencheu.length
-      ? `Foto lida${via}: ${preencheu.join(', ')}`
-      : 'Não consegui ler — confira manualmente', preencheu.length ? 'ok' : 'err');
+      ? `Preenchido: ${preencheu.join(', ')}. Confira o valor e o tipo.`
+      : 'Confira os campos manualmente', preencheu.length ? 'ok' : 'err');
   } catch (err) {
     ov.style.display = 'none';
     toast('Erro ao ler a foto: ' + err.message, 'err');
