@@ -591,15 +591,10 @@ select.inp{cursor:pointer}
     <div class="sheet-handle"></div>
     <div class="sheet-title">Como deseja lançar?</div>
     <div class="capture-options">
-      <div class="cap-opt" onclick="iniciarQR()">
+      <div class="cap-opt" onclick="lerFotoNota()">
         <div class="cap-icon">📷</div>
-        <div class="cap-label">QR Code</div>
-        <div class="cap-desc">Ler QR da NFCe</div>
-      </div>
-      <div class="cap-opt" onclick="iniciarOCR()">
-        <div class="cap-icon">🔍</div>
-        <div class="cap-label">Foto OCR</div>
-        <div class="cap-desc">Fotografar recibo</div>
+        <div class="cap-label">Foto da nota</div>
+        <div class="cap-desc">Lê QR e dados da foto</div>
       </div>
       <div class="cap-opt" onclick="fecharCaptura();abrirFormNota({tipo:'RDA'})">
         <div class="cap-icon">✏️</div>
@@ -615,11 +610,6 @@ select.inp{cursor:pointer}
         <div class="cap-icon">🔑</div>
         <div class="cap-label">Chave NF-e/NFC-e</div>
         <div class="cap-desc">Digitar chave de 44 dígitos</div>
-      </div>
-      <div class="cap-opt" onclick="iniciarBarcode()">
-        <div class="cap-icon">📊</div>
-        <div class="cap-label">Cód. Barras</div>
-        <div class="cap-desc">Chave da NF-e (DANFE)</div>
       </div>
     </div>
   </div>
@@ -642,9 +632,9 @@ select.inp{cursor:pointer}
   <div class="ocr-spin"></div>
   <div id="ocr-progress">Preparando OCR…</div>
 </div>
-<!-- input oculto para foto OCR -->
+<!-- input oculto para foto da nota (lê QR + texto da mesma imagem) -->
 <input type="file" id="f-foto-ocr" accept="image/*" capture="environment" style="display:none"
-       onchange="onFotoOCR(event)">
+       onchange="onFotoNota(event)">
 
 <!-- ═══════════ NOTA FORM ═══════════ -->
 <div id="nota-form-overlay" class="full-overlay">
@@ -870,15 +860,15 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=29"></script>
-<script defer src="js/nfce.js?v=29"></script>
-<script defer src="js/sefaz.js?v=29"></script>
-<script defer src="js/brasilapi.js?v=29"></script>
-<script defer src="js/ocr.js?v=29"></script>
-<script defer src="js/excel.js?v=29"></script>
-<script defer src="js/gestor.js?v=29"></script>
-<script defer src="js/gdrive.js?v=29"></script>
-<script defer src="js/app.js?v=29"></script>
+<script defer src="js/db.js?v=30"></script>
+<script defer src="js/nfce.js?v=30"></script>
+<script defer src="js/sefaz.js?v=30"></script>
+<script defer src="js/brasilapi.js?v=30"></script>
+<script defer src="js/ocr.js?v=30"></script>
+<script defer src="js/excel.js?v=30"></script>
+<script defer src="js/gestor.js?v=30"></script>
+<script defer src="js/gdrive.js?v=30"></script>
+<script defer src="js/app.js?v=30"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

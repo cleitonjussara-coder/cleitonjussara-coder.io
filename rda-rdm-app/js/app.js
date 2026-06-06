@@ -27,7 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1097,38 +1097,91 @@ async function onChaveNFCe(raw) {
   } finally { setLoading(false); }
 }
 
-/* ── OCR ─────────────────────────────────────────────────── */
-function iniciarOCR() {
+/* ── FOTO DA NOTA — lê QR Code E texto da MESMA imagem ───────
+   Uma foto só: tenta achar o QR (chave) com jsQR e, em paralelo,
+   roda OCR p/ valor/data/CNPJ/razão. Junta tudo num formulário. */
+function lerFotoNota() {
   fecharCaptura();
   $('f-foto-ocr').click();
 }
 
-async function onFotoOCR(e) {
+/* decodifica um QR Code a partir de uma imagem estática (foto) */
+function _lerQRDeImagem(blob) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      const max = 1600;                       // limita p/ performance
+      if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w*s); h = Math.round(h*s); }
+      const c  = document.createElement('canvas'); c.width = w; c.height = h;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(img, 0, 0, w, h);
+      try {
+        const d = cx.getImageData(0, 0, w, h);
+        const code = (typeof jsQR !== 'undefined')
+          ? jsQR(d.data, w, h, { inversionAttempts: 'attemptBoth' })
+          : null;
+        resolve(code?.data || null);
+      } catch (_) { resolve(null); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+async function onFotoNota(e) {
   const file = e.target.files[0];
   if (!file) return;
-  fotoBlob = file;
 
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
-  $('ocr-progress').textContent = 'Iniciando OCR…';
+  $('ocr-progress').textContent = 'Lendo a nota…';
 
+  const dados = { metodo_captura: 'foto' };
+
+  // 1) tenta ler o QR Code da própria foto (chave NFC-e)
   try {
-    const result = await OCR.processar(file);
-    ov.style.display = 'none';
-    abrirFormNota({
-      cnpj         : result.cnpj  || '',
-      valor        : result.valor || '',
-      data         : result.data  || hoje(),
-      razao_social : result.razao_social || '',
-      chave        : result.chave || '',
-      uf           : result.uf    || '',
-      metodo_captura: 'ocr',
-    });
-  } catch(err) {
-    ov.style.display = 'none';
-    toast('Erro no OCR: ' + err.message, 'err');
-  }
+    await _ensureJsQR().catch(() => {});
+    const qrTxt = await _lerQRDeImagem(file);
+    if (qrTxt) {
+      let parsed = NFCE.fromScan(qrTxt);
+      if (!(parsed?.chave)) {
+        const m = qrTxt.replace(/\D/g, '').match(/\d{44}/);
+        if (m) parsed = NFCE.parseChave44(m[0]);
+      }
+      if (parsed?.chave) {
+        Object.assign(dados, parsed);
+        _salvarUrlQR(parsed.chave, qrTxt);
+      }
+    }
+  } catch (_) {}
+
+  // 2) OCR do texto p/ preencher o que o QR não traz (valor, data, CNPJ, razão)
+  try {
+    $('ocr-progress').textContent = 'Lendo o texto da nota…';
+    const r = await OCR.processar(file);
+    dados.cnpj         = dados.cnpj         || r.cnpj         || '';
+    dados.valor        = dados.valor        || r.valor        || '';
+    dados.data         = dados.data         || r.data         || hoje();
+    dados.razao_social = dados.razao_social || r.razao_social || '';
+    dados.chave        = dados.chave        || r.chave        || '';
+    dados.uf           = dados.uf           || r.uf           || '';
+  } catch (_) {}
+
+  ov.style.display = 'none';
   e.target.value = '';
+
+  if (!dados.chave && !dados.cnpj && !dados.valor) {
+    toast('Não consegui ler a nota. Tente uma foto mais nítida ou use "Manual".', 'err');
+  }
+
+  // abre o formulário e ANEXA a foto (abrirFormNota zera fotoBlob, então setamos depois)
+  await abrirFormNota(dados);
+  fotoBlob = file;
+  fotoURL  = URL.createObjectURL(file);
+  atualizarPreviewFoto(fotoURL);
 }
 
 /* ── Form Nota ───────────────────────────────────────────── */
@@ -1154,7 +1207,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-ano').value = dados.ano || filAno;
 
   // badge de captura
-  const badges = { qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', barcode:'📊 Cód. Barras', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
+  const badges = { foto:'📷 Foto da nota', qrcode:'📷 QR Code', ocr:'🔍 OCR', manual:'✏️ Manual', barcode:'📊 Cód. Barras', chave_nfce_chave:'🔑 Chave', chave_nfce_sefaz_json:'🌐 SEFAZ', chave_nfce_sefaz_proxy:'🌐 SEFAZ', chave_nfce_sefaz_html:'🌐 SEFAZ' };
   const _modelo = dados.modelo || (_digitos(dados.chave).length === 44 ? _digitos(dados.chave).slice(20,22) : '');
   $('captura-badge').textContent = _modelo === '55'
     ? '🧾 NF-e (chave)'
