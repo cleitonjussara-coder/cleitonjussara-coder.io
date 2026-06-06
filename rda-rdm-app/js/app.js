@@ -27,6 +27,7 @@ let fotoURL   = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
+const APP_VERSION = 'v25';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -263,6 +264,7 @@ function renderAuth(mode='login') {
       <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
       <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
+      <p style="color:rgba(255,255,255,.45);font-size:11px;margin-top:14px">Versão ${APP_VERSION}</p>
     </div>
   ` : `
     <h2 class="auth-title">Criar conta</h2>
@@ -820,7 +822,7 @@ async function iniciarQR() {
   setLoading(false);
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
-  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe';
+  $('qr-hint').textContent = 'Aponte para o QR Code da NFCe  ·  ' + APP_VERSION;
   $('qr-status-txt').textContent = '';
   _qrSeen = 0;
   const video  = $('qr-video');
