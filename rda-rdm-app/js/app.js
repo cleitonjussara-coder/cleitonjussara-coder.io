@@ -25,10 +25,12 @@ let qrFrame   = null;
 let fotoBlob  = null;
 let fotoURL   = null;
 let fotoExt   = null;   // 'jpg' | 'png' | 'pdf' | 'xml' | …
+let fotoRender    = null;   // imagem renderizada da 1ª página do PDF (preview + QR/OCR)
+let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -64,6 +66,64 @@ function _kindDoExt(ext) {
 }
 const _ehImagemExt = ext => _kindDoExt(ext) === 'image';
 const _extDeUrl = url => { const m = String(url).match(/\.([a-z0-9]+)(?:[?#]|$)/i); return m ? m[1].toLowerCase() : null; };
+
+function _setFotoRender(blob) {
+  fotoRender    = blob || null;
+  fotoRenderURL = blob ? URL.createObjectURL(blob) : null;
+}
+
+/* ── PDF → imagem (pdf.js sob demanda, como o Tesseract) ──── */
+const _PDFJS_BASE = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build';
+async function _ensurePdfJs() {
+  if (window.pdfjsLib) return;
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = `${_PDFJS_BASE}/pdf.min.js`;
+    s.onload  = res;
+    s.onerror = () => rej(new Error('Falha ao carregar o leitor de PDF'));
+    document.head.appendChild(s);
+  });
+  // worker via blob (CDN é cross-origin); se falhar, o pdf.js usa o fallback na thread principal
+  try {
+    const t = await (await fetch(`${_PDFJS_BASE}/pdf.worker.min.js`)).text();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([t], { type: 'text/javascript' }));
+  } catch (_) {}
+}
+
+/* Renderiza a 1ª página do PDF como JPEG e extrai o texto embutido (se houver) */
+async function _renderPdfPagina1(file) {
+  await _ensurePdfJs();
+  const doc  = await pdfjsLib.getDocument({
+    data: await file.arrayBuffer(),
+    // fontes padrão (Helvetica etc.) e cmaps vêm do CDN — sem isso o render trava
+    standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
+    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+    cMapPacked: true,
+  }).promise;
+  const page = await doc.getPage(1);
+  const vp1  = page.getViewport({ scale: 1 });
+  const vp   = page.getViewport({ scale: Math.min(3, 1600 / vp1.width) });
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+  // intent 'print' usa setTimeout em vez de requestAnimationFrame —
+  // não trava se o app for para segundo plano durante a leitura
+  await page.render({ canvasContext: c.getContext('2d'), viewport: vp, intent: 'print' }).promise;
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+
+  let texto = '';
+  try {
+    const tc = await page.getTextContent();
+    const porY = {};
+    for (const it of tc.items) {
+      const y = Math.round(it.transform[5]);
+      (porY[y] = porY[y] || []).push(it.str);
+    }
+    // PDF tem origem no canto inferior → ordena do topo para a base
+    texto = Object.keys(porY).map(Number).sort((a, b) => b - a)
+      .map(y => porY[y].join(' ')).join('\n');
+  } catch (_) {}
+  return { blob, texto };
+}
 
 /* ── Link de consulta da nota (SEFAZ) ─────────────────────── */
 async function resolverLinkConsulta(chaveRaw) {
@@ -1321,7 +1381,7 @@ async function onFotoNota(e) {
 
 /* ── Form Nota ───────────────────────────────────────────── */
 async function abrirFormNota(dados = {}) {
-  fotoBlob = null; fotoURL = null; fotoExt = null;
+  fotoBlob = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
 
@@ -1358,6 +1418,7 @@ async function abrirFormNota(dados = {}) {
       fotoExt  = local.ext || _extDoArquivo(local.blob);
       fotoURL  = URL.createObjectURL(local.blob);
       atualizarPreviewFoto(fotoURL);
+      if (fotoExt === 'pdf') _renderizarPreviewPdfAsync(local.blob);  // puxa a imagem em background
     } else {
       fotoExt = _extDeUrl(dados.foto_path || '') || GDrive.getFotoExt?.(dados.id) || null;
       const driveUrl = GDrive.getFotoUrl?.(dados.id);
@@ -1380,6 +1441,16 @@ async function abrirFormNota(dados = {}) {
 
   // título
   $('nf-titulo').textContent = dados.id ? 'Editar Nota' : 'Nova Nota';
+}
+
+/* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
+async function _renderizarPreviewPdfAsync(blob) {
+  try {
+    const { blob: img } = await _renderPdfPagina1(blob);
+    if (fotoBlob !== blob) return;   // usuário trocou o anexo enquanto renderizava
+    _setFotoRender(img);
+    atualizarPreviewFoto(fotoURL);
+  } catch (_) {}
 }
 
 /* mostra/esconde o link "Consultar no SEFAZ" conforme a chave do formulário */
@@ -1478,7 +1549,27 @@ async function onArquivoNotaChange(e) {
   atualizarPreviewFoto(fotoURL);
   if (_ehImagemExt(fotoExt))      await extrairDadosDaFoto(file);
   else if (fotoExt === 'xml')     await extrairDadosDoXML(file);
-  else /* pdf */                  toast('PDF anexado. Confira os campos e salve.');
+  else /* pdf */                  await extrairDadosDoPDF(file);
+}
+
+/* PDF anexado → renderiza a 1ª página como imagem (vira o preview)
+   e lê os dados: texto embutido do PDF (DANFE digital) ou QR/OCR da imagem. */
+async function extrairDadosDoPDF(file) {
+  const ov = $('ocr-overlay');
+  ov.style.display = 'flex';
+  $('ocr-progress').textContent = 'Lendo o PDF…';
+  try {
+    const { blob, texto } = await _renderPdfPagina1(file);
+    _setFotoRender(blob);
+    atualizarPreviewFoto(fotoURL);   // agora mostra a imagem da 1ª página
+    // PDF digital (DANFE) traz o texto embutido — mais confiável que OCR
+    const temTexto  = texto.replace(/\s/g, '').length >= 40;
+    const ocrPronto = temTexto ? OCR.parseFiscalText(texto) : null;
+    await extrairDadosDaFoto(blob, ocrPronto);  // QR da imagem + preenche campos
+  } catch (err) {
+    ov.style.display = 'none';
+    toast('Não consegui ler este PDF — anexado mesmo assim.', 'err');
+  }
 }
 
 /* Lê o XML da NF-e/NFC-e e preenche os campos (a chave é autoritativa). */
@@ -1553,12 +1644,14 @@ async function _lerQRdaImagem(file) {
   return p;
 }
 
-/* Botão "Ler QR da foto e inserir a chave" — usa a foto já anexada */
+/* Botão "Ler QR da foto e inserir a chave" — usa a foto anexada
+   (ou a imagem renderizada da 1ª página, no caso de PDF) */
 async function lerChaveDaFotoAnexada() {
-  if (!fotoBlob) { toast('Anexe uma foto da nota primeiro', 'err'); return; }
+  const alvo = _ehImagemExt(fotoExt || 'jpg') ? fotoBlob : fotoRender;
+  if (!alvo) { toast('Anexe uma foto da nota primeiro', 'err'); return; }
   const ov = $('ocr-overlay');
   if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Procurando QR Code na foto…'; }
-  const qr = await _lerQRdaImagem(fotoBlob);
+  const qr = await _lerQRdaImagem(alvo);
   if (ov) ov.style.display = 'none';
   if (qr?.chave && qr.chave.length === 44) {
     $('nf-chave').value = qr.chave;
@@ -1584,8 +1677,9 @@ function _mostrarChaveNota() {
 }
 
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
-   Combina os resultados e preenche só os campos vazios. */
-async function extrairDadosDaFoto(file) {
+   Combina os resultados e preenche só os campos vazios.
+   ocrPronto: resultado de parse já extraído (ex.: texto embutido de PDF) — pula o OCR. */
+async function extrairDadosDaFoto(file, ocrPronto = null) {
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
   $('ocr-progress').textContent = 'Procurando QR Code…';
@@ -1593,15 +1687,18 @@ async function extrairDadosDaFoto(file) {
     // Busca 1: QR Code dentro da imagem
     const qr = await _lerQRdaImagem(file);
 
-    // chave: a do QR desta foto OU a que já está no formulário (veio do "Escanear QR")
+    // OCR do texto impresso — usado principalmente para o VALOR
+    let ocr = ocrPronto || {};
+    if (!ocrPronto) {
+      $('ocr-progress').textContent = 'Lendo o texto…';
+      try { ocr = await OCR.processar(file); } catch (_) {}
+    }
+
+    // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido
     let chave = (qr?.chave && qr.chave.length === 44) ? qr.chave : _digitos($('nf-chave').value);
+    if (chave.length !== 44 && _digitos(ocr.chave).length === 44) chave = _digitos(ocr.chave);
     if (chave.length !== 44) chave = '';
     const daChave = chave ? NFCE.parseChave44(chave) : null;
-
-    // OCR do texto impresso — usado principalmente para o VALOR
-    $('ocr-progress').textContent = 'Lendo o texto…';
-    let ocr = {};
-    try { ocr = await OCR.processar(file); } catch (_) {}
 
     const preencheu = [];
 
@@ -1670,6 +1767,10 @@ function atualizarPreviewFoto(url) {
     const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
     prev.innerHTML = `<img src="${src}" alt="Anexo" class="foto-thumb"
       onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'">`;
+  } else if (kind === 'pdf' && fotoRenderURL) {
+    // imagem da 1ª página puxada do PDF
+    prev.innerHTML = `<img src="${fotoRenderURL}" alt="PDF (1ª página)" class="foto-thumb">
+      <span class="muted-p" style="display:block;font-size:11px">📄 PDF — imagem da 1ª página</span>`;
   } else {
     const icon = kind === 'pdf' ? '📄' : '🧾';
     prev.innerHTML = `<span class="muted-p">${icon} ${kind.toUpperCase()} anexado — use “Ver anexo” na lista</span>`;
@@ -1679,13 +1780,13 @@ function atualizarPreviewFoto(url) {
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:
-   há IMAGEM anexada E a leitura automática NÃO pegou a chave.
-   (PDF/XML não têm QR para ler.) */
+   há algo legível (imagem, ou PDF já renderizado) E a leitura
+   automática NÃO pegou a chave. (XML não tem QR para ler.) */
 function _atualizarBotaoLerChave() {
   const btn = $('btn-ler-chave'); if (!btn) return;
-  const ehImagem = !!fotoBlob && (!fotoExt || _ehImagemExt(fotoExt));
+  const legivel  = (!!fotoBlob && (!fotoExt || _ehImagemExt(fotoExt))) || !!fotoRender;
   const temChave = _digitos($('nf-chave').value).length === 44;
-  btn.style.display = (ehImagem && !temChave) ? 'block' : 'none';
+  btn.style.display = (legivel && !temChave) ? 'block' : 'none';
 }
 
 async function salvarNota() {
