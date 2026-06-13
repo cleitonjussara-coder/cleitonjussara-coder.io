@@ -115,8 +115,12 @@ window.DB = (() => {
     if (n) await _put('notas', { ...n, deleted: true, synced: false, updated_at: new Date().toISOString() });
   }
 
-  /* ── FOTOS (blob local) ───────────────────────────────── */
-  const saveFotoLocal  = (nota_id, blob) => _put('fotos', { nota_id, blob });
+  /* ── ANEXOS / FOTOS (blob local: foto, PDF ou XML) ────── */
+  const MIME_POR_EXT = {
+    jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp',
+    heic:'image/heic', gif:'image/gif', pdf:'application/pdf', xml:'text/xml',
+  };
+  const saveFotoLocal  = (nota_id, blob, ext) => _put('fotos', { nota_id, blob, ext: (ext || 'jpg').toLowerCase() });
   const getFotoLocal   = (nota_id) => _get('fotos', nota_id);
   const delFotoLocal   = (nota_id) => _del('fotos', nota_id);
 
@@ -177,13 +181,15 @@ window.DB = (() => {
       } catch (_) { fail++; }
     }
 
-    // Fotos pendentes
+    // Anexos pendentes (foto, PDF ou XML)
     const pendingFotos = await _getAll('fotos');
     for (const f of pendingFotos) {
       try {
-        const path = `${(await _get('notas', f.nota_id))?.user_id}/${f.nota_id}.jpg`;
+        const ext  = (f.ext || 'jpg').toLowerCase();
+        const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
+        const path = `${(await _get('notas', f.nota_id))?.user_id}/${f.nota_id}.${ext}`;
         const { error } = await sb.storage.from('notas-fotos').upload(path, f.blob,
-          { contentType: 'image/jpeg', upsert: true });
+          { contentType: mime, upsert: true });
         if (!error) {
           await sb.from('notas').update({ foto_path: path }).eq('id', f.nota_id);
           await delFotoLocal(f.nota_id);

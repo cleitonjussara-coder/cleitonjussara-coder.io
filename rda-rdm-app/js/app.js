@@ -21,13 +21,14 @@ let filAno    = new Date().getFullYear();
 let qrStream  = null;
 let qrFrame   = null;
 
-/* foto selecionada na edição */
+/* arquivo (foto / PDF / XML) selecionado na edição */
 let fotoBlob  = null;
 let fotoURL   = null;
+let fotoExt   = null;   // 'jpg' | 'png' | 'pdf' | 'xml' | …
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -36,6 +37,33 @@ const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 const $    = id => document.getElementById(id);
 const fmtData = d => { try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR'); } catch(_){return d;} };
 const _digitos = s => String(s||'').replace(/\D/g,'');
+
+/* ── Tipo de arquivo anexado (foto / PDF / XML) ───────────── */
+const _EXTS_OK = ['jpg','jpeg','png','webp','heic','gif','pdf','xml'];
+function _extDoArquivo(file) {
+  const nome = (file?.name || '').toLowerCase();
+  const m = nome.match(/\.([a-z0-9]+)$/);
+  if (m && _EXTS_OK.includes(m[1])) return m[1] === 'jpeg' ? 'jpg' : m[1];
+  const t = (file?.type || '').toLowerCase();
+  if (t === 'application/pdf') return 'pdf';
+  if (t === 'text/xml' || t === 'application/xml') return 'xml';
+  if (t === 'image/png')  return 'png';
+  if (t === 'image/webp') return 'webp';
+  if (t === 'image/heic' || t === 'image/heif') return 'heic';
+  if (t === 'image/gif')  return 'gif';
+  if (t.startsWith('image/')) return 'jpg';
+  return 'jpg';
+}
+/* 'image' | 'pdf' | 'xml' a partir da extensão */
+function _kindDoExt(ext) {
+  ext = String(ext || '').toLowerCase();
+  if (!ext) return null;
+  if (ext === 'pdf') return 'pdf';
+  if (ext === 'xml') return 'xml';
+  return 'image';
+}
+const _ehImagemExt = ext => _kindDoExt(ext) === 'image';
+const _extDeUrl = url => { const m = String(url).match(/\.([a-z0-9]+)(?:[?#]|$)/i); return m ? m[1].toLowerCase() : null; };
 
 /* ── Link de consulta da nota (SEFAZ) ─────────────────────── */
 async function resolverLinkConsulta(chaveRaw) {
@@ -620,7 +648,7 @@ function renderNotas() {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
-            ${n.foto_path||n.foto_local ? `<button class="btn-icon-sm" onclick="verFoto('${n.id}')" title="Ver foto">🖼</button>` : ''}
+            ${n.foto_path||n.foto_local ? `<button class="btn-icon-sm" onclick="verFoto('${n.id}')" title="Ver anexo da nota">📎</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
@@ -1286,13 +1314,14 @@ async function onFotoNota(e) {
   // abre o formulário e ANEXA a foto (abrirFormNota zera fotoBlob, então setamos depois)
   await abrirFormNota(dados);
   fotoBlob = file;
+  fotoExt  = _extDoArquivo(file);
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
 }
 
 /* ── Form Nota ───────────────────────────────────────────── */
 async function abrirFormNota(dados = {}) {
-  fotoBlob = null; fotoURL = null;
+  fotoBlob = null; fotoURL = null; fotoExt = null;
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
 
@@ -1326,9 +1355,11 @@ async function abrirFormNota(dados = {}) {
     const local = await DB.getFotoLocal(dados.id);
     if (local?.blob) {
       fotoBlob = local.blob;
+      fotoExt  = local.ext || _extDoArquivo(local.blob);
       fotoURL  = URL.createObjectURL(local.blob);
       atualizarPreviewFoto(fotoURL);
     } else {
+      fotoExt = _extDeUrl(dados.foto_path || '') || GDrive.getFotoExt?.(dados.id) || null;
       const driveUrl = GDrive.getFotoUrl?.(dados.id);
       atualizarPreviewFoto(driveUrl || (dados.foto_path ? `supabase:${dados.foto_path}` : null));
     }
@@ -1427,10 +1458,85 @@ async function onFotoNotaChange(e) {
   const file = e.target.files[0];
   if (!file) return;
   fotoBlob = file;
+  fotoExt  = 'jpg';                 // câmera sempre devolve imagem
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
   // lê a própria foto anexada (OCR) e preenche os campos vazios
   await extrairDadosDaFoto(file);
+}
+
+/* Anexar arquivo já existente no aparelho: imagem, PDF ou XML da NF-e.
+   - imagem  → OCR (lê valor/empresa) como na foto
+   - XML     → faz o parse e preenche tudo (autoritativo)
+   - PDF     → só anexa (sem leitura automática) */
+async function onArquivoNotaChange(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  fotoBlob = file;
+  fotoExt  = _extDoArquivo(file);
+  fotoURL  = URL.createObjectURL(file);
+  atualizarPreviewFoto(fotoURL);
+  if (_ehImagemExt(fotoExt))      await extrairDadosDaFoto(file);
+  else if (fotoExt === 'xml')     await extrairDadosDoXML(file);
+  else /* pdf */                  toast('PDF anexado. Confira os campos e salve.');
+}
+
+/* Lê o XML da NF-e/NFC-e e preenche os campos (a chave é autoritativa). */
+async function extrairDadosDoXML(file) {
+  const ov = $('ocr-overlay');
+  if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Lendo o XML da nota…'; }
+  try {
+    const txt = await file.text();
+    const doc = new DOMParser().parseFromString(txt, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML inválido');
+    const T = sel => doc.querySelector(sel)?.textContent?.trim() || '';
+
+    const preencheu = [];
+
+    // chave: do atributo Id (infNFe Id="NFe<44 dígitos>") ou de <chNFe>
+    let chave = _digitos(doc.querySelector('infNFe')?.getAttribute('Id') || '');
+    if (chave.length !== 44) chave = _digitos(T('chNFe'));
+    const daChave = (chave.length === 44) ? NFCE.parseChave44(chave) : null;
+    if (chave.length === 44) {
+      $('nf-chave').value = chave;
+      if ($('nf-uf'))  $('nf-uf').value  = daChave?.uf  || $('nf-uf').value;
+      if ($('nf-mes')) $('nf-mes').value = daChave?.mes || $('nf-mes').value;
+      if ($('nf-ano')) $('nf-ano').value = daChave?.ano || $('nf-ano').value;
+      _atualizarLinkConsulta();
+    }
+
+    // CNPJ + razão social do emitente
+    const cnpj = _digitos(T('emit CNPJ'));
+    if (cnpj.length === 14) {
+      $('nf-cnpj').value = BrasilAPI.formatar(cnpj); preencheu.push('CNPJ');
+      const xNome = T('emit xNome');
+      if (xNome) $('nf-razao').value = xNome; else buscarRazaoSocial(cnpj);
+    }
+
+    // data de emissão (dhEmi = ISO; dEmi = AAAA-MM-DD)
+    const dh = T('ide dhEmi') || T('ide dEmi');
+    if (dh) {
+      const d = dh.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        $('nf-data').value = d; preencheu.push('data');
+        if (chave.length !== 44) {   // sem chave autoritativa → mês/ano vêm da data
+          $('nf-mes').value = parseInt(d.slice(5, 7), 10);
+          $('nf-ano').value = parseInt(d.slice(0, 4), 10);
+        }
+      }
+    }
+
+    // valor total da nota
+    const vNF = parseFloat(T('ICMSTot vNF') || T('vNF'));
+    if (!isNaN(vNF) && vNF > 0) { $('nf-valor').value = vNF.toFixed(2); preencheu.push('valor'); }
+
+    if (ov) ov.style.display = 'none';
+    toast(preencheu.length ? `XML lido: ${preencheu.join(', ')}.` : 'XML anexado. Confira os campos.',
+          preencheu.length ? 'ok' : 'err');
+  } catch (err) {
+    if (ov) ov.style.display = 'none';
+    toast('Não consegui ler este XML: ' + err.message + ' — anexado mesmo assim.', 'err');
+  }
 }
 
 /* Lê um QR Code dentro de uma imagem (foto do cupom) usando o leitor robusto
@@ -1548,25 +1654,38 @@ async function extrairDadosDaFoto(file) {
 
 function atualizarPreviewFoto(url) {
   const prev = $('foto-preview');
-  if (url) {
-    const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
-    prev.innerHTML = `<img src="${src}" alt="Foto" class="foto-thumb"
-      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 foto anexada</span>'">`;
-    $('btn-foto-label').textContent = '📷 Trocar foto';
-  } else {
+  if (!url) {
     prev.innerHTML = '';
-    $('btn-foto-label').textContent = '📷 Anexar foto';
+    $('btn-foto-label').textContent = '📷 Tirar foto';
+    _atualizarBotaoLerChave();
+    return;
   }
+  // tipo: pela extensão do anexo atual, senão pela URL/path
+  let kind = _kindDoExt(fotoExt);
+  if (!kind) {
+    const e = url.startsWith('supabase:') ? _extDeUrl(url.slice(9)) : _extDeUrl(url);
+    kind = _kindDoExt(e) || 'image';
+  }
+  if (kind === 'image') {
+    const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
+    prev.innerHTML = `<img src="${src}" alt="Anexo" class="foto-thumb"
+      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'">`;
+  } else {
+    const icon = kind === 'pdf' ? '📄' : '🧾';
+    prev.innerHTML = `<span class="muted-p">${icon} ${kind.toUpperCase()} anexado — use “Ver anexo” na lista</span>`;
+  }
+  $('btn-foto-label').textContent = '📷 Trocar foto';
   _atualizarBotaoLerChave();
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:
-   há foto anexada E a leitura automática NÃO pegou a chave. */
+   há IMAGEM anexada E a leitura automática NÃO pegou a chave.
+   (PDF/XML não têm QR para ler.) */
 function _atualizarBotaoLerChave() {
   const btn = $('btn-ler-chave'); if (!btn) return;
-  const temFoto  = !!fotoBlob;
+  const ehImagem = !!fotoBlob && (!fotoExt || _ehImagemExt(fotoExt));
   const temChave = _digitos($('nf-chave').value).length === 44;
-  btn.style.display = (temFoto && !temChave) ? 'block' : 'none';
+  btn.style.display = (ehImagem && !temChave) ? 'block' : 'none';
 }
 
 async function salvarNota() {
@@ -1595,21 +1714,22 @@ async function salvarNota() {
     foto_local     : null,
   };
 
-  // foto
+  // anexo (foto / PDF / XML)
+  const anexoExt = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : null);
   if (fotoBlob) {
     payload.foto_local = fotoBlob;
-    await DB.saveFotoLocal(payload.id || 'tmp', fotoBlob);
+    await DB.saveFotoLocal(payload.id || 'tmp', fotoBlob, anexoExt);
   }
 
   setLoading(true);
   try {
     const saved = await DB.saveNota(payload, user.id);
     if (fotoBlob) {
-      await DB.saveFotoLocal(saved.id, fotoBlob);
-      // upload da foto com todos os dados da nota como metadados no Drive
-      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id })
-        .then(() => toast('Foto salva no Drive ☁️'))
-        .catch(e => toast('Drive foto: ' + e.message, 'err'));
+      await DB.saveFotoLocal(saved.id, fotoBlob, anexoExt);
+      // upload do anexo com todos os dados da nota como metadados no Drive
+      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id }, anexoExt)
+        .then(() => toast('Anexo salvo no Drive ☁️'))
+        .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }
     fecharFormNota();
     await carregarDadosLocais();
@@ -1640,26 +1760,30 @@ async function verFoto(id) {
   const n = notas.find(x=>x.id===id);
   if (!n) return;
 
-  let url = null;
+  let url = null, ext = null;
 
-  // 1. foto local (IndexedDB)
+  // 1. anexo local (IndexedDB)
   const local = await DB.getFotoLocal(id);
-  if (local?.blob) url = URL.createObjectURL(local.blob);
+  if (local?.blob) { url = URL.createObjectURL(local.blob); ext = local.ext || _extDoArquivo(local.blob); }
 
   // 2. Google Drive
   if (!url) {
     const driveUrl = GDrive.getFotoUrl?.(id);
-    if (driveUrl) url = driveUrl;
+    if (driveUrl) { url = driveUrl; ext = GDrive.getFotoExt?.(id) || _extDeUrl(n.foto_path || ''); }
   }
 
   // 3. Supabase Storage
   if (!url && n.foto_path && sb) {
     const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
-    if (data?.signedUrl) url = data.signedUrl;
+    if (data?.signedUrl) { url = data.signedUrl; ext = _extDeUrl(n.foto_path); }
   }
 
-  if (!url) { toast('Foto não encontrada', 'err'); return; }
+  if (!url) { toast('Anexo não encontrado', 'err'); return; }
 
+  // PDF/XML → abre em nova aba (o navegador renderiza/baixa)
+  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { window.open(url, '_blank'); return; }
+
+  // imagem (ou tipo desconhecido) → visualizador
   $('foto-viewer-img').src = url;
   $('foto-viewer-info').textContent =
     `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;

@@ -205,11 +205,12 @@ window.GDrive = (() => {
   ════════════════════════════════════════════ */
   const _trim = (v, n = 124) => String(v ?? '').slice(0, n);
 
-  async function uploadFotoComDados(blob, nota) {
+  async function uploadFotoComDados(blob, nota, ext) {
     if (!nota?.id || !isConnected()) return null;
     _checkConnected();
 
-    const filename   = `foto-${nota.id}.jpg`;
+    const fileext    = (ext || 'jpg').toLowerCase();
+    const filename   = `foto-${nota.id}.${fileext}`;
     const existingId = fileIndex[filename];
     const appProperties = {
       nota_id      : _trim(nota.id),
@@ -250,15 +251,24 @@ window.GDrive = (() => {
     return fileIndex[filename];
   }
 
+  // nome do arquivo do anexo no Drive (foto-<id>.<ext>), qualquer extensão
+  function _fotoFilename(notaId) {
+    return Object.keys(fileIndex).find(k => k.startsWith(`foto-${notaId}.`)) || null;
+  }
   function getFotoUrl(notaId) {
-    const fid = fileIndex[`foto-${notaId}.jpg`];
-    if (!fid || !isConnected()) return null;
-    return `${FILES_API}/${fid}?alt=media&access_token=${encodeURIComponent(accessToken)}`;
+    const name = _fotoFilename(notaId);
+    if (!name || !isConnected()) return null;
+    return `${FILES_API}/${fileIndex[name]}?alt=media&access_token=${encodeURIComponent(accessToken)}`;
+  }
+  function getFotoExt(notaId) {
+    const name = _fotoFilename(notaId);
+    const m = name && name.match(/\.([a-z0-9]+)$/i);
+    return m ? m[1].toLowerCase() : null;
   }
 
   async function listarFotasComDados() {
     if (!isConnected()) return [];
-    const q = `'${FOLDER_ID}' in parents and mimeType='image/jpeg' and trashed=false`;
+    const q = `'${FOLDER_ID}' in parents and name contains 'foto-' and trashed=false`;
     const data = await _req(
       `${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name,appProperties,createdTime)&pageSize=1000`
     );
@@ -307,7 +317,7 @@ window.GDrive = (() => {
   return {
     init, requestAccess, disconnect, testarConexao,
     syncNotas, loadNotas,
-    uploadFotoComDados, listarFotasComDados, getFotoUrl,
+    uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
     isConnected, isConfigured, minutosRestantes,
   };
 })();

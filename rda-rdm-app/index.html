@@ -704,16 +704,24 @@ select.inp{cursor:pointer}
        font-weight:600;text-decoration:underline;cursor:pointer">🔗 Consultar nota no SEFAZ</a>
 
     <div class="field">
-      <label class="lbl">Foto da nota</label>
+      <label class="lbl">Arquivo da nota</label>
       <div class="foto-area">
         <input type="file" id="f-foto-nota" accept="image/*" capture="environment"
                onchange="onFotoNotaChange(event)">
         <div class="foto-btn-wrap" onclick="$('f-foto-nota').click()">
-          <span id="btn-foto-label">📷 Anexar foto</span>
-          <span style="font-size:11px;color:var(--text2)">Toque para abrir a câmera — leio o valor e a empresa da foto</span>
+          <span id="btn-foto-label">📷 Tirar foto</span>
+          <span style="font-size:11px;color:var(--text2)">Abre a câmera — leio o valor e a empresa da foto</span>
           <div id="foto-preview"></div>
         </div>
       </div>
+      <!-- Anexar arquivo já existente no aparelho: foto, PDF ou XML da NF-e -->
+      <input type="file" id="f-arq-nota" style="display:none"
+             accept="image/*,application/pdf,.pdf,.xml,text/xml,application/xml"
+             onchange="onArquivoNotaChange(event)">
+      <button type="button" class="btn btn-outline btn-sm btn-full"
+              style="margin-top:8px" onclick="$('f-arq-nota').click()">
+        📎 Anexar arquivo (PDF, XML ou imagem)
+      </button>
       <button type="button" id="btn-ler-chave" class="btn btn-outline btn-sm btn-full"
               style="display:none;margin-top:8px" onclick="lerChaveDaFotoAnexada()">
         🔑 Não leu a chave? Tocar para ler o QR
@@ -809,7 +817,8 @@ select.inp{cursor:pointer}
         <li>✏️ <b>Manual</b> · 💸 <b>Repasse</b></li>
       </ul>
       <p>Ao <b>anexar a foto</b> no formulário, o app lê a foto sozinho e completa os campos vazios. Confira e toque em <b>Salvar</b>.</p>
-      <p class="ajuda-note">⚠️ O <b>valor</b> não vem da chave (padrão da nota fiscal). Use a <b>foto</b> (lê o TOTAL) ou digite.</p>
+      <p>No formulário há também <b>📎 Anexar arquivo</b>: escolha do aparelho uma <b>imagem</b>, um <b>PDF</b> (DANFE) ou o <b>XML</b> da nota. Com o <b>XML</b> o app preenche tudo sozinho (CNPJ, empresa, data e valor). O anexo fica guardado na nota — toque em <b>📎</b> na lista para abrir.</p>
+      <p class="ajuda-note">⚠️ O <b>valor</b> não vem da chave (padrão da nota fiscal). Use a <b>foto</b>, o <b>XML</b> ou digite.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -871,15 +880,15 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=40"></script>
-<script defer src="js/nfce.js?v=40"></script>
-<script defer src="js/sefaz.js?v=40"></script>
-<script defer src="js/brasilapi.js?v=40"></script>
-<script defer src="js/ocr.js?v=40"></script>
-<script defer src="js/excel.js?v=40"></script>
-<script defer src="js/gestor.js?v=40"></script>
-<script defer src="js/gdrive.js?v=40"></script>
-<script defer src="js/app.js?v=40"></script>
+<script defer src="js/db.js?v=41"></script>
+<script defer src="js/nfce.js?v=41"></script>
+<script defer src="js/sefaz.js?v=41"></script>
+<script defer src="js/brasilapi.js?v=41"></script>
+<script defer src="js/ocr.js?v=41"></script>
+<script defer src="js/excel.js?v=41"></script>
+<script defer src="js/gestor.js?v=41"></script>
+<script defer src="js/gdrive.js?v=41"></script>
+<script defer src="js/app.js?v=41"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
