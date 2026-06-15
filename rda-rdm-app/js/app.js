@@ -30,7 +30,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -773,6 +773,7 @@ function renderSaldo() {
     <div class="export-btns">
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV</button>
       <button class="btn btn-sm btn-outline" onclick="exportExcel()">Excel Anual</button>
+      <button class="btn btn-sm btn-primary" onclick="exportSheets()">📊 Google Sheets</button>
     </div>
   </div>
 
@@ -1953,6 +1954,26 @@ async function _ensureXLSX() {
 }
 async function exportCSV()   { await _ensureXLSX(); Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
 async function exportExcel() { await _ensureXLSX(); Excel.exportarAnual(filAno, notas, repasses, user); }
+
+/* Planilha do Google "ao vivo" — cria/atualiza na pasta do Drive e abre o link */
+async function exportSheets() {
+  if (!GDrive.isConnected()) {
+    toast('Conecte o Google Drive no Perfil primeiro', 'err');
+    switchView('perfil');
+    return;
+  }
+  // abre a aba JÁ no clique (evita bloqueio de popup); navega quando a planilha estiver pronta
+  const aba = window.open('', '_blank');
+  setLoading(true);
+  try {
+    const url = await GSheets.exportarAnual(filAno, notas, repasses, user);
+    if (aba) aba.location = url; else window.open(url, '_blank');
+    toast('Planilha do Google atualizada! 📊');
+  } catch (e) {
+    if (aba) aba.close();
+    toast('Sheets: ' + e.message, 'err');
+  } finally { setLoading(false); }
+}
 
 /* ── Boot ────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {

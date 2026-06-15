@@ -5,7 +5,7 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v42';
+const CACHE   = 'petermann-v43';
 const SHELL   = [
   '/',
   '/index.html',
@@ -22,6 +22,7 @@ const SHELL   = [
   '/js/excel.js',
   '/js/gestor.js',
   '/js/gdrive.js',
+  '/js/gsheets.js',
 ];
 
 const CDN = [
