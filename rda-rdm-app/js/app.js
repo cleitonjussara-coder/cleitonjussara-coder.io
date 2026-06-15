@@ -30,7 +30,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -823,6 +823,26 @@ function mudarMesEquipe(delta) {
 
 function exportExcelEquipe() {
   Gestor.exportEquipeExcel(sb, user, filMes, filAno);
+}
+
+/* Planilha do Google da equipe (consolidada, mês atual) */
+async function exportSheetsEquipe() {
+  if (!GDrive.isConnected()) {
+    toast('Conecte o Google Drive no Perfil primeiro', 'err');
+    switchView('perfil');
+    return;
+  }
+  const aba = window.open('', '_blank');   // abre no clique p/ não cair em bloqueio de popup
+  setLoading(true);
+  try {
+    const { collabs, notas, repasses, mes, ano } = await Gestor.renderForExcel(sb, user, filMes, filAno);
+    const url = await GSheets.exportarEquipe(notas, repasses, collabs, mes, ano, user.nome);
+    if (aba) aba.location = url; else window.open(url, '_blank');
+    toast('Planilha da equipe atualizada! 📊');
+  } catch (e) {
+    if (aba) aba.close();
+    toast('Sheets equipe: ' + e.message, 'err');
+  } finally { setLoading(false); }
 }
 
 /* ── VIEW: PERFIL ────────────────────────────────────────── */

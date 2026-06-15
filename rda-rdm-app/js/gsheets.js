@@ -86,6 +86,33 @@ window.GSheets = (() => {
     return { title: 'Repasses', rows, headerRow: 2, moneyCols: [3] };
   }
 
+  function buildEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
+    const rows = [
+      ['PETERMANN — RELATÓRIO DA EQUIPE'],
+      [`Mês: ${MESES[mes-1]}/${ano}    Atualizado em ${_agora()}` + (gestorNome ? `    Gestor: ${gestorNome}` : '')],
+      [],
+      ['Núcleo','Colaborador','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo'],
+    ];
+    let tRDMg = 0, tRDMr = 0, tRDAg = 0, tRDAr = 0;
+    const nucs = {};
+    (collabs || []).forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo] || []).push(c); });
+    for (const [nucleo, membros] of Object.entries(nucs).sort()) {
+      membros.slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || '')).forEach(c => {
+        const cns = (notas || []).filter(n => n.user_id === c.id && !n.deleted);
+        const crs = (repasses || []).filter(r => r.user_id === c.id && !r.deleted);
+        const rdmG = cns.filter(n => n.tipo === 'RDM').reduce((s, n) => s + cur(n.valor), 0);
+        const rdmR = crs.filter(r => r.tipo === 'RDM').reduce((s, r) => s + cur(r.valor), 0);
+        const rdaG = cns.filter(n => n.tipo === 'RDA').reduce((s, n) => s + cur(n.valor), 0);
+        const rdaR = crs.filter(r => r.tipo === 'RDA').reduce((s, r) => s + cur(r.valor), 0);
+        tRDMg += rdmG; tRDMr += rdmR; tRDAg += rdaG; tRDAr += rdaR;
+        rows.push([nucleo, c.nome || c.email, cur(rdmG), cur(rdmR), cur(rdmR-rdmG), cur(rdaG), cur(rdaR), cur(rdaR-rdaG)]);
+      });
+    }
+    rows.push([]);
+    rows.push(['TOTAL GERAL', '', cur(tRDMg), cur(tRDMr), cur(tRDMr-tRDMg), cur(tRDAg), cur(tRDAr), cur(tRDAr-tRDAg)]);
+    return { title: 'EQUIPE', rows, headerRow: 3, moneyCols: [2,3,4,5,6,7] };
+  }
+
   function _agora() {
     const d = new Date();
     return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -171,18 +198,10 @@ window.GSheets = (() => {
     return reqs;
   }
 
-  /* ════════════ Exportação principal ════════════ */
-  async function exportarAnual(ano, notas, repasses, colab) {
+  /* ════════════ Publicação (cria/atualiza + escreve + formata) ════════════ */
+  async function _publicar(title, tabs) {
     if (!GDrive.isConnected()) throw new Error('Conecte o Google Drive no Perfil primeiro');
-
-    const tabs = [
-      buildResumo(notas, repasses, ano, colab),
-      buildRDM(notas, repasses, ano),
-      buildRDA(notas, ano),
-      buildRepasses(repasses, ano),
-    ];
     const tabTitles = tabs.map(t => t.title);
-    const title = `Petermann ${(colab.nome || 'Colaborador').trim()} ${ano}`;
 
     let ssId = await _acharPlanilha(title);
     if (!ssId) ssId = (await _criarPlanilha(title, tabTitles)).spreadsheetId;
@@ -212,8 +231,25 @@ window.GSheets = (() => {
     return `https://docs.google.com/spreadsheets/d/${ssId}/edit`;
   }
 
+  /* planilha pessoal (anual, 4 abas) */
+  function exportarAnual(ano, notas, repasses, colab) {
+    const tabs = [
+      buildResumo(notas, repasses, ano, colab),
+      buildRDM(notas, repasses, ano),
+      buildRDA(notas, ano),
+      buildRepasses(repasses, ano),
+    ];
+    return _publicar(`Petermann ${(colab.nome || 'Colaborador').trim()} ${ano}`, tabs);
+  }
+
+  /* planilha consolidada da equipe (mensal, 1 aba) */
+  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
+    const tabs = [buildEquipe(notas, repasses, collabs, mes, ano, gestorNome)];
+    return _publicar(`Petermann Equipe ${MESES[mes-1]} ${ano}`, tabs);
+  }
+
   return {
-    exportarAnual,
-    buildResumo, buildRDM, buildRDA, buildRepasses,  // expostos p/ teste
+    exportarAnual, exportarEquipe,
+    buildResumo, buildRDM, buildRDA, buildRepasses, buildEquipe,  // expostos p/ teste
   };
 })();

@@ -39,7 +39,10 @@ window.Gestor = (() => {
           <span class="mes-label">${MESES[mes-1]} ${ano}</span>
           <button class="btn-mes-nav" onclick="mudarMesEquipe(1)">›</button>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">Excel</button>
+        <div class="export-btns">
+          <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">Excel</button>
+          <button class="btn btn-sm btn-primary" onclick="exportSheetsEquipe()">📊 Sheets</button>
+        </div>
       </div>`;
 
       // Cards de resumo geral
