@@ -5,24 +5,26 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v44';
+const CACHE   = 'petermann-v45';
+// caminhos RELATIVOS (./) → o app funciona em qualquer domínio ou subpasta
+// (ex.: usuario.github.io/repo/rda-rdm-app/ ou seudominio.com.br/rda-rdm-app/)
 const SHELL   = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/logo.jpg',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/js/app.js',
-  '/js/db.js',
-  '/js/nfce.js',
-  '/js/sefaz.js',
-  '/js/brasilapi.js',
-  '/js/ocr.js',
-  '/js/excel.js',
-  '/js/gestor.js',
-  '/js/gdrive.js',
-  '/js/gsheets.js',
+  './',
+  './index.html',
+  './manifest.json',
+  './logo.jpg',
+  './icon-192.png',
+  './icon-512.png',
+  './js/app.js',
+  './js/db.js',
+  './js/nfce.js',
+  './js/sefaz.js',
+  './js/brasilapi.js',
+  './js/ocr.js',
+  './js/excel.js',
+  './js/gestor.js',
+  './js/gdrive.js',
+  './js/gsheets.js',
 ];
 
 const CDN = [
@@ -77,6 +79,6 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return r;
       })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('/index.html')))
+      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
   );
 });
