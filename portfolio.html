@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cleiton — Apps & Ferramentas</title>
+<meta name="description" content="Portfólio de aplicativos para gestão de campo, inspeções agrícolas e controle de despesas.">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --p:    #1B4332;
+  --pm:   #2D6A4F;
+  --pl:   #40916C;
+  --acc:  #74C69D;
+  --ora:  #F4A261;
+  --bg:   #F0F4F1;
+  --srf:  #FFFFFF;
+  --txt:  #0F1F16;
+  --mut:  #5A6E60;
+  --bdr:  #D4E2D8;
+  --shd:  0 4px 28px rgba(0,0,0,.09);
+  --r:    16px;
+}
+
+html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+       background: var(--bg); color: var(--txt); min-height: 100vh; }
+
+/* ═══════════════════════════════════
+   HERO
+═══════════════════════════════════ */
+.hero {
+  background: linear-gradient(150deg, #0d2b1e 0%, var(--p) 45%, #1f5c3a 100%);
+  color: #fff;
+  padding: 64px 24px 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 110%, rgba(116,198,157,.2) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 85%  -5%, rgba(244,162, 97,.14) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.hero-inner { position: relative; max-width: 780px; margin: 0 auto; }
+
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 99px;
+  padding: 5px 14px;
+  font-size: 12px; font-weight: 600; color: var(--acc);
+  margin-bottom: 20px;
+  letter-spacing: .4px;
+}
+.hero-eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--acc);
+                    animation: blink 2s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.hero-name {
+  font-size: clamp(32px, 6vw, 52px);
+  font-weight: 900; letter-spacing: -1.5px; line-height: 1.08;
+  margin-bottom: 12px;
+}
+.hero-name span { color: var(--acc); }
+
+.hero-sub {
+  font-size: clamp(15px, 2.5vw, 18px);
+  color: rgba(255,255,255,.68);
+  margin-bottom: 32px; line-height: 1.65; max-width: 560px; margin-left: auto; margin-right: auto;
+}
+
+.hero-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 52px; }
+
+.cta-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 12px 22px; border-radius: 10px;
+  font-size: 14px; font-weight: 700; text-decoration: none;
+  transition: all .18s;
+}
+.cta-primary { background: var(--acc); color: var(--p); }
+.cta-primary:hover { background: #8fd4ad; transform: translateY(-2px); }
+.cta-ghost { background: rgba(255,255,255,.1); border: 1.5px solid rgba(255,255,255,.25); color: #fff; }
+.cta-ghost:hover { background: rgba(255,255,255,.18); }
+
+/* ── Phone mockup ──────────────────────── */
+.phone-wrap {
+  display: flex; justify-content: center; gap: 20px; align-items: flex-end;
+  margin-bottom: -2px;
+}
+
+.phone {
+  width: 200px;
+  background: #111;
+  border-radius: 32px;
+  border: 6px solid #222;
+  box-shadow: 0 32px 64px rgba(0,0,0,.55), 0 0 0 1px #333;
+  overflow: hidden;
+  position: relative;
+}
+.phone.main { width: 230px; }
+.phone-notch {
+  height: 22px; background: #111;
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid #1a1a1a;
+}
+.phone-notch-bar { width: 60px; height: 10px; background: #000; border-radius: 99px; }
+.phone-screen {
+  background: #1B4332;
+  min-height: 340px;
+  position: relative; overflow: hidden;
+}
+.phone.main .phone-screen { min-height: 390px; }
+
+/* app ui inside phone */
+.ph-header {
+  background: #2D6A4F; padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.ph-logo { font-size: 11px; font-weight: 800; color: #fff; }
+.ph-logo b { color: #74C69D; }
+.ph-dot { width: 6px; height: 6px; border-radius: 50%; background: #74C69D; }
+
+.ph-body { padding: 10px; background: #F0F4F1; min-height: 280px; }
+.ph.main .ph-body { min-height: 330px; }
+
+.ph-month { text-align: center; font-size: 9px; font-weight: 700; color: #2D6A4F;
+            padding: 4px 0 8px; }
+
+.ph-card {
+  background: #fff; border-radius: 8px; padding: 8px 10px; margin-bottom: 7px;
+  border-left: 3px solid;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  font-size: 8px;
+}
+.ph-card.rda { border-color: #40916C; }
+.ph-card.rdm { border-color: #F4A261; }
+.ph-card-top { display: flex; gap: 4px; align-items: center; margin-bottom: 3px; }
+.ph-badge { font-size: 6px; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+.ph-badge.rda { background: #D1FAE5; color: #065F46; }
+.ph-badge.rdm { background: #FEF3C7; color: #92400E; }
+.ph-empresa { font-size: 7.5px; font-weight: 600; color: #1C2B20; }
+.ph-val { font-size: 10px; font-weight: 800; color: #1B4332; margin-top: 2px; }
+
+.ph-nav {
+  position: sticky; bottom: 0;
+  background: #fff; border-top: 1px solid #D4E2D8;
+  display: flex; padding: 5px 0;
+}
+.ph-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center;
+              gap: 2px; font-size: 5.5px; color: #5A6E60; }
+.ph-nav-btn.active { color: #2D6A4F; }
+.ph-nav-dot { width: 18px; height: 18px; border-radius: 50%; background: #2D6A4F;
+              display: flex; align-items: center; justify-content: center; }
+.ph-nav-dot svg { width: 9px; height: 9px; stroke: #fff; }
+
+.phone-side {
+  transform: perspective(800px) rotateY(12deg) rotateX(4deg) scale(.82);
+  transform-origin: bottom center;
+  opacity: .75;
+}
+
+/* ═══════════════════════════════════
+   STATS BAR
+═══════════════════════════════════ */
+.stats-bar {
+  background: var(--srf);
+  border-top: 1px solid var(--bdr);
+  border-bottom: 1px solid var(--bdr);
+}
+.stats-inner {
+  max-width: 900px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; justify-content: center;
+  padding: 0 24px;
+}
+.stat {
+  flex: 1; min-width: 130px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 22px 16px; gap: 4px;
+  border-right: 1px solid var(--bdr);
+}
+.stat:last-child { border-right: none; }
+.stat-num { font-size: 26px; font-weight: 900; color: var(--p); letter-spacing: -1px; }
+.stat-lbl { font-size: 12px; color: var(--mut); font-weight: 500; text-align: center; }
+
+/* ═══════════════════════════════════
+   SECTION
+═══════════════════════════════════ */
+.section { max-width: 1100px; margin: 0 auto; padding: 64px 24px 32px; }
+.sec-eyebrow {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--pl); margin-bottom: 6px;
+}
+.sec-title {
+  font-size: clamp(24px, 4vw, 34px); font-weight: 900; color: var(--p);
+  letter-spacing: -.5px; margin-bottom: 40px;
+}
+
+/* ═══════════════════════════════════
+   APP CARDS
+═══════════════════════════════════ */
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.app-card {
+  background: var(--srf);
+  border-radius: var(--r);
+  box-shadow: var(--shd);
+  border: 1px solid var(--bdr);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: transform .22s, box-shadow .22s;
+}
+.app-card:hover { transform: translateY(-5px); box-shadow: 0 16px 48px rgba(0,0,0,.13); }
+
+.card-top {
+  height: 10px;
+  background: linear-gradient(90deg, var(--p), var(--acc));
+}
+.card-top.ora  { background: linear-gradient(90deg, #C05621, #F4A261); }
+.card-top.blue { background: linear-gradient(90deg, #1D4ED8, #60A5FA); }
+.card-top.gray { background: linear-gradient(90deg, #475569, #94A3B8); }
+
+.card-body { padding: 26px; flex: 1; display: flex; flex-direction: column; }
+
+.card-icon-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+
+.c-icon {
+  width: 54px; height: 54px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+}
+.ic-g { background: #D1FAE5; }
+.ic-o { background: #FEF3C7; }
+.ic-b { background: #DBEAFE; }
+.ic-gr { background: #F1F5F9; }
+
+.c-status {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; padding: 4px 10px; border-radius: 99px;
+}
+.st-live { background: #D1FAE5; color: #065F46; }
+.st-soon { background: #FEF3C7; color: #92400E; }
+.st-beta { background: #DBEAFE; color: #1E40AF; }
+
+.c-name {
+  font-size: 21px; font-weight: 900; color: var(--p);
+  letter-spacing: -.4px; margin-bottom: 8px;
+}
+.c-desc {
+  font-size: 13.5px; color: var(--mut); line-height: 1.7;
+  flex: 1; margin-bottom: 18px;
+}
+
+.c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.c-tag {
+  font-size: 11.5px; font-weight: 600; padding: 4px 10px;
+  border-radius: 6px; background: var(--bg); color: var(--mut);
+  border: 1px solid var(--bdr);
+}
+
+.c-feats { display: flex; flex-direction: column; gap: 7px; margin-bottom: 22px; }
+.c-feat { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--mut); }
+.c-feat-icon { font-size: 14px; flex-shrink: 0; }
+
+.c-foot { display: flex; gap: 8px; padding-top: 18px; border-top: 1px solid var(--bdr); }
+
+.btn-open {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 16px; background: var(--p); color: #fff; border-radius: 10px;
+  font-size: 14px; font-weight: 700; text-decoration: none; transition: all .15s;
+}
+.btn-open:hover { background: var(--pm); transform: translateY(-1px); }
+.btn-open.off {
+  background: var(--bg); color: var(--mut);
+  border: 1.5px solid var(--bdr); pointer-events: none;
+}
+
+.btn-ico {
+  width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1.5px solid var(--bdr); background: var(--srf);
+  color: var(--mut); text-decoration: none; transition: all .15s; flex-shrink: 0;
+}
+.btn-ico:hover { border-color: var(--pl); color: var(--p); background: #e8f5ee; }
+
+/* ── Card placeholder ── */
+.card-ph {
+  border: 2px dashed var(--bdr); border-radius: var(--r);
+  background: transparent; min-height: 280px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 40px;
+  transition: border-color .2s;
+}
+.card-ph:hover { border-color: var(--pl); }
+.ph-plus { font-size: 36px; color: var(--bdr); transition: color .2s; }
+.card-ph:hover .ph-plus { color: var(--pl); }
+
+/* ═══════════════════════════════════
+   TECH STACK
+═══════════════════════════════════ */
+.tech-grid {
+  display: flex; flex-wrap: wrap; gap: 12px;
+}
+.tech-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--srf); border: 1.5px solid var(--bdr); border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px; font-weight: 600; color: var(--mut);
+  transition: border-color .15s, color .15s;
+}
+.tech-pill:hover { border-color: var(--pl); color: var(--p); }
+.tech-pill span { font-size: 18px; }
+
+/* ═══════════════════════════════════
+   ABOUT
+═══════════════════════════════════ */
+.about-wrap {
+  background: linear-gradient(135deg, var(--p) 0%, var(--pm) 100%);
+  border-radius: var(--r); padding: 40px;
+  display: flex; gap: 36px; align-items: flex-start;
+  color: #fff;
+}
+.about-av {
+  width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(255,255,255,.15); border: 2.5px solid rgba(255,255,255,.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; font-weight: 900; letter-spacing: -1px; color: #fff;
+}
+.about-inner h3 { font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+.about-inner .sub { font-size: 13px; color: rgba(255,255,255,.6); margin-bottom: 14px; }
+.about-inner p { font-size: 14px; color: rgba(255,255,255,.75); line-height: 1.72; margin-bottom: 20px; }
+
+.about-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.a-link {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 700; padding: 8px 16px;
+  border-radius: 9px; text-decoration: none; transition: all .15s;
+}
+.a-link.light { background: rgba(255,255,255,.15); border: 1.5px solid rgba(255,255,255,.25); color: #fff; }
+.a-link.light:hover { background: rgba(255,255,255,.25); }
+.a-link.acc { background: var(--acc); color: var(--p); border: 1.5px solid var(--acc); }
+.a-link.acc:hover { background: #8fd4ad; }
+
+/* ═══════════════════════════════════
+   FOOTER
+═══════════════════════════════════ */
+footer {
+  background: #0d2b1e; color: rgba(255,255,255,.45);
+  text-align: center; padding: 30px 24px;
+  font-size: 13px; margin-top: 72px;
+}
+footer strong { color: rgba(255,255,255,.85); }
+footer a { color: var(--acc); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════
+   ANIM
+═══════════════════════════════════ */
+.fade-up {
+  opacity: 0; transform: translateY(28px);
+  transition: opacity .55s ease, transform .55s ease;
+}
+.fade-up.visible { opacity: 1; transform: translateY(0); }
+
+/* ═══════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════ */
+@media (max-width: 640px) {
+  .about-wrap { flex-direction: column; }
+  .phone-side { display: none; }
+  .stat { min-width: 110px; padding: 16px 12px; }
+  .stat-num { font-size: 22px; }
+  .card-body { padding: 18px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+   HERO
+══════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <span class="hero-eyebrow-dot"></span>
+      Disponível para colaborações
+    </div>
+
+    <h1 class="hero-name">Cleiton <span>Jussara</span></h1>
+
+    <p class="hero-sub">
+      Desenvolvo aplicativos PWA para gestão de campo, inspeções agrícolas
+      e controle de despesas — apps que funcionam offline e cabem no bolso.
+    </p>
+
+    <div class="hero-ctas">
+      <a href="#apps" class="cta-btn cta-primary">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+        Ver Apps
+      </a>
+      <a href="mailto:cleitonjussara@gmail.com" class="cta-btn cta-ghost">
+        Entrar em contato
+      </a>
+    </div>
+
+    <!-- Phone mockups -->
+    <div class="phone-wrap">
+
+      <!-- Phone lateral esquerda -->
+      <div class="phone phone-side" style="transform:perspective(800px) rotateY(-14deg) rotateX(4deg) scale(.78);transform-origin:bottom center;opacity:.65">
+        <div class="phone-notch"><div class="phone-notch-bar"></div></div>
+        <div class="phone-screen">
+          <div class="ph-header">
+            <span class="ph-logo">Petermann <b>App</b></span>
+            <div class="ph-dot"></div>
+          </div>
+          <div class="ph-body">
+            <div class="ph-month">Saldo · Mai 2026</div>
+            <div class="ph-card rda">
+              <div class="ph-card-top"><span class="ph-badge rda">RDA</span></div>
+              <div class="ph-empresa">Auto Posto Central</div>
+              <div class="ph-val">R$ 280,00</div>
+            </div>
+            <div class="ph-card rdm">
+              <div class="ph-card-top"><span class="ph-badge rdm">RDM</span></div>
+              <div class="ph-empresa">Hotel Recanto Verde</div>
+              <div class="ph-val">R$ 420,00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone principal (centro) -->
+      <div class="phone main">
+        <div class="phone-notch"><div class="phone-notch-bar"></div></div>
+        <div class="phone-screen">
+          <div class="ph-header">
+            <span class="ph-logo">Petermann <b>App</b></span>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div class="ph-dot"></div>
+              <span style="font-size:7px;color:rgba(255,255,255,.7)">Drive</span>
+            </div>
+          </div>
+          <div class="ph-body">
+            <div class="ph-month">Notas · Mai 2026</div>
+            <div class="ph-card rda">
+              <div class="ph-card-top"><span class="ph-badge rda">RDA</span><span style="font-size:6px;color:#5A6E60;margin-left:3px">Abastecimento</span></div>
+              <div class="ph-empresa">Posto BR Km 340</div>
+              <div class="ph-val">R$ 195,40</div>
+            </div>
+            <div class="ph-card rdm">
+              <div class="ph-card-top"><span class="ph-badge rdm">RDM</span><span style="font-size:6px;color:#5A6E60;margin-left:3px">Hospedagem</span></div>
+              <div class="ph-empresa">Pousada Serra Verde</div>
+              <div class="ph-val">R$ 380,00</div>
+            </div>
+            <div class="ph-card rda">
+              <div class="ph-card-top"><span class="ph-badge rda">RDA</span></div>
+              <div class="ph-empresa">Restaurante do Campo</div>
+              <div class="ph-val">R$ 64,50</div>
+            </div>
+          </div>
+          <div class="ph-nav">
+            <div class="ph-nav-btn active">
+              <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:#2D6A4F;fill:none;stroke-width:2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Notas
+            </div>
+            <div class="ph-nav-btn" style="flex:0 0 36px">
+              <div class="ph-nav-dot">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-width="2.5" stroke-linecap="round"/></svg>
+              </div>
+            </div>
+            <div class="ph-nav-btn">
+              <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              Saldo
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone lateral direita -->
+      <div class="phone phone-side" style="transform:perspective(800px) rotateY(14deg) rotateX(4deg) scale(.78);transform-origin:bottom center;opacity:.65">
+        <div class="phone-notch"><div class="phone-notch-bar"></div></div>
+        <div class="phone-screen">
+          <div class="ph-header">
+            <span class="ph-logo">Petermann <b>App</b></span>
+            <div class="ph-dot"></div>
+          </div>
+          <div class="ph-body">
+            <div class="ph-month">Perfil</div>
+            <div style="background:#fff;border-radius:8px;padding:10px;text-align:center;font-size:8px;color:#1B4332;margin-bottom:7px">
+              <div style="width:28px;height:28px;border-radius:50%;background:#2D6A4F;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;margin:0 auto 5px">CJ</div>
+              <div style="font-weight:700;color:#1B4332">Cleiton J.</div>
+              <div style="font-size:6.5px;color:#5A6E60">admin · Cristalina</div>
+            </div>
+            <div style="background:#fff;border-radius:8px;padding:8px 10px;font-size:7.5px;color:#5A6E60;display:flex;justify-content:space-between;align-items:center">
+              <span>Google Drive</span>
+              <span style="color:#40916C;font-weight:700">✓ Conectado</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /phone-wrap -->
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+   STATS BAR
+══════════════════════════════════════ -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat fade-up">
+      <div class="stat-num">3</div>
+      <div class="stat-lbl">Modos de captura<br>QR · OCR · Manual</div>
+    </div>
+    <div class="stat fade-up" style="transition-delay:.08s">
+      <div class="stat-num">100%</div>
+      <div class="stat-lbl">Funciona offline<br>IndexedDB + SW</div>
+    </div>
+    <div class="stat fade-up" style="transition-delay:.16s">
+      <div class="stat-num">2x</div>
+      <div class="stat-lbl">Sync em nuvem<br>Google Drive + Supabase</div>
+    </div>
+    <div class="stat fade-up" style="transition-delay:.24s">
+      <div class="stat-num">0</div>
+      <div class="stat-lbl">Instalação necessária<br>Abre direto no celular</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+   APPS
+══════════════════════════════════════ -->
+<section class="section" id="apps">
+  <div class="sec-eyebrow">Portfólio</div>
+  <div class="sec-title">Apps &amp; Ferramentas</div>
+
+  <div class="apps-grid">
+
+    <!-- Petermann App -->
+    <div class="app-card fade-up">
+      <div class="card-top"></div>
+      <div class="card-body">
+        <div class="card-icon-row">
+          <div class="c-icon ic-g">🌿</div>
+          <span class="c-status st-live">● Ativo</span>
+        </div>
+        <div class="c-name">Petermann App</div>
+        <p class="c-desc">
+          PWA offline-first para lançamento de notas RDA/RDM em campo.
+          Captura via QR Code da NFCe, OCR em foto ou formulário manual.
+          Sync automático com Google Drive e Supabase.
+        </p>
+        <div class="c-tags">
+          <span class="c-tag">RDA / RDM</span>
+          <span class="c-tag">PWA</span>
+          <span class="c-tag">Offline-first</span>
+          <span class="c-tag">Google Drive</span>
+          <span class="c-tag">OCR</span>
+        </div>
+        <div class="c-feats">
+          <div class="c-feat"><span class="c-feat-icon">📷</span>Leitura de QR Code da NFCe</div>
+          <div class="c-feat"><span class="c-feat-icon">🔍</span>OCR em foto de recibo (Tesseract.js)</div>
+          <div class="c-feat"><span class="c-feat-icon">🏢</span>Consulta automática de CNPJ via BrasilAPI</div>
+          <div class="c-feat"><span class="c-feat-icon">📊</span>Export Excel / CSV por período</div>
+          <div class="c-feat"><span class="c-feat-icon">👥</span>Dashboard de equipe para gestores</div>
+          <div class="c-feat"><span class="c-feat-icon">☁️</span>Fotos e dados no Google Drive</div>
+        </div>
+        <div class="c-foot">
+          <a href="./rda-rdm-app/" class="btn-open">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Abrir App
+          </a>
+          <a href="https://github.com/cleitonjussara-coder/cleitonjussara-coder.io" target="_blank" rel="noopener" class="btn-ico" title="GitHub">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cronograma Semanal -->
+    <div class="app-card fade-up" style="transition-delay:.1s">
+      <div class="card-top ora"></div>
+      <div class="card-body">
+        <div class="card-icon-row">
+          <div class="c-icon ic-o">📅</div>
+          <span class="c-status st-soon">Em breve</span>
+        </div>
+        <div class="c-name">Cronograma Semanal</div>
+        <p class="c-desc">
+          Painel visual de cronograma de inspeções por semana —
+          fazendas, glebas, inspetores e visitas organizados de
+          forma clara para gestão da safra.
+        </p>
+        <div class="c-tags">
+          <span class="c-tag">Inspeções</span>
+          <span class="c-tag">Safra</span>
+          <span class="c-tag">Dashboard</span>
+        </div>
+        <div class="c-feats">
+          <div class="c-feat"><span class="c-feat-icon">🗓️</span>Painel semanal por inspetor</div>
+          <div class="c-feat"><span class="c-feat-icon">🏡</span>Agrupamento por fazenda e gleba</div>
+          <div class="c-feat"><span class="c-feat-icon">📈</span>Contagem de visitas por safra</div>
+          <div class="c-feat"><span class="c-feat-icon">🖨️</span>Impressão de cronograma</div>
+        </div>
+        <div class="c-foot">
+          <a href="#" class="btn-open off">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Em desenvolvimento
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slot futuro -->
+    <div class="card-ph fade-up" style="transition-delay:.2s">
+      <div class="ph-plus">＋</div>
+      <div style="font-size:15px;font-weight:800;color:var(--pl)">Próximo App</div>
+      <div style="font-size:13px;color:var(--mut);max-width:180px;line-height:1.65;margin-top:4px">
+        Novos projetos em desenvolvimento. Fique ligado!
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+   TECH STACK
+══════════════════════════════════════ -->
+<section class="section" style="padding-top:0">
+  <div class="sec-eyebrow">Tecnologias</div>
+  <div class="sec-title">Stack utilizada</div>
+
+  <div class="tech-grid">
+    <div class="tech-pill fade-up"><span>🌐</span> PWA / Service Worker</div>
+    <div class="tech-pill fade-up" style="transition-delay:.05s"><span>💾</span> IndexedDB (offline-first)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.1s"><span>☁️</span> Google Drive API</div>
+    <div class="tech-pill fade-up" style="transition-delay:.15s"><span>🗄️</span> Supabase (PostgreSQL)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.2s"><span>🔍</span> Tesseract.js (OCR)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.25s"><span>📷</span> jsQR (QR Code)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.3s"><span>📊</span> SheetJS (Excel)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.35s"><span>🇧🇷</span> BrasilAPI (CNPJ)</div>
+    <div class="tech-pill fade-up" style="transition-delay:.4s"><span>📱</span> HTML · CSS · JS Vanilla</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+   ABOUT
+══════════════════════════════════════ -->
+<section class="section" style="padding-top:0" id="sobre">
+  <div class="sec-eyebrow">Sobre</div>
+  <div class="sec-title">Quem sou</div>
+
+  <div class="about-wrap fade-up">
+    <div class="about-av">CJ</div>
+    <div class="about-inner">
+      <h3>Cleiton Jussara</h3>
+      <p class="sub">Desenvolvedor de Apps · Gestão de Campo &amp; Agro</p>
+      <p>
+        Crio soluções práticas para o campo — aplicativos que funcionam offline,
+        são rápidos de usar no celular e resolvem problemas reais de equipes de
+        inspeção e gestão agrícola. Foco total em PWAs leves, sem instalação e
+        que sincronizam automaticamente quando a internet volta.
+      </p>
+      <div class="about-links">
+        <a href="https://github.com/cleitonjussara-coder" target="_blank" rel="noopener" class="a-link light">
+          <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          GitHub
+        </a>
+        <a href="mailto:cleitonjussara@gmail.com" class="a-link acc">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+          Enviar e-mail
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+   FOOTER
+══════════════════════════════════════ -->
+<footer>
+  <p>Feito com dedicação por <strong>Cleiton Jussara</strong>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/cleitonjussara-coder/cleitonjussara-coder.io" target="_blank" rel="noopener">Ver no GitHub ↗</a></p>
+  <p style="margin-top:6px;font-size:11.5px">
+    © 2026 · Todos os apps são PWAs — funcionam direto no celular, sem instalação
+  </p>
+</footer>
+
+<script>
+// Scroll fade-in
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll('.fade-up').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
