@@ -1849,7 +1849,7 @@ async function salvarNota() {
     if (fotoBlob) {
       await DB.saveFotoLocal(saved.id, fotoBlob, anexoExt);
       // upload do anexo com todos os dados da nota como metadados no Drive
-      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id }, anexoExt)
+      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id, user_email: user.email, user_nome: user.nome }, anexoExt)
         .then(() => toast('Anexo salvo no Drive ☁️'))
         .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }

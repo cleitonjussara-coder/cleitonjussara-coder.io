@@ -10,12 +10,16 @@ window.GDrive = (() => {
   const FILES_API  = 'https://www.googleapis.com/drive/v3/files'; 
   const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files';
   const LS_KEY     = 'gdrive_tok_v3';
+  const FOLDER_MIME = 'application/vnd.google-apps.folder';
+  const MESES = ['', 'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                 'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-  let tokenClient = null;
-  let accessToken = null;
-  let tokenExpiry = 0;
-  let fileIndex   = {};
-  let _gisReady   = false;
+  let tokenClient  = null;
+  let accessToken  = null;
+  let tokenExpiry  = 0;
+  let fileIndex    = {};
+  let _folderCache = {};   // chave `${paiId}/${nome}` → Promise<id> (evita criar 2x)
+  let _gisReady    = false;
 
   /* ════════════════════════════════════════════
      INIT — restaura token salvo, SEM popup
@@ -94,9 +98,10 @@ window.GDrive = (() => {
     if (accessToken && window.google?.accounts?.oauth2) {
       google.accounts.oauth2.revoke(accessToken, () => {});
     }
-    accessToken = null;
-    tokenExpiry = 0;
-    fileIndex   = {};
+    accessToken  = null;
+    tokenExpiry  = 0;
+    fileIndex    = {};
+    _folderCache = {};
     sessionStorage.removeItem(LS_KEY);
   }
 
@@ -130,16 +135,110 @@ window.GDrive = (() => {
   }
 
   /* ════════════════════════════════════════════
-     ÍNDICE DE ARQUIVOS
+     VARREDURA DA ÁRVORE (raiz + subpastas)
+     BFS por nível: 1 consulta agrupa todos os pais
+     do mesmo nível (barato, não 1 chamada por pasta).
+     Retorna só ARQUIVOS (pastas viram próximos pais).
+  ════════════════════════════════════════════ */
+  async function _walkTree(rootId) {
+    const files = [];
+    let level = [rootId];
+    let guard = 0;
+    while (level.length && guard++ < 12) {
+      const next = [];
+      for (let i = 0; i < level.length; i += 40) {
+        const ids = level.slice(i, i + 40);
+        const q = '(' + ids.map(id => `'${id}' in parents`).join(' or ') + ') and trashed=false';
+        let pageToken = null;
+        do {
+          const url = `${FILES_API}?q=${encodeURIComponent(q)}`
+            + `&fields=nextPageToken,files(id,name,mimeType,appProperties,createdTime)`
+            + `&pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+          const data = await _req(url);
+          for (const f of (data.files || [])) {
+            if (f.mimeType === FOLDER_MIME) next.push(f.id);
+            else files.push(f);
+          }
+          pageToken = data.nextPageToken || null;
+        } while (pageToken);
+      }
+      level = next;
+    }
+    return files;
+  }
+
+  /* ════════════════════════════════════════════
+     ÍNDICE DE ARQUIVOS (nome → id), árvore inteira.
+     Inclui os JSON da raiz e as fotos em subpastas.
+     Nome de foto é único (foto-<id>.<ext>), então
+     guardar "plano" por nome continua funcionando.
   ════════════════════════════════════════════ */
   async function _refreshIndex() {
-    const q = `'${FOLDER_ID}' in parents and trashed=false`;
-    const data = await _req(
-      `${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1000`
-    );
+    const files = await _walkTree(FOLDER_ID);
     fileIndex = {};
-    (data.files || []).forEach(f => { fileIndex[f.name] = f.id; });
-    console.log(`GDrive ✓ ${Object.keys(fileIndex).length} arquivos na pasta`);
+    files.forEach(f => { fileIndex[f.name] = f.id; });
+    console.log(`GDrive ✓ ${Object.keys(fileIndex).length} arquivos (raiz + subpastas)`);
+  }
+
+  /* ════════════════════════════════════════════
+     SUBPASTAS — acha ou cria, com cache de Promise
+     para não criar a mesma pasta duas vezes.
+  ════════════════════════════════════════════ */
+  function _getOrCreateFolder(name, parentId) {
+    const safe = String(name || 'sem-nome');
+    const key  = parentId + '/' + safe;
+    if (_folderCache[key]) return _folderCache[key];
+    const p = (async () => {
+      const esc = safe.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const q = `mimeType='${FOLDER_MIME}' and name='${esc}' and '${parentId}' in parents and trashed=false`;
+      const found = await _req(
+        `${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`
+      );
+      if (found.files && found.files[0]) return found.files[0].id;
+      const made = await _req(`${FILES_API}?fields=id`, {
+        method: 'POST',
+        json: { name: safe, mimeType: FOLDER_MIME, parents: [parentId] },
+      });
+      return made.id;
+    })();
+    p.catch(() => { delete _folderCache[key]; }); // se falhar, permite tentar de novo
+    _folderCache[key] = p;
+    return p;
+  }
+
+  /* nomes das pastas: Colaborador / Mês-Ano / Tipo */
+  const _slug = s => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .trim().toLowerCase().replace(/[^a-z0-9.]+/g, '.').replace(/^\.+|\.+$/g, '');
+
+  function _colabFolderName(nota) {
+    const email = String(nota.user_email || '').trim();
+    if (email.includes('@')) return email.split('@')[0].toLowerCase(); // ex: naycon.cenci
+    const nome = _slug(nota.user_nome);
+    if (nome) return nome;
+    return 'colaborador-' + _trim(nota.user_id, 8);
+  }
+  function _mesAnoFolder(nota) {
+    const m = parseInt(nota.mes, 10);
+    const a = parseInt(nota.ano, 10);
+    const nome = (m >= 1 && m <= 12) ? MESES[m] : ('Mes-' + (nota.mes || 'NA'));
+    return `${nome}-${a || 'NA'}`;                                      // ex: Junho-2026
+  }
+  function _tipoFolder(nota) {
+    const t = String(nota.tipo || '').toUpperCase();
+    return (t === 'RDA' || t === 'RDM') ? t : 'OUTROS';
+  }
+
+  /* destino final do upload; se algo falhar, volta pra raiz (nunca perde a foto) */
+  async function _resolveDestino(nota) {
+    try {
+      const colab  = await _getOrCreateFolder(_colabFolderName(nota), FOLDER_ID);
+      const mesAno = await _getOrCreateFolder(_mesAnoFolder(nota), colab);
+      const tipo   = await _getOrCreateFolder(_tipoFolder(nota), mesAno);
+      return tipo;
+    } catch (e) {
+      console.warn('GDrive subpastas falharam — salvando na raiz:', e.message);
+      return FOLDER_ID;
+    }
   }
 
   /* ════════════════════════════════════════════
@@ -228,9 +327,12 @@ window.GDrive = (() => {
       chave_nfce   : _trim(nota.chave_nfce, 50),
     };
 
+    // arquivo novo → resolve subpasta Colaborador/Mês-Ano/Tipo (cai na raiz se falhar)
+    // arquivo já existente → mantém onde está (PATCH só atualiza conteúdo/metadados)
+    const parentId = existingId ? FOLDER_ID : await _resolveDestino(nota);
     const meta = existingId
       ? { appProperties }
-      : { name: filename, parents: [FOLDER_ID], appProperties };
+      : { name: filename, parents: [parentId], appProperties };
 
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
@@ -268,13 +370,12 @@ window.GDrive = (() => {
 
   async function listarFotasComDados() {
     if (!isConnected()) return [];
-    const q = `'${FOLDER_ID}' in parents and name contains 'foto-' and trashed=false`;
-    const data = await _req(
-      `${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name,appProperties,createdTime)&pageSize=1000`
-    );
-    return (data.files || []).map(f => ({
-      fileId: f.id, filename: f.name, criadoEm: f.createdTime, dados: f.appProperties || {},
-    }));
+    const files = await _walkTree(FOLDER_ID);      // raiz + subpastas
+    return files
+      .filter(f => f.name && f.name.indexOf('foto-') === 0)
+      .map(f => ({
+        fileId: f.id, filename: f.name, criadoEm: f.createdTime, dados: f.appProperties || {},
+      }));
   }
 
   /* ════════════════════════════════════════════
