@@ -1228,6 +1228,14 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
   const dados = { ...parsed, metodo_captura: 'qrcode' };
   if (!dados.data) dados.data = hoje();
 
+  // TRAVA na leitura: se a chave já foi registrada, avisa e abre a nota existente
+  const dup = _notaDuplicadaChave(parsed.chave, null);
+  if (dup) {
+    toast('⚠️ Nota já registrada — abrindo a existente.', 'err');
+    editarNota(dup.id);
+    return;
+  }
+
   await abrirFormNota(dados);   // chave/CNPJ/UF já entram; fotoBlob fica null
   _pedirFotoPasso2();           // Passo 2: destaca e pede a foto (abre no TOQUE)
   toast('Chave lida! 🔑 Passo 2: toque no botão destacado para fotografar a nota.');
@@ -1966,12 +1974,26 @@ function _atualizarBotaoLerChave() {
   btn.style.display = (legivel && !temChave) ? 'block' : 'none';
 }
 
+/* nota (não deletada) do usuário com a MESMA chave NFC-e já registrada;
+   ignora a que está sendo editada. Devolve a nota existente ou null. */
+function _notaDuplicadaChave(chave, ignoreId) {
+  const c = _digitos(chave);
+  if (c.length !== 44) return null;
+  return notas.find(n => n.id !== ignoreId && !n.deleted && _digitos(n.chave_nfce) === c) || null;
+}
+
 async function salvarNota() {
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
   // só tipo e data são obrigatórios — sem valor, grava como "pendente" (0)
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
+
+  // TRAVA anti-duplicata: mesma chave NFC-e já registrada bloqueia o salvamento
+  if (_notaDuplicadaChave($('nf-chave').value, $('nf-id').value || null)) {
+    toast('⚠️ Esta nota já foi registrada (chave NFC-e duplicada).', 'err');
+    return;
+  }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;
 
