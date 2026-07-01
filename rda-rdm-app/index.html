@@ -237,6 +237,40 @@ select.inp{cursor:pointer}
 .sub-breakdown{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
 .sub-row{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:2px}
 
+/* ─────────────────────────────────────────────
+   DASHBOARD GESTÃO
+──────────────────────────────────────────────*/
+.dash-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:8px 14px 4px}
+.kpi{background:var(--surface);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);
+     border-left:3px solid var(--primary)}
+.kpi.warn{border-left-color:var(--accent)}
+.kpi.neg{border-left-color:var(--danger)}
+.kpi-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--text2)}
+.kpi-val{font-size:20px;font-weight:800;color:var(--primary-d);margin:3px 0 1px;line-height:1.1}
+.kpi.neg .kpi-val{color:var(--danger)}
+.kpi-sub{font-size:11px;color:var(--text2)}
+
+.dash-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+           margin:8px 14px 4px;padding:12px 14px}
+.dash-card-title{font-size:13px;font-weight:700;color:var(--primary-d);margin-bottom:10px}
+
+.evo{display:flex;align-items:flex-end;gap:4px;height:100px}
+.evo-col{flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center}
+.evo-bar{width:100%;max-width:20px;background:var(--secondary);border-radius:4px 4px 0 0;min-height:2px}
+.evo-col.cur .evo-bar{background:var(--primary)}
+.evo-labels{display:flex;gap:4px;margin-top:5px}
+.evo-labels span{flex:1;text-align:center;font-size:9px;color:var(--text2);text-transform:uppercase}
+.evo-labels span.cur{color:var(--primary);font-weight:800}
+
+.nuc-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.nuc-row:last-child{margin-bottom:0}
+.nuc-name{font-size:12.5px;color:var(--text);width:74px;flex-shrink:0;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nuc-track{flex:1;height:18px;background:var(--bg);border-radius:6px;overflow:hidden}
+.nuc-fill{height:100%;background:linear-gradient(90deg,var(--primary-l),var(--primary));
+          border-radius:6px;min-width:6px}
+.nuc-val{font-size:12px;font-weight:700;color:var(--primary-d);width:76px;text-align:right;flex-shrink:0}
+
 .section-hd{
   display:flex;align-items:center;justify-content:space-between;
   padding:8px 14px 6px;font-size:14px;font-weight:700;color:var(--primary-d)
@@ -884,16 +918,16 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=44"></script>
-<script defer src="js/nfce.js?v=44"></script>
-<script defer src="js/sefaz.js?v=44"></script>
-<script defer src="js/brasilapi.js?v=44"></script>
-<script defer src="js/ocr.js?v=44"></script>
-<script defer src="js/excel.js?v=44"></script>
-<script defer src="js/gestor.js?v=44"></script>
-<script defer src="js/gdrive.js?v=44"></script>
-<script defer src="js/gsheets.js?v=44"></script>
-<script defer src="js/app.js?v=44"></script>
+<script defer src="js/db.js?v=45"></script>
+<script defer src="js/nfce.js?v=45"></script>
+<script defer src="js/sefaz.js?v=45"></script>
+<script defer src="js/brasilapi.js?v=45"></script>
+<script defer src="js/ocr.js?v=45"></script>
+<script defer src="js/excel.js?v=45"></script>
+<script defer src="js/gestor.js?v=45"></script>
+<script defer src="js/gdrive.js?v=45"></script>
+<script defer src="js/gsheets.js?v=45"></script>
+<script defer src="js/app.js?v=45"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

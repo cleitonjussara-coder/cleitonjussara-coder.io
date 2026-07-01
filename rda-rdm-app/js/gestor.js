@@ -16,24 +16,49 @@ window.Gestor = (() => {
     const mes = options.mes || new Date().getMonth() + 1;
     const ano = options.ano || new Date().getFullYear();
 
-    el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando equipe…</p></div>';
+    el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando gestão…</p></div>';
     const podeConsolidar = currentUser.role === 'admin' || currentUser.role === 'gestor';
     try {
       const { data: collabs, error: ce } = await sb.from('colaboradores').select('*').order('nome');
       if (ce) throw ce;
 
-      const [{ data: notas }, { data: repasses }] = await Promise.all([
-        sb.from('notas').select('user_id,tipo,subtipo,valor,mes,ano,deleted').eq('ano',ano).eq('mes',mes),
-        sb.from('repasses').select('user_id,tipo,valor,mes,ano,deleted').eq('ano',ano).eq('mes',mes),
+      // busca o ANO inteiro (p/ a evolução); o mês é filtrado no cliente
+      const [{ data: notasAno }, { data: repAno }] = await Promise.all([
+        sb.from('notas').select('user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted').eq('ano', ano),
+        sb.from('repasses').select('user_id,tipo,valor,mes,ano,deleted').eq('ano', ano),
       ]);
+      const nsAno = (notasAno || []).filter(n => !n.deleted);
+      const rsAno = (repAno   || []).filter(r => !r.deleted);
+      const ns = nsAno.filter(n => n.mes === mes);
+      const rs = rsAno.filter(r => r.mes === mes);
+      const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
 
-      const ns = (notas   ||[]).filter(n=>!n.deleted);
-      const rs = (repasses||[]).filter(r=>!r.deleted);
+      // KPIs do mês
+      const gRDA = soma(ns.filter(n => n.tipo === 'RDA'));
+      const gRDM = soma(ns.filter(n => n.tipo === 'RDM'));
+      const gasto = gRDA + gRDM;
+      const recebido = soma(rs);
+      const saldo = recebido - gasto;
+      const pend = ns.filter(n => Number(n.valor || 0) <= 0).length;
+      const semFoto = ns.filter(n => !n.foto_path).length;
+      const ativos = new Set(ns.map(n => n.user_id)).size;
 
-      // agrupa por nucleo
-      const nucs = {};
-      collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
+      // Evolução: gasto por mês no ano
+      const evo = [];
+      for (let m = 1; m <= 12; m++) evo.push(soma(nsAno.filter(n => n.mes === m)));
+      const maxEvo = Math.max(1, ...evo);
 
+      // Gasto por núcleo (mês)
+      const porNuc = {};
+      ns.forEach(n => {
+        const c = collabs.find(x => x.id === n.user_id);
+        const nc = c?.nucleo || 'Outro';
+        porNuc[nc] = (porNuc[nc] || 0) + Number(n.valor || 0);
+      });
+      const nucRank = Object.entries(porNuc).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
+      const maxNuc = Math.max(1, ...nucRank.map(e => e[1]));
+
+      // ── Cabeçalho ──
       let html = `<div class="page-hd">
         <div class="mes-nav">
           <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
@@ -42,44 +67,65 @@ window.Gestor = (() => {
         </div>
         <div class="export-btns">
           <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">Excel</button>
-          <button class="btn btn-sm btn-primary" onclick="exportSheetsEquipe()">📊 Sheets</button>
-          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()">☁️ Fotos → Drive</button>` : ''}
+          <button class="btn btn-sm btn-primary" onclick="exportSheetsEquipe()" title="Planilha da equipe">📊</button>
+          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
         </div>
       </div>`;
 
-      // Cards de resumo geral
-      let totalRDMg=0, totalRDMr=0, totalRDAg=0, totalRDAr=0;
-      collabs.forEach(c => {
-        const cns = ns.filter(n=>n.user_id===c.id);
-        const crs = rs.filter(r=>r.user_id===c.id);
-        totalRDMg += cns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
-        totalRDMr += crs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
-        totalRDAg += cns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
-        totalRDAr += crs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
-      });
-
-      html += `
-      <div class="saldo-grid">
-        <div class="saldo-card ${totalRDMr-totalRDMg<0?'neg':''}">
-          <div class="saldo-label">RDM Total</div>
-          <div class="saldo-val">${brl(totalRDMr-totalRDMg)}</div>
-          <div class="saldo-detail">
-            <span>Gasto <b>${brl(totalRDMg)}</b></span>
-            <span>Recebido <b>${brl(totalRDMr)}</b></span>
-          </div>
+      // ── KPIs ──
+      html += `<div class="dash-kpis">
+        <div class="kpi warn">
+          <div class="kpi-label">💸 Gasto no mês</div>
+          <div class="kpi-val">${brl(gasto)}</div>
+          <div class="kpi-sub">RDA ${brl(gRDA)} · RDM ${brl(gRDM)}</div>
         </div>
-        <div class="saldo-card ${totalRDAr-totalRDAg<0?'neg':''}">
-          <div class="saldo-label">RDA Total</div>
-          <div class="saldo-val">${brl(totalRDAr-totalRDAg)}</div>
-          <div class="saldo-detail">
-            <span>Gasto <b>${brl(totalRDAg)}</b></span>
-            <span>Recebido <b>${brl(totalRDAr)}</b></span>
-          </div>
+        <div class="kpi">
+          <div class="kpi-label">💰 Recebido</div>
+          <div class="kpi-val">${brl(recebido)}</div>
+          <div class="kpi-sub">repasses do mês</div>
+        </div>
+        <div class="kpi ${saldo < 0 ? 'neg' : ''}">
+          <div class="kpi-label">📊 Saldo</div>
+          <div class="kpi-val">${brl(saldo)}</div>
+          <div class="kpi-sub">recebido − gasto</div>
+        </div>
+        <div class="kpi ${pend ? 'warn' : ''}">
+          <div class="kpi-label">🧾 Notas (${ns.length})</div>
+          <div class="kpi-val">${ativos}<span style="font-size:12px;font-weight:600;color:var(--text2)"> ativos</span></div>
+          <div class="kpi-sub">${pend} s/ valor · ${semFoto} s/ foto</div>
         </div>
       </div>`;
 
+      // ── Evolução (ano) ──
+      html += `<div class="dash-card">
+        <div class="dash-card-title">Evolução do gasto · ${ano}</div>
+        <div class="evo">
+          ${evo.map((v, i) => `<div class="evo-col ${i + 1 === mes ? 'cur' : ''}" title="${MESES[i]}: ${brl(v)}">
+            <div class="evo-bar" style="height:${Math.max(2, Math.round(v / maxEvo * 100))}%"></div>
+          </div>`).join('')}
+        </div>
+        <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
+      </div>`;
+
+      // ── Gasto por núcleo (mês) ──
+      html += `<div class="dash-card">
+        <div class="dash-card-title">Gasto por núcleo · ${MESES[mes-1]}</div>
+        ${nucRank.length ? nucRank.map(([nc, v]) => `
+          <div class="nuc-row">
+            <span class="nuc-name">${esc(nc)}</span>
+            <div class="nuc-track"><div class="nuc-fill" style="width:${Math.max(4, Math.round(v / maxNuc * 100))}%"></div></div>
+            <span class="nuc-val">${brl(v)}</span>
+          </div>`).join('') : '<div class="kpi-sub">Sem gastos neste mês.</div>'}
+      </div>`;
+
+      html += `<div class="section-hd">Detalhe por colaborador</div>`;
+
+      // agrupa por nucleo p/ o detalhe
+      const nucs = {};
+      collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
       NUCLEOS.forEach(nucleo => { if (!nucs[nucleo]) nucs[nucleo] = []; });
       for (const [nucleo, membros] of Object.entries(nucs).sort()) {
+        if (!membros.length) continue;
         let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
         let mHtml = '';
 
@@ -145,7 +191,7 @@ window.Gestor = (() => {
         })
       );
 
-      window._equipeCache = { collabs, notas, repasses, mes, ano };
+      window._equipeCache = { collabs, notas: ns, repasses: rs, mes, ano };
 
     } catch(e) {
       el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>`;
