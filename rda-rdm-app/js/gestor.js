@@ -17,6 +17,7 @@ window.Gestor = (() => {
     const ano = options.ano || new Date().getFullYear();
 
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando equipe…</p></div>';
+    const podeConsolidar = currentUser.role === 'admin' || currentUser.role === 'gestor';
     try {
       const { data: collabs, error: ce } = await sb.from('colaboradores').select('*').order('nome');
       if (ce) throw ce;
@@ -42,6 +43,7 @@ window.Gestor = (() => {
         <div class="export-btns">
           <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">Excel</button>
           <button class="btn btn-sm btn-primary" onclick="exportSheetsEquipe()">📊 Sheets</button>
+          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()">☁️ Fotos → Drive</button>` : ''}
         </div>
       </div>`;
 

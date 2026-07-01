@@ -180,6 +180,10 @@ window.GDrive = (() => {
     console.log(`GDrive ✓ ${Object.keys(fileIndex).length} arquivos (raiz + subpastas)`);
   }
 
+  /* atualiza o índice sob demanda (ex.: antes de consolidar fotos da equipe,
+     p/ não recriar o que já está no Drive) */
+  async function atualizarIndice() { _checkConnected(); await _refreshIndex(); }
+
   /* ════════════════════════════════════════════
      SUBPASTAS — acha ou cria, com cache de Promise
      para não criar a mesma pasta duas vezes.
@@ -423,6 +427,7 @@ window.GDrive = (() => {
     init, requestAccess, disconnect, testarConexao,
     syncNotas, loadNotas,
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
+    atualizarIndice,
     isConnected, isConfigured, minutosRestantes,
     getToken, getFolderId,
   };

@@ -845,6 +845,67 @@ async function exportSheetsEquipe() {
   } finally { setLoading(false); }
 }
 
+/* Gestor: envia ao Drive as fotos de TODOS os colaboradores do mês/ano
+   aberto na aba Equipe, organizadas em Colaborador/Mês-Ano/Tipo.
+   Baixa cada foto do Supabase Storage e reúsa o upload que já cria as
+   subpastas. Se a foto já estiver no Drive, só atualiza (não duplica). */
+async function enviarFotosEquipeDrive() {
+  if (!sb || DEMO_MODE) { toast('Disponível apenas com Supabase configurado', 'err'); return; }
+  if (!GDrive.isConnected()) {
+    toast('Conecte o Google Drive no Perfil primeiro', 'err');
+    switchView('perfil');
+    return;
+  }
+  if (!confirm(`Enviar ao Drive as fotos de TODOS os colaboradores de ${filMes}/${filAno}?\nPode levar um tempo conforme a quantidade.`)) return;
+
+  const ov = $('ocr-overlay');
+  const setProg = txt => { if (ov) ov.style.display = 'flex'; const p = $('ocr-progress'); if (p) p.textContent = txt; };
+  setProg('Preparando envio…');
+
+  try {
+    // 1) mapa user_id -> {nome,email} p/ nomear a pasta do colaborador
+    const { data: collabs } = await sb.from('colaboradores').select('id,nome,email');
+    const mapa = {};
+    (collabs || []).forEach(c => { mapa[c.id] = c; });
+
+    // 2) notas COM foto do mês/ano abertos
+    const { data: notas, error } = await sb.from('notas')
+      .select('id,user_id,tipo,mes,ano,foto_path,deleted')
+      .eq('mes', filMes).eq('ano', filAno);
+    if (error) throw error;
+    const comFoto = (notas || []).filter(n => n.foto_path && !n.deleted);
+    if (!comFoto.length) { if (ov) ov.style.display = 'none'; toast('Nenhuma foto para enviar neste mês.'); return; }
+
+    // 3) atualiza índice do Drive p/ NÃO duplicar o que já está lá
+    setProg('Lendo o que já existe no Drive…');
+    try { await GDrive.atualizarIndice(); } catch (_) {}
+
+    // 4) baixa do Supabase e sobe pro Drive
+    let ok = 0, falhou = 0, i = 0;
+    for (const n of comFoto) {
+      i++;
+      setProg(`Enviando fotos ${i}/${comFoto.length}…`);
+      try {
+        const { data: blob, error: de } = await sb.storage.from('notas-fotos').download(n.foto_path);
+        if (de || !blob) { falhou++; continue; }
+        const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
+        const c   = mapa[n.user_id] || {};
+        await GDrive.uploadFotoComDados(blob, {
+          id: n.id, tipo: n.tipo, mes: n.mes, ano: n.ano,
+          user_id: n.user_id, user_email: c.email, user_nome: c.nome,
+        }, ext);
+        ok++;
+      } catch (_) { falhou++; }
+    }
+
+    if (ov) ov.style.display = 'none';
+    toast(`Fotos no Drive: ${ok} enviada(s)${falhou ? `, ${falhou} falha(s)` : ''}.`, falhou ? 'err' : 'ok');
+  } catch (e) {
+    if (ov) ov.style.display = 'none';
+    toast('Envio ao Drive: ' + e.message, 'err');
+  }
+}
+
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
 function renderPerfil() {
   $('app-content').innerHTML = `
