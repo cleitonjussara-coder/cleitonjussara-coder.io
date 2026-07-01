@@ -454,6 +454,10 @@ select.inp{cursor:pointer}
   background:var(--surface2);
 }
 .foto-thumb{max-width:100%;max-height:180px;border-radius:var(--radius-sm);margin-top:8px}
+/* destaque do "Passo 2: fotografe a nota" (após ler o QR) */
+.foto-btn-wrap.pedir-foto{border-color:var(--primary);border-style:solid;
+  animation:pulsoFoto 1.3s ease-in-out infinite}
+@keyframes pulsoFoto{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
 
 /* ─────────────────────────────────────────────
    MODAL

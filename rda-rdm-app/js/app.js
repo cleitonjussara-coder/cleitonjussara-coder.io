@@ -1084,16 +1084,24 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
   if (!dados.data) dados.data = hoje();
 
   await abrirFormNota(dados);   // chave/CNPJ/UF já entram; fotoBlob fica null
+  _pedirFotoPasso2();           // Passo 2: destaca e pede a foto (abre no TOQUE)
+  toast('Chave lida! 🔑 Passo 2: toque no botão destacado para fotografar a nota.');
+}
 
-  // destaca o botão de foto como chamada p/ ação
-  const lbl = $('btn-foto-label');
-  if (lbl) lbl.textContent = '📷 Fotografar a nota inteira (conferência)';
-
-  toast('Chave lida! 🔑 Agora fotografe a nota inteira para conferência.');
-
-  // tenta abrir a câmera da nota automaticamente (se o navegador permitir;
-  // caso bloqueie por falta de gesto, o usuário toca em "Anexar foto").
-  setTimeout(() => { try { $('f-foto-nota').click(); } catch (_) {} }, 400);
+/* Passo 2 do fluxo "QR → foto": destaca o botão de foto como chamada de ação.
+   A câmera abre no TOQUE do usuário (gesto real) — não depende de auto-abrir,
+   que o celular bloqueia. O destaque some quando a foto é anexada. */
+function _pedirFotoPasso2() {
+  const wrap = document.querySelector('.foto-btn-wrap');
+  const lbl  = $('btn-foto-label');
+  if (lbl)  lbl.textContent = '📷 PASSO 2 — Toque para fotografar a nota';
+  if (wrap) {
+    wrap.classList.add('pedir-foto');
+    try { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+  }
+}
+function _limparPedirFoto() {
+  document.querySelector('.foto-btn-wrap')?.classList.remove('pedir-foto');
 }
 
 /* ── Código de Barras (Quagga2) ───────────────────────── */
@@ -1403,6 +1411,7 @@ async function onFotoNota(e) {
 /* ── Form Nota ───────────────────────────────────────────── */
 async function abrirFormNota(dados = {}) {
   fotoBlob = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
+  _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
 
@@ -1549,6 +1558,7 @@ async function buscarRazaoSocial(raw) {
 async function onFotoNotaChange(e) {
   const file = e.target.files[0];
   if (!file) return;
+  _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
   fotoExt  = 'jpg';                 // câmera sempre devolve imagem
   fotoURL  = URL.createObjectURL(file);
@@ -1564,6 +1574,7 @@ async function onFotoNotaChange(e) {
 async function onArquivoNotaChange(e) {
   const file = e.target.files[0];
   if (!file) return;
+  _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
   fotoExt  = _extDoArquivo(file);
   fotoURL  = URL.createObjectURL(file);
