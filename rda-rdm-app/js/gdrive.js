@@ -210,15 +210,15 @@ window.GDrive = (() => {
     return p;
   }
 
-  /* nomes das pastas: Colaborador / Mês-Ano / Tipo */
-  const _slug = s => String(s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
-    .trim().toLowerCase().replace(/[^a-z0-9.]+/g, '.').replace(/^\.+|\.+$/g, '');
-
+  /* nome da pasta do colaborador: prioriza o NOME (ex: "Naycon Cenci");
+     sem nome cai no email; sem email, no id. Mês-Ano e Tipo abaixo. */
   function _colabFolderName(nota) {
-    const email = String(nota.user_email || '').trim();
-    if (email.includes('@')) return email.split('@')[0].toLowerCase(); // ex: naycon.cenci
-    const nome = _slug(nota.user_nome);
+    const nome = String(nota.user_nome || '')
+      .replace(/[\\/:*?"<>|]/g, ' ')   // tira caracteres que atrapalham nome de pasta
+      .replace(/\s+/g, ' ').trim();
     if (nome) return nome;
+    const email = String(nota.user_email || '').trim();
+    if (email.includes('@')) return email.split('@')[0].toLowerCase();
     return 'colaborador-' + _trim(nota.user_id, 8);
   }
   function _mesAnoFolder(nota) {
