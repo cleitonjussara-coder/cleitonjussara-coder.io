@@ -115,33 +115,28 @@ returns text language sql security definer stable as $$
   select nucleo from public.colaboradores where id = auth.uid();
 $$;
 
--- colaboradores: ver a si mesmo, gestor vê núcleo, admin vê tudo
+-- colaboradores: ver a si mesmo; gestor e admin veem TODOS os núcleos
 create policy "colab_sel" on public.colaboradores for select using (
   id = auth.uid() or
-  public.my_role() = 'admin' or
-  (public.my_role() = 'gestor' and nucleo = public.my_nucleo())
+  public.my_role() in ('admin','gestor')
 );
 create policy "colab_upd_self"  on public.colaboradores for update using (id = auth.uid());
 create policy "colab_upd_admin" on public.colaboradores for update using (public.my_role() = 'admin');
 
--- notas
+-- notas: dono vê as suas; gestor e admin veem de TODOS os núcleos
 create policy "notas_sel" on public.notas for select using (
   user_id = auth.uid() or
-  public.my_role() = 'admin' or
-  (public.my_role() = 'gestor' and
-    exists(select 1 from public.colaboradores c where c.id = user_id and c.nucleo = public.my_nucleo()))
+  public.my_role() in ('admin','gestor')
 );
 create policy "notas_ins" on public.notas for insert with check (user_id = auth.uid());
 create policy "notas_upd" on public.notas for update using (
   user_id = auth.uid() or public.my_role() = 'admin'
 );
 
--- repasses
+-- repasses: dono vê os seus; gestor e admin veem de TODOS os núcleos
 create policy "rep_sel" on public.repasses for select using (
   user_id = auth.uid() or
-  public.my_role() = 'admin' or
-  (public.my_role() = 'gestor' and
-    exists(select 1 from public.colaboradores c where c.id = user_id and c.nucleo = public.my_nucleo()))
+  public.my_role() in ('admin','gestor')
 );
 create policy "rep_ins" on public.repasses for insert with check (user_id = auth.uid());
 create policy "rep_upd" on public.repasses for update using (
