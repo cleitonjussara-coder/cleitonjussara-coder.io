@@ -1989,10 +1989,24 @@ async function salvarNota() {
   // só tipo e data são obrigatórios — sem valor, grava como "pendente" (0)
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
 
-  // TRAVA anti-duplicata: mesma chave NFC-e já registrada bloqueia o salvamento
+  // TRAVA anti-duplicata (local): mesma chave já registrada por MIM bloqueia
   if (_notaDuplicadaChave($('nf-chave').value, $('nf-id').value || null)) {
     toast('⚠️ Esta nota já foi registrada (chave NFC-e duplicada).', 'err');
     return;
+  }
+  // TRAVA de EQUIPE (online): a mesma chave já existe em QUALQUER colaborador?
+  // usa a função chave_nfce_existe (SECURITY DEFINER) — só devolve sim/não.
+  const _chaveDig = _digitos($('nf-chave').value);
+  if (_chaveDig.length === 44 && sb && navigator.onLine) {
+    try {
+      const { data: existe, error } = await sb.rpc('chave_nfce_existe', {
+        p_chave: _chaveDig, p_ignore_id: $('nf-id').value || null,
+      });
+      if (!error && existe) {
+        toast('⚠️ Esta nota já foi registrada por outro colaborador da equipe.', 'err');
+        return;
+      }
+    } catch (_) { /* falha na checagem online não bloqueia (a trava local já valeu) */ }
   }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;

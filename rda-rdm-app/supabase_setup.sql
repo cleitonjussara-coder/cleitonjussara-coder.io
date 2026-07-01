@@ -115,6 +115,20 @@ returns text language sql security definer stable as $$
   select nucleo from public.colaboradores where id = auth.uid();
 $$;
 
+-- Trava anti-duplicata de EQUIPE: a chave NFC-e já existe em QUALQUER
+-- colaborador? Devolve só sim/não (não expõe dados de outros).
+create or replace function public.chave_nfce_existe(p_chave text, p_ignore_id uuid default null)
+returns boolean language sql security definer stable
+set search_path = public as $$
+  select exists(
+    select 1 from public.notas
+    where regexp_replace(coalesce(chave_nfce, ''), '[^0-9]', '', 'g') = p_chave
+      and coalesce(deleted, false) = false
+      and (p_ignore_id is null or id <> p_ignore_id)
+  );
+$$;
+grant execute on function public.chave_nfce_existe(text, uuid) to authenticated;
+
 -- colaboradores: ver a si mesmo; gestor e admin veem TODOS os núcleos
 create policy "colab_sel" on public.colaboradores for select using (
   id = auth.uid() or
