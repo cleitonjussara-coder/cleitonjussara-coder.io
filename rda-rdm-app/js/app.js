@@ -309,6 +309,7 @@ async function onLogin(authUser) {
             showTela('app');                       // atualiza menu Equipe conforme o cargo
             if (viewAtual === 'perfil') renderPerfil();
           }
+          _maybeAutoConsolidarFotos();             // papel de gestor confirmado → tenta organizar (se Drive já conectado)
         }).catch(() => {});
     }
 
@@ -426,6 +427,7 @@ async function initDrive() {
     updateDriveBadge();
     if (driveOk && user) {
       await pullFromDrive();
+      _maybeAutoConsolidarFotos();          // gestor abriu o app com Drive → organiza fotos da equipe
     } else if (!driveOk && GDrive.isConfigured()) {
       // Drive configurado mas não conectado — mostra banner sutil
       _mostrarBannerDrive();
@@ -464,6 +466,7 @@ async function connectDrive() {
     await pullFromDrive();
     toast('✅ Google Drive conectado!');
     if (viewAtual === 'perfil') renderPerfil();
+    _maybeAutoConsolidarFotos();            // conectou agora → se for gestor, organiza fotos da equipe
   } catch (e) {
     const msg = e.message || 'Erro desconhecido';
     if (msg.includes('negado') || msg.includes('denied')) {
@@ -930,6 +933,61 @@ async function enviarFotosEquipeDrive() {
     if (ov) ov.style.display = 'none';
     alert('Envio ao Drive falhou: ' + e.message);
   }
+}
+
+/* ── Consolidação AUTOMÁTICA (silenciosa) ────────────────────
+   Roda sozinha quando o GESTOR/ADMIN abre o app com Drive conectado.
+   Sobe ao Drive só as fotos da equipe que AINDA NÃO estão lá (barato:
+   pula download+upload do que já existe). Sem popups; toast só se fez algo. */
+let _autoConsolidaFeito = false, _autoConsolidaRodando = false;
+
+function _maybeAutoConsolidarFotos() {
+  if (_autoConsolidaFeito || _autoConsolidaRodando) return;
+  if (!sb || DEMO_MODE || !user) return;
+  if (user.role !== 'gestor' && user.role !== 'admin') return;
+  if (!navigator.onLine || !GDrive.isConnected()) return;
+  _autoConsolidaRodando = true;
+  _autoConsolidarFotosDrive()
+    .then(() => { _autoConsolidaFeito = true; })
+    .catch(() => {})
+    .finally(() => { _autoConsolidaRodando = false; });
+}
+
+async function _autoConsolidarFotosDrive() {
+  // 1) atualiza índice p/ saber o que já está no Drive
+  await GDrive.atualizarIndice();
+
+  // 2) mapa de colaboradores + todas as notas com foto
+  const [{ data: collabs }, { data: notas }] = await Promise.all([
+    sb.from('colaboradores').select('id,nome,email'),
+    sb.from('notas').select('id,user_id,tipo,mes,ano,foto_path,deleted'),
+  ]);
+  const mapa = {};
+  (collabs || []).forEach(c => { mapa[c.id] = c; });
+
+  // 3) só as que têm foto, não deletadas, e que AINDA NÃO estão no Drive
+  const pendentes = (notas || []).filter(n =>
+    n.foto_path && !n.deleted && !GDrive.getFotoExt(n.id)
+  );
+  if (!pendentes.length) return;
+
+  // 4) baixa do Supabase e sobe pro Drive (para suave se a conexão cair)
+  let ok = 0;
+  for (const n of pendentes) {
+    if (!navigator.onLine || !GDrive.isConnected()) break;
+    try {
+      const r = await sb.storage.from('notas-fotos').download(n.foto_path);
+      if (r.error || !r.data) continue;
+      const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
+      const c   = mapa[n.user_id] || {};
+      await GDrive.uploadFotoComDados(r.data, {
+        id: n.id, tipo: n.tipo, mes: n.mes, ano: n.ano,
+        user_id: n.user_id, user_email: c.email, user_nome: c.nome,
+      }, ext);
+      ok++;
+    } catch (_) { /* segue p/ a próxima */ }
+  }
+  if (ok) toast(`Drive atualizado: ${ok} foto(s) da equipe organizada(s) ☁️`);
 }
 
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
