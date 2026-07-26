@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -276,8 +276,9 @@ async function init() {
     if (viewAtual==='home')   renderHome();
     if (viewAtual==='notas') renderNotas();
     if (viewAtual==='saldo') renderSaldo();
-    const {ok,pulled} = e.detail||{};
+    const {ok,pulled,fotosFail,erroFoto} = e.detail||{};
     if ((ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
+    if (fotosFail) _avisarFalhaAnexo(fotosFail, erroFoto);
   });
   window.addEventListener('ocr-progress', e => {
     const el = $('ocr-progress');
@@ -321,10 +322,30 @@ async function onLogin(authUser) {
   } catch (_) { setLoading(false); }
 }
 
+/* Falha ao subir anexo era engolida em silêncio: a foto ficava tentando de
+   novo a cada 60s e a nota aparecia como "sem anexo" sem explicação nenhuma.
+   Agora avisa — no máximo 1 vez a cada 5 min, p/ não virar spam de toast. */
+let _ultimoAvisoAnexo = 0;
+function _avisarFalhaAnexo(qtd, motivo) {
+  console.warn('[anexo] não subiu:', motivo);
+  if (Date.now() - _ultimoAvisoAnexo < 5 * 60_000) return;
+  _ultimoAvisoAnexo = Date.now();
+  toast(`⚠️ ${qtd} anexo${qtd > 1 ? 's' : ''} não subiu — tentando de novo`, 'err');
+}
+
+let _reparoAnexosFeito = false;
 async function carregarDadosLocais() {
   if (!user) return;
   notas    = await DB.getNotasUser(user.id);
   repasses = await DB.getRepassesUser(user.id);
+  // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
+  if (!_reparoAnexosFeito) {
+    _reparoAnexosFeito = true;
+    DB.repararFotosLocais().then(r => {
+      if (r?.trocados) console.info(
+        `[anexo] ${r.trocados} cópia(s) local(is) liberada(s), ${r.recuperados} recuperada(s) p/ envio`);
+    }).catch(() => {});
+  }
 }
 
 /* ── Telas ───────────────────────────────────────────────── */
@@ -1887,6 +1908,35 @@ function _blobToImg(blob) {
   });
 }
 
+/* ── Compressão do anexo antes de guardar/enviar ──────────────
+   A foto crua do celular tem 3 a 5 MB e o armazenamento do Supabase é
+   limitado; com o lado maior em 1800 px o cupom continua legível e o
+   arquivo cai para algo entre 200 e 500 KB.
+   Roda no momento de SALVAR, depois de o OCR já ter lido a imagem
+   original — reduzir aqui não piora a leitura do valor.
+   PDF e XML passam intactos. Qualquer falha (HEIC do iPhone, que o
+   canvas não decodifica) devolve o original: comprimir é otimização,
+   nunca motivo para perder o anexo. */
+const _FOTO_LADO_MAX   = 1800;
+const _FOTO_QUALIDADE  = 0.75;
+const _FOTO_MIN_COMPRIMIR = 400 * 1024;   // abaixo disso não vale o esforço
+
+async function _comprimirImagem(blob, ext) {
+  if (!blob || !_ehImagemExt(ext || 'jpg')) return { blob, ext };
+  if (blob.size <= _FOTO_MIN_COMPRIMIR)    return { blob, ext };
+  try {
+    const img = await _blobToImg(blob);
+    const escala = Math.min(1, _FOTO_LADO_MAX / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width  = Math.max(1, Math.round(img.width  * escala));
+    c.height = Math.max(1, Math.round(img.height * escala));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const menor = await new Promise(r => c.toBlob(r, 'image/jpeg', _FOTO_QUALIDADE));
+    if (!menor || menor.size >= blob.size) return { blob, ext };   // nunca piora
+    return { blob: menor, ext: 'jpg' };                            // reencodado
+  } catch (_) { return { blob, ext }; }
+}
+
 /* LEITOR DE QR ROBUSTO — extrai o texto do QR de uma imagem.
    Estratégia que resolve "QR pequeno na foto da nota inteira":
    1) BarcodeDetector nativo (Android Chrome) — muito superior p/ QR denso
@@ -2508,20 +2558,23 @@ async function salvarNota() {
     foto_local     : null,
   };
 
-  // anexo (foto / PDF / XML)
-  const anexoExt = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : null);
-  if (fotoBlob) {
-    payload.foto_local = fotoBlob;
-    await DB.saveFotoLocal(payload.id || 'tmp', fotoBlob, anexoExt);
-  }
-
   setLoading(true);
   try {
+    // anexo (foto / PDF / XML) — imagem é reduzida antes de guardar
+    let anexoBlob = fotoBlob;
+    let anexoExt  = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : null);
+    if (anexoBlob) {
+      ({ blob: anexoBlob, ext: anexoExt } = await _comprimirImagem(anexoBlob, anexoExt));
+      // marcador, não o blob: a cópia real fica na store 'fotos' e é apagada
+      // quando sobe. Guardar o blob aqui enchia o aparelho para sempre.
+      payload.foto_local = anexoExt || 'jpg';
+    }
+
     const saved = await DB.saveNota(payload, user.id);
-    if (fotoBlob) {
-      await DB.saveFotoLocal(saved.id, fotoBlob, anexoExt);
+    if (anexoBlob) {
+      await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
       // upload do anexo com todos os dados da nota como metadados no Drive
-      GDrive.uploadFotoComDados(fotoBlob, { ...saved, user_id: user.id, user_email: user.email, user_nome: user.nome }, anexoExt)
+      GDrive.uploadFotoComDados(anexoBlob, { ...saved, user_id: user.id, user_email: user.email, user_nome: user.nome }, anexoExt)
         .then(() => toast('Anexo salvo no Drive ☁️'))
         .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }

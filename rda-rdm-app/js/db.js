@@ -124,6 +124,40 @@ window.DB = (() => {
   const getFotoLocal   = (nota_id) => _get('fotos', nota_id);
   const delFotoLocal   = (nota_id) => _del('fotos', nota_id);
 
+  const EXT_POR_MIME = { ...Object.fromEntries(
+    Object.entries(MIME_POR_EXT).map(([e, m]) => [m, e])), 'image/jpeg': 'jpg' };
+  const _extDeBlob = b => EXT_POR_MIME[b?.type] || 'jpg';
+
+  /* ── Migração única: solta os blobs presos no registro da nota ──────
+     O anexo era guardado em DOIS lugares: na store 'fotos' (de onde o
+     upload sai) e também dentro do próprio registro da nota, no campo
+     foto_local. Só a cópia da store era apagada depois de subir — a de
+     dentro da nota ficava para sempre, então o aparelho acumulava todas
+     as fotos já lançadas, de 3 a 5 MB cada.
+     Nada nunca leu esse blob: os três lugares que olham foto_local só
+     testam se ele existe, para saber se a nota tem anexo. Então aqui ele
+     é trocado por um marcador curto (a extensão), o que mantém esse teste
+     funcionando e devolve o espaço.
+     Se o blob for a ÚNICA cópia (não está na fila nem subiu ainda), ele é
+     movido para a store 'fotos' antes — assim a foto ainda consegue subir
+     em vez de ser descartada. */
+  async function repararFotosLocais() {
+    if (await getMeta('foto_local_migrado', false)) return null;
+    let trocados = 0, recuperados = 0;
+    for (const n of await _getAll('notas')) {
+      if (!(n.foto_local instanceof Blob)) continue;
+      const ext = _extDeBlob(n.foto_local);
+      if (!n.foto_path && !(await _get('fotos', n.id))) {
+        await saveFotoLocal(n.id, n.foto_local, ext);
+        recuperados++;
+      }
+      await _put('notas', { ...n, foto_local: ext });
+      trocados++;
+    }
+    await setMeta('foto_local_migrado', true);
+    return { trocados, recuperados };
+  }
+
   /* ── REPASSES ────────────────────────────────────────── */
   async function saveRepasse(rep, userId) {
     const now = new Date().toISOString();
@@ -165,7 +199,7 @@ window.DB = (() => {
   let _running = false;
 
   async function pushPending(sb) {
-    if (!sb || !navigator.onLine) return { ok: 0, fail: 0 };
+    if (!sb || !navigator.onLine) return { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null };
     const [allN, allR] = await Promise.all([_getAll('notas'), _getAll('repasses')]);
     let ok = 0, fail = 0;
 
@@ -182,19 +216,32 @@ window.DB = (() => {
     }
 
     // Anexos pendentes (foto, PDF ou XML)
-    const pendingFotos = await _getAll('fotos');
-    for (const f of pendingFotos) {
+    let fotosOk = 0, fotosFail = 0, erroFoto = null;
+    const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
+
+    for (const f of await _getAll('fotos')) {
       try {
+        const nota = await _get('notas', f.nota_id);
+        // Sem a nota não há para quem o anexo pertencer — antes isso montava
+        // um caminho "undefined/…" e subia lixo para o bucket a cada sync.
+        if (!nota?.user_id) { await delFotoLocal(f.nota_id); continue; }
+
         const ext  = (f.ext || 'jpg').toLowerCase();
         const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
-        const path = `${(await _get('notas', f.nota_id))?.user_id}/${f.nota_id}.${ext}`;
+        const path = `${nota.user_id}/${f.nota_id}.${ext}`;
+
         const { error } = await sb.storage.from('notas-fotos').upload(path, f.blob,
           { contentType: mime, upsert: true });
-        if (!error) {
-          await sb.from('notas').update({ foto_path: path }).eq('id', f.nota_id);
-          await delFotoLocal(f.nota_id);
-        }
-      } catch (_) {}
+        if (error) { falhou(error.message); continue; }
+
+        await sb.from('notas').update({ foto_path: path }).eq('id', f.nota_id);
+        // grava o caminho TAMBÉM no registro local: sem isso a nota ficava sem
+        // foto_path até o próximo pull, o 📎 desaparecia da lista e o painel
+        // contava a nota como "sem anexo" mesmo com a foto já no servidor.
+        await _put('notas', { ...nota, foto_path: path, foto_local: ext });
+        await delFotoLocal(f.nota_id);
+        fotosOk++;
+      } catch (e) { falhou(e?.message || 'falha ao enviar o anexo'); }
     }
 
     // Repasses
@@ -208,7 +255,7 @@ window.DB = (() => {
       } catch (_) { fail++; }
     }
 
-    return { ok, fail };
+    return { ok, fail, fotosOk, fotosFail, erroFoto };
   }
 
   async function pullIncremental(sb, userId) {
@@ -263,7 +310,7 @@ window.DB = (() => {
   return {
     open,
     saveNota, getNotasUser, softDeleteNota,
-    saveFotoLocal, getFotoLocal,
+    saveFotoLocal, getFotoLocal, repararFotosLocais,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta,
