@@ -1,0 +1,60 @@
+# ───────────────────────────────────────────────
+#  Petermann App — config Apache (Locaweb)
+#  Vai na RAIZ do subdomínio app.pmservicosagronomicos.com.br
+#  As regras valem também para as subpastas (rda-rdm-app/, js/).
+# ───────────────────────────────────────────────
+
+# 0) Bloqueia arquivos internos que não devem ficar públicos caso sejam
+#    enviados por engano (scripts SQL, documentação). NÃO inclui .json:
+#    o manifest.json precisa ser público para o app instalar no celular.
+#    O bloco vem duplicado de propósito: "Require" é do Apache 2.4 e
+#    derruba o site com erro 500 no 2.2, então cada versão usa o seu.
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(sql|md|log|bak)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "\.(sql|md|log|bak)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+</IfModule>
+
+
+# 1) Força HTTPS (PWA exige: câmera, service worker, instalar app)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# 2) MIME types corretos
+<IfModule mod_mime.c>
+  AddType application/manifest+json   .webmanifest
+  AddType application/json            .json
+  AddType application/javascript      .js
+  AddType image/svg+xml               .svg
+</IfModule>
+
+# 3) Cache
+<IfModule mod_headers.c>
+  # Service Worker e index NUNCA cacheados pelo navegador
+  # (assim ele sempre pega a versão nova do app na hora)
+  <FilesMatch "(sw\.js|index\.html|manifest\.json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+
+  # Ícones e logo podem ser cacheados por bastante tempo
+  <FilesMatch "\.(png|jpg|jpeg|svg|ico)$">
+    Header set Cache-Control "public, max-age=2592000"
+  </FilesMatch>
+</IfModule>
+
+# 4) Compressão (deixa o app mais leve/rápido)
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+# 5) Página inicial
+DirectoryIndex index.html

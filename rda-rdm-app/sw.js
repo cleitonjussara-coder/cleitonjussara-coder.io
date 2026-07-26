@@ -5,24 +5,31 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v50';
+const CACHE   = 'petermann-v51';
+/* Caminhos RELATIVOS ao sw.js — não comece com "/".
+   Com "/index.html" o service worker procurava na raiz do domínio, mas o app
+   é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
+   no lugar do app e o manifest/ícones davam 404 e ficavam de fora (o
+   .catch() do install engolia o erro, então nada disso aparecia).
+   Relativo funciona em qualquer pasta — e é o que faz o app continuar
+   inteiro se um dia ele mudar de endereço ou de servidor. */
 const SHELL   = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/logo.jpg',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/js/app.js',
-  '/js/db.js',
-  '/js/nfce.js',
-  '/js/sefaz.js',
-  '/js/brasilapi.js',
-  '/js/ocr.js',
-  '/js/excel.js',
-  '/js/gestor.js',
-  '/js/gdrive.js',
-  '/js/gsheets.js',
+  './',
+  './index.html',
+  './manifest.json',
+  './logo.jpg',
+  './icon-192.png',
+  './icon-512.png',
+  './js/app.js',
+  './js/db.js',
+  './js/nfce.js',
+  './js/sefaz.js',
+  './js/brasilapi.js',
+  './js/ocr.js',
+  './js/excel.js',
+  './js/gestor.js',
+  './js/gdrive.js',
+  './js/gsheets.js',
 ];
 
 const CDN = [
@@ -77,6 +84,8 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return r;
       })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('/index.html')))
+      // offline: o próprio arquivo; se não tiver, o index DESTA pasta
+      // ("/index.html" devolvia a página de redirecionamento da raiz)
+      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
   );
 });
