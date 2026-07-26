@@ -16,6 +16,8 @@ let driveOk   = false;
 let viewAtual = 'home';
 let filMes    = new Date().getMonth() + 1;
 let filAno    = new Date().getFullYear();
+let _drivePullInterval = null;
+let filtroPeriodo = 'mensal';
 
 /* câmera */
 let qrStream  = null;
@@ -30,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v48';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -548,133 +550,591 @@ function switchView(v) {
   else if (v==='perfil') renderPerfil();
 }
 
-/* ── VIEW: HOME ──────────────────────────────────────────── */
-function renderHome() {
-  const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
-  const rs = repasses.filter(r => r.mes===filMes && r.ano===filAno);
+/* ═══════════════════════════════════════════════════════════
+   VIEW: HOME — dashboard interativo
+   Estado da interação vive fora do render p/ sobreviver ao
+   innerHTML (toque numa barra, série ligada/desligada, etc.)
+═══════════════════════════════════════════════════════════ */
+let dashSerie      = { RDM:true, RDA:true };  // séries visíveis no gráfico
+let dashTendencia  = false;                   // linha do total sobre as barras
+let dashBarraSel   = null;                    // índice da coluna tocada
+let dashFatiaSel   = null;                    // chave da fatia do donut tocada
+let _dashEvo       = [];                      // dados do gráfico (p/ o drill-down)
 
-  const rdmG = ns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
-  const rdmR = rs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
-  const rdaG = ns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
-  const rdaR = rs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
+const _n     = v => Number(v) || 0;
+const _soma  = arr => arr.reduce((a,x) => a + _n(x.valor), 0);
+const _dataDe = o => String(o?.data || o?.created_at || '');   // nunca undefined
 
-  const pendentes = ns.filter(n => n.synced===false).length;
-  const totalNotas = ns.length;
+/* Rótulo curto p/ eixo: R$ 350 · R$ 1,2 mil · R$ 1,4 mi */
+function brlCurto(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6)  return 'R$ ' + (v/1e6).toFixed(1).replace('.',',') + ' mi';
+  if (a >= 1000) return 'R$ ' + (v/1000).toFixed(a >= 10000 ? 0 : 1).replace('.',',') + ' mil';
+  return 'R$ ' + Math.round(v);
+}
 
-  // barras RDM por categoria
-  const subs = ['Abastecimento','Hospedagem','Outros'];
-  const subVals = subs.map(s => ns.filter(n=>n.tipo==='RDM'&&n.subtipo===s).reduce((a,n)=>a+Number(n.valor||0),0));
-  const subMax  = Math.max(...subVals, 1);
-  const cores   = ['r1','r2','r3'];
+/* Topo "redondo" da escala do gráfico (1, 2, 2,5 ou 5 × potência de 10) */
+function _escalaTopo(pico) {
+  if (!(pico > 0)) return 100;
+  const mag = Math.pow(10, Math.floor(Math.log10(pico)));
+  for (const m of [1, 2, 2.5, 5]) if (mag*m >= pico) return mag*m;
+  return mag*10;
+}
 
-  let barHtml = '';
-  subs.forEach((s, i) => {
-    if (rdmG === 0 && subVals[i] === 0) return;
-    const pct = Math.round((subVals[i] / subMax) * 100);
-    barHtml += `
-    <div class="bar-item">
-      <span class="bar-label">${s}</span>
-      <div class="bar-track"><div class="bar-fill ${cores[i]}" style="width:${pct}%"></div></div>
-      <span class="bar-val">${brl(subVals[i])}</span>
-    </div>`;
+/* Agrega notas e repasses de um período (mês ou ano inteiro) */
+function _agregaPeriodo(mes, ano, modo) {
+  const doPeriodo = o => !o.deleted && o.ano === ano && (modo === 'anual' || o.mes === mes);
+  const ns = notas.filter(doPeriodo);
+  const rs = repasses.filter(doPeriodo);
+  const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t));
+  const rdmG = porTipo(ns,'RDM'), rdaG = porTipo(ns,'RDA');
+  const rdmR = porTipo(rs,'RDM'), rdaR = porTipo(rs,'RDA');
+  return { ns, rs, rdmG, rdaG, rdmR, rdaR,
+           gasto: rdmG + rdaG, recebido: rdmR + rdaR };
+}
+
+function _periodoAnterior(mes, ano, modo) {
+  if (modo === 'anual') return { mes, ano: ano - 1 };
+  return mes > 1 ? { mes: mes-1, ano } : { mes: 12, ano: ano-1 };
+}
+
+/* Chip de variação vs. período anterior. subirEhBom=false p/ gastos. */
+function chipDelta(atual, anterior, subirEhBom = true) {
+  if (!anterior) return atual ? '<span class="dl dl-new">novo</span>' : '';
+  const pct = ((atual - anterior) / Math.abs(anterior)) * 100;
+  if (Math.abs(pct) < 0.5) return '<span class="dl dl-flat">estável</span>';
+  const subiu = pct > 0;
+  const bom   = subirEhBom ? subiu : !subiu;
+  return `<span class="dl ${bom ? 'dl-bom' : 'dl-ruim'}" title="vs. período anterior">${
+    subiu ? '▲' : '▼'} ${Math.abs(pct) >= 999 ? '999+' : Math.abs(pct).toFixed(0)}%</span>`;
+}
+
+/* ── Interações ─────────────────────────────────────────── */
+function alternarPeriodoDashboard(periodo) {
+  filtroPeriodo = periodo;
+  dashBarraSel = null;
+  renderHome();
+}
+
+function alternarSerieDash(k) {
+  // nunca deixa as duas séries apagadas — o gráfico ficaria vazio
+  if (dashSerie[k] && !dashSerie[k === 'RDM' ? 'RDA' : 'RDM']) return;
+  dashSerie[k] = !dashSerie[k];
+  renderHome();
+}
+
+function alternarTendenciaDash() { dashTendencia = !dashTendencia; renderHome(); }
+
+function selecionarBarraDash(i) {
+  dashBarraSel = (dashBarraSel === i) ? null : i;
+  renderHome();
+}
+
+function selecionarFatiaDash(chave) {
+  dashFatiaSel = (dashFatiaSel === chave) ? null : chave;
+  renderHome();
+}
+
+/* Toque numa coluna → "Abrir" pula o dashboard para aquele mês/ano */
+function abrirBarraDash() {
+  const d = _dashEvo[dashBarraSel];
+  if (!d) return;
+  filMes = d.mes; filAno = d.ano;
+  dashBarraSel = null;
+  renderHome();
+}
+
+/* ── Gráfico de evolução (SVG, interativo) ──────────────── */
+function gerarGraficoEvolucao(dados) {
+  const W = 340, H = 172;
+  const pl = 48, pr = 12, pt = 18, pb = 28;
+  const gw = W - pl - pr, gh = H - pt - pb;
+  const base = pt + gh;
+
+  const totalDe = d => (dashSerie.RDM ? d.rdm : 0) + (dashSerie.RDA ? d.rda : 0);
+  const visiveis = dados.flatMap(d => [
+    dashSerie.RDM ? d.rdm : 0,
+    dashSerie.RDA ? d.rda : 0,
+    dashTendencia ? totalDe(d) : 0,
+  ]);
+  const topo = _escalaTopo(Math.max(...visiveis, 0));
+  const cw   = gw / Math.max(1, dados.length);
+  const y    = v => base - (Math.min(v, topo) / topo) * gh;
+
+  /* grade: só 0 / metade / topo recebem rótulo — _escalaTopo garante
+     que a metade também caia num número redondo. 1/4 e 3/4 ficam
+     como linhas de apoio sem texto. */
+  let svg = '';
+  [0, .25, .5, .75, 1].forEach(f => {
+    const yy = base - f*gh;
+    const rotulado = f === 0 || f === .5 || f === 1;
+    svg += `<line x1="${pl}" y1="${yy.toFixed(1)}" x2="${W-pr}" y2="${yy.toFixed(1)}"
+             stroke="var(--border)" stroke-width="${f === 0 ? 1.2 : .8}"
+             ${f === 0 ? '' : `stroke-dasharray="2 3" opacity="${rotulado ? .7 : .35}"`}/>`;
+    if (rotulado)
+      svg += `<text x="${pl-6}" y="${(yy+2.6).toFixed(1)}" text-anchor="end"
+               style="font-size:7.5px;fill:var(--text2);font-weight:600">${brlCurto(topo*f)}</text>`;
   });
 
-  // evolucao ultimos 3 meses
-  let evoHtml = '';
-  for (let i = 2; i >= 0; i--) {
-    let m = filMes - i;
-    let a = filAno;
-    if (m < 1) { m += 12; a--; }
-    const mNs = notas.filter(n=>n.mes===m&&n.ano===a);
-    const valRDM = mNs.filter(n=>n.tipo==='RDM').reduce((s,n)=>s+Number(n.valor||0),0);
-    const valRDA = mNs.filter(n=>n.tipo==='RDA').reduce((s,n)=>s+Number(n.valor||0),0);
-    evoHtml += `
-    <div class="evo-card">
-      <div class="evo-mes">${MESES[m-1]}</div>
-      <div class="evo-rdm">${brl(valRDM)}</div>
-      <div class="evo-rda">${brl(valRDA)}</div>
+  /* barras agrupadas */
+  const nSeries = (dashSerie.RDM ? 1 : 0) + (dashSerie.RDA ? 1 : 0);
+  const bw = Math.max(4, Math.min(13, (cw - 8) / Math.max(1, nSeries)));
+  dados.forEach((d, i) => {
+    const cx  = pl + i*cw + cw/2;
+    const sel = dashBarraSel === i;
+
+    if (sel) svg += `<rect x="${(pl+i*cw).toFixed(1)}" y="${pt}" width="${cw.toFixed(1)}"
+                      height="${gh}" fill="var(--primary)" opacity=".07" rx="4"/>`;
+
+    let slot = 0;
+    const barra = (val, cor) => {
+      const x  = nSeries === 1 ? cx - bw/2 : cx - bw - 1.5 + slot*(bw + 3);
+      slot++;
+      if (!(val > 0)) return '';
+      const h = Math.max(2, base - y(val));
+      return `<rect x="${x.toFixed(1)}" y="${(base-h).toFixed(1)}" width="${bw.toFixed(1)}"
+               height="${h.toFixed(1)}" rx="2.5" fill="${cor}"
+               opacity="${dashBarraSel === null || sel ? 1 : .38}"/>`;
+    };
+    if (dashSerie.RDM) svg += barra(d.rdm, 'var(--accent)');
+    if (dashSerie.RDA) svg += barra(d.rda, 'var(--primary)');
+
+    svg += `<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle"
+             style="font-size:8.5px;font-weight:${sel?800:500};
+             fill:${sel?'var(--primary)':'var(--text2)'}">${d.label}</text>`;
+  });
+
+  /* linha de tendência do total */
+  if (dashTendencia && dados.length > 1) {
+    const pts = dados.map((d,i) =>
+      `${(pl + i*cw + cw/2).toFixed(1)},${y(totalDe(d)).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="1.8"
+             stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>`;
+    dados.forEach((d,i) => {
+      svg += `<circle cx="${(pl + i*cw + cw/2).toFixed(1)}" cy="${y(totalDe(d)).toFixed(1)}"
+               r="2.6" fill="#fff" stroke="#3b82f6" stroke-width="1.6"/>`;
+    });
+  }
+
+  /* áreas de toque por coluna (sempre por último = ficam no topo) */
+  dados.forEach((_, i) => {
+    svg += `<rect x="${(pl+i*cw).toFixed(1)}" y="${pt}" width="${cw.toFixed(1)}" height="${gh+pb-8}"
+             fill="transparent" style="cursor:pointer" onclick="selecionarBarraDash(${i})"/>`;
+  });
+
+  return `<svg class="db-chart" viewBox="0 0 ${W} ${H}" role="img"
+            aria-label="Evolução de gastos por período">${svg}</svg>`;
+}
+
+/* ── Donut de composição (SVG, fatias tocáveis) ─────────── */
+function gerarDonut(cats, total) {
+  const CX = 66, CY = 66, R = 50, C = 2*Math.PI*R;
+  if (!(total > 0)) {
+    return `<svg viewBox="0 0 132 132" class="db-chart" style="height:132px">
+      <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--bg)" stroke-width="16"/>
+      <text x="${CX}" y="${CY+4}" text-anchor="middle"
+        style="font-size:11px;fill:var(--text2);font-weight:700">sem gastos</text></svg>`;
+  }
+
+  let acc = 0, segs = '';
+  cats.forEach(c => {
+    const len = (c.val/total) * C;
+    const sel = dashFatiaSel === c.key;
+    segs += `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${c.cor}"
+              stroke-width="${sel ? 22 : 16}" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}"
+              stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"
+              opacity="${dashFatiaSel === null || sel ? 1 : .35}"
+              style="cursor:pointer;transition:stroke-width .18s,opacity .18s"
+              onclick="selecionarFatiaDash('${c.key}')"/>`;
+    acc += len;
+  });
+
+  const foco = cats.find(c => c.key === dashFatiaSel);
+  const centro = foco
+    ? `<text x="${CX}" y="${CY-3}" text-anchor="middle"
+         style="font-size:14px;font-weight:800;fill:var(--primary-d)">${
+           Math.round(foco.val/total*100)}%</text>
+       <text x="${CX}" y="${CY+11}" text-anchor="middle"
+         style="font-size:8px;font-weight:700;fill:var(--text2)">${esc(foco.curto)}</text>`
+    : `<text x="${CX}" y="${CY-2}" text-anchor="middle"
+         style="font-size:12.5px;font-weight:800;fill:var(--primary-d)">${brlCurto(total)}</text>
+       <text x="${CX}" y="${CY+11}" text-anchor="middle"
+         style="font-size:8px;font-weight:700;fill:var(--text2)">TOTAL</text>`;
+
+  return `<svg viewBox="0 0 132 132" class="db-chart" style="height:132px">${segs}${centro}</svg>`;
+}
+
+function renderHome() {
+  const modo = filtroPeriodo;                        // 'mensal' | 'anual'
+  const A    = _agregaPeriodo(filMes, filAno, modo); // período em foco
+  const pAnt = _periodoAnterior(filMes, filAno, modo);
+  const B    = _agregaPeriodo(pAnt.mes, pAnt.ano, modo);
+
+  const rotulo = modo === 'mensal' ? `${MESES[filMes-1]} ${filAno}` : String(filAno);
+
+  /* ── Primeiro acesso: convite em vez de painel vazio ────── */
+  if (!notas.length && !repasses.length) {
+    $('app-content').innerHTML = `
+    <div class="db-container">
+      <div class="db-card" style="align-items:center;text-align:center;gap:12px;padding:28px 20px">
+        <div style="font-size:44px">📊</div>
+        <div style="font-size:17px;font-weight:800;color:var(--primary-d)">Seu painel começa aqui</div>
+        <p style="font-size:13.5px;color:var(--text2);line-height:1.5">
+          Lance a primeira nota e o dashboard passa a mostrar saldo, evolução,
+          composição dos gastos e pendências automaticamente.</p>
+        <button class="btn btn-primary btn-full" onclick="abrirCaptura()">+ Lançar primeira nota</button>
+        <button class="btn btn-outline btn-full" onclick="abrirAjuda()">Como usar o app</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  /* ── Números do período ─────────────────────────────────── */
+  const saldo      = A.recebido - A.gasto;
+  const saldoAnt   = B.recebido - B.gasto;
+  const totalNotas = A.ns.length;
+  const mediaNota  = totalNotas   ? A.gasto / totalNotas   : 0;
+  const mediaAnt   = B.ns.length  ? B.gasto / B.ns.length  : 0;
+  const maior      = [...A.ns].sort((a,b) => _n(b.valor) - _n(a.valor))[0] || null;
+  const consumoPct = A.recebido > 0 ? (A.gasto / A.recebido) * 100 : (A.gasto > 0 ? 100 : 0);
+
+  /* ── Série do gráfico: 6 meses ou 5 anos ────────────────── */
+  _dashEvo = [];
+  if (modo === 'mensal') {
+    for (let i = 5; i >= 0; i--) {
+      let m = filMes - i, a = filAno;
+      while (m < 1) { m += 12; a--; }
+      const g = _agregaPeriodo(m, a, 'mensal');
+      _dashEvo.push({ label: MESES[m-1], mes: m, ano: a, rdm: g.rdmG, rda: g.rdaG });
+    }
+  } else {
+    for (let i = 4; i >= 0; i--) {
+      const a = filAno - i;
+      const g = _agregaPeriodo(filMes, a, 'anual');
+      _dashEvo.push({ label: String(a), mes: filMes, ano: a, rdm: g.rdmG, rda: g.rdaG });
+    }
+  }
+  if (dashBarraSel !== null && !_dashEvo[dashBarraSel]) dashBarraSel = null;
+
+  /* ── Composição dos gastos (donut) ──────────────────────── */
+  const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
+  const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && f(n)));
+  const cats = [
+    { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
+      val: somaRDM(n => n.subtipo === 'Abastecimento') },
+    { key:'hosp',   name:'RDM · Hospedagem',    curto:'Hosped.',  cor:'var(--accent)',
+      val: somaRDM(n => n.subtipo === 'Hospedagem') },
+    // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
+    { key:'outros', name:'RDM · Outros',        curto:'Outros',   cor:'#94a3b8',
+      val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
+    { key:'rda',    name:'RDA · Diárias',       curto:'RDA',      cor:'var(--primary)',
+      val: A.rdaG },
+  ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+  if (dashFatiaSel && !cats.some(c => c.key === dashFatiaSel)) dashFatiaSel = null;
+
+  /* ── Ranking de fornecedores ────────────────────────────── */
+  const mapaForn = new Map();
+  A.ns.forEach(n => {
+    if (_n(n.valor) <= 0) return;
+    const nome = String(n.razao_social || '').trim()
+      || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa');
+    const cur = mapaForn.get(nome) || { val:0, qtd:0 };
+    cur.val += _n(n.valor); cur.qtd++;
+    mapaForn.set(nome, cur);
+  });
+  const forn = [...mapaForn.entries()]
+    .map(([nome, v]) => ({ nome, ...v }))
+    .sort((a,b) => b.val - a.val).slice(0, 5);
+  const maxForn = forn.length ? forn[0].val : 1;
+
+  /* ── Pendências ─────────────────────────────────────────── */
+  const semValor = A.ns.filter(n => _n(n.valor) <= 0).length;
+  const semAnexo = A.ns.filter(n => !n.foto_path && !n.foto_local).length;
+  const naoSync  = A.ns.filter(n => n.synced === false).length;
+  const escopo   = modo === 'anual';
+
+  const linhaPend = (n, ico, txt, flag) => n ? `
+    <button class="db-pend-item" onclick="irParaNotas('${flag}',${escopo})">
+      <span class="db-pend-ico">${ico}</span>
+      <span class="db-pend-txt">${txt}</span>
+      <span class="db-pend-n">${n}</span>
+      <span class="db-pend-seta">›</span>
+    </button>` : '';
+
+  const pendHtml = (semValor + semAnexo + naoSync)
+    ? linhaPend(semValor, '⚠️', 'Notas sem valor',        'sem-valor')
+    + linhaPend(semAnexo, '📎', 'Notas sem anexo',        'sem-anexo')
+    + linhaPend(naoSync,  '⏳', 'Aguardando envio',       'pendente')
+    : `<div class="db-pend-item ok">
+         <span class="db-pend-ico">✅</span>
+         <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
+         <span class="db-pend-n">0</span>
+       </div>`;
+
+  /* ── Ritmo de gasto e projeção (só no modo mês) ──────────── */
+  let ritmoHtml = '';
+  if (modo === 'mensal') {
+    const agora     = new Date();
+    const ehAtual   = filMes === agora.getMonth()+1 && filAno === agora.getFullYear();
+    const diasMes   = new Date(filAno, filMes, 0).getDate();
+    const corridos  = ehAtual ? agora.getDate() : diasMes;
+    const mediaDia  = corridos ? A.gasto / corridos : 0;
+    const projecao  = mediaDia * diasMes;
+    const diasComNota = new Set(A.ns.map(n => _dataDe(n).slice(0,10)).filter(Boolean)).size;
+    ritmoHtml = `
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Ritmo de gasto</span>
+        <span style="font-size:10px;color:var(--text2);font-weight:600">
+          ${ehAtual ? `dia ${corridos} de ${diasMes}` : `${diasMes} dias`}</span>
+      </div>
+      <div class="db-ritmo">
+        <div class="db-ritmo-cel">
+          <div class="db-ritmo-val">${brlCurto(mediaDia)}</div>
+          <div class="db-ritmo-lbl">por dia</div>
+        </div>
+        <div class="db-ritmo-cel">
+          <div class="db-ritmo-val">${brlCurto(ehAtual ? projecao : A.gasto)}</div>
+          <div class="db-ritmo-lbl">${ehAtual ? 'projeção' : 'fechado'}</div>
+        </div>
+        <div class="db-ritmo-cel">
+          <div class="db-ritmo-val">${diasComNota}</div>
+          <div class="db-ritmo-lbl">dias c/ nota</div>
+        </div>
+      </div>
     </div>`;
   }
 
-  // ultimas 5 notas
-  const recentes = [...ns].sort((a,b) => b.data.localeCompare(a.data) || (b.created_at||'').localeCompare(a.created_at||'')).slice(0, 5);
-  let recHtml = recentes.length ? recentes.map(n => `
-    <div class="recent-item" onclick="editarNota('${n.id}')">
-      <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
+  /* ── Últimas notas ──────────────────────────────────────── */
+  const recentes = [...A.ns]
+    .sort((a,b) => _dataDe(b).localeCompare(_dataDe(a))
+                || String(b.created_at||'').localeCompare(String(a.created_at||'')))
+    .slice(0, 5);
+  const recHtml = recentes.length ? recentes.map(n => `
+    <div class="recent-item" onclick="editarNota('${n.id}')" style="cursor:pointer">
+      <span class="tipo-badge tipo-${n.tipo}">${esc(n.tipo)}</span>
       <div class="recent-info">
-        <div class="recent-tit">${esc(n.razao_social || (n.cnpj?BrasilAPI.formatar(n.cnpj):'Sem empresa'))}</div>
-        <div class="recent-sub">${fmtData(n.data)}${n.subtipo?' · '+n.subtipo:''}</div>
+        <div class="recent-tit">${esc(n.razao_social
+          || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
+        <div class="recent-sub">${esc(fmtData(n.data))}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</div>
       </div>
-      <span class="recent-val ${n.tipo.toLowerCase()}">${brl(n.valor)}</span>
-    </div>`).join('') : '<p class="muted-p">Nenhuma nota lançada este mes.</p>';
+      <span class="recent-val ${String(n.tipo||'').toLowerCase()}">${
+        _n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
+    </div>`).join('') : '<p class="muted-p">Nenhuma nota lançada no período.</p>';
 
+  /* ── Faixa de detalhe do gráfico (drill-down) ───────────── */
+  const barra = dashBarraSel !== null ? _dashEvo[dashBarraSel] : null;
+  const drillHtml = barra ? `
+    <div class="db-drill">
+      <span><b>${esc(barra.label)}</b></span>
+      <span>RDM <b>${brl(barra.rdm)}</b></span>
+      <span>RDA <b>${brl(barra.rda)}</b></span>
+      <span>Total <b>${brl(barra.rdm + barra.rda)}</b></span>
+      <span class="sp">
+        ${(barra.mes !== filMes || barra.ano !== filAno)
+          ? `<button class="btn btn-sm btn-primary" onclick="abrirBarraDash()">Abrir</button>` : ''}
+        <button class="btn btn-sm btn-outline" onclick="selecionarBarraDash(${dashBarraSel})">Fechar</button>
+      </span>
+    </div>`
+    : `<div class="db-hint">Toque numa coluna para ver os valores do período</div>`;
+
+  /* ── Montagem ───────────────────────────────────────────── */
   $('app-content').innerHTML = `
-  <div class="page-hd">
-    <div class="mes-nav">
-      <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
-      <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
-    </div>
-  </div>
+  <div class="db-container">
 
-  <div class="home-grid">
-    <div class="home-card">
-      <div class="home-card-icon">⛽</div>
-      <div class="home-card-val${rdmR-rdmG<0?' neg':''}">${brl(rdmR-rdmG)}</div>
-      <div class="home-card-label">RDM</div>
-      <div class="home-card-sub">${brl(rdmG)} gasto · ${brl(rdmR)} recebido</div>
+    <div class="db-header">
+      <div class="mes-nav">
+        <button class="btn-mes-nav" onclick="mudarMes(-1)" aria-label="Período anterior">‹</button>
+        <span class="mes-label">${esc(rotulo)}</span>
+        <button class="btn-mes-nav" onclick="mudarMes(1)" aria-label="Próximo período">›</button>
+      </div>
+      <div class="seg">
+        <button class="seg-btn ${modo === 'mensal' ? 'active' : ''}"
+                onclick="alternarPeriodoDashboard('mensal')">Mês</button>
+        <button class="seg-btn ${modo === 'anual' ? 'active' : ''}"
+                onclick="alternarPeriodoDashboard('anual')">Ano</button>
+      </div>
     </div>
-    <div class="home-card">
-      <div class="home-card-icon">📋</div>
-      <div class="home-card-val${rdaR-rdaG<0?' neg':''}">${brl(rdaR-rdaG)}</div>
-      <div class="home-card-label">RDA</div>
-      <div class="home-card-sub">${brl(rdaG)} gasto · ${brl(rdaR)} recebido</div>
-    </div>
-    <div class="home-card">
-      <div class="home-card-icon">📄</div>
-      <div class="home-card-val">${totalNotas}</div>
-      <div class="home-card-label">Notas</div>
-      <div class="home-card-sub">lançadas este mês</div>
-    </div>
-    <div class="home-card">
-      <div class="home-card-icon">${pendentes?'⏳':'✅'}</div>
-      <div class="home-card-val">${pendentes||'0'}</div>
-      <div class="home-card-label">Pendentes</div>
-      <div class="home-card-sub">${pendentes?'aguardando sync':'tudo sincronizado'}</div>
-    </div>
-  </div>
 
-  ${rdmG > 0 ? `
-  <div class="bar-section">
-    <div class="bar-hd">Gastos RDM por Categoria</div>
-    ${barHtml}
-  </div>` : ''}
-
-  <div class="evo-section">
-    <div class="bar-hd">Evolução</div>
-    <div class="evo-row">${evoHtml}</div>
-  </div>
-
-  <div class="recent-section">
-    <div class="recent-hd">
-      <span>Últimos Lançamentos</span>
-      <a onclick="switchView('notas')">Ver todas →</a>
+    <div class="db-hero">
+      <div class="db-hero-top">
+        <div>
+          <div class="db-hero-lbl">Saldo · ${esc(rotulo)}</div>
+          <div class="db-hero-val ${saldo < 0 ? 'neg' : ''}">${brl(saldo)}</div>
+        </div>
+        ${chipDelta(saldo, saldoAnt, true)}
+      </div>
+      <div class="db-hero-meta">
+        <span>Recebido <b>${brl(A.recebido)}</b></span>
+        <span>Gasto <b>${brl(A.gasto)}</b></span>
+      </div>
+      <div class="db-consumo">
+        <div class="db-consumo-fill ${consumoPct > 100 ? 'over' : ''}"
+             style="width:${Math.min(100, Math.round(consumoPct))}%"></div>
+      </div>
+      <div class="db-consumo-txt">${
+        A.recebido > 0
+          ? `${Math.round(consumoPct)}% do repasse utilizado`
+          : (A.gasto > 0 ? 'Gasto sem repasse lançado no período' : 'Nada lançado no período')
+      }</div>
     </div>
-    ${recHtml}
+
+    <div class="db-grid">
+      <button class="db-kpi rdm" onclick="switchView('saldo')">
+        <div class="db-kpi-top">
+          <span class="db-kpi-title">Saldo RDM</span>
+          ${chipDelta(A.rdmR - A.rdmG, B.rdmR - B.rdmG, true)}
+        </div>
+        <span class="db-kpi-val ${A.rdmR - A.rdmG < 0 ? 'neg' : ''}">${brl(A.rdmR - A.rdmG)}</span>
+        <span class="db-kpi-sub">${brl(A.rdmG)} gasto · ${brl(A.rdmR)} rec.</span>
+      </button>
+      <button class="db-kpi rda" onclick="switchView('saldo')">
+        <div class="db-kpi-top">
+          <span class="db-kpi-title">Saldo RDA</span>
+          ${chipDelta(A.rdaR - A.rdaG, B.rdaR - B.rdaG, true)}
+        </div>
+        <span class="db-kpi-val ${A.rdaR - A.rdaG < 0 ? 'neg' : ''}">${brl(A.rdaR - A.rdaG)}</span>
+        <span class="db-kpi-sub">${brl(A.rdaG)} gasto · ${brl(A.rdaR)} rec.</span>
+      </button>
+      <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
+        <div class="db-kpi-top">
+          <span class="db-kpi-title">Média/Nota</span>
+          ${chipDelta(mediaNota, mediaAnt, false)}
+        </div>
+        <span class="db-kpi-val">${brl(mediaNota)}</span>
+        <span class="db-kpi-sub">${totalNotas} nota${totalNotas === 1 ? '' : 's'} no período</span>
+      </button>
+      <button class="db-kpi maior" onclick="${maior ? `editarNota('${maior.id}')` : 'abrirCaptura()'}">
+        <div class="db-kpi-top"><span class="db-kpi-title">Maior nota</span></div>
+        <span class="db-kpi-val">${maior ? brl(maior.valor) : brl(0)}</span>
+        <span class="db-kpi-sub">${maior ? esc(maior.razao_social || 'Sem empresa') : 'Nenhuma nota'}</span>
+      </button>
+    </div>
+
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Evolução ${modo === 'mensal' ? '· 6 meses' : '· 5 anos'}</span>
+        <div class="db-legend">
+          <button class="lg-btn rdm ${dashSerie.RDM ? 'on' : 'off'}"
+                  onclick="alternarSerieDash('RDM')"><span class="lg-dot"></span>RDM</button>
+          <button class="lg-btn rda ${dashSerie.RDA ? 'on' : 'off'}"
+                  onclick="alternarSerieDash('RDA')"><span class="lg-dot"></span>RDA</button>
+          <button class="lg-btn trend ${dashTendencia ? 'on' : 'off'}"
+                  onclick="alternarTendenciaDash()"><span class="lg-dot"></span>Total</button>
+        </div>
+      </div>
+      ${gerarGraficoEvolucao(_dashEvo)}
+      ${drillHtml}
+    </div>
+
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Composição dos gastos</span>
+        ${dashFatiaSel ? `<a class="link" onclick="selecionarFatiaDash('${dashFatiaSel}')">limpar</a>` : ''}
+      </div>
+      <div class="db-donut-wrap">
+        <div class="db-donut">${gerarDonut(cats, A.gasto)}</div>
+        <div class="db-donut-legend">
+          ${cats.length ? cats.map(c => `
+            <button class="db-dl-item ${dashFatiaSel && dashFatiaSel !== c.key ? 'dim' : ''}"
+                    onclick="selecionarFatiaDash('${c.key}')">
+              <span class="db-dl-dot" style="background:${c.cor}"></span>
+              <span class="db-dl-name">${esc(c.name)}</span>
+              <span class="db-dl-val">${brl(c.val)}</span>
+            </button>`).join('')
+          : '<p class="muted-p">Nenhuma despesa no período.</p>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Onde mais se gasta</span>
+        <span style="font-size:10px;color:var(--text2);font-weight:600">top ${forn.length}</span>
+      </div>
+      <div class="db-rank">
+        ${forn.length ? forn.map((f, i) => `
+          <div class="db-rank-item">
+            <div class="db-rank-meta">
+              <span class="db-rank-pos">${i+1}º</span>
+              <span class="db-rank-name">${esc(f.nome)}</span>
+              <span class="db-rank-val">${brl(f.val)}</span>
+            </div>
+            <div class="db-rank-track">
+              <div class="db-rank-fill" style="width:${Math.max(4, Math.round(f.val/maxForn*100))}%"></div>
+            </div>
+            <div style="font-size:10px;color:var(--text2)">${f.qtd} nota${f.qtd === 1 ? '' : 's'}
+              · ${brl(f.val/f.qtd)} em média</div>
+          </div>`).join('')
+        : '<p class="muted-p">Sem fornecedores identificados no período.</p>'}
+      </div>
+    </div>
+
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Pendências</span>
+        <a class="link" onclick="irParaNotas(null,${escopo})">Ver notas →</a>
+      </div>
+      <div class="db-pend">${pendHtml}</div>
+    </div>
+
+    ${ritmoHtml}
+
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Últimas notas</span>
+        <a class="link" onclick="irParaNotas(null,${escopo})">Ver todas →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">${recHtml}</div>
+    </div>
+
   </div>`;
 }
 
 /* ── VIEW: NOTAS ─────────────────────────────────────────── */
+/* Filtro vindo do dashboard (toque numa pendência) */
+let filtroNotasFlag = null;   // 'sem-valor' | 'sem-anexo' | 'pendente' | null
+let filtroNotasAno  = false;  // true = ano inteiro em vez de um mês
+
+const _ROTULO_FLAG = {
+  'sem-valor': '⚠️ Só notas sem valor',
+  'sem-anexo': '📎 Só notas sem anexo',
+  'pendente' : '⏳ Só notas aguardando envio',
+};
+
+function irParaNotas(flag = null, anoInteiro = false) {
+  filtroNotasFlag = flag;
+  filtroNotasAno  = !!anoInteiro;
+  switchView('notas');
+}
+
+function limparFiltroNotas() {
+  filtroNotasFlag = null;
+  filtroNotasAno  = false;
+  renderNotas();
+}
+
+function _passaFiltroNota(n) {
+  if (filtroNotasFlag === 'sem-valor') return _n(n.valor) <= 0;
+  if (filtroNotasFlag === 'sem-anexo') return !n.foto_path && !n.foto_local;
+  if (filtroNotasFlag === 'pendente')  return n.synced === false;
+  return true;
+}
+
 function renderNotas() {
   const el = $('app-content');
-  const ns = notas.filter(n => n.mes===filMes && n.ano===filAno)
-    .sort((a,b) => b.data.localeCompare(a.data));
+  const ns = notas
+    .filter(n => !n.deleted && n.ano === filAno
+                 && (filtroNotasAno || n.mes === filMes) && _passaFiltroNota(n))
+    .sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
+
+  const periodo = filtroNotasAno ? String(filAno) : `${MESES[filMes-1]} ${filAno}`;
 
   let html = `
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
+      <span class="mes-label">${periodo}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
     <div class="fil-tipo">
@@ -684,11 +1144,22 @@ function renderNotas() {
     </div>
   </div>`;
 
+  if (filtroNotasFlag || filtroNotasAno) {
+    html += `<div class="fil-ativo">
+      <span>${_ROTULO_FLAG[filtroNotasFlag] || '📅 Ano inteiro'}${
+        filtroNotasFlag && filtroNotasAno ? ' · ano inteiro' : ''} — ${ns.length} nota${
+        ns.length === 1 ? '' : 's'}</span>
+      <button onclick="limparFiltroNotas()" title="Limpar filtro">✕</button>
+    </div>`;
+  }
+
   if (!ns.length) {
     html += `<div class="empty-state">
       <div class="empty-icon">📋</div>
-      <p>Nenhuma nota em ${MESES[filMes-1]}/${filAno}</p>
-      <button class="btn btn-primary" onclick="abrirCaptura()">+ Lançar</button>
+      <p>${filtroNotasFlag ? 'Nenhuma nota com esse filtro em' : 'Nenhuma nota em'} ${periodo}</p>
+      <button class="btn btn-primary" onclick="${filtroNotasFlag || filtroNotasAno
+        ? 'limparFiltroNotas()' : 'abrirCaptura()'}">${filtroNotasFlag || filtroNotasAno
+        ? 'Limpar filtro' : '+ Lançar'}</button>
     </div>`;
   } else {
     html += `<div class="notas-list" id="notas-list">`;
@@ -724,9 +1195,18 @@ function renderNotas() {
 }
 
 function mudarMes(delta) {
-  filMes += delta;
-  if (filMes > 12) { filMes = 1;  filAno++; }
-  if (filMes < 1)  { filMes = 12; filAno--; }
+  // no modo anual (dashboard ou lista filtrada por ano) as setas andam de ano
+  const porAno = (viewAtual === 'home'  && filtroPeriodo === 'anual')
+              || (viewAtual === 'notas' && filtroNotasAno);
+  if (porAno) {
+    filAno += delta;
+  } else {
+    filMes += delta;
+    if (filMes > 12) { filMes = 1;  filAno++; }
+    if (filMes < 1)  { filMes = 12; filAno--; }
+  }
+  dashBarraSel = null;
+  if (viewAtual==='home')  renderHome();
   if (viewAtual==='notas') renderNotas();
   if (viewAtual==='saldo') renderSaldo();
 }
