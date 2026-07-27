@@ -135,7 +135,7 @@ window.SEFAZ = (() => {
   function parseSefazHTML(html) {
     const r = { razao_social:null, cnpj:null, valor:null, data:null, endereco:null };
 
-    const cnpjM = html.match(/CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}[\/1]\d{4}[-]?\d{2})/i);
+    const cnpjM = html.match(/CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}[/1]\d{4}[-]?\d{2})/i);
     if (cnpjM) r.cnpj = digits(cnpjM[1]);
 
     const nomeM = html.match(/(?:Nome|Raz[ãa]o\s*Social|Emitente)[:\s]+([^<]{4,80})/i);
@@ -144,9 +144,9 @@ window.SEFAZ = (() => {
     const valM = html.match(/(?:Valor\s*Total|Total\s*da\s*Nota|A\s*Pagar)[:\s]*R?\$?\s*([0-9]{1,7}[.,][0-9]{2})/i);
     if (valM) r.valor = parseFloat(valM[1].replace(',','.'));
 
-    const dataM = html.match(/(?:Emiss[ãa]o|Data)[:\s]*(\d{2}[\/\-.]\d{2}[\/\-.]\d{4})/i);
+    const dataM = html.match(/(?:Emiss[ãa]o|Data)[:\s]*(\d{2}[/\-.]\d{2}[/\-.]\d{4})/i);
     if (dataM) {
-      const parts = dataM[1].split(/[\/\-.]/);
+      const parts = dataM[1].split(/[/\-.]/);
       r.data = `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
 

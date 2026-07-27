@@ -76,16 +76,17 @@ self.addEventListener('fetch', e => {
 
   // Shell (HTML/JS/CSS locais) → NETWORK FIRST
   // Sempre tenta a rede (pega código novo na hora); cache só como reserva offline.
+  // Os scripts no HTML têm ?v=... para forçar refresh; ignoreSearch faz com que
+  // o cache offline responda independentemente da query string.
   e.respondWith(
     fetch(e.request)
       .then(r => {
-        // guarda uma cópia fresca p/ uso offline
+        // guarda uma cópia fresca p/ uso offline (com query string original)
         const copy = r.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return r;
       })
-      // offline: o próprio arquivo; se não tiver, o index DESTA pasta
-      // ("/index.html" devolvia a página de redirecionamento da raiz)
-      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+      .catch(() => caches.match(e.request, { ignoreSearch: true })
+        .then(r => r || caches.match('./index.html')))
   );
 });

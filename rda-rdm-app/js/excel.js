@@ -235,14 +235,14 @@ window.Excel = (() => {
     hdrRow(ws, r, ['Mês','Data','Tipo','Valor (R$)','Descrição']);
     r++;
 
-    const rs = repasses.filter(r => r.ano===ano && !r.deleted)
+    const rs = repasses.filter(rp => rp.ano===ano && !rp.deleted)
       .sort((a,b) => a.mes-b.mes || a.data.localeCompare(b.data));
-    rs.forEach(r => {
-      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[r.mes-1]);
-      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(r.data);
-      ws[XLSX.utils.encode_cell({r,c:2})] = strCenter(r.tipo);
-      ws[XLSX.utils.encode_cell({r,c:3})] = numCell(r.valor);
-      ws[XLSX.utils.encode_cell({r,c:4})] = strCell(r.descricao||'');
+    rs.forEach(rp => {
+      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[rp.mes-1]);
+      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(rp.data);
+      ws[XLSX.utils.encode_cell({r,c:2})] = strCenter(rp.tipo);
+      ws[XLSX.utils.encode_cell({r,c:3})] = numCell(rp.valor);
+      ws[XLSX.utils.encode_cell({r,c:4})] = strCell(rp.descricao||'');
       r++;
     });
 

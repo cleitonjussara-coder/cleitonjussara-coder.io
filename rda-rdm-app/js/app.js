@@ -1496,11 +1496,11 @@ function renderPerfil() {
   $('app-content').innerHTML = `
   <div class="page-hd"><h2>Perfil</h2></div>
   <div class="perfil-card">
-    <div class="perfil-avatar">${(user?.nome||'?')[0].toUpperCase()}</div>
+    <div class="perfil-avatar">${esc((user?.nome||'?')[0].toUpperCase())}</div>
     <div class="perfil-nome">${esc(user?.nome||user?.email||'')}</div>
     <div class="perfil-email">${esc(user?.email||'')}</div>
     <div class="perfil-meta">
-      <span class="role-pill role-${user?.role}">${user?.role||'colaborador'}</span>
+      <span class="role-pill role-${esc(user?.role||'colaborador')}">${esc(user?.role||'colaborador')}</span>
       <span class="nucleo-pill">${esc(user?.nucleo||'')}</span>
     </div>
   </div>
