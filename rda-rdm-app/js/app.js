@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -1758,6 +1758,15 @@ function _limparPedirFoto() {
   document.querySelector('.foto-btn-wrap')?.classList.remove('pedir-foto');
 }
 
+/* Destaca a área de anexo quando tentam salvar sem ele (mesmo destaque
+   visual do Passo 2, mas sem trocar o texto do botão). */
+function _pedirAnexoObrigatorio() {
+  const wrap = document.querySelector('.foto-btn-wrap');
+  if (!wrap) return;
+  wrap.classList.add('pedir-foto');
+  try { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+}
+
 /* ── Código de Barras (Quagga2) ───────────────────────── */
 let _barcodeRunning = false;
 let _quaggaLoaded    = false;
@@ -2516,8 +2525,21 @@ async function salvarNota() {
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
-  // só tipo e data são obrigatórios — sem valor, grava como "pendente" (0)
+  // sem valor ainda grava como "pendente" (0), mas sem anexo não grava
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
+
+  /* ANEXO OBRIGATÓRIO — nota de prestação de contas sem comprovante não vale.
+     Ao EDITAR, o anexo que a nota já tem no servidor conta: depois que a foto
+     sobe, o blob local é apagado e `fotoBlob` fica null. Sem essa ressalva,
+     nenhuma nota já sincronizada poderia mais ser corrigida. */
+  const _idEdicao  = $('nf-id').value || null;
+  const _notaAtual = _idEdicao ? notas.find(n => n.id === _idEdicao) : null;
+  const _temAnexoSalvo = !!(_notaAtual && (_notaAtual.foto_path || _notaAtual.foto_local));
+  if (!fotoBlob && !_temAnexoSalvo) {
+    toast('Anexe a foto ou o arquivo da nota antes de salvar', 'err');
+    _pedirAnexoObrigatorio();
+    return;
+  }
 
   // TRAVA anti-duplicata (local): mesma chave já registrada por MIM bloqueia
   if (_notaDuplicadaChave($('nf-chave').value, $('nf-id').value || null)) {
@@ -2557,6 +2579,13 @@ async function salvarNota() {
     metodo_captura : $('nf-metodo').value       || 'manual',
     foto_local     : null,
   };
+
+  /* Ao editar, mantém o vínculo com o anexo que já está no servidor. O payload
+     é montado só com os campos do formulário, e sem isto o save gravava o
+     registro sem foto_path: a foto continuava no Supabase, mas a nota perdia a
+     referência — sumia o 📎 e ela voltava a contar como "sem anexo".
+     Se um anexo novo for enviado, o pushPending sobrescreve com o caminho certo. */
+  if (_notaAtual?.foto_path) payload.foto_path = _notaAtual.foto_path;
 
   setLoading(true);
   try {
