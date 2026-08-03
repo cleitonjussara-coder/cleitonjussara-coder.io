@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v59';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -149,27 +149,40 @@ async function _renderPdfPagina1(file) {
   return { blob, texto };
 }
 
-/* ── Link de consulta da nota (SEFAZ) ─────────────────────── */
-async function resolverLinkConsulta(chaveRaw) {
+/* ── Link de consulta da nota (SEFAZ) ───────────────────────
+   Só a URL lida do QR abre a nota exata — ela carrega o hash assinado com
+   o CSC do emitente, que não dá para recalcular a partir da chave (ver o
+   cabeçalho do sefaz.js). Sem ela sobra o portal nacional com a chave
+   preenchida, que é palpite com captcha: por isso devolvemos {exato}, para
+   a UI avisar em vez de prometer o que não entrega. */
+async function resolverLinkConsulta(chaveRaw, qrUrlDaNota) {
   const chave = _digitos(chaveRaw);
   if (chave.length !== 44) return null;
+
+  if (/^https?:\/\//i.test(qrUrlDaNota || '')) return { url: qrUrlDaNota, exato: true };
+
+  // notas escaneadas antes da v59 têm a URL só em meta, neste aparelho
   let raw = null;
-  try { raw = await DB.getMeta('qr_' + chave); } catch (_) {}   // URL real do QR, se houver
-  return raw || (window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null);
+  try { raw = await DB.getMeta('qr_' + chave); } catch (_) {}
+  if (raw) return { url: raw, exato: true };
+
+  const fallback = window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null;
+  return fallback ? { url: fallback, exato: false } : null;
 }
 
-function abrirConsultaChave(chaveRaw) {
+function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
   if (_digitos(chaveRaw).length !== 44) { toast('Esta nota não tem chave NFC-e para consulta', 'err'); return; }
   const w = window.open('', '_blank');           // abre já, evita bloqueio de popup
-  resolverLinkConsulta(chaveRaw).then(url => {
-    if (url) { if (w) w.location.href = url; else window.open(url, '_blank'); }
-    else { if (w) w.close(); toast('Não foi possível montar o link de consulta', 'err'); }
+  resolverLinkConsulta(chaveRaw, qrUrlDaNota).then(r => {
+    if (!r) { if (w) w.close(); toast('Não foi possível montar o link de consulta', 'err'); return; }
+    if (w) w.location.href = r.url; else window.open(r.url, '_blank');
+    if (!r.exato) toast('Nota não foi lida por QR — abrindo o portal nacional com a chave (pede captcha)');
   });
 }
 
 function consultarNota(id) {
   const n = notas.find(x => x.id === id);
-  abrirConsultaChave(n?.chave_nfce || '');
+  abrirConsultaChave(n?.chave_nfce || '', n?.qr_url || null);
 }
 
 /* guarda a URL real lida de um QR, indexada pela chave.
@@ -2848,9 +2861,21 @@ async function salvarNota() {
      referência — sumia o 📎 e ela voltava a contar como "sem anexo".
      Se um anexo novo for enviado, o pushPending sobrescreve com o caminho certo. */
   if (_notaAtual?.foto_path) payload.foto_path = _notaAtual.foto_path;
+  if (_notaAtual?.qr_url)    payload.qr_url    = _notaAtual.qr_url;
 
   setLoading(true);
   try {
+    /* URL real do QR: até aqui ela só existe em meta, indexada pela chave,
+       porque no momento da leitura a nota ainda não tinha id. A partir do
+       save ela viaja no próprio registro e sobe junto no sync — sem isso o
+       link só funcionava no aparelho que escaneou. */
+    if (!payload.qr_url && payload.chave_nfce) {
+      const c = _digitos(payload.chave_nfce);
+      if (c.length === 44) {
+        try { payload.qr_url = (await DB.getMeta('qr_' + c)) || null; } catch (_) {}
+      }
+    }
+
     // anexo (foto / PDF / XML) — imagem é reduzida antes de guardar
     let anexoBlob = fotoBlob;
     let anexoExt  = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : null);

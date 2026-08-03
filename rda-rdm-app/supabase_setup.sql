@@ -37,6 +37,10 @@ create table if not exists public.notas (
   uf              char(2),
   modelo          char(2),
   foto_path       text,
+  -- URL lida do QR Code da nota. Guardada porque é a ÚNICA forma de reabrir a
+  -- nota no portal da SEFAZ: ela traz o hash assinado com o CSC do emitente,
+  -- que não dá para recalcular a partir da chave de acesso.
+  qr_url          text,
   observacao      text,
   deleted         boolean       not null default false,
   created_at      timestamptz   not null default now(),
@@ -192,3 +196,12 @@ create index if not exists idx_rep_upd      on public.repasses(updated_at);
 -- update public.colaboradores set role='gestor', nucleo='Formosa'    where email='rayner@exemplo.com';
 -- update public.colaboradores set role='gestor', nucleo='Paracatu'   where email='renan@exemplo.com';
 -- update public.colaboradores set role='gestor', nucleo='Uberlândia' where email='arthur@exemplo.com';
+
+-- ─── Migrações em bancos já existentes ────────────────────────────────
+-- Para quem já rodou este script antes. Idempotente: pode rodar de novo.
+--
+-- v59 — guarda a URL do QR Code na própria nota, para o link de consulta
+-- funcionar em qualquer aparelho (antes ficava só no IndexedDB de quem
+-- escaneou). Enquanto isto não roda, o app continua sincronizando: ele
+-- detecta a ausência da coluna e sobe a nota sem ela.
+alter table public.notas add column if not exists qr_url text;

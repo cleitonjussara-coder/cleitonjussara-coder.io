@@ -198,6 +198,12 @@ window.DB = (() => {
   /* ── SYNC ────────────────────────────────────────────── */
   let _running = false;
 
+  /* Vira true se o Supabase ainda não tem a coluna qr_url; volta a false a
+     cada recarga do app, então a migração é detectada sem limpar nada. */
+  let _semColunaQrUrl = false;
+  const _ehErroQrUrl = e =>
+    /qr_url/i.test(`${e?.message || ''} ${e?.details || ''} ${e?.hint || ''}`);
+
   async function pushPending(sb) {
     if (!sb || !navigator.onLine) return { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null };
     const [allN, allR] = await Promise.all([_getAll('notas'), _getAll('repasses')]);
@@ -208,8 +214,18 @@ window.DB = (() => {
       const payload = { ...n };
       delete payload.foto_local; // não sobe o blob
       delete payload.synced;     // coluna só existe localmente (IndexedDB)
+      if (_semColunaQrUrl) delete payload.qr_url;
       try {
-        const { error } = await sb.from('notas').upsert(payload);
+        let { error } = await sb.from('notas').upsert(payload);
+        /* qr_url é coluna nova (v59). Enquanto o `alter table` não roda no
+           Supabase, o PostgREST recusa o registro inteiro por causa dela e o
+           sync parava de subir QUALQUER nota. Detecta, marca e repete sem a
+           coluna — quando a migração rodar, volta a subir sozinho. */
+        if (error && _ehErroQrUrl(error)) {
+          _semColunaQrUrl = true;
+          delete payload.qr_url;
+          ({ error } = await sb.from('notas').upsert(payload));
+        }
         if (!error) { await _put('notas', { ...n, synced: true }); ok++; }
         else fail++;
       } catch (_) { fail++; }
