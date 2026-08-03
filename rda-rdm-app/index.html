@@ -310,6 +310,12 @@ select.inp{cursor:pointer}
 .recent-tit{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recent-sub{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recent-val{font-size:13px;font-weight:700;flex-shrink:0}
+/* miniatura do anexo nas "Ultimas notas" — menor que a da lista de Notas */
+.recent-thumb{width:34px;height:34px;flex-shrink:0;padding:0;cursor:pointer;
+              border:1px solid var(--border);border-radius:8px;background:var(--bg);
+              display:flex;align-items:center;justify-content:center;overflow:hidden}
+.recent-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.recent-thumb .nota-thumb-ph{font-size:13px}
 .recent-val.rda{color:var(--primary)}
 .recent-val.rdm{color:var(--accent-d)}
 

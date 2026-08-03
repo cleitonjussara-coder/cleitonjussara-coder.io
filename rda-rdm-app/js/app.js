@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1037,6 +1037,9 @@ function renderHome() {
     .slice(0, 5);
   const recHtml = recentes.length ? recentes.map(n => `
     <div class="recent-item" onclick="editarNota('${n.id}')" style="cursor:pointer">
+      ${n.foto_path || n.foto_local ? `
+      <button class="recent-thumb" id="dbthumb-${n.id}" title="Ver anexo da nota"
+              onclick="event.stopPropagation();verFoto('${n.id}')"><span class="nota-thumb-ph">📎</span></button>` : ''}
       <span class="tipo-badge tipo-${n.tipo}">${esc(n.tipo)}</span>
       <div class="recent-info">
         <div class="recent-tit">${esc(n.razao_social
@@ -1292,6 +1295,8 @@ function renderHome() {
     </div>
 
   </div>`;
+
+  _carregarMiniaturas(recentes, 'dbthumb-').catch(() => {});
 }
 
 /* ── VIEW: NOTAS ─────────────────────────────────────────── */
@@ -1388,7 +1393,6 @@ function renderNotas() {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
-            ${n.foto_path||n.foto_local ? `<button class="btn-icon-sm" onclick="verFoto('${n.id}')" title="Ver anexo da nota">📎</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
@@ -1412,14 +1416,14 @@ function _limparMiniaturas() {
 /* Preenche as miniaturas depois que a lista já está na tela, na mesma ordem
    de fallback do verFoto: blob local (offline) → Drive → Supabase.
    As notas que só existem no Supabase saem numa única chamada assinada. */
-async function _carregarMiniaturas(ns) {
+async function _carregarMiniaturas(ns, pref = 'thumb-') {
   _limparMiniaturas();
   const comAnexo = (ns || []).filter(n => n.foto_path || n.foto_local);
   if (!comAnexo.length) return;
 
   const pendentes = [];
   for (const n of comAnexo) {
-    const slot = $('thumb-' + n.id);
+    const slot = $(pref + n.id);
     if (!slot) continue;
 
     const local = await DB.getFotoLocal(n.id).catch(() => null);
@@ -1447,7 +1451,7 @@ async function _carregarMiniaturas(ns) {
     .createSignedUrls(pendentes.map(n => n.foto_path), 300);
   (data || []).forEach((r, i) => {
     const n = pendentes[i];
-    if (r?.signedUrl) _pintarMiniatura($('thumb-' + n.id), r.signedUrl, _extDeUrl(n.foto_path));
+    if (r?.signedUrl) _pintarMiniatura($(pref + n.id), r.signedUrl, _extDeUrl(n.foto_path));
   });
 }
 
