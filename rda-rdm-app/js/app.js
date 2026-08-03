@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -45,10 +45,8 @@ const EMPRESA = {
   subtitulo: 'Relatório de Despesas Mensais (RDM) e Relatório de Despesas com Alimentações (RDA)',
 };
 
-/* Safra derivada do ano do exercício, como na planilha: exercício 2026 → "25/26".
-   Se a empresa mudar o corte da safra, é só ajustar aqui. */
-const safraDoExercicio = ano =>
-  `${String((ano - 1) % 100).padStart(2,'0')}/${String(ano % 100).padStart(2,'0')}`;
+/* Safra e exercício são a mesma coisa aqui: o ano civil. O "25/26" que aparece
+   na planilha modelo é rótulo daquele documento, não uma regra do app. */
 
 /* Trimestres da aba BANCO DE DADOS: T1 = Jan-Mar, T2 = Abr-Jun, T3 = Jul-Set, T4 = Out-Dez */
 const TRIMESTRES = [
@@ -1079,11 +1077,7 @@ function renderHome() {
           <span class="db-emp-val">${esc(user?.nome || user?.email || '—')}</span>
         </div>
         <div class="db-emp-campo">
-          <span class="db-emp-lbl">Safra</span>
-          <span class="db-emp-val">${esc(safraDoExercicio(filAno))}</span>
-        </div>
-        <div class="db-emp-campo">
-          <span class="db-emp-lbl">Ano do Exercício</span>
+          <span class="db-emp-lbl">Safra / Ano do Exercício</span>
           <span class="db-emp-val">${filAno}</span>
         </div>
       </div>
