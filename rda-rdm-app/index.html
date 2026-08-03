@@ -464,6 +464,9 @@ select.inp{cursor:pointer}
               font-family:inherit;cursor:pointer;width:100%;text-align:left;transition:transform .1s ease}
 .db-pend-item:active{transform:scale(.98)}
 .db-pend-item.ok{background:#F0FBF4;border-color:#BBEFD0;cursor:default}
+/* data suspeita: contamina o saldo em silêncio, então destoa das demais */
+.db-pend-item.alerta{background:#FFF7ED;border-color:#FDBA74}
+.db-pend-item.alerta .db-pend-txt b{font-weight:800;color:#9A3412}
 .db-pend-ico{font-size:15px;flex-shrink:0}
 .db-pend-txt{flex:1;font-size:12.5px;font-weight:600;color:var(--text)}
 .db-pend-n{font-size:12.5px;font-weight:800;color:var(--danger);flex-shrink:0}
@@ -1107,16 +1110,16 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=60"></script>
-<script defer src="js/nfce.js?v=60"></script>
-<script defer src="js/sefaz.js?v=60"></script>
-<script defer src="js/brasilapi.js?v=60"></script>
-<script defer src="js/ocr.js?v=60"></script>
-<script defer src="js/excel.js?v=60"></script>
-<script defer src="js/gestor.js?v=60"></script>
-<script defer src="js/gdrive.js?v=60"></script>
-<script defer src="js/gsheets.js?v=60"></script>
-<script defer src="js/app.js?v=60"></script>
+<script defer src="js/db.js?v=61"></script>
+<script defer src="js/nfce.js?v=61"></script>
+<script defer src="js/sefaz.js?v=61"></script>
+<script defer src="js/brasilapi.js?v=61"></script>
+<script defer src="js/ocr.js?v=61"></script>
+<script defer src="js/excel.js?v=61"></script>
+<script defer src="js/gestor.js?v=61"></script>
+<script defer src="js/gdrive.js?v=61"></script>
+<script defer src="js/gsheets.js?v=61"></script>
+<script defer src="js/app.js?v=61"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

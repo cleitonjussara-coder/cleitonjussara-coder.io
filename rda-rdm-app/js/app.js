@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -691,6 +691,26 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
   return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido };
 }
 
+/* ── Nota com data implausível ───────────────────────────────
+   O ano da nota sai dos dígitos 3-4 da chave de acesso, então um QR borrado
+   ou um OCR que troca um dígito joga a nota para um mês qualquer do passado.
+   Ela some de todas as telas — que são todas por mês — e mesmo assim entra
+   na pendência anterior do saldo acumulado, contaminando todos os meses
+   seguintes sem deixar rastro. Foi assim que apareceu -R$ 900,00 num mês
+   sem nada lançado.
+
+   Por isso esta checagem é feita sobre TODAS as notas, não só as do período
+   em foco: uma nota fora da janela é, por definição, invisível no período. */
+const JANELA_PASSADO_MESES = 24;
+function _dataImplausivel(n) {
+  const agora = new Date();
+  const kAgora = agora.getFullYear() * 12 + (agora.getMonth() + 1);
+  const k = Number(n.ano) * 12 + Number(n.mes);
+  if (!Number.isFinite(k)) return true;                 // mes/ano ausente ou corrompido
+  return k > kAgora || k < kAgora - JANELA_PASSADO_MESES;
+}
+const _notasDataSuspeita = () => notas.filter(n => !n.deleted && _dataImplausivel(n));
+
 function _periodoAnterior(mes, ano, modo) {
   if (modo === 'anual') return { mes, ano: ano - 1 };
   return mes > 1 ? { mes: mes-1, ano } : { mes: 12, ano: ano-1 };
@@ -977,8 +997,20 @@ function renderHome() {
     if (_n(n.valor) <= 0) m.push('sem valor');
     if (!n.foto_path && !n.foto_local) m.push('sem anexo');
     if (n.synced === false) m.push('não enviada');
+    if (_dataImplausivel(n)) m.push('data fora do período');
     return m.join(' · ');
   };
+
+  /* Data suspeita é a única pendência que NÃO respeita o período em foco:
+     a nota está escondida justamente por estar fora dele. */
+  const suspeitas = _notasDataSuspeita();
+  const linhaSuspeita = suspeitas.length ? `
+    <button class="db-pend-item alerta" onclick="irParaNotas('data-suspeita',false)">
+      <span class="db-pend-ico">📅</span>
+      <span class="db-pend-txt">Data suspeita <b>(fora do período)</b></span>
+      <span class="db-pend-n">${suspeitas.length}</span>
+      <span class="db-pend-seta">›</span>
+    </button>` : '';
 
   const itensPend = pendentes.slice(0, 10).map(n => `
     <div class="db-pend-item" style="gap:10px">
@@ -994,7 +1026,7 @@ function renderHome() {
     </div>`).join('');
 
   const pendHtml = pendentes.length
-    ? resumoPend.map(linhaResumo).join('')
+    ? linhaSuspeita + resumoPend.map(linhaResumo).join('')
       + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
            <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
              Notas pendentes</div>
@@ -1003,7 +1035,7 @@ function renderHome() {
              ? `<button class="btn btn-sm btn-outline btn-full" style="margin-top:8px" onclick="irParaNotas(null,${escopo})">
                   Ver todas (${pendentes.length})</button>` : ''}
          </div>`
-    : `<div class="db-pend-item ok">
+    : linhaSuspeita + `<div class="db-pend-item ok">
          <span class="db-pend-ico">✅</span>
          <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
          <span class="db-pend-n">0</span>
@@ -1318,10 +1350,14 @@ let filtroNotasFlag = null;   // 'sem-valor' | 'sem-anexo' | 'pendente' | null
 let filtroNotasAno  = false;  // true = ano inteiro em vez de um mês
 
 const _ROTULO_FLAG = {
-  'sem-valor': '⚠️ Só notas sem valor',
-  'sem-anexo': '📎 Só notas sem anexo',
-  'pendente' : '⏳ Só notas aguardando envio',
+  'sem-valor'    : '⚠️ Só notas sem valor',
+  'sem-anexo'    : '📎 Só notas sem anexo',
+  'pendente'     : '⏳ Só notas aguardando envio',
+  'data-suspeita': '📅 Notas com data fora do período',
 };
+
+/* Este filtro ignora mês/ano: a nota está escondida por estar fora deles. */
+const _FLAG_SEM_PERIODO = 'data-suspeita';
 
 function irParaNotas(flag = null, anoInteiro = false) {
   filtroNotasFlag = flag;
@@ -1336,20 +1372,23 @@ function limparFiltroNotas() {
 }
 
 function _passaFiltroNota(n) {
-  if (filtroNotasFlag === 'sem-valor') return _n(n.valor) <= 0;
-  if (filtroNotasFlag === 'sem-anexo') return !n.foto_path && !n.foto_local;
-  if (filtroNotasFlag === 'pendente')  return n.synced === false;
+  if (filtroNotasFlag === 'sem-valor')     return _n(n.valor) <= 0;
+  if (filtroNotasFlag === 'sem-anexo')     return !n.foto_path && !n.foto_local;
+  if (filtroNotasFlag === 'pendente')      return n.synced === false;
+  if (filtroNotasFlag === 'data-suspeita') return _dataImplausivel(n);
   return true;
 }
 
 function renderNotas() {
   const el = $('app-content');
+  const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO;
+  const noPeriodo  = n => semPeriodo || (n.ano === filAno && (filtroNotasAno || n.mes === filMes));
   const ns = notas
-    .filter(n => !n.deleted && n.ano === filAno
-                 && (filtroNotasAno || n.mes === filMes) && _passaFiltroNota(n))
+    .filter(n => !n.deleted && noPeriodo(n) && _passaFiltroNota(n))
     .sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
-  const periodo = filtroNotasAno ? String(filAno) : `${MESES[filMes-1]} ${filAno}`;
+  const periodo = semPeriodo ? 'Todos os períodos'
+                : filtroNotasAno ? String(filAno) : `${MESES[filMes-1]} ${filAno}`;
 
   let html = `
   <div class="page-hd">
