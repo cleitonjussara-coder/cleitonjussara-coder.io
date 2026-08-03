@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -614,6 +614,24 @@ function _agregaPeriodo(mes, ano, modo) {
            gasto: rdmG + rdaG, recebido: rdmR + rdaR };
 }
 
+/* Saldo acumulado mês a mês para RDM/RDA (independentes).
+   Pendência negativa de meses anteriores é abatida do repasse do mês atual.
+   Ex.: Mês 1 Gasto 500 Repasse 300 → Pendência -200
+        Mês 2 Gasto 100 Repasse 400 → Saldo Líquido = (400-100) + (-200) = 100 */
+function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
+  const targetKey = targetAno * 12 + targetMes;
+  const ePassado  = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) < targetKey);
+  const eAtual    = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) === targetKey);
+  const gastosPassados   = _soma(notas.filter(ePassado));
+  const repassesPassados = _soma(repasses.filter(ePassado));
+  const pendenciaAnterior = repassesPassados - gastosPassados;
+  const gastoMes   = _soma(notas.filter(eAtual));
+  const repasseMes = _soma(repasses.filter(eAtual));
+  const saldoMes   = repasseMes - gastoMes;
+  const saldoLiquido = pendenciaAnterior + saldoMes;
+  return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido };
+}
+
 function _periodoAnterior(mes, ano, modo) {
   if (modo === 'anual') return { mes, ano: ano - 1 };
   return mes > 1 ? { mes: mes-1, ano } : { mes: 12, ano: ano-1 };
@@ -819,6 +837,11 @@ function renderHome() {
   const maior      = [...A.ns].sort((a,b) => _n(b.valor) - _n(a.valor))[0] || null;
   const consumoPct = A.recebido > 0 ? (A.gasto / A.recebido) * 100 : (A.gasto > 0 ? 100 : 0);
 
+  /* Saldo acumulado (histórico) p/ KPIs — RDM e RDA separados */
+  const rdmAcc = _saldoAcumuladoAte(filMes, filAno, 'RDM');
+  const rdaAcc = _saldoAcumuladoAte(filMes, filAno, 'RDA');
+  const totalAcumulado = rdmAcc.saldoLiquido + rdaAcc.saldoLiquido;
+
   /* ── Série do gráfico: 6 meses ou 5 anos ────────────────── */
   _dashEvo = [];
   if (modo === 'mensal') {
@@ -868,24 +891,57 @@ function renderHome() {
     .sort((a,b) => b.val - a.val).slice(0, 5);
   const maxForn = forn.length ? forn[0].val : 1;
 
-  /* ── Pendências ─────────────────────────────────────────── */
-  const semValor = A.ns.filter(n => _n(n.valor) <= 0).length;
-  const semAnexo = A.ns.filter(n => !n.foto_path && !n.foto_local).length;
-  const naoSync  = A.ns.filter(n => n.synced === false).length;
+  /* ── Pendências (lista interativa com transferência) ───── */
   const escopo   = modo === 'anual';
+  const pendentes = A.ns.filter(n =>
+    n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
+  ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
-  const linhaPend = (n, ico, txt, flag) => n ? `
-    <button class="db-pend-item" onclick="irParaNotas('${flag}',${escopo})">
-      <span class="db-pend-ico">${ico}</span>
-      <span class="db-pend-txt">${txt}</span>
-      <span class="db-pend-n">${n}</span>
+  const resumoPend = [
+    { ico:'⚠️', txt:'Sem valor',    n: pendentes.filter(n => _n(n.valor) <= 0).length, flag:'sem-valor' },
+    { ico:'📎', txt:'Sem anexo',    n: pendentes.filter(n => !n.foto_path && !n.foto_local).length, flag:'sem-anexo' },
+    { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.synced === false).length, flag:'pendente' },
+  ];
+
+  const linhaResumo = r => r.n ? `
+    <button class="db-pend-item" onclick="irParaNotas('${r.flag}',${escopo})">
+      <span class="db-pend-ico">${r.ico}</span>
+      <span class="db-pend-txt">${r.txt}</span>
+      <span class="db-pend-n">${r.n}</span>
       <span class="db-pend-seta">›</span>
     </button>` : '';
 
-  const pendHtml = (semValor + semAnexo + naoSync)
-    ? linhaPend(semValor, '⚠️', 'Notas sem valor',        'sem-valor')
-    + linhaPend(semAnexo, '📎', 'Notas sem anexo',        'sem-anexo')
-    + linhaPend(naoSync,  '⏳', 'Aguardando envio',       'pendente')
+  const motivosDe = n => {
+    const m = [];
+    if (_n(n.valor) <= 0) m.push('sem valor');
+    if (!n.foto_path && !n.foto_local) m.push('sem anexo');
+    if (n.synced === false) m.push('não enviada');
+    return m.join(' · ');
+  };
+
+  const itensPend = pendentes.slice(0, 10).map(n => `
+    <div class="db-pend-item" style="gap:10px">
+      <span class="tipo-badge tipo-${n.tipo}" style="flex-shrink:0">${esc(n.tipo)}</span>
+      <div style="flex:1;min-width:0">
+        <div class="db-pend-txt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
+        <div style="font-size:10.5px;color:var(--text2);margin-top:1px">
+          ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
+      </div>
+      <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
+      <button class="btn btn-sm btn-outline" onclick="abrirTransferirNota('${n.id}')" style="flex-shrink:0">Mover</button>
+    </div>`).join('');
+
+  const pendHtml = pendentes.length
+    ? resumoPend.map(linhaResumo).join('')
+      + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+             Notas pendentes</div>
+           <div class="db-pend">${itensPend}</div>
+           ${pendentes.length > 10
+             ? `<button class="btn btn-sm btn-outline btn-full" style="margin-top:8px" onclick="irParaNotas(null,${escopo})">
+                  Ver todas (${pendentes.length})</button>` : ''}
+         </div>`
     : `<div class="db-pend-item ok">
          <span class="db-pend-ico">✅</span>
          <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
@@ -980,14 +1036,16 @@ function renderHome() {
     <div class="db-hero">
       <div class="db-hero-top">
         <div>
-          <div class="db-hero-lbl">Saldo · ${esc(rotulo)}</div>
-          <div class="db-hero-val ${saldo < 0 ? 'neg' : ''}">${brl(saldo)}</div>
+          <div class="db-hero-lbl">Saldo Acumulado · ${esc(rotulo)}</div>
+          <div class="db-hero-val ${totalAcumulado < 0 ? 'neg' : ''}">${brl(totalAcumulado)}</div>
         </div>
-        ${chipDelta(saldo, saldoAnt, true)}
       </div>
       <div class="db-hero-meta">
         <span>Recebido <b>${brl(A.recebido)}</b></span>
         <span>Gasto <b>${brl(A.gasto)}</b></span>
+        <span>${rdmAcc.pendenciaAnterior !== 0 || rdaAcc.pendenciaAnterior !== 0
+          ? `<span>Pend. anterior <b style="color:${(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior) < 0 ? 'var(--danger)' : 'inherit'}">${brl(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior)}</b></span>`
+          : ''}</span>
       </div>
       <div class="db-consumo">
         <div class="db-consumo-fill ${consumoPct > 100 ? 'over' : ''}"
@@ -1004,18 +1062,24 @@ function renderHome() {
       <button class="db-kpi rdm" onclick="switchView('saldo')">
         <div class="db-kpi-top">
           <span class="db-kpi-title">Saldo RDM</span>
-          ${chipDelta(A.rdmR - A.rdmG, B.rdmR - B.rdmG, true)}
+          ${rdmAcc.pendenciaAnterior < 0
+            ? `<span class="dl dl-ruim">Pend. ${brl(rdmAcc.pendenciaAnterior)}</span>`
+            : (rdmAcc.pendenciaAnterior > 0
+              ? `<span class="dl dl-bom">Créd. ${brl(rdmAcc.pendenciaAnterior)}</span>` : '')}
         </div>
-        <span class="db-kpi-val ${A.rdmR - A.rdmG < 0 ? 'neg' : ''}">${brl(A.rdmR - A.rdmG)}</span>
-        <span class="db-kpi-sub">${brl(A.rdmG)} gasto · ${brl(A.rdmR)} rec.</span>
+        <span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
+        <span class="db-kpi-sub">${brl(rdmAcc.gastoMes)} gasto · ${brl(rdmAcc.repasseMes)} rec.</span>
       </button>
       <button class="db-kpi rda" onclick="switchView('saldo')">
         <div class="db-kpi-top">
           <span class="db-kpi-title">Saldo RDA</span>
-          ${chipDelta(A.rdaR - A.rdaG, B.rdaR - B.rdaG, true)}
+          ${rdaAcc.pendenciaAnterior < 0
+            ? `<span class="dl dl-ruim">Pend. ${brl(rdaAcc.pendenciaAnterior)}</span>`
+            : (rdaAcc.pendenciaAnterior > 0
+              ? `<span class="dl dl-bom">Créd. ${brl(rdaAcc.pendenciaAnterior)}</span>` : '')}
         </div>
-        <span class="db-kpi-val ${A.rdaR - A.rdaG < 0 ? 'neg' : ''}">${brl(A.rdaR - A.rdaG)}</span>
-        <span class="db-kpi-sub">${brl(A.rdaG)} gasto · ${brl(A.rdaR)} rec.</span>
+        <span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
+        <span class="db-kpi-sub">${brl(rdaAcc.gastoMes)} gasto · ${brl(rdaAcc.repasseMes)} rec.</span>
       </button>
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
@@ -1243,13 +1307,11 @@ function filtrarTipo(btn) {
 
 /* ── VIEW: SALDO ─────────────────────────────────────────── */
 function renderSaldo() {
+  const rdm = _saldoAcumuladoAte(filMes, filAno, 'RDM');
+  const rda = _saldoAcumuladoAte(filMes, filAno, 'RDA');
+
   const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
   const rs = repasses.filter(r => r.mes===filMes && r.ano===filAno);
-
-  const rdmG = ns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
-  const rdmR = rs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
-  const rdaG = ns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
-  const rdaR = rs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
 
   // breakdown RDM por subtipo
   const subs = ['Abastecimento','Hospedagem','Outros'];
@@ -1267,6 +1329,27 @@ function renderSaldo() {
       <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
     </div>`).join('') : '<p class="muted-p">Nenhum repasse lançado.</p>';
 
+  /* card independente do tipo */
+  const cardTipo = (lbl, d) => {
+    const quitado = d.pendenciaAnterior < 0 && d.saldoLiquido >= 0;
+    const statusTag = quitado
+      ? '<span class="dl dl-bom" style="margin-left:6px">Quitado</span>'
+      : (d.saldoLiquido < 0
+          ? '<span class="dl dl-ruim" style="margin-left:6px">Pendência</span>' : '');
+    return `
+    <div class="saldo-card ${d.saldoLiquido<0?'neg':''}">
+      <div class="saldo-label">${lbl} ${statusTag}</div>
+      <div class="saldo-val">${brl(d.saldoLiquido)}</div>
+      <div class="saldo-detail">
+        ${d.pendenciaAnterior !== 0
+          ? `<span>Pend. anterior <b style="color:${d.pendenciaAnterior<0?'var(--danger)':'inherit'}">${brl(d.pendenciaAnterior)}</b></span>` : ''}
+        <span>Gasto <b>${brl(d.gastoMes)}</b></span>
+        <span>Recebido <b>${brl(d.repasseMes)}</b></span>
+      </div>
+      ${lbl==='RDM' && subHtml ? `<div class="sub-breakdown">${subHtml}</div>` : ''}
+    </div>`;
+  };
+
   $('app-content').innerHTML = `
   <div class="page-hd">
     <div class="mes-nav">
@@ -1282,23 +1365,8 @@ function renderSaldo() {
   </div>
 
   <div class="saldo-grid">
-    <div class="saldo-card ${rdmR-rdmG<0?'neg':''}">
-      <div class="saldo-label">RDM</div>
-      <div class="saldo-val">${brl(rdmR-rdmG)}</div>
-      <div class="saldo-detail">
-        <span>Gasto <b>${brl(rdmG)}</b></span>
-        <span>Recebido <b>${brl(rdmR)}</b></span>
-      </div>
-      ${subHtml ? `<div class="sub-breakdown">${subHtml}</div>` : ''}
-    </div>
-    <div class="saldo-card ${rdaR-rdaG<0?'neg':''}">
-      <div class="saldo-label">RDA</div>
-      <div class="saldo-val">${brl(rdaR-rdaG)}</div>
-      <div class="saldo-detail">
-        <span>Gasto <b>${brl(rdaG)}</b></span>
-        <span>Recebido <b>${brl(rdaR)}</b></span>
-      </div>
-    </div>
+    ${cardTipo('RDM', rdm)}
+    ${cardTipo('RDA', rda)}
   </div>
 
   <div class="section-hd">

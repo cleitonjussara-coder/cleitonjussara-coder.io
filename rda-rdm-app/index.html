@@ -1002,6 +1002,37 @@ select.inp{cursor:pointer}
        style="color:rgba(255,255,255,.75);font-size:13px;text-align:center;padding:0 16px"></div>
 </div>
 
+<!-- ═══════════ MODAL TRANSFERIR PENDÊNCIA ═══════════ -->
+<div id="transferir-overlay" class="modal-overlay" style="display:none"
+     onclick="if(event.target===this)fecharTransferir()">
+  <div class="modal-card">
+    <div class="modal-hd">
+      <h3>Mover pendência para…</h3>
+      <button class="btn-close-modal" onclick="fecharTransferir()">✕</button>
+    </div>
+    <div class="modal-bd">
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1">
+          <label class="lbl">Mês</label>
+          <select class="inp" id="tr-mes"></select>
+        </div>
+        <div class="field" style="flex:1">
+          <label class="lbl">Ano</label>
+          <select class="inp" id="tr-ano"></select>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.5;margin-top:8px">
+        A nota sai do mês atual e passa a contar no período escolhido.
+        Mantém o mesmo dia do mês quando possível.
+      </p>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-outline" onclick="fecharTransferir()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarTransferencia()">Mover</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ LOADING / TOAST ═══════════ -->
 <div id="loading-overlay" style="display:none">
   <div class="spin"></div>
@@ -1013,16 +1044,16 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=52"></script>
-<script defer src="js/nfce.js?v=52"></script>
-<script defer src="js/sefaz.js?v=52"></script>
-<script defer src="js/brasilapi.js?v=52"></script>
-<script defer src="js/ocr.js?v=52"></script>
-<script defer src="js/excel.js?v=52"></script>
-<script defer src="js/gestor.js?v=52"></script>
-<script defer src="js/gdrive.js?v=52"></script>
-<script defer src="js/gsheets.js?v=52"></script>
-<script defer src="js/app.js?v=52"></script>
+<script defer src="js/db.js?v=53"></script>
+<script defer src="js/nfce.js?v=53"></script>
+<script defer src="js/sefaz.js?v=53"></script>
+<script defer src="js/brasilapi.js?v=53"></script>
+<script defer src="js/ocr.js?v=53"></script>
+<script defer src="js/excel.js?v=53"></script>
+<script defer src="js/gestor.js?v=53"></script>
+<script defer src="js/gdrive.js?v=53"></script>
+<script defer src="js/gsheets.js?v=53"></script>
+<script defer src="js/app.js?v=53"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

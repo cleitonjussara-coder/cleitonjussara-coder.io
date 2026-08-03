@@ -83,26 +83,27 @@ window.Excel = (() => {
   /* ── RESUMO Gerencial ───────────────────────────────── */
   function buildResumo(notas, repasses, ano, colab) {
     const ws = {};
-    ws['!cols'] = [{wch:8},{wch:16},{wch:16},{wch:16},{wch:16},{wch:16},{wch:16}];
+    ws['!cols'] = [{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:16},{wch:16}];
     ws['!merges'] = [];
 
     let r = 0;
 
     // Título principal
-    merge(ws, r, 0, r, 6);
+    merge(ws, r, 0, r, 8);
     ws[XLSX.utils.encode_cell({r, c:0})] = titCell('PETERMANN — RELATÓRIO FINANCEIRO');
     r++;
 
     // Subtítulo
-    merge(ws, r, 0, r, 6);
+    merge(ws, r, 0, r, 8);
     ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Colaborador: ${colab.nome||''}    Núcleo: ${colab.nucleo||''}    Ano: ${ano}`);
     r++; r++; // pula linha
 
     // Cabeçalho
-    hdrRow(ws, r, ['Mês','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo']);
+    hdrRow(ws, r, ['Mês','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo','Pend. Anterior','Saldo Acum.']);
     r++;
 
     let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
+    let acumRDM=0, acumRDA=0;
     for (let m = 1; m <= 12; m++) {
       const ns = notas.filter(n => n.mes===m && n.ano===ano && !n.deleted);
       const rs = repasses.filter(r => r.mes===m && r.ano===ano && !r.deleted);
@@ -112,6 +113,11 @@ window.Excel = (() => {
       const rdaR = rs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+cur(r.valor),0);
       tRDMg+=rdmG; tRDMr+=rdmR; tRDAg+=rdaG; tRDAr+=rdaR;
       const sRDM = rdmR-rdmG, sRDA = rdaR-rdaG;
+
+      const pendAnterior = acumRDM + acumRDA;  // antes de adicionar este mês
+      acumRDM += sRDM; acumRDA += sRDA;
+      const saldoAcum = acumRDM + acumRDA;
+
       ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[m-1]);
       ws[XLSX.utils.encode_cell({r,c:1})] = numCell(rdmG);
       ws[XLSX.utils.encode_cell({r,c:2})] = numCell(rdmR);
@@ -119,6 +125,8 @@ window.Excel = (() => {
       ws[XLSX.utils.encode_cell({r,c:4})] = numCell(rdaG);
       ws[XLSX.utils.encode_cell({r,c:5})] = numCell(rdaR);
       ws[XLSX.utils.encode_cell({r,c:6})] = sRDA < 0 ? numNeg(sRDA) : numCell(sRDA);
+      ws[XLSX.utils.encode_cell({r,c:7})] = pendAnterior < 0 ? numNeg(pendAnterior) : numCell(pendAnterior || 0);
+      ws[XLSX.utils.encode_cell({r,c:8})] = saldoAcum < 0 ? numNeg(saldoAcum) : numCell(saldoAcum);
       r++;
     }
 
@@ -131,15 +139,17 @@ window.Excel = (() => {
     ws[XLSX.utils.encode_cell({r,c:4})] = totCell(tRDAg);
     ws[XLSX.utils.encode_cell({r,c:5})] = totCell(tRDAr);
     ws[XLSX.utils.encode_cell({r,c:6})] = sTDAr < 0 ? totNeg(sTDAr) : totCell(sTDAr);
+    ws[XLSX.utils.encode_cell({r,c:7})] = { t:'s', v:'', s:{ border:BORDER_THIN } };
+    ws[XLSX.utils.encode_cell({r,c:8})] = (acumRDM+acumRDA) < 0 ? totNeg(acumRDM+acumRDA) : totCell(acumRDM+acumRDA);
     r += 2;
 
     // Geração
-    merge(ws, r, 0, r, 6);
+    merge(ws, r, 0, r, 8);
     ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — Petermann App`);
     r++;
 
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:6}});
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:3,c:0},e:{r:3+11,c:6}}) };
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:8}});
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:3,c:0},e:{r:3+11,c:8}}) };
     return ws;
   }
 
