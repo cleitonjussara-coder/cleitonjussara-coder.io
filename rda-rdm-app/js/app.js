@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3004,6 +3004,10 @@ function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */
 function abrirFormRepasse() {
+  /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
+     lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
+     como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
+  $('rep-tipo').value  = 'RDA';
   $('rep-data').value  = hoje();
   $('rep-valor').value = '';
   $('rep-desc').value  = '';
@@ -3024,7 +3028,8 @@ async function salvarRepasse() {
   fecharFormRepasse();
   await carregarDadosLocais();
   renderSaldo();
-  toast('Repasse lançado!');
+  // o tipo vai no aviso: erro de tipo é invisível no valor e só aparece no saldo
+  toast(`Repasse ${tipo} de ${brl(valor)} lançado!`);
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
 }
