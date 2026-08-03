@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -863,15 +863,17 @@ function renderHome() {
   /* ── Composição dos gastos (donut) ──────────────────────── */
   const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
   const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && f(n)));
+  /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
+     o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
   const cats = [
     { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
       val: somaRDM(n => n.subtipo === 'Abastecimento') },
-    { key:'hosp',   name:'RDM · Hospedagem',    curto:'Hosped.',  cor:'var(--accent)',
+    { key:'hosp',   name:'RDM · Hospedagens',   curto:'Hosped.',  cor:'var(--accent)',
       val: somaRDM(n => n.subtipo === 'Hospedagem') },
     // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
-    { key:'outros', name:'RDM · Outros',        curto:'Outros',   cor:'#94a3b8',
+    { key:'outros', name:'RDM · Outros (Borracharia/Oficina/EPIs)', curto:'Outros', cor:'#94a3b8',
       val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
-    { key:'rda',    name:'RDA · Diárias',       curto:'RDA',      cor:'var(--primary)',
+    { key:'rda',    name:'RDA · Alimentação',   curto:'RDA',      cor:'var(--primary)',
       val: A.rdaG },
   ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
   if (dashFatiaSel && !cats.some(c => c.key === dashFatiaSel)) dashFatiaSel = null;
@@ -1061,25 +1063,25 @@ function renderHome() {
     <div class="db-grid">
       <button class="db-kpi rdm" onclick="switchView('saldo')">
         <div class="db-kpi-top">
-          <span class="db-kpi-title">Saldo RDM</span>
+          <span class="db-kpi-title">Saldo de RDM Recebido</span>
           ${rdmAcc.pendenciaAnterior < 0
             ? `<span class="dl dl-ruim">Pend. ${brl(rdmAcc.pendenciaAnterior)}</span>`
             : (rdmAcc.pendenciaAnterior > 0
               ? `<span class="dl dl-bom">Créd. ${brl(rdmAcc.pendenciaAnterior)}</span>` : '')}
         </div>
         <span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
-        <span class="db-kpi-sub">${brl(rdmAcc.gastoMes)} gasto · ${brl(rdmAcc.repasseMes)} rec.</span>
+        <span class="db-kpi-sub">Gasto ${brl(rdmAcc.gastoMes)} · Recebido ${brl(rdmAcc.repasseMes)}</span>
       </button>
       <button class="db-kpi rda" onclick="switchView('saldo')">
         <div class="db-kpi-top">
-          <span class="db-kpi-title">Saldo RDA</span>
+          <span class="db-kpi-title">Saldo de RDA Recebido</span>
           ${rdaAcc.pendenciaAnterior < 0
             ? `<span class="dl dl-ruim">Pend. ${brl(rdaAcc.pendenciaAnterior)}</span>`
             : (rdaAcc.pendenciaAnterior > 0
               ? `<span class="dl dl-bom">Créd. ${brl(rdaAcc.pendenciaAnterior)}</span>` : '')}
         </div>
         <span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
-        <span class="db-kpi-sub">${brl(rdaAcc.gastoMes)} gasto · ${brl(rdaAcc.repasseMes)} rec.</span>
+        <span class="db-kpi-sub">Gasto ${brl(rdaAcc.gastoMes)} · Recebido ${brl(rdaAcc.repasseMes)}</span>
       </button>
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
@@ -1313,11 +1315,15 @@ function renderSaldo() {
   const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
   const rs = repasses.filter(r => r.mes===filMes && r.ano===filAno);
 
-  // breakdown RDM por subtipo
-  const subs = ['Abastecimento','Hospedagem','Outros'];
+  // breakdown RDM por subtipo — rotulo conforme a planilha padrao, chave inalterada
+  const subs = [
+    { key:'Abastecimento', lbl:'Abastecimento' },
+    { key:'Hospedagem',    lbl:'Hospedagens' },
+    { key:'Outros',        lbl:'Outros (Borracharia/Oficina/EPIs)' },
+  ];
   const subHtml = subs.map(s => {
-    const v = ns.filter(n=>n.tipo==='RDM'&&n.subtipo===s).reduce((a,n)=>a+Number(n.valor||0),0);
-    return v>0 ? `<div class="sub-row"><span>${s}</span><span>${brl(v)}</span></div>` : '';
+    const v = ns.filter(n=>n.tipo==='RDM'&&n.subtipo===s.key).reduce((a,n)=>a+Number(n.valor||0),0);
+    return v>0 ? `<div class="sub-row"><span>${s.lbl}</span><span>${brl(v)}</span></div>` : '';
   }).join('');
 
   // repasses do mês
