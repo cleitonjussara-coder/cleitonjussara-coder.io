@@ -155,11 +155,13 @@ window.Gestor = (() => {
                 <span class="bal-type">RDM</span>
                 <span class="bal-val">${brl(rdmR-rdmG)}</span>
                 <span class="bal-detail">Gasto ${brl(rdmG)}</span>
+                <span class="bal-detail">Recebido ${brl(rdmR)}</span>
               </div>
               <div class="bal-box ${rdaR-rdaG<0?'neg':'pos'}">
                 <span class="bal-type">RDA</span>
                 <span class="bal-val">${brl(rdaR-rdaG)}</span>
                 <span class="bal-detail">Gasto ${brl(rdaG)}</span>
+                <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>
           </div>`;
