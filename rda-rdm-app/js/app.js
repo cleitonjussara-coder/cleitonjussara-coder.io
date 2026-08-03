@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2722,14 +2722,23 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
   ov.style.display = 'flex';
   $('ocr-progress').textContent = 'Procurando QR Code…';
   try {
-    // Busca 1: QR Code dentro da imagem
+    // Busca 1: QR Code na foto INTEIRA — o QR pode cair fora do recorte
     const qr = await _lerQRdaImagem(file);
 
     // OCR do texto impresso — usado principalmente para o VALOR
     let ocr = ocrPronto || {};
     if (!ocrPronto) {
+      /* Recorte antes do OCR: lendo a foto toda, mesa, mão e a nota do lado
+         entram no texto e viram valor/CNPJ errado. Alimenta só a leitura —
+         o anexo salvo continua sendo a foto original (evidência fiscal). */
+      let alvo = file;
+      if (window.Recorte) {
+        ov.style.display = 'none';                 // o recorte assume a tela
+        try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
+        ov.style.display = 'flex';
+      }
       $('ocr-progress').textContent = 'Lendo o texto…';
-      try { ocr = await OCR.processar(file); } catch (_) {}
+      try { ocr = await OCR.processar(alvo); } catch (_) {}
     }
 
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido

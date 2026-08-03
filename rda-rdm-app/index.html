@@ -464,6 +464,29 @@ select.inp{cursor:pointer}
               font-family:inherit;cursor:pointer;width:100%;text-align:left;transition:transform .1s ease}
 .db-pend-item:active{transform:scale(.98)}
 .db-pend-item.ok{background:#F0FBF4;border-color:#BBEFD0;cursor:default}
+
+/* ── Recorte da foto (só alimenta o OCR) ───────────────── */
+/* z-index 110: acima do form da nota (100), abaixo do toast (200) */
+#crop-overlay{display:none;position:fixed;inset:0;z-index:110;background:#111;
+              flex-direction:column;gap:10px;padding:14px;
+              padding-top:calc(14px + env(safe-area-inset-top,0px));
+              padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+.crop-hd{color:#fff;text-align:center;display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.crop-tit{font-size:15px;font-weight:800}
+#crop-dica{font-size:11.5px;opacity:.72;line-height:1.3}
+.crop-palco{flex:1;position:relative;display:flex;align-items:center;justify-content:center;
+            overflow:hidden;touch-action:none;min-height:0}
+#crop-img{max-width:100%;max-height:100%;display:block;user-select:none;-webkit-user-drag:none}
+.crop-rect{position:absolute;border:2px solid #fff;cursor:move;touch-action:none;
+           box-shadow:0 0 0 9999px rgba(0,0,0,.62)}
+.crop-alca{position:absolute;width:24px;height:24px;background:#fff;border-radius:50%;
+           box-shadow:0 1px 5px rgba(0,0,0,.5);touch-action:none}
+.crop-alca.nw{left:-12px;top:-12px;cursor:nwse-resize}
+.crop-alca.ne{right:-12px;top:-12px;cursor:nesw-resize}
+.crop-alca.sw{left:-12px;bottom:-12px;cursor:nesw-resize}
+.crop-alca.se{right:-12px;bottom:-12px;cursor:nwse-resize}
+.crop-ft{display:flex;gap:10px;flex-shrink:0}
+.crop-ft .btn{flex:1}
 /* data suspeita: contamina o saldo em silêncio, então destoa das demais */
 .db-pend-item.alerta{background:#FFF7ED;border-color:#FDBA74}
 .db-pend-item.alerta .db-pend-txt b{font-weight:800;color:#9A3412}
@@ -836,6 +859,28 @@ select.inp{cursor:pointer}
   <div class="ocr-spin"></div>
   <div id="ocr-progress">Preparando OCR…</div>
 </div>
+
+<!-- Recorte: enquadra a nota antes do OCR. Só alimenta a leitura —
+     o anexo salvo continua sendo a foto inteira. -->
+<div id="crop-overlay">
+  <div class="crop-hd">
+    <span class="crop-tit">Enquadre a nota</span>
+    <span id="crop-dica">Arraste os cantos para enquadrar a nota</span>
+  </div>
+  <div class="crop-palco" id="crop-palco">
+    <img id="crop-img" alt="Foto da nota para recorte">
+    <div class="crop-rect" id="crop-rect">
+      <span class="crop-alca nw" data-alca="nw"></span>
+      <span class="crop-alca ne" data-alca="ne"></span>
+      <span class="crop-alca sw" data-alca="sw"></span>
+      <span class="crop-alca se" data-alca="se"></span>
+    </div>
+  </div>
+  <div class="crop-ft">
+    <button type="button" class="btn btn-outline" id="crop-inteira">Foto inteira</button>
+    <button type="button" class="btn btn-primary" id="crop-usar">Usar recorte</button>
+  </div>
+</div>
 <!-- input oculto para foto da nota (lê QR + texto da mesma imagem) -->
 <input type="file" id="f-foto-ocr" accept="image/*" capture="environment" style="display:none"
        onchange="onFotoNota(event)">
@@ -1110,16 +1155,17 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=62"></script>
-<script defer src="js/nfce.js?v=62"></script>
-<script defer src="js/sefaz.js?v=62"></script>
-<script defer src="js/brasilapi.js?v=62"></script>
-<script defer src="js/ocr.js?v=62"></script>
-<script defer src="js/excel.js?v=62"></script>
-<script defer src="js/gestor.js?v=62"></script>
-<script defer src="js/gdrive.js?v=62"></script>
-<script defer src="js/gsheets.js?v=62"></script>
-<script defer src="js/app.js?v=62"></script>
+<script defer src="js/db.js?v=63"></script>
+<script defer src="js/nfce.js?v=63"></script>
+<script defer src="js/sefaz.js?v=63"></script>
+<script defer src="js/brasilapi.js?v=63"></script>
+<script defer src="js/ocr.js?v=63"></script>
+<script defer src="js/recorte.js?v=63"></script>
+<script defer src="js/excel.js?v=63"></script>
+<script defer src="js/gestor.js?v=63"></script>
+<script defer src="js/gdrive.js?v=63"></script>
+<script defer src="js/gsheets.js?v=63"></script>
+<script defer src="js/app.js?v=63"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
