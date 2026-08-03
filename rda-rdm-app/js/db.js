@@ -250,7 +250,16 @@ window.DB = (() => {
           { contentType: mime, upsert: true });
         if (error) { falhou(error.message); continue; }
 
-        await sb.from('notas').update({ foto_path: path }).eq('id', f.nota_id);
+        /* O erro deste update PRECISA ser checado. Sem isso, quando ele
+           falhava (RLS, queda de rede, linha ainda não inserida) o código
+           seguia em frente, apagava o blob local e o servidor ficava sem
+           foto_path — no pull seguinte o null do servidor sobrescrevia o
+           caminho local e a foto sumia de vez, mesmo estando no Storage.
+           Falhando aqui, o blob fica e a próxima sync tenta de novo. */
+        const { error: erroRef } = await sb.from('notas')
+          .update({ foto_path: path }).eq('id', f.nota_id);
+        if (erroRef) { falhou(erroRef.message); continue; }
+
         // grava o caminho TAMBÉM no registro local: sem isso a nota ficava sem
         // foto_path até o próximo pull, o 📎 desaparecia da lista e o painel
         // contava a nota como "sem anexo" mesmo com a foto já no servidor.
@@ -287,7 +296,16 @@ window.DB = (() => {
           const local = await _get(table, row.id);
           // remoto vence se local já está sincronizado (ou não existe)
           if (!local || local.synced || new Date(row.updated_at) >= new Date(local.updated_at)) {
-            await _put(table, { ...row, synced: true, foto_local: local?.foto_local || null });
+            const merge = { ...row, synced: true, foto_local: local?.foto_local || null };
+            /* foto_path é a exceção ao "remoto vence": o app nunca remove
+               anexo (ele é obrigatório), então null do servidor não é uma
+               remoção intencional — é a linha que ficou para trás. Deixar
+               sobrescrever apagava a referência de uma foto que está no
+               Storage, e a nota ficava sem imagem para sempre. */
+            if (table === 'notas' && !row.foto_path && local?.foto_path) {
+              merge.foto_path = local.foto_path;
+            }
+            await _put(table, merge);
             pulled++;
           }
         }
@@ -298,13 +316,46 @@ window.DB = (() => {
     return pulled;
   }
 
+  /* Recupera notas que perderam o foto_path mas cujo arquivo continua no
+     Storage — o estrago que o update não checado (corrigido acima) já fez.
+     O caminho é determinístico (user_id/nota_id.ext), então basta listar a
+     pasta do usuário e casar pelo id da nota. Só reconecta referência: não
+     apaga nem sobe nada. */
+  async function repararFotosOrfas(sb, userId) {
+    if (!sb || !navigator.onLine || !userId) return 0;
+    const orfas = (await _getAllByIdx('notas', 'user_id', userId))
+      .filter(n => !n.deleted && !n.foto_path);
+    if (!orfas.length) return 0;
+
+    const { data: arquivos, error } = await sb.storage.from('notas-fotos')
+      .list(userId, { limit: 1000 });
+    if (error || !arquivos?.length) return 0;
+
+    const porId = new Map();
+    arquivos.forEach(a => porId.set(String(a.name).replace(/\.[^.]+$/, ''), a.name));
+
+    let recuperadas = 0;
+    for (const n of orfas) {
+      const arq = porId.get(n.id);
+      if (!arq) continue;
+      const path = `${userId}/${arq}`;
+      const { error: e } = await sb.from('notas').update({ foto_path: path }).eq('id', n.id);
+      if (e) continue;
+      await _put('notas', { ...n, foto_path: path });
+      recuperadas++;
+    }
+    return recuperadas;
+  }
+
   async function sync(sb, userId) {
     if (_running) return null;
     _running = true;
     try {
       const push   = await pushPending(sb);
       const pulled = await pullIncremental(sb, userId);
-      const result = { ...push, pulled };
+      let recuperadas = 0;
+      try { recuperadas = await repararFotosOrfas(sb, userId); } catch (_) {}
+      const result = { ...push, pulled, recuperadas };
       window.dispatchEvent(new CustomEvent('db-synced', { detail: result }));
       return result;
     } finally {
@@ -326,7 +377,7 @@ window.DB = (() => {
   return {
     open,
     saveNota, getNotasUser, softDeleteNota,
-    saveFotoLocal, getFotoLocal, repararFotosLocais,
+    saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta,
