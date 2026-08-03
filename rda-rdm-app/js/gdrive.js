@@ -46,7 +46,8 @@ window.GDrive = (() => {
 
       accessToken = tok;
       tokenExpiry = exp;
-      await _refreshIndex();
+      // índice em segundo plano: abrir o app não espera pela varredura
+      _garantirIndice().catch(e => console.warn('GDrive índice:', e.message));
       return true;
     } catch (e) {
       console.warn('GDrive.init:', e.message);
@@ -81,10 +82,11 @@ window.GDrive = (() => {
         accessToken = resp.access_token;
         tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
         sessionStorage.setItem(LS_KEY, JSON.stringify({ tok: accessToken, exp: tokenExpiry }));
-        try {
-          await _refreshIndex();
-          resolve(true);
-        } catch (e) { reject(e); }
+        /* Conecta na hora. O índice vai em segundo plano — era ele que fazia
+           o botão "Conectar" ficar cada vez mais lento conforme o arquivo de
+           fotos crescia, esperando algo que a conexão não usa. */
+        _garantirIndice().catch(e => console.warn('GDrive índice:', e.message));
+        resolve(true);
       };
       // prompt: '' → tenta sem UI se já consentido; 'select_account' → mostra seletor
       tokenClient.requestAccessToken({ prompt: 'select_account' });
@@ -98,10 +100,11 @@ window.GDrive = (() => {
     if (accessToken && window.google?.accounts?.oauth2) {
       google.accounts.oauth2.revoke(accessToken, () => {});
     }
-    accessToken  = null;
-    tokenExpiry  = 0;
-    fileIndex    = {};
-    _folderCache = {};
+    accessToken   = null;
+    tokenExpiry   = 0;
+    fileIndex     = {};
+    _folderCache  = {};
+    _indicePronto = false;   // sem isso a reconexão reusaria o índice da conta antiga
     sessionStorage.removeItem(LS_KEY);
   }
 
@@ -177,12 +180,31 @@ window.GDrive = (() => {
     const files = await _walkTree(FOLDER_ID);
     fileIndex = {};
     files.forEach(f => { fileIndex[f.name] = f.id; });
+    _indicePronto = true;
     console.log(`GDrive ✓ ${Object.keys(fileIndex).length} arquivos (raiz + subpastas)`);
   }
 
+  /* ÍNDICE PREGUIÇOSO
+     Montar o índice varre a árvore inteira (raiz + Colaborador/Mês-Ano/Tipo),
+     e isso crescia junto com o arquivo de fotos. Como ele bloqueava o init() e
+     o requestAccess(), conectar no Drive ficava cada vez mais lento no celular
+     — esperando um índice que a conexão em si não precisa.
+     Agora só quem realmente depende dele espera: o upload, que consulta o
+     índice para atualizar o arquivo em vez de duplicar. */
+  let _indicePronto  = false;
+  let _indicePromise = null;
+  function _garantirIndice() {
+    if (_indicePronto) return Promise.resolve();
+    if (!_indicePromise) {
+      _indicePromise = _refreshIndex()
+        .finally(() => { _indicePromise = null; });
+    }
+    return _indicePromise;                 // chamadas simultâneas dividem a mesma varredura
+  }
+
   /* atualiza o índice sob demanda (ex.: antes de consolidar fotos da equipe,
-     p/ não recriar o que já está no Drive) */
-  async function atualizarIndice() { _checkConnected(); await _refreshIndex(); }
+     p/ não recriar o que já está no Drive) — sempre força releitura */
+  async function atualizarIndice() { _checkConnected(); _indicePronto = false; await _garantirIndice(); }
 
   /* ════════════════════════════════════════════
      SUBPASTAS — acha ou cria, com cache de Promise
@@ -266,12 +288,25 @@ window.GDrive = (() => {
   /* ════════════════════════════════════════════
      SALVAR / LER JSON
   ════════════════════════════════════════════ */
+  /* Acha UM arquivo pelo nome na raiz: uma consulta, em vez da varredura
+     inteira. O JSON de notas é tudo que o sync precisa, e ele mora na raiz —
+     não faz sentido percorrer as subpastas de fotos para achá-lo. */
+  async function _acharNaRaiz(filename) {
+    if (fileIndex[filename]) return fileIndex[filename];
+    const q = `name='${String(filename).replace(/'/g, "\\'")}' and '${FOLDER_ID}' in parents and trashed=false`;
+    const data = await _req(`${FILES_API}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`);
+    const id = data.files?.[0]?.id || null;
+    if (id) fileIndex[filename] = id;
+    return id;
+  }
+
   async function saveJSON(filename, data) {
     _checkConnected();
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
 
-    if (fileIndex[filename]) {
-      const res = await fetch(`${UPLOAD_API}/${fileIndex[filename]}?uploadType=media`, {
+    const existente = await _acharNaRaiz(filename);
+    if (existente) {
+      const res = await fetch(`${UPLOAD_API}/${existente}?uploadType=media`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: blob,
@@ -296,8 +331,10 @@ window.GDrive = (() => {
   }
 
   async function loadJSON(filename) {
-    if (!fileIndex[filename] || !isConnected()) return null;
-    const res = await fetch(`${FILES_API}/${fileIndex[filename]}?alt=media`, {
+    if (!isConnected()) return null;
+    const id = await _acharNaRaiz(filename).catch(() => null);
+    if (!id) return null;
+    const res = await fetch(`${FILES_API}/${id}?alt=media`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     return res.ok ? res.json() : null;
@@ -314,6 +351,10 @@ window.GDrive = (() => {
 
     const fileext    = (ext || 'jpg').toLowerCase();
     const filename   = `foto-${nota.id}.${fileext}`;
+    /* Aqui o índice é indispensável: sem ele o upload não sabe que o arquivo
+       já existe e criaria uma cópia a cada envio. É o único ponto que ainda
+       espera a varredura — e ela roda uma vez só, não a cada conexão. */
+    await _garantirIndice();
     const existingId = fileIndex[filename];
     const appProperties = {
       nota_id      : _trim(nota.id),
