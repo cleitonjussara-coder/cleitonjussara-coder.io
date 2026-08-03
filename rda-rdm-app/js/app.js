@@ -32,7 +32,31 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
+
+/* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
+const EMPRESA = {
+  razao:     'PETERMANN & MORAIS LTDA ME',
+  cnpj:      '17.117.768/0001-42',
+  endereco:  'Rua Natal Vasconcelos Montes, 185 - Sala 01. Centro.',
+  cep:       '75.503-340',
+  cidade:    'Itumbiara, Goiás',
+  titulo:    'DESPESAS CORPORATIVAS',
+  subtitulo: 'Relatório de Despesas Mensais (RDM) e Relatório de Despesas com Alimentações (RDA)',
+};
+
+/* Safra derivada do ano do exercício, como na planilha: exercício 2026 → "25/26".
+   Se a empresa mudar o corte da safra, é só ajustar aqui. */
+const safraDoExercicio = ano =>
+  `${String((ano - 1) % 100).padStart(2,'0')}/${String(ano % 100).padStart(2,'0')}`;
+
+/* Trimestres da aba BANCO DE DADOS: T1 = Jan-Mar, T2 = Abr-Jun, T3 = Jul-Set, T4 = Out-Dez */
+const TRIMESTRES = [
+  { id:'T1', meses:[1,2,3],    rotulo:'Jan–Mar' },
+  { id:'T2', meses:[4,5,6],    rotulo:'Abr–Jun' },
+  { id:'T3', meses:[7,8,9],    rotulo:'Jul–Set' },
+  { id:'T4', meses:[10,11,12], rotulo:'Out–Dez' },
+];
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -614,6 +638,30 @@ function _agregaPeriodo(mes, ano, modo) {
            gasto: rdmG + rdaG, recebido: rdmR + rdaR };
 }
 
+/* Resumo por trimestre do exercício, como o quadro da aba BANCO DE DADOS.
+   Soma GASTOS (não repasses) — é o que as fórmulas M6/M8 da planilha apontam. */
+function _resumoTrimestral(ano) {
+  const porMes = Array.from({ length: 13 }, () => ({ rdm: 0, rda: 0 }));
+  notas.forEach(n => {
+    if (n.deleted || n.ano !== ano) return;
+    const m = porMes[n.mes];
+    if (!m) return;
+    if (n.tipo === 'RDM') m.rdm += _n(n.valor);
+    else if (n.tipo === 'RDA') m.rda += _n(n.valor);
+  });
+  const trims = TRIMESTRES.map(t => {
+    const rdm = t.meses.reduce((a, m) => a + porMes[m].rdm, 0);
+    const rda = t.meses.reduce((a, m) => a + porMes[m].rda, 0);
+    return { ...t, rdm, rda, total: rdm + rda };
+  });
+  return {
+    trims,
+    totalRdm:  trims.reduce((a, t) => a + t.rdm, 0),
+    totalRda:  trims.reduce((a, t) => a + t.rda, 0),
+    totalGeral: trims.reduce((a, t) => a + t.total, 0),
+  };
+}
+
 /* Saldo acumulado mês a mês para RDM/RDA (independentes).
    Pendência negativa de meses anteriores é abatida do repasse do mês atual.
    Ex.: Mês 1 Gasto 500 Repasse 300 → Pendência -200
@@ -1017,9 +1065,81 @@ function renderHome() {
     </div>`
     : `<div class="db-hint">Toque numa coluna para ver os valores do período</div>`;
 
+  /* ── Cabeçalho institucional (aba CABEÇALHO da planilha) ── */
+  const cabecalhoHtml = `
+    <div class="db-emp">
+      <div class="db-emp-razao">${esc(EMPRESA.razao)}</div>
+      <div class="db-emp-linha">CNPJ ${esc(EMPRESA.cnpj)}</div>
+      <div class="db-emp-linha">${esc(EMPRESA.endereco)} CEP ${esc(EMPRESA.cep)} — ${esc(EMPRESA.cidade)}</div>
+      <div class="db-emp-tit">${esc(EMPRESA.titulo)}</div>
+      <div class="db-emp-sub">${esc(EMPRESA.subtitulo)}</div>
+      <div class="db-emp-campos">
+        <div class="db-emp-campo">
+          <span class="db-emp-lbl">Funcionário</span>
+          <span class="db-emp-val">${esc(user?.nome || user?.email || '—')}</span>
+        </div>
+        <div class="db-emp-campo">
+          <span class="db-emp-lbl">Safra</span>
+          <span class="db-emp-val">${esc(safraDoExercicio(filAno))}</span>
+        </div>
+        <div class="db-emp-campo">
+          <span class="db-emp-lbl">Ano do Exercício</span>
+          <span class="db-emp-val">${filAno}</span>
+        </div>
+      </div>
+    </div>`;
+
+  /* ── Quadro trimestral (aba BANCO DE DADOS) ─────────────── */
+  const T = _resumoTrimestral(filAno);
+  /* valor cheio (sem "R$", que vai no título) — o quadro é conferido contra a planilha */
+  const numBR = v => v.toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const celTrim = (v, cls = '') =>
+    `<td class="${cls}${v > 0 ? '' : ' zero'}">${v > 0 ? numBR(v) : '—'}</td>`;
+  const trimestralHtml = `
+    <div class="db-card">
+      <div class="db-card-title">
+        <span>Resumo trimestral · ${filAno}</span>
+        <span style="font-size:10px;color:var(--text2);font-weight:600">gastos em R$</span>
+      </div>
+      <div class="db-trim-wrap">
+        <table class="db-trim">
+          <thead>
+            <tr>
+              <th></th>
+              ${T.trims.map(t => `<th>${t.id}<span>${esc(t.rotulo)}</span></th>`).join('')}
+              <th class="tot">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>RDM</th>
+              ${T.trims.map(t => celTrim(t.rdm)).join('')}
+              ${celTrim(T.totalRdm, 'tot')}
+            </tr>
+            <tr>
+              <th>RDA</th>
+              ${T.trims.map(t => celTrim(t.rda)).join('')}
+              ${celTrim(T.totalRda, 'tot')}
+            </tr>
+            <tr class="soma">
+              <th>Total/Trim</th>
+              ${T.trims.map(t => celTrim(t.total)).join('')}
+              ${celTrim(T.totalGeral, 'tot')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="db-trim-geral">
+        <span>Total Geral do Exercício</span>
+        <b>${brl(T.totalGeral)}</b>
+      </div>
+    </div>`;
+
   /* ── Montagem ───────────────────────────────────────────── */
   $('app-content').innerHTML = `
   <div class="db-container">
+
+    ${cabecalhoHtml}
 
     <div class="db-header">
       <div class="mes-nav">
@@ -1113,6 +1233,8 @@ function renderHome() {
       ${gerarGraficoEvolucao(_dashEvo)}
       ${drillHtml}
     </div>
+
+    ${trimestralHtml}
 
     <div class="db-card">
       <div class="db-card-title">
