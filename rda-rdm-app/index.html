@@ -210,6 +210,21 @@ select.inp{cursor:pointer}
 .nota-valor{font-size:17px;font-weight:800;color:var(--primary-d)}
 .nota-actions{display:flex;gap:2px}
 .nota-data{font-size:12.5px;color:var(--text2);margin-left:auto}
+
+/* miniatura do anexo — some se a nota nao tem foto (card fica igual ao de antes) */
+.nota-card.com-thumb{display:grid;grid-template-columns:76px 1fr;align-items:start;
+                     grid-template-areas:"thumb head" "thumb body" "foot foot"}
+.nota-card.com-thumb .nota-thumb{grid-area:thumb}
+.nota-card.com-thumb .nota-head {grid-area:head}
+.nota-card.com-thumb .nota-body {grid-area:body}
+.nota-card.com-thumb .nota-foot {grid-area:foot}
+.nota-thumb{margin:10px 0 8px 12px;width:64px;height:64px;padding:0;cursor:pointer;
+            border:1px solid var(--border);border-radius:10px;background:var(--bg);
+            display:flex;align-items:center;justify-content:center;overflow:hidden;
+            transition:transform .15s ease}
+.nota-thumb:active{transform:scale(.95)}
+.nota-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.nota-thumb-ph{font-size:20px;opacity:.45}
 .sync-pending{font-size:13px}
 
 .tipo-badge{

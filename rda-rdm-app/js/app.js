@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1369,7 +1369,10 @@ function renderNotas() {
     ns.forEach(n => {
       const pendSync = n.synced===false ? '<span class="sync-pending" title="Pendente sync">⏳</span>' : '';
       html += `
-      <div class="nota-card" data-tipo="${n.tipo}">
+      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
+        ${n.foto_path||n.foto_local ? `
+        <button class="nota-thumb" id="thumb-${n.id}" onclick="verFoto('${n.id}')"
+                title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
@@ -1395,6 +1398,71 @@ function renderNotas() {
     html += `</div>`;
   }
   el.innerHTML = html;
+  _carregarMiniaturas(ns).catch(() => {});
+}
+
+/* ── Miniaturas do anexo na lista de notas ───────────────── */
+/* URLs de objeto criadas aqui; revogadas antes de cada novo render */
+let _thumbURLs = [];
+function _limparMiniaturas() {
+  _thumbURLs.forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+  _thumbURLs = [];
+}
+
+/* Preenche as miniaturas depois que a lista já está na tela, na mesma ordem
+   de fallback do verFoto: blob local (offline) → Drive → Supabase.
+   As notas que só existem no Supabase saem numa única chamada assinada. */
+async function _carregarMiniaturas(ns) {
+  _limparMiniaturas();
+  const comAnexo = (ns || []).filter(n => n.foto_path || n.foto_local);
+  if (!comAnexo.length) return;
+
+  const pendentes = [];
+  for (const n of comAnexo) {
+    const slot = $('thumb-' + n.id);
+    if (!slot) continue;
+
+    const local = await DB.getFotoLocal(n.id).catch(() => null);
+    if (local?.blob) {
+      const ext = local.ext || _extDoArquivo(local.blob);
+      /* só imagem vira object URL; PDF/XML mostram ícone e não precisam de blob */
+      const url = _ehImagemExt(ext) ? URL.createObjectURL(local.blob) : 'icone';
+      if (url !== 'icone') _thumbURLs.push(url);
+      _pintarMiniatura(slot, url, ext);
+      continue;
+    }
+    const driveUrl = GDrive.getFotoUrl?.(n.id);
+    if (driveUrl) {
+      _pintarMiniatura(slot, driveUrl, GDrive.getFotoExt?.(n.id) || _extDeUrl(n.foto_path || ''));
+      continue;
+    }
+    if (n.foto_path) pendentes.push(n);
+  }
+  if (!pendentes.length) return;
+
+  /* offline ou sem sessão: fica o 📎, que ainda abre o visualizador */
+  if (!sb || !navigator.onLine) return;
+
+  const { data } = await sb.storage.from('notas-fotos')
+    .createSignedUrls(pendentes.map(n => n.foto_path), 300);
+  (data || []).forEach((r, i) => {
+    const n = pendentes[i];
+    if (r?.signedUrl) _pintarMiniatura($('thumb-' + n.id), r.signedUrl, _extDeUrl(n.foto_path));
+  });
+}
+
+/* PDF/XML não têm o que renderizar: mostra o ícone do tipo em vez da imagem */
+function _pintarMiniatura(slot, url, ext) {
+  if (!slot || !url) return;
+  if (!_ehImagemExt(ext || 'jpg')) {
+    slot.innerHTML = `<span class="nota-thumb-ph">${ext === 'pdf' ? '📄' : '🧾'}</span>`;
+    return;
+  }
+  const img = new Image();
+  img.alt = 'Anexo da nota';
+  img.onload  = () => { slot.innerHTML = ''; slot.appendChild(img); };
+  img.onerror = () => {};   // mantém o 📎 do placeholder
+  img.src = url;
 }
 
 function mudarMes(delta) {
