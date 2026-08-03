@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1663,6 +1663,66 @@ async function exportSheetsEquipe() {
   } finally { setLoading(false); }
 }
 
+/* Diagnóstico de anexos — percorre a MESMA cascata que a miniatura e o
+   verFoto usam (blob local → Drive → Supabase) e reporta o erro exato de
+   cada etapa. Existe porque "a foto não aparece" tem pelo menos quatro
+   causas com conserto oposto: arquivo nunca subiu, referência perdida,
+   permissão de leitura negada, ou falha só na exibição. Sem isso, achar
+   qual delas é depende de rodar SQL no Supabase. */
+async function diagnosticoFotos() {
+  if (!sb || DEMO_MODE) { alert('Disponível apenas com Supabase configurado.'); return; }
+  const ov = $('ocr-overlay');
+  ov.style.display = 'flex';
+  $('ocr-progress').textContent = 'Verificando anexos…';
+  try {
+    const minhas   = notas.filter(n => !n.deleted && n.user_id === user.id);
+    const comPath  = minhas.filter(n => n.foto_path);
+    const semPath  = minhas.filter(n => !n.foto_path);
+
+    // amostra: até 5 das mais recentes que deveriam ter arquivo no servidor
+    const amostra = [...comPath].sort((a,b) =>
+      String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0, 5);
+
+    const linhas = [];
+    for (const n of amostra) {
+      const passos = [];
+      const local = await DB.getFotoLocal(n.id).catch(() => null);
+      passos.push(local?.blob ? 'local:ok' : 'local:não');
+      passos.push(GDrive.getFotoUrl?.(n.id) ? 'drive:ok' : 'drive:não');
+      try {
+        const r = await sb.storage.from('notas-fotos').download(n.foto_path);
+        passos.push(r.error ? `supabase:ERRO ${r.error.message}`
+                  : r.data  ? `supabase:ok ${Math.round(r.data.size/1024)}kB`
+                            : 'supabase:vazio');
+      } catch (e) { passos.push('supabase:EXCEÇÃO ' + e.message); }
+      linhas.push(`${fmtData(n.data)} ${n.tipo} ${brl(n.valor)}\n  ${n.foto_path}\n  ${passos.join(' | ')}`);
+    }
+
+    // blobs locais ainda não enviados
+    let pendentesLocais = 0;
+    for (const n of semPath) if ((await DB.getFotoLocal(n.id).catch(()=>null))?.blob) pendentesLocais++;
+
+    ov.style.display = 'none';
+    alert(
+      `DIAGNÓSTICO DE ANEXOS\n\n` +
+      `Minhas notas: ${minhas.length}\n` +
+      `Com foto_path (deveriam ter arquivo no servidor): ${comPath.length}\n` +
+      `Sem foto_path: ${semPath.length}\n` +
+      `  destas, com arquivo ainda só no aparelho: ${pendentesLocais}\n\n` +
+      (amostra.length
+        ? `AMOSTRA (${amostra.length} mais recentes):\n\n` + linhas.join('\n\n')
+        : 'Nenhuma nota com foto_path para testar.') +
+      `\n\nComo ler:\n` +
+      `• supabase:ok → arquivo existe e você consegue baixar\n` +
+      `• supabase:ERRO Object not found → arquivo não está lá OU a leitura foi negada\n` +
+      `• local:não e supabase:ERRO → é este caso que deixa a nota sem imagem`
+    );
+  } catch (e) {
+    ov.style.display = 'none';
+    alert('Diagnóstico falhou: ' + e.message);
+  }
+}
+
 /* Gestor: envia ao Drive as fotos de TODOS os colaboradores (todos os
    meses), organizadas em Colaborador/Mês-Ano/Tipo. Baixa cada foto do
    Supabase Storage e reúsa o upload que já cria as subpastas. Se a foto
@@ -1833,6 +1893,7 @@ function renderPerfil() {
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
+    <button class="btn btn-outline" onclick="diagnosticoFotos()">🔎 Diagnóstico de anexos</button>
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
       ${driveOk && GDrive.isConnected() ? `
