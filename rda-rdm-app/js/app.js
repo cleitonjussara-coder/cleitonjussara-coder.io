@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v65';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2844,7 +2844,27 @@ function _notaDuplicadaChave(chave, ignoreId) {
   return notas.find(n => n.id !== ignoreId && !n.deleted && _digitos(n.chave_nfce) === c) || null;
 }
 
+/* Trava de reentrância do Salvar.
+   Sem ela, um segundo toque durante os awaits (checagem online da chave,
+   compressão do anexo, gravação) reentrava em salvarNota() com nf-id ainda
+   vazio, e DB.saveNota gerava OUTRO uuid — duas notas iguais no banco.
+   Aparecia mais em RDA porque a trava anti-duplicata existente depende da
+   chave NFC-e, e cupom de restaurante costuma não ter chave. */
+let _salvandoNota = false;
 async function salvarNota() {
+  if (_salvandoNota) return;
+  _salvandoNota = true;
+  const btn = $('nf-btn-salvar');
+  if (btn) btn.disabled = true;
+  try {
+    await _salvarNotaInterno();
+  } finally {
+    _salvandoNota = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function _salvarNotaInterno() {
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
