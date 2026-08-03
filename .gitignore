@@ -3,6 +3,9 @@ files.zip
 .nojekyll
 .DS_Store
 
+# dependencias do lint (instaladas via npm install)
+node_modules/
+
 # gerados localmente, nao versionar
 petermann-locaweb.zip
 consultas-uso-storage.sql
