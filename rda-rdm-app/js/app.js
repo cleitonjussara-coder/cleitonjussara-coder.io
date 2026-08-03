@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1487,12 +1487,17 @@ async function _carregarMiniaturas(ns, pref = 'thumb-') {
       _pintarMiniatura(slot, url, ext);
       continue;
     }
+    /* Supabase ANTES do Drive. A URL do Drive leva o token na query
+       (?alt=media&access_token=…), formato que a API do Google não aceita
+       mais para autorizar: o <img> falha calado, cai no onerror e a nota
+       fica sem imagem — mesmo com o arquivo íntegro no Supabase. Como o
+       Drive vinha primeiro, o caminho que funciona nunca era tentado. */
+    if (n.foto_path) { pendentes.push(n); continue; }
+
     const driveUrl = GDrive.getFotoUrl?.(n.id);
     if (driveUrl) {
       _pintarMiniatura(slot, driveUrl, GDrive.getFotoExt?.(n.id) || _extDeUrl(n.foto_path || ''));
-      continue;
     }
-    if (n.foto_path) pendentes.push(n);
   }
   if (!pendentes.length) return;
 
@@ -1669,6 +1674,16 @@ async function exportSheetsEquipe() {
    causas com conserto oposto: arquivo nunca subiu, referência perdida,
    permissão de leitura negada, ou falha só na exibição. Sem isso, achar
    qual delas é depende de rodar SQL no Supabase. */
+/* Uma URL só serve se o <img> conseguir carregá-la. Erro de autorização
+   não vira exceção: vem como onerror mudo. */
+const _urlCarrega = url => new Promise(res => {
+  const i = new Image();
+  const t = setTimeout(() => { i.onload = i.onerror = null; res(false); }, 6000);
+  i.onload  = () => { clearTimeout(t); res(true);  };
+  i.onerror = () => { clearTimeout(t); res(false); };
+  i.src = url;
+});
+
 async function diagnosticoFotos() {
   if (!sb || DEMO_MODE) { alert('Disponível apenas com Supabase configurado.'); return; }
   const ov = $('ocr-overlay');
@@ -1688,7 +1703,14 @@ async function diagnosticoFotos() {
       const passos = [];
       const local = await DB.getFotoLocal(n.id).catch(() => null);
       passos.push(local?.blob ? 'local:ok' : 'local:não');
-      passos.push(GDrive.getFotoUrl?.(n.id) ? 'drive:ok' : 'drive:não');
+
+      /* Testa se a URL do Drive CARREGA, não só se foi montada. Marcar
+         "drive:ok" só por existir foi o que escondeu a causa real: a URL
+         existia, era escolhida na frente do Supabase, e não renderizava. */
+      const driveUrl = GDrive.getFotoUrl?.(n.id);
+      passos.push(!driveUrl ? 'drive:não'
+                : (await _urlCarrega(driveUrl)) ? 'drive:carrega'
+                : 'drive:NÃO CARREGA');
       try {
         const r = await sb.storage.from('notas-fotos').download(n.foto_path);
         passos.push(r.error ? `supabase:ERRO ${r.error.message}`
@@ -3058,16 +3080,19 @@ async function verFoto(id) {
   const local = await DB.getFotoLocal(id);
   if (local?.blob) { url = URL.createObjectURL(local.blob); ext = local.ext || _extDoArquivo(local.blob); }
 
-  // 2. Google Drive
-  if (!url) {
-    const driveUrl = GDrive.getFotoUrl?.(id);
-    if (driveUrl) { url = driveUrl; ext = GDrive.getFotoExt?.(id) || _extDeUrl(n.foto_path || ''); }
-  }
-
-  // 3. Supabase Storage
+  /* 2. Supabase Storage — ANTES do Drive. A URL do Drive leva o token na
+     query (?alt=media&access_token=…), formato que a API do Google não
+     aceita mais para autorizar: a imagem não carrega e o visualizador
+     abria vazio, mesmo com o arquivo íntegro no Supabase. */
   if (!url && n.foto_path && sb) {
     const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
     if (data?.signedUrl) { url = data.signedUrl; ext = _extDeUrl(n.foto_path); }
+  }
+
+  // 3. Google Drive — último recurso (nota que só existe no Drive)
+  if (!url) {
+    const driveUrl = GDrive.getFotoUrl?.(id);
+    if (driveUrl) { url = driveUrl; ext = GDrive.getFotoExt?.(id) || _extDeUrl(n.foto_path || ''); }
   }
 
   if (!url) { toast('Anexo não encontrado', 'err'); return; }
