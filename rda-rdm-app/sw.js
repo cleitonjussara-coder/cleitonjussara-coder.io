@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    Service Worker — Petermann App
    Estratégia:
-     • Shell (HTML/JS/CSS locais) → Cache First
+     • Shell (HTML/JS/CSS locais) → Network First (cache só como reserva offline)
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
