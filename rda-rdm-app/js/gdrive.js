@@ -340,13 +340,16 @@ window.GDrive = (() => {
       const f    = arquivos[i];
       const p    = f.appProperties || {};
       const pai  = f.parents?.[0] || null;
-      /* o nome do colaborador não está nas appProperties — vem da pasta em
-         que o arquivo já mora; só se ele estiver solto na raiz é que o mapa
-         de perfis (passado pelo app) entra */
+      /* O nome oficial do perfil vence o nome da pasta atual: é o que funde
+         as pastas que o mesmo colaborador acumulou quando ainda não tinha
+         nome preenchido (o upload caía no prefixo do e-mail — daí existirem
+         "cleiton" e "cleitonjussara" lado a lado). Sem entrada no mapa —
+         colaborador de outro perfil, que este usuário não enxerga — mantém a
+         pasta onde já está, sem chutar. */
       const nota = {
         tipo: p.tipo, subtipo: p.subtipo, mes: p.mes, ano: p.ano, data: p.data,
         user_id: p.user_id,
-        user_nome: _pastaColabDe(pai, folderMap) || nomePorUserId[p.user_id] || '',
+        user_nome: nomePorUserId[p.user_id] || _pastaColabDe(pai, folderMap) || '',
       };
       try {
         const destino = await _resolveDestino(nota);

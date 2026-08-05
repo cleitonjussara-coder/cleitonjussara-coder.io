@@ -568,9 +568,20 @@ async function migrarPastasDrive() {
 
   setLoading(true);
   try {
+    /* mapa id → nome oficial: é ele que funde as pastas antigas de um mesmo
+       colaborador (ex.: "cleitonjussara", do tempo em que o nome não estava
+       preenchido, e "cleiton"). O gestor enxerga todos; quem não enxerga fica
+       só com o próprio, e as pastas dos outros seguem intactas. */
+    const nomePorUserId = {};
+    if (sb && !DEMO_MODE) {
+      const { data: collabs } = await sb.from('colaboradores').select('id,nome');
+      (collabs || []).forEach(c => { if (c.nome) nomePorUserId[c.id] = c.nome; });
+    }
+    if (user.nome) nomePorUserId[user.id] = user.nome;   // o próprio perfil manda
+
     const r = await GDrive.migrarParaModeloPadrao({
-      nomePorUserId : { [user.id]: user.nome },
-      onProgress    : (feitos, total) => setLoading(true, `Movendo ${feitos}/${total}…`),
+      nomePorUserId,
+      onProgress : (feitos, total) => setLoading(true, `Movendo ${feitos}/${total}…`),
     });
     if (!r.total)      toast('Nenhuma foto encontrada no Drive');
     else if (r.falhas) toast(`${r.movidos} movidas, ${r.falhas} falharam — veja o console`, 'err');
