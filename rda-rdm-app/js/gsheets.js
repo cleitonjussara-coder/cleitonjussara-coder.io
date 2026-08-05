@@ -39,9 +39,19 @@ window.GSheets = (() => {
                         'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const cur = v => parseFloat(Number(v || 0).toFixed(2));
 
-  /* linhas em branco que sobram em cada bloco, para lançamento manual */
-  const MIN_RDM = 10;
-  const MIN_RDA = 8;
+  /* Bloco do tamanho exato dos lançamentos: mês sem nota nem aparece, e mês
+     com nota não reserva linha em branco. É o que mantém cada aba curta o
+     bastante para caber numa página — a planilha é regerada pelo botão, então
+     o mês surge sozinho quando a primeira nota entrar.
+     Consequência assumida: não há linha vaga para lançar à mão; para isso é
+     preciso inserir a linha e esticar o SUM do bloco. */
+  const MIN_RDM = 0;
+  const MIN_RDA = 0;
+
+  /* paleta — mesma identidade do app */
+  const VERDE  = { red: 0.176, green: 0.416, blue: 0.310 };   // #2D6A4F
+  const CLARO  = { red: 0.902, green: 0.945, blue: 0.921 };   // faixa de mês
+  const BRANCO = { red: 1, green: 1, blue: 1 };
 
   /* títulos das abas — iguais aos do arquivo modelo, inclusive os pontos */
   const ABA = {
@@ -163,16 +173,19 @@ window.GSheets = (() => {
     g.set(3, H, "OUTROS (BORRACHARIA/OFICINA/EPI'S)");
     COL.forEach(c => g.linha(4, c, ['DATA', 'CNPJ DA NOTA', 'R$']));
 
-    const totaisMes = [];
-    const moeda = [];
+    /* 12 posições; mês sem nota fica null e nem ocupa linha na aba —
+       o BANCO DE DADOS lê isso e escreve 0 na grade daquele mês. */
+    const totaisMes = new Array(12).fill(null);
+    const moeda = [], realce = [];
     let r = 5;
     for (let m = 1; m <= 12; m++) {
       const doMes = _doMes(notas, m, ano).filter(n => n.tipo === 'RDM');
+      if (!doMes.length) continue;
       const porCat = CATS.map(cat => doMes
         .filter(n => (n.subtipo || 'Outros') === cat)
         .sort((a, b) => String(a.data).localeCompare(String(b.data))));
 
-      const altura = Math.max(MIN_RDM, ...porCat.map(l => l.length));
+      const altura = Math.max(MIN_RDM, 1, ...porCat.map(l => l.length));
       const rLabel = r;
       const rIni   = r + 1;
       const rFim   = rIni + altura - 1;
@@ -193,19 +206,24 @@ window.GSheets = (() => {
       /* total do mês: soma as três categorias sem vírgula (locale) */
       g.set(rMes, E, `=D${rTotal}+G${rTotal}+J${rTotal}`);
       moeda.push([rMes - 1, E - 1, rMes, E]);
+      realce.push([rLabel, 1, 10, CLARO], [rTotal, 1, 10, CLARO]);
 
-      totaisMes.push(rMes);
+      totaisMes[m - 1] = rMes;
       r = rMes + 1;
     }
 
-    g.set(2, D, '=' + totaisMes.map(x => `E${x}`).join('+'));
+    /* sem nenhum mês lançado o acumulado seria "=" (fórmula vazia) → 0 */
+    const usados = totaisMes.filter(Boolean);
+    g.set(2, D, usados.length ? '=' + usados.map(x => `E${x}`).join('+') : 0);
     g.set(2, G, `='${ABA.banco}'!C${linhaRecebidoRDM}`);   // total recebido
     g.set(2, J, '=D2-G2');                                 // saldo (convenção do modelo)
     moeda.push([1, D - 1, 2, D], [1, G - 1, 2, G], [1, J - 1, 2, J]);
 
     return {
-      title: ABA.rdm, rows: g.rows(), moeda,
-      negrito: [[1, 0, 9], [2, 0, 9], [3, 0, 9]],
+      title: ABA.rdm, rows: g.rows(), moeda, realce,
+      negrito: [[1, 0, 10], [2, 0, 10]],
+      cabecalho: [[3, 1, 10], [4, 1, 10]],
+      congelar: 4,
       totaisMes,
     };
   }
@@ -219,15 +237,16 @@ window.GSheets = (() => {
     g.set(1, B, 'RELATÓRIO DE DESPESAS COM ALIMENTAÇÕES (R.D.A.)');
     g.set(1, F, `='${ABA.cab}'!B6`);
 
-    const totaisMes = [];
-    const moeda = [];
+    const totaisMes = new Array(12).fill(null);
+    const moeda = [], realce = [], cabecalhos = [];
     let r = 4;
     for (let m = 1; m <= 12; m++) {
       const doMes = _doMes(notas, m, ano)
         .filter(n => n.tipo === 'RDA')
         .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+      if (!doMes.length) continue;
 
-      const altura = Math.max(MIN_RDA, Math.ceil(doMes.length / 2));
+      const altura = Math.max(MIN_RDA, 1, Math.ceil(doMes.length / 2));
       const esquerda = doMes.slice(0, altura);
       const direita  = doMes.slice(altura);
 
@@ -254,14 +273,18 @@ window.GSheets = (() => {
       g.set(rTotal, B, 'TOTAL DE GASTOS');
       g.set(rTotal, G, `=SUM(D${rIni}:D${rFim})+SUM(G${rIni}:G${rFim})`);
       moeda.push([rTotal - 1, G - 1, rTotal, G]);
+      realce.push([rLabel, 1, 7, CLARO], [rTotal, 1, 7, CLARO]);
+      cabecalhos.push([rHeader, 1, 7]);
 
-      totaisMes.push(rTotal);
+      totaisMes[m - 1] = rTotal;
       r = rTotal + 1;
     }
 
     return {
-      title: ABA.rda, rows: g.rows(), moeda,
-      negrito: [[1, 0, 6]],
+      title: ABA.rda, rows: g.rows(), moeda, realce,
+      negrito: [[1, 0, 7]],
+      cabecalho: cabecalhos,
+      congelar: 1,
       totaisMes,
     };
   }
@@ -284,10 +307,13 @@ window.GSheets = (() => {
     g.set(5, L, 'Meses');
     MESES_TITULO.forEach((nome, i) => g.set(5, M + i, nome));
 
+    /* refRDM/refRDA têm 12 posições; null = mês que não virou bloco na aba
+       (nenhuma nota). A grade continua mostrando os 12 meses, mas o mês
+       ausente recebe 0 em vez de uma referência para linha inexistente. */
     g.set(6, L, 'RDM');
-    refRDM.forEach((lin, i) => g.set(6, M + i, `='${ABA.rdm}'!E${lin}`));
+    refRDM.forEach((lin, i) => g.set(6, M + i, lin ? `='${ABA.rdm}'!E${lin}` : 0));
     g.set(8, L, 'RDA');
-    refRDA.forEach((lin, i) => g.set(8, M + i, `='${ABA.rda}'!G${lin}`));
+    refRDA.forEach((lin, i) => g.set(8, M + i, lin ? `='${ABA.rda}'!G${lin}` : 0));
 
     /* trimestres: 3 meses somados sem vírgula */
     [0, 3, 6, 9].forEach(off => {
@@ -313,7 +339,8 @@ window.GSheets = (() => {
     g.set(8, B, 'TOTAL DE GASTO ACUMULADO DE RDM');
     g.set(8, F, 'TOTAL DE GASTO ACUMULADO DE RDA');
     g.set(9, B, `='${ABA.rdm}'!D2`);
-    g.set(9, F, '=' + refRDA.map(l => `'${ABA.rda}'!G${l}`).join('+'));
+    const rdaUsados = refRDA.filter(Boolean);
+    g.set(9, F, rdaUsados.length ? '=' + rdaUsados.map(l => `'${ABA.rda}'!G${l}`).join('+') : 0);
     g.set(10, B, 'SALDO DE RDM RECEBIDO');
     g.set(10, F, 'SALDO DE RDA RECEBIDO');
     g.set(11, B, '=B7-B9');
@@ -451,6 +478,25 @@ window.GSheets = (() => {
      As faixas vêm dos construtores em índice 0 (como a API quer). */
   function _formatRequests(sheetId, tab) {
     const reqs = [];
+    if (tab.congelar) reqs.push({ updateSheetProperties: {
+      properties: { sheetId, gridProperties: { frozenRowCount: tab.congelar } },
+      fields: 'gridProperties.frozenRowCount' } });
+
+    /* faixa de cabeçalho: fundo verde, texto branco em negrito */
+    (tab.cabecalho || []).forEach(([r, c0, c1]) => reqs.push({ repeatCell: {
+      range: { sheetId, startRowIndex: r - 1, endRowIndex: r, startColumnIndex: c0, endColumnIndex: c1 },
+      cell: { userEnteredFormat: {
+        backgroundColor: VERDE,
+        textFormat: { foregroundColor: BRANCO, bold: true },
+        horizontalAlignment: 'CENTER' } },
+      fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)' } }));
+
+    /* faixa de mês e linha de total: fundo claro + negrito */
+    (tab.realce || []).forEach(([r, c0, c1, cor]) => reqs.push({ repeatCell: {
+      range: { sheetId, startRowIndex: r - 1, endRowIndex: r, startColumnIndex: c0, endColumnIndex: c1 },
+      cell: { userEnteredFormat: { backgroundColor: cor, textFormat: { bold: true } } },
+      fields: 'userEnteredFormat(backgroundColor,textFormat.bold)' } }));
+
     (tab.negrito || []).forEach(([r, c0, c1]) => reqs.push({ repeatCell: {
       range: { sheetId, startRowIndex: r - 1, endRowIndex: r, startColumnIndex: c0, endColumnIndex: c1 },
       cell: { userEnteredFormat: { textFormat: { bold: true } } },
