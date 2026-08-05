@@ -1147,7 +1147,10 @@ select.inp{cursor:pointer}
 
 <!-- ═══════════ LOADING / TOAST ═══════════ -->
 <div id="loading-overlay" style="display:none">
-  <div class="spin"></div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div class="spin"></div>
+    <div id="loading-msg" style="font-size:13px;font-weight:600;color:var(--text2)"></div>
+  </div>
 </div>
 <div id="toast"></div>
 
@@ -1156,17 +1159,17 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=69"></script>
-<script defer src="js/nfce.js?v=69"></script>
-<script defer src="js/sefaz.js?v=69"></script>
-<script defer src="js/brasilapi.js?v=69"></script>
-<script defer src="js/ocr.js?v=69"></script>
-<script defer src="js/recorte.js?v=69"></script>
-<script defer src="js/excel.js?v=69"></script>
-<script defer src="js/gestor.js?v=69"></script>
-<script defer src="js/gdrive.js?v=69"></script>
-<script defer src="js/gsheets.js?v=69"></script>
-<script defer src="js/app.js?v=69"></script>
+<script defer src="js/db.js?v=70"></script>
+<script defer src="js/nfce.js?v=70"></script>
+<script defer src="js/sefaz.js?v=70"></script>
+<script defer src="js/brasilapi.js?v=70"></script>
+<script defer src="js/ocr.js?v=70"></script>
+<script defer src="js/recorte.js?v=70"></script>
+<script defer src="js/excel.js?v=70"></script>
+<script defer src="js/gestor.js?v=70"></script>
+<script defer src="js/gdrive.js?v=70"></script>
+<script defer src="js/gsheets.js?v=70"></script>
+<script defer src="js/app.js?v=70"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>

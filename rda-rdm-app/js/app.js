@@ -204,8 +204,13 @@ function toast(msg, tipo='ok') {
 
 let _telaAtual = 'auth';
 
-function setLoading(on) {
+/* `msg` é opcional: operações longas (ex.: migração de pastas do Drive)
+   reexibem o overlay a cada passo com o progresso, o que também rearma o
+   timeout de segurança — sem isso ele se esconderia no meio do trabalho. */
+function setLoading(on, msg = '') {
   const el = $('loading-overlay');
+  const tx = $('loading-msg');
+  if (tx) tx.textContent = on ? msg : '';
   if (on) {
     el.style.display = 'flex';
     setTimeout(() => { if (el.style.display === 'flex') el.style.display = 'none'; }, 15000);
@@ -548,6 +553,29 @@ async function testarDrive() {
   try {
     const r = await GDrive.testarConexao();
     toast(`✅ Drive OK — pasta "${r.nome}" acessível!`);
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally { setLoading(false); }
+}
+
+/* Reorganiza o que já está no Drive no layout da pasta modelo da empresa
+   ({Colaborador}/{Ano}/RDM DESPESAS CORPORATIVAS/{CATEGORIA}/{01 jan}).
+   Só move arquivo — não apaga nada, e rodar de novo é inofensivo. */
+async function migrarPastasDrive() {
+  if (!GDrive.isConnected()) { toast('Conecte o Drive primeiro', 'err'); return; }
+  if (!confirm('Reorganizar as fotos já enviadas no padrão de pastas da empresa?\n\n'
+             + 'Os arquivos são movidos, nunca apagados. As pastas antigas ficam onde estão, vazias.')) return;
+
+  setLoading(true);
+  try {
+    const r = await GDrive.migrarParaModeloPadrao({
+      nomePorUserId : { [user.id]: user.nome },
+      onProgress    : (feitos, total) => setLoading(true, `Movendo ${feitos}/${total}…`),
+    });
+    if (!r.total)      toast('Nenhuma foto encontrada no Drive');
+    else if (r.falhas) toast(`${r.movidos} movidas, ${r.falhas} falharam — veja o console`, 'err');
+    else               toast(`✅ ${r.movidos} movidas, ${r.jaOk} já estavam no lugar`);
+    if (r.erros.length) console.warn('Migração Drive — falhas:', r.erros);
   } catch (e) {
     toast(e.message, 'err');
   } finally { setLoading(false); }
@@ -1928,6 +1956,7 @@ function renderPerfil() {
           <p style="font-size:12px;color:#5A6E60">Notas e fotos sincronizando automaticamente</p>
         </div>
         <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar acesso à pasta</button>
+        <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="migrarPastasDrive()">🗂️ Reorganizar pastas no padrão</button>
         <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>
       ` : `
         <div style="background:#F8FAF9;border:1.5px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">

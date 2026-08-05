@@ -11,8 +11,22 @@ window.GDrive = (() => {
   const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files';
   const LS_KEY     = 'gdrive_tok_v3';
   const FOLDER_MIME = 'application/vnd.google-apps.folder';
-  const MESES = ['', 'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                 'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  /* ── Nomenclatura da pasta modelo da empresa ──────────────────────
+     Espelha "Colaborador | DESPESAS CORPORATIVAS | CLIENTE" no Drive:
+       {Colaborador}/{Ano}/RDM DESPESAS CORPORATIVAS/{CATEGORIA}/{01 jan}
+       {Colaborador}/{Ano}/RDA ALIMENTAÇÃO/{01 jan}
+     O prefixo numérico do mês é o que faz o Drive ordenar na ordem do
+     calendário — com nome por extenso ele lista Abril, Agosto, Dezembro.
+     O nível do ano não existe no modelo (a pasta é refeita a cada
+     exercício); aqui ele é explícito para não misturar 2025 com 2026. */
+  const MESES_PASTA = ['', '01 jan','02 fev','03 mar','04 abr','05 mai','06 jun',
+                       '07 jul','08 ago','09 set','10 out','11 nov','12 dez'];
+  const GRUPO_RDM = 'RDM DESPESAS CORPORATIVAS';
+  const GRUPO_RDA = 'RDA ALIMENTAÇÃO';
+  /* subtipo gravado na nota → nome da categoria na pasta modelo
+     (a planilha usa "Hospedagem", a pasta usa "HOSPEDAGENS") */
+  const CATEGORIA_RDM = { abastecimento: 'ABASTECIMENTO', hospedagem: 'HOSPEDAGENS' };
 
   let tokenClient  = null;
   let accessToken  = null;
@@ -142,8 +156,11 @@ window.GDrive = (() => {
      BFS por nível: 1 consulta agrupa todos os pais
      do mesmo nível (barato, não 1 chamada por pasta).
      Retorna só ARQUIVOS (pastas viram próximos pais).
+     Passando um Map em `folderMap`, ele sai preenchido com
+     id → { name, parent } — a migração usa isso para saber
+     em que pasta de colaborador cada arquivo está hoje.
   ════════════════════════════════════════════ */
-  async function _walkTree(rootId) {
+  async function _walkTree(rootId, folderMap = null) {
     const files = [];
     let level = [rootId];
     let guard = 0;
@@ -155,12 +172,14 @@ window.GDrive = (() => {
         let pageToken = null;
         do {
           const url = `${FILES_API}?q=${encodeURIComponent(q)}`
-            + `&fields=nextPageToken,files(id,name,mimeType,appProperties,createdTime)`
+            + `&fields=nextPageToken,files(id,name,mimeType,appProperties,createdTime,parents)`
             + `&pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
           const data = await _req(url);
           for (const f of (data.files || [])) {
-            if (f.mimeType === FOLDER_MIME) next.push(f.id);
-            else files.push(f);
+            if (f.mimeType === FOLDER_MIME) {
+              next.push(f.id);
+              if (folderMap) folderMap.set(f.id, { name: f.name, parent: f.parents?.[0] || null });
+            } else files.push(f);
           }
           pageToken = data.nextPageToken || null;
         } while (pageToken);
@@ -185,7 +204,7 @@ window.GDrive = (() => {
   }
 
   /* ÍNDICE PREGUIÇOSO
-     Montar o índice varre a árvore inteira (raiz + Colaborador/Mês-Ano/Tipo),
+     Montar o índice varre a árvore inteira (raiz + as subpastas do modelo),
      e isso crescia junto com o arquivo de fotos. Como ele bloqueava o init() e
      o requestAccess(), conectar no Drive ficava cada vez mais lento no celular
      — esperando um índice que a conexão em si não precisa.
@@ -233,7 +252,7 @@ window.GDrive = (() => {
   }
 
   /* nome da pasta do colaborador: prioriza o NOME (ex: "Naycon Cenci");
-     sem nome cai no email; sem email, no id. Mês-Ano e Tipo abaixo. */
+     sem nome cai no email; sem email, no id. Ano/Grupo/Categoria/Mês abaixo. */
   function _colabFolderName(nota) {
     const nome = String(nota.user_nome || '')
       .replace(/[\\/:*?"<>|]/g, ' ')   // tira caracteres que atrapalham nome de pasta
@@ -243,28 +262,115 @@ window.GDrive = (() => {
     if (email.includes('@')) return email.split('@')[0].toLowerCase();
     return 'colaborador-' + _trim(nota.user_id, 8);
   }
-  function _mesAnoFolder(nota) {
-    const m = parseInt(nota.mes, 10);
-    const a = parseInt(nota.ano, 10);
-    const nome = (m >= 1 && m <= 12) ? MESES[m] : ('Mes-' + (nota.mes || 'NA'));
-    return `${nome}-${a || 'NA'}`;                                      // ex: Junho-2026
+  /* mes/ano da nota; uploads antigos podem não ter os campos, então cai
+     na data (YYYY-MM-DD) antes de desistir */
+  function _mesAno(nota) {
+    let m = parseInt(nota.mes, 10);
+    let a = parseInt(nota.ano, 10);
+    if (!(m >= 1 && m <= 12) || !(a >= 2000 && a <= 2100)) {
+      const d = String(nota.data || '').match(/^(\d{4})-(\d{2})/);
+      if (d) { a = parseInt(d[1], 10); m = parseInt(d[2], 10); }
+    }
+    return {
+      mes: (m >= 1 && m <= 12) ? MESES_PASTA[m] : 'sem-mes',
+      ano: (a >= 2000 && a <= 2100) ? String(a) : 'sem-ano',
+    };
   }
-  function _tipoFolder(nota) {
-    const t = String(nota.tipo || '').toUpperCase();
-    return (t === 'RDA' || t === 'RDM') ? t : 'OUTROS';
+
+  /* RDA vai direto pros meses — é sempre alimentação, e o modelo não abre
+     categoria embaixo dela. RDM abre em ABASTECIMENTO / HOSPEDAGENS /
+     OUTROS, que é exatamente o subtipo que a nota já grava. */
+  function _trilhaGrupo(nota) {
+    if (String(nota.tipo || '').toUpperCase() === 'RDA') return [GRUPO_RDA];
+    const sub = String(nota.subtipo || '').trim().toLowerCase();
+    return [GRUPO_RDM, CATEGORIA_RDM[sub] || 'OUTROS'];
+  }
+
+  /* caminho completo da nota dentro da pasta compartilhada */
+  function _trilhaDestino(nota) {
+    const { mes, ano } = _mesAno(nota);
+    return [_colabFolderName(nota), ano, ..._trilhaGrupo(nota), mes];
   }
 
   /* destino final do upload; se algo falhar, volta pra raiz (nunca perde a foto) */
   async function _resolveDestino(nota) {
     try {
-      const colab  = await _getOrCreateFolder(_colabFolderName(nota), FOLDER_ID);
-      const mesAno = await _getOrCreateFolder(_mesAnoFolder(nota), colab);
-      const tipo   = await _getOrCreateFolder(_tipoFolder(nota), mesAno);
-      return tipo;
+      let pai = FOLDER_ID;
+      for (const nome of _trilhaDestino(nota)) pai = await _getOrCreateFolder(nome, pai);
+      return pai;
     } catch (e) {
       console.warn('GDrive subpastas falharam — salvando na raiz:', e.message);
       return FOLDER_ID;
     }
+  }
+
+  /* ════════════════════════════════════════════
+     MIGRAÇÃO PARA O MODELO PADRÃO
+     Move o que já está no Drive do layout antigo
+     ({Colab}/Junho-2026/RDM) para o novo. Só move:
+     não apaga arquivo nem pasta vazia — quem quiser
+     limpar as pastas antigas faz isso à mão.
+     Reexecutar é inofensivo (o que já está no lugar
+     certo é contado como "ok" e pulado).
+  ════════════════════════════════════════════ */
+
+  /* Sobe pelos pais até a pasta logo abaixo da raiz — é a do colaborador.
+     null se o arquivo estiver solto na raiz (fallback de upload que falhou). */
+  function _pastaColabDe(parentId, folderMap) {
+    let atual = parentId, guard = 0;
+    while (atual && atual !== FOLDER_ID && guard++ < 12) {
+      const info = folderMap.get(atual);
+      if (!info) return null;
+      if (info.parent === FOLDER_ID) return info.name;
+      atual = info.parent;
+    }
+    return null;
+  }
+
+  async function migrarParaModeloPadrao({ nomePorUserId = {}, onProgress = null } = {}) {
+    _checkConnected();
+    const folderMap = new Map();
+    const arquivos  = (await _walkTree(FOLDER_ID, folderMap))
+      .filter(f => f.name && f.name.indexOf('foto-') === 0);
+
+    let movidos = 0, jaOk = 0, falhas = 0;
+    const erros = [];
+
+    for (let i = 0; i < arquivos.length; i++) {
+      const f    = arquivos[i];
+      const p    = f.appProperties || {};
+      const pai  = f.parents?.[0] || null;
+      /* o nome do colaborador não está nas appProperties — vem da pasta em
+         que o arquivo já mora; só se ele estiver solto na raiz é que o mapa
+         de perfis (passado pelo app) entra */
+      const nota = {
+        tipo: p.tipo, subtipo: p.subtipo, mes: p.mes, ano: p.ano, data: p.data,
+        user_id: p.user_id,
+        user_nome: _pastaColabDe(pai, folderMap) || nomePorUserId[p.user_id] || '',
+      };
+      try {
+        const destino = await _resolveDestino(nota);
+        if (destino === FOLDER_ID) {
+          falhas++;
+          if (erros.length < 10) erros.push(`${f.name}: não foi possível criar a subpasta`);
+        } else if (destino === pai) {
+          jaOk++;
+        } else {
+          await _req(`${FILES_API}/${f.id}?addParents=${destino}`
+            + (pai ? `&removeParents=${pai}` : '') + '&fields=id', { method: 'PATCH' });
+          movidos++;
+        }
+      } catch (e) {
+        falhas++;
+        if (erros.length < 10) erros.push(`${f.name}: ${e.message}`);
+      }
+      if (onProgress) onProgress(i + 1, arquivos.length);
+    }
+
+    /* os caminhos mudaram; o índice é por nome (não por pasta), mas forçar a
+       releitura evita trabalhar em cima de ids de uma árvore que não existe mais */
+    _indicePronto = false;
+    return { total: arquivos.length, movidos, jaOk, falhas, erros };
   }
 
   /* ════════════════════════════════════════════
@@ -372,12 +478,11 @@ window.GDrive = (() => {
       chave_nfce   : _trim(nota.chave_nfce, 50),
     };
 
-    // arquivo novo → resolve subpasta Colaborador/Mês-Ano/Tipo (cai na raiz se falhar)
+    // arquivo novo → resolve a subpasta do modelo padrão (cai na raiz se falhar)
     // arquivo já existente → mantém onde está (PATCH só atualiza conteúdo/metadados)
-    const parentId = existingId ? FOLDER_ID : await _resolveDestino(nota);
     const meta = existingId
       ? { appProperties }
-      : { name: filename, parents: [parentId], appProperties };
+      : { name: filename, parents: [await _resolveDestino(nota)], appProperties };
 
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
@@ -468,7 +573,7 @@ window.GDrive = (() => {
     init, requestAccess, disconnect, testarConexao,
     syncNotas, loadNotas,
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
-    atualizarIndice,
+    atualizarIndice, migrarParaModeloPadrao,
     isConnected, isConfigured, minutosRestantes,
     getToken, getFolderId,
   };
