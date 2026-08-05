@@ -327,19 +327,29 @@ window.GDrive = (() => {
     return null;
   }
 
-  async function migrarParaModeloPadrao({ nomePorUserId = {}, onProgress = null } = {}) {
+  async function migrarParaModeloPadrao({ nomePorUserId = {}, notaPorId = {}, onProgress = null } = {}) {
     _checkConnected();
     const folderMap = new Map();
     const arquivos  = (await _walkTree(FOLDER_ID, folderMap))
       .filter(f => f.name && f.name.indexOf('foto-') === 0);
 
-    let movidos = 0, jaOk = 0, falhas = 0;
+    let movidos = 0, jaOk = 0, falhas = 0, metaCorrigidos = 0;
     const erros = [];
 
     for (let i = 0; i < arquivos.length; i++) {
       const f    = arquivos[i];
       const p    = f.appProperties || {};
       const pai  = f.parents?.[0] || null;
+      /* A NOTA manda, não o appProperties. O metadado no Drive foi gravado
+         por caminhos que ja omitiram campos (o envio da equipe subia sem
+         subtipo, e toda nota RDM virava OUTROS); confiar nele propagaria o
+         erro para o destino. Sem a nota em maos — arquivo de alguem que este
+         perfil nao enxerga — ai sim vale o que esta no arquivo. */
+      const real = notaPorId[p.nota_id] || null;
+      const base = real
+        ? { tipo: real.tipo, subtipo: real.subtipo, mes: real.mes, ano: real.ano, data: real.data, user_id: real.user_id }
+        : { tipo: p.tipo,    subtipo: p.subtipo,    mes: p.mes,    ano: p.ano,    data: p.data,    user_id: p.user_id };
+
       /* O nome oficial do perfil vence o nome da pasta atual: é o que funde
          as pastas que o mesmo colaborador acumulou quando ainda não tinha
          nome preenchido (o upload caía no prefixo do e-mail — daí existirem
@@ -347,21 +357,34 @@ window.GDrive = (() => {
          colaborador de outro perfil, que este usuário não enxerga — mantém a
          pasta onde já está, sem chutar. */
       const nota = {
-        tipo: p.tipo, subtipo: p.subtipo, mes: p.mes, ano: p.ano, data: p.data,
-        user_id: p.user_id,
-        user_nome: nomePorUserId[p.user_id] || _pastaColabDe(pai, folderMap) || '',
+        ...base,
+        user_nome: nomePorUserId[base.user_id] || _pastaColabDe(pai, folderMap) || '',
       };
       try {
         const destino = await _resolveDestino(nota);
         if (destino === FOLDER_ID) {
           falhas++;
           if (erros.length < 10) erros.push(`${f.name}: não foi possível criar a subpasta`);
-        } else if (destino === pai) {
-          jaOk++;
-        } else {
-          await _req(`${FILES_API}/${f.id}?addParents=${destino}`
-            + (pai ? `&removeParents=${pai}` : '') + '&fields=id', { method: 'PATCH' });
-          movidos++;
+          if (onProgress) onProgress(i + 1, arquivos.length);
+          continue;
+        }
+        /* Além de mover, reescreve o appProperties quando ele diverge da nota
+           — é o metadado errado que jogou as RDM em OUTROS, e ele continuaria
+           mentindo para quem lê as fotos pelo Drive. Vai no mesmo PATCH. */
+        const mover   = destino !== pai;
+        const metaRuim = !!real && (p.subtipo !== _trim(real.subtipo) || p.tipo !== _trim(real.tipo));
+        if (!mover && !metaRuim) { jaOk++; }
+        else {
+          const qs = mover
+            ? `?addParents=${destino}${pai ? `&removeParents=${pai}` : ''}&fields=id`
+            : '?fields=id';
+          await _req(`${FILES_API}/${f.id}${qs}`, {
+            method: 'PATCH',
+            json: metaRuim
+              ? { appProperties: { tipo: _trim(real.tipo), subtipo: _trim(real.subtipo) } }
+              : undefined,
+          });
+          if (mover) movidos++; else metaCorrigidos++;
         }
       } catch (e) {
         falhas++;
@@ -373,7 +396,7 @@ window.GDrive = (() => {
     /* os caminhos mudaram; o índice é por nome (não por pasta), mas forçar a
        releitura evita trabalhar em cima de ids de uma árvore que não existe mais */
     _indicePronto = false;
-    return { total: arquivos.length, movidos, jaOk, falhas, erros };
+    return { total: arquivos.length, movidos, jaOk, falhas, metaCorrigidos, erros };
   }
 
   /* ════════════════════════════════════════════

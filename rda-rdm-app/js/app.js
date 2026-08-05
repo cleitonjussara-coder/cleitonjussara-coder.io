@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -579,13 +579,24 @@ async function migrarPastasDrive() {
     }
     if (user.nome) nomePorUserId[user.id] = user.nome;   // o próprio perfil manda
 
+    /* As notas de verdade: a migração usa elas em vez do appProperties, que
+       pode ter sido gravado incompleto por um envio antigo. Locais primeiro,
+       servidor por cima (o gestor enxerga a equipe toda). */
+    const notaPorId = {};
+    notas.forEach(n => { notaPorId[n.id] = n; });
+    if (sb && !DEMO_MODE) {
+      const { data } = await sb.from('notas').select('id,user_id,tipo,subtipo,mes,ano,data');
+      (data || []).forEach(n => { notaPorId[n.id] = n; });
+    }
+
     const r = await GDrive.migrarParaModeloPadrao({
-      nomePorUserId,
+      nomePorUserId, notaPorId,
       onProgress : (feitos, total) => setLoading(true, `Movendo ${feitos}/${total}…`),
     });
+    const extra = r.metaCorrigidos ? `, ${r.metaCorrigidos} com dados corrigidos` : '';
     if (!r.total)      toast('Nenhuma foto encontrada no Drive');
     else if (r.falhas) toast(`${r.movidos} movidas, ${r.falhas} falharam — veja o console`, 'err');
-    else               toast(`✅ ${r.movidos} movidas, ${r.jaOk} já estavam no lugar`);
+    else               toast(`✅ ${r.movidos} movidas${extra}, ${r.jaOk} já no lugar`);
     if (r.erros.length) console.warn('Migração Drive — falhas:', r.erros);
   } catch (e) {
     toast(e.message, 'err');
@@ -1811,7 +1822,7 @@ async function enviarFotosEquipeDrive() {
 
     // 2) TODAS as notas com foto (todos os meses / todos os colaboradores)
     const { data: notas, error } = await sb.from('notas')
-      .select('id,user_id,tipo,mes,ano,foto_path,deleted');
+      .select('id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted');
     if (error) throw new Error('notas: ' + error.message);
     const totalNotas = (notas || []).length;
     const comFoto = (notas || []).filter(n => n.foto_path && !n.deleted);
@@ -1850,7 +1861,10 @@ async function enviarFotosEquipeDrive() {
         const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
         const c   = mapa[n.user_id] || {};
         await GDrive.uploadFotoComDados(blob, {
-          id: n.id, tipo: n.tipo, mes: n.mes, ano: n.ano,
+          /* subtipo e data PRECISAM vir: sem subtipo toda nota RDM cai na
+             pasta OUTROS, mesmo sendo Abastecimento — e o appProperties
+             gravado errado ainda contamina a migração, que confia nele. */
+          id: n.id, tipo: n.tipo, subtipo: n.subtipo, mes: n.mes, ano: n.ano, data: n.data,
           user_id: n.user_id, user_email: c.email, user_nome: c.nome,
         }, ext);
         ok++;
@@ -1896,7 +1910,7 @@ async function _autoConsolidarFotosDrive() {
   // 2) mapa de colaboradores + todas as notas com foto
   const [{ data: collabs }, { data: notas }] = await Promise.all([
     sb.from('colaboradores').select('id,nome,email'),
-    sb.from('notas').select('id,user_id,tipo,mes,ano,foto_path,deleted'),
+    sb.from('notas').select('id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted'),
   ]);
   const mapa = {};
   (collabs || []).forEach(c => { mapa[c.id] = c; });
@@ -1917,7 +1931,8 @@ async function _autoConsolidarFotosDrive() {
       const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
       const c   = mapa[n.user_id] || {};
       await GDrive.uploadFotoComDados(r.data, {
-        id: n.id, tipo: n.tipo, mes: n.mes, ano: n.ano,
+        // subtipo/data obrigatórios — ver o comentário no envio da equipe
+        id: n.id, tipo: n.tipo, subtipo: n.subtipo, mes: n.mes, ano: n.ano, data: n.data,
         user_id: n.user_id, user_email: c.email, user_nome: c.nome,
       }, ext);
       ok++;
