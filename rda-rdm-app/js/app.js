@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v75';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3187,7 +3187,26 @@ function abrirFormRepasse() {
 }
 function fecharFormRepasse() { $('rep-overlay').style.display = 'none'; }
 
+/* Mesma trava do salvarNota (v65, quando RDA duplicava): o repasse ficou de
+   fora e o defeito reapareceu aqui — dois toques no Salvar gravavam dois
+   repasses, e o extrato do RDM na planilha mostrava o dobro do recebido.
+   Repasse não tem chave para deduplicar depois (nota tem a chave da NFC-e),
+   então a única defesa é não deixar entrar duas vezes. */
+let _salvandoRepasse = false;
 async function salvarRepasse() {
+  if (_salvandoRepasse) return;
+  _salvandoRepasse = true;
+  const btn = $('rep-btn-salvar');
+  if (btn) btn.disabled = true;
+  try {
+    await _salvarRepasseInterno();
+  } finally {
+    _salvandoRepasse = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function _salvarRepasseInterno() {
   const tipo  = $('rep-tipo').value;
   const valor = parseFloat($('rep-valor').value);
   const data  = $('rep-data').value;
