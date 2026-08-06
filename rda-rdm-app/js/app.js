@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -251,6 +251,10 @@ function _ensureSb() {
     }
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     sb.auth.onAuthStateChange(async (_ev, session) => {
+      /* PASSWORD_RECOVERY também chega por aqui; a sessão que vem com ele é
+         só para trocar a senha, não para entrar no app. */
+      if (_ev === 'PASSWORD_RECOVERY') _recuperandoSenha = true;
+      if (_recuperandoSenha) { showTela('auth'); renderAuth('nova-senha'); return; }
       if (session?.user) {
         if (user && _telaAtual === 'app') return;
         await onLogin(session.user);
@@ -282,7 +286,9 @@ async function init() {
     try {
       await _ensureSb();
       const { data:{ session } } = await sb.auth.getSession();
-      if (!session) { showTela('auth'); renderAuth(); }
+      /* veio do link do e-mail: pede a nova senha antes de qualquer coisa */
+      if (_recuperandoSenha) { showTela('auth'); renderAuth('nova-senha'); }
+      else if (!session) { showTela('auth'); renderAuth(); }
     } catch (_) {
       // sem rede no boot — mostra login mesmo assim; o botao recarrega o Supabase
       showTela('auth'); renderAuth();
@@ -403,21 +409,66 @@ function showTela(t) {
 }
 
 /* ── Auth ────────────────────────────────────────────────── */
+
+/* RECUPERAÇÃO DE SENHA — a trava mais importante deste bloco.
+   O link do e-mail volta para o app com um token que o Supabase troca por
+   uma SESSÃO VÁLIDA. Como o onAuthStateChange manda para dentro do app
+   sempre que há sessão, sem isto a pessoa entraria direto e a tela de nova
+   senha nunca apareceria — o link viraria um "login mágico".
+   A leitura acontece na carga do script, ANTES de createClient(), porque o
+   cliente consome e limpa o hash da URL ao iniciar. */
+let _recuperandoSenha = /type=recovery/.test(location.hash + location.search);
+function _limparUrlRecuperacao() {
+  _recuperandoSenha = false;
+  try { history.replaceState(null, '', location.pathname + location.search.replace(/[?&]type=recovery[^&]*/, '')); }
+  catch (_) {}
+}
+
 let authMode = 'login';
 function renderAuth(mode='login') {
   authMode = mode;
-  $('auth-body').innerHTML = mode==='login' ? `
-    <h2 class="auth-title">Entrar</h2>
-    <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
-    <input class="inp" id="a-pass"  type="password" placeholder="Senha" autocomplete="current-password">
-    <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
-    <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
+  const rodape = `
     <div style="margin-top:8px;text-align:center">
       <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
       <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
       <p style="color:rgba(255,255,255,.45);font-size:11px;margin-top:14px">Versão ${APP_VERSION}</p>
-    </div>
+    </div>`;
+
+  if (mode === 'reset') {
+    $('auth-body').innerHTML = `
+      <h2 class="auth-title">Recuperar senha</h2>
+      <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
+        Informe o e-mail da sua conta. Você receberá um link para definir uma senha nova.
+      </p>
+      <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
+      <button class="btn btn-primary btn-full" id="a-btn-reset" onclick="pedirRecuperacao()">Enviar link</button>
+      <p class="auth-switch"><a onclick="renderAuth('login')">Voltar para o login</a></p>
+      ${rodape}`;
+    return;
+  }
+
+  if (mode === 'nova-senha') {
+    $('auth-body').innerHTML = `
+      <h2 class="auth-title">Nova senha</h2>
+      <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
+        Escolha a senha que você vai usar a partir de agora.
+      </p>
+      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 6 caracteres)" autocomplete="new-password">
+      <input class="inp" id="a-pass2" type="password" placeholder="Repita a nova senha" autocomplete="new-password">
+      <button class="btn btn-primary btn-full" id="a-btn-nova" onclick="definirNovaSenha()">Salvar senha</button>
+      <p class="auth-switch"><a onclick="cancelarRecuperacao()">Cancelar</a></p>`;
+    return;
+  }
+
+  $('auth-body').innerHTML = mode==='login' ? `
+    <h2 class="auth-title">Entrar</h2>
+    <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
+    <input class="inp" id="a-pass"  type="password" placeholder="Senha" autocomplete="current-password">
+    <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
+    <p class="auth-switch"><a onclick="renderAuth('reset')">Esqueci minha senha</a></p>
+    <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
+    ${rodape}
   ` : `
     <h2 class="auth-title">Criar conta</h2>
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
@@ -441,6 +492,78 @@ async function usarSemConta() {
   await carregarDadosLocais();
   showTela('app');
   switchView('home');
+}
+
+/* Dispara o e-mail de redefinição. O redirectTo aponta para o próprio app
+   (origem + caminho, sem hash) e PRECISA estar na lista de Redirect URLs do
+   Supabase — fora dela o link do e-mail cai numa página de erro. */
+let _pedindoRecuperacao = false;
+async function pedirRecuperacao() {
+  if (_pedindoRecuperacao) return;
+  const email = $('a-email').value.trim();
+  if (!email) { toast('Informe o e-mail da conta','err'); return; }
+
+  _pedindoRecuperacao = true;
+  const btn = $('a-btn-reset');
+  if (btn) btn.disabled = true;
+  setLoading(true);
+  try {
+    await _ensureSb();
+    const destino = location.origin + location.pathname;
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: destino });
+    if (error) throw error;
+    /* Resposta genérica de propósito: dizer "e-mail não cadastrado" revelaria
+       quem tem conta para qualquer um que digite endereços na tela. */
+    toast('Se este e-mail tiver conta, o link chega em instantes. Verifique também o spam.');
+    renderAuth('login');
+  } catch (e) {
+    toast('Não consegui enviar: ' + e.message, 'err');
+  } finally {
+    _pedindoRecuperacao = false;
+    if (btn) btn.disabled = false;
+    setLoading(false);
+  }
+}
+
+/* Grava a senha nova usando a sessão temporária criada pelo link. */
+let _definindoSenha = false;
+async function definirNovaSenha() {
+  if (_definindoSenha) return;
+  const nova  = $('a-pass').value;
+  const nova2 = $('a-pass2').value;
+  if (!nova || nova.length < 6) { toast('A senha precisa de pelo menos 6 caracteres','err'); return; }
+  if (nova !== nova2)           { toast('As duas senhas não são iguais','err'); return; }
+
+  _definindoSenha = true;
+  const btn = $('a-btn-nova');
+  if (btn) btn.disabled = true;
+  setLoading(true);
+  try {
+    await _ensureSb();
+    const { error } = await sb.auth.updateUser({ password: nova });
+    if (error) throw error;
+    /* Sai da sessão do link antes de mandar para o login: assim a pessoa
+       estreia a senha nova, em vez de entrar de carona no token do e-mail. */
+    _limparUrlRecuperacao();
+    await sb.auth.signOut();
+    toast('Senha alterada! Entre com ela agora.');
+    showTela('auth');
+    renderAuth('login');
+  } catch (e) {
+    /* O link vale uma hora e uma vez só — é o erro mais provável aqui. */
+    toast('Não consegui alterar: ' + e.message + ' — se o link expirou, peça outro.', 'err');
+  } finally {
+    _definindoSenha = false;
+    if (btn) btn.disabled = false;
+    setLoading(false);
+  }
+}
+
+async function cancelarRecuperacao() {
+  _limparUrlRecuperacao();
+  try { await sb?.auth?.signOut(); } catch (_) {}
+  showTela('auth');
+  renderAuth('login');
 }
 
 async function login() {
