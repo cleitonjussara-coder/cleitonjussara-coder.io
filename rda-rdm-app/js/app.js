@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v79';
+const APP_VERSION = 'v80';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -479,8 +479,70 @@ function comoInstalar() {
       + '1. Abra o menu do navegador — os três pontinhos (⋮)\n'
       + '2. Toque em "Adicionar à tela inicial" ou "Instalar app"\n'
       + '3. Confirme\n\n'
-      + 'Se a opção não estiver lá, o app provavelmente já está instalado — '
-      + 'procure o ícone na tela inicial.');
+      + 'A opção NÃO APARECE no menu quando:\n\n'
+      + '• "Site para computador" está marcado no mesmo menu — desmarque e recarregue;\n'
+      + '• o app já está instalado — procure o ícone na tela inicial;\n'
+      + '• a aba é anônima — abra numa aba normal.\n\n'
+      + 'Se nenhum for o caso, use "Diagnóstico de instalação" no Perfil.');
+}
+
+/* Mostra o que o NAVEGADOR DESTE APARELHO pensa da instalação. Existe
+   porque o manifesto e o servidor podem estar perfeitos (e estão) e ainda
+   assim o Chrome não oferecer instalar — o motivo só aparece no aparelho.
+   Sem isto vira adivinhação por foto de tela. */
+async function diagnosticoInstalacao() {
+  const L = [];
+  const sn = b => (b ? 'SIM' : 'não');
+
+  L.push('COMO O NAVEGADOR VÊ O APP');
+  L.push('');
+  L.push(`Endereço seguro (https): ${sn(location.protocol === 'https:')}`);
+  L.push(`Já rodando como app instalado: ${sn(_jaInstalado())}`);
+  L.push(`Navegador ofereceu instalar: ${sn(!!_promptInstalar)}`);
+  L.push(`Aparelho iPhone/iPad: ${sn(_ehIOS())}`);
+  L.push('');
+
+  const link = document.querySelector('link[rel="manifest"]');
+  L.push(`Manifesto declarado na página: ${sn(!!link)}`);
+  if (link) {
+    try {
+      const r = await fetch(link.href, { cache: 'no-store' });
+      const m = await r.json();
+      L.push(`  carregou: SIM (HTTP ${r.status})`);
+      L.push(`  display: ${m.display} | ícones: ${(m.icons || []).map(i => i.sizes).join(', ')}`);
+    } catch (e) { L.push(`  FALHOU: ${e.message}`); }
+  }
+  L.push('');
+
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      L.push(`Service worker registrado: ${sn(!!reg)}`);
+      if (reg) {
+        L.push(`  escopo: ${reg.scope}`);
+        L.push(`  controlando esta página: ${sn(!!navigator.serviceWorker.controller)}`);
+      }
+    } catch (e) { L.push(`Service worker: erro — ${e.message}`); }
+  } else {
+    L.push('Service worker: não suportado neste navegador');
+  }
+  L.push('');
+
+  /* A pergunta que mais importa quando a opção some do menu do Chrome:
+     ele esconde "Instalar app" quando o app JÁ ESTÁ instalado. */
+  if (navigator.getInstalledRelatedApps) {
+    try {
+      const apps = await navigator.getInstalledRelatedApps();
+      L.push(`Já instalado neste aparelho: ${apps.length ? 'SIM' : 'não detectado'}`);
+    } catch (e) { L.push(`Checagem de instalado: falhou (${e.message})`); }
+  } else {
+    L.push('Checagem de instalado: navegador não suporta');
+  }
+  L.push('');
+  L.push(`Versão do app: ${APP_VERSION}`);
+  L.push(`Navegador: ${navigator.userAgent.slice(0, 110)}`);
+
+  alert(L.join('\n'));
 }
 
 /* ── Auth ────────────────────────────────────────────────── */
@@ -2173,6 +2235,7 @@ function renderPerfil() {
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
     <button class="btn btn-outline" onclick="diagnosticoFotos()">🔎 Diagnóstico de anexos</button>
+    <button class="btn btn-outline" onclick="diagnosticoInstalacao()">🔎 Diagnóstico de instalação</button>
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
       ${driveOk && GDrive.isConnected() ? `
