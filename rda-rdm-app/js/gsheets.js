@@ -216,7 +216,12 @@ window.GSheets = (() => {
     const usados = totaisMes.filter(Boolean);
     g.set(2, D, usados.length ? '=' + usados.map(x => `E${x}`).join('+') : 0);
     g.set(2, G, `='${ABA.banco}'!C${linhaRecebidoRDM}`);   // total recebido
-    g.set(2, J, '=D2-G2');                                 // saldo (convenção do modelo)
+    /* SALDO = recebido - gasto: o que ainda resta do repasse com o
+       colaborador. O arquivo modelo traz =D2-G2 aqui (gasto - recebido) e
+       =B7-B9 no BANCO DE DADOS (recebido - gasto), ou seja, o mesmo saldo
+       com sinais opostos em abas diferentes. Seguimos o sentido do BANCO,
+       que é o que corresponde ao significado do numero. */
+    g.set(2, J, '=G2-D2');
     moeda.push([1, D - 1, 2, D], [1, G - 1, 2, G], [1, J - 1, 2, J]);
 
     return {
