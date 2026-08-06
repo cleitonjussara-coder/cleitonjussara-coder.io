@@ -236,11 +236,19 @@ window.GSheets = (() => {
   /* ════════════ ABA R.D.A ════════════
      Sempre alimentação, sem categoria. Dois pares de colunas por mês
      (B/C/D e E/F/G) — a esquerda enche primeiro, igual ao modelo. */
-  function buildRDA(notas, ano) {
+  function buildRDA(notas, ano, linhaRecebidoRDA) {
     const g = grade();
     g.set(1, A, `='${ABA.cab}'!B6`);
     g.set(1, B, 'RELATÓRIO DE DESPESAS COM ALIMENTAÇÕES (R.D.A.)');
     g.set(1, F, `='${ABA.cab}'!B6`);
+
+    /* Linha de totais espelhando a da R.D.M. Não existe no arquivo modelo
+       (lá o saldo do RDA só aparece no BANCO DE DADOS), mas sem ela é
+       preciso pular de aba para saber quanto ainda resta de alimentação.
+       Cabe em B..G, que é a largura desta aba. */
+    g.set(2, B, 'TOTAL DE GASTO ACUMULADO');
+    g.set(2, D, 'TOTAL RECEBIDO');
+    g.set(2, F, 'SALDO');
 
     const totaisMes = new Array(12).fill(null);
     const moeda = [], realce = [], cabecalhos = [];
@@ -285,11 +293,17 @@ window.GSheets = (() => {
       r = rTotal + 1;
     }
 
+    const usados = totaisMes.filter(Boolean);
+    g.set(2, C, usados.length ? '=' + usados.map(x => `G${x}`).join('+') : 0);
+    g.set(2, E, `='${ABA.banco}'!H${linhaRecebidoRDA}`);
+    g.set(2, G, '=E2-C2');            // saldo = recebido - gasto, igual à R.D.M.
+    moeda.push([1, C - 1, 2, C], [1, E - 1, 2, E], [1, G - 1, 2, G]);
+
     return {
       title: ABA.rda, rows: g.rows(), moeda, realce,
-      negrito: [[1, 0, 7]],
+      negrito: [[1, 0, 7], [2, 0, 7]],
       cabecalho: cabecalhos,
-      congelar: 1,
+      congelar: 2,
       totaisMes,
     };
   }
@@ -343,9 +357,11 @@ window.GSheets = (() => {
     g.set(7, F, `=H${totRDA}`);
     g.set(8, B, 'TOTAL DE GASTO ACUMULADO DE RDM');
     g.set(8, F, 'TOTAL DE GASTO ACUMULADO DE RDA');
+    /* Aponta para o acumulado que cada aba ja calcula, em vez de repetir a
+       soma mes a mes aqui: uma referencia so, e as duas abas nao tem como
+       divergir. (No arquivo modelo o F9 refazia a soma dos doze meses.) */
     g.set(9, B, `='${ABA.rdm}'!D2`);
-    const rdaUsados = refRDA.filter(Boolean);
-    g.set(9, F, rdaUsados.length ? '=' + rdaUsados.map(l => `'${ABA.rda}'!G${l}`).join('+') : 0);
+    g.set(9, F, `='${ABA.rda}'!C2`);
     g.set(10, B, 'SALDO DE RDM RECEBIDO');
     g.set(10, F, 'SALDO DE RDA RECEBIDO');
     g.set(11, B, '=B7-B9');
@@ -551,7 +567,7 @@ window.GSheets = (() => {
   function montarAnual(ano, notas, repasses, colab) {
     const ext = _linhasExtrato(repasses, ano);
     const rdm = buildRDM(notas, ano, ext.rdm);
-    const rda = buildRDA(notas, ano);
+    const rda = buildRDA(notas, ano, ext.rda);
     return [
       buildCabecalho(ano, colab),
       buildNormas(),
