@@ -22,5 +22,12 @@
     }
   ],
   "categories": ["finance", "productivity"],
-  "lang": "pt-BR"
+  "lang": "pt-BR",
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://app.pmservicosagronomicos.com.br/rda-rdm-app/manifest.json"
+    }
+  ]
 }

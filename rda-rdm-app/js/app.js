@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v80';
+const APP_VERSION = 'v81';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -529,11 +529,16 @@ async function diagnosticoInstalacao() {
   L.push('');
 
   /* A pergunta que mais importa quando a opção some do menu do Chrome:
-     ele esconde "Instalar app" quando o app JÁ ESTÁ instalado. */
+     ele esconde "Instalar app" quando o app JÁ ESTÁ instalado.
+     Atenção: getInstalledRelatedApps só enxerga o que o manifesto declara
+     em related_applications. Sem essa declaração ele devolve lista vazia
+     SEMPRE — instalado ou não —, e a resposta nao significa nada. Por isso
+     o manifesto passou a se auto-declarar; se ainda vier vazio aqui, ai sim
+     e sinal de que nao esta instalado. */
   if (navigator.getInstalledRelatedApps) {
     try {
       const apps = await navigator.getInstalledRelatedApps();
-      L.push(`Já instalado neste aparelho: ${apps.length ? 'SIM' : 'não detectado'}`);
+      L.push(`Já instalado neste aparelho: ${apps.length ? 'SIM' : 'não'}`);
     } catch (e) { L.push(`Checagem de instalado: falhou (${e.message})`); }
   } else {
     L.push('Checagem de instalado: navegador não suporta');
