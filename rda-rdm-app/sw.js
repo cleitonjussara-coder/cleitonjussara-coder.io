@@ -5,7 +5,7 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v78';
+const CACHE   = 'petermann-v79';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz

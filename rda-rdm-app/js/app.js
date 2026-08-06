@@ -32,7 +32,7 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -408,6 +408,81 @@ function showTela(t) {
   }
 }
 
+/* ── Instalar como app (PWA) ─────────────────────────────────
+   O app atendia todos os requisitos de instalação mas nunca OFERECIA:
+   só explicava o caminho do menu na tela de ajuda, e quem não achava o
+   menu ficava sem. Agora o próprio app pede.
+
+   Android/Chrome dispara beforeinstallprompt quando considera o site
+   instalável; guardamos o evento porque ele só pode ser disparado de
+   dentro de um clique do usuário, e vale uma vez só.
+
+   iPhone é outro mundo: o Safari não tem esse evento e nunca mostra
+   prompt. O único caminho é Compartilhar → Adicionar à Tela de Início, e
+   só pelo Safari (pelo Chrome no iOS a opção nem aparece). Lá o botão
+   vira instrução. */
+let _promptInstalar = null;
+
+const _ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const _jaInstalado = () =>
+  window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();          // sem isto o Chrome mostra a barra dele e o evento se perde
+  _promptInstalar = e;
+  _pintarBotaoInstalar();
+});
+window.addEventListener('appinstalled', () => {
+  _promptInstalar = null;
+  _pintarBotaoInstalar();
+  toast('App instalado! Procure o ícone na tela inicial.');
+});
+
+/* Preenche todos os pontos que oferecem a instalação (login e perfil).
+   Chamado a cada render e quando o navegador avisa que dá para instalar. */
+function _pintarBotaoInstalar() {
+  const slots = document.querySelectorAll('.install-slot');
+  if (!slots.length) return;
+  let html = '';
+  if (!_jaInstalado()) {
+    const acao = _promptInstalar ? 'instalarApp()' : 'comoInstalar()';
+    html = `<button class="btn btn-outline btn-full" style="margin-bottom:8px"
+              onclick="${acao}">📱 Instalar app no celular</button>`;
+  }
+  slots.forEach(s => { s.innerHTML = html; });
+}
+
+async function instalarApp() {
+  if (!_promptInstalar) { comoInstalar(); return; }
+  const evt = _promptInstalar;
+  _promptInstalar = null;                 // o evento vale uma vez só
+  try {
+    evt.prompt();
+    const { outcome } = await evt.userChoice;
+    if (outcome !== 'accepted') toast('Instalação cancelada — dá para instalar depois pelo menu do navegador');
+  } catch (e) {
+    toast('Não consegui abrir a instalação: ' + e.message, 'err');
+  } finally {
+    _pintarBotaoInstalar();               // sem o evento, o botão vira instrução
+  }
+}
+
+function comoInstalar() {
+  alert(_ehIOS()
+    ? 'Para instalar no iPhone:\n\n'
+      + '1. Abra este link no SAFARI (pelo Chrome a opção não aparece)\n'
+      + '2. Toque em Compartilhar — o quadrado com a seta para cima\n'
+      + '3. Role a lista e toque em "Adicionar à Tela de Início"\n'
+      + '4. Toque em Adicionar\n\n'
+      + 'O ícone aparece junto dos outros apps.'
+    : 'Para instalar no Android:\n\n'
+      + '1. Abra o menu do navegador — os três pontinhos (⋮)\n'
+      + '2. Toque em "Adicionar à tela inicial" ou "Instalar app"\n'
+      + '3. Confirme\n\n'
+      + 'Se a opção não estiver lá, o app provavelmente já está instalado — '
+      + 'procure o ícone na tela inicial.');
+}
+
 /* ── Auth ────────────────────────────────────────────────── */
 
 /* RECUPERAÇÃO DE SENHA — a trava mais importante deste bloco.
@@ -430,6 +505,7 @@ function renderAuth(mode='login') {
   const rodape = `
     <div style="margin-top:8px;text-align:center">
       <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <div class="install-slot"></div>
       <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
       <p style="color:rgba(255,255,255,.45);font-size:11px;margin-top:14px">Versão ${APP_VERSION}</p>
@@ -445,6 +521,7 @@ function renderAuth(mode='login') {
       <button class="btn btn-primary btn-full" id="a-btn-reset" onclick="pedirRecuperacao()">Enviar link</button>
       <p class="auth-switch"><a onclick="renderAuth('login')">Voltar para o login</a></p>
       ${rodape}`;
+    _pintarBotaoInstalar();
     return;
   }
 
@@ -478,10 +555,12 @@ function renderAuth(mode='login') {
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
       <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <div class="install-slot"></div>
       <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
     </div>
   `;
+  _pintarBotaoInstalar();
 }
 
 /* Modo local sem autenticação — acessa QR/OCR sem depender do Supabase */
@@ -2089,6 +2168,7 @@ function renderPerfil() {
   </div>
 
   <div class="perfil-actions">
+    <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
     <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
     <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
@@ -2121,6 +2201,7 @@ function renderPerfil() {
     </div>
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
+  _pintarBotaoInstalar();
 }
 
 async function salvarPerfil() {
