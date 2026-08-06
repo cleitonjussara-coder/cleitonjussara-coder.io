@@ -41,7 +41,7 @@ const APP_VERSION = 'v1';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 83;
+const APP_BUILD = 84;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2246,10 +2246,6 @@ function renderPerfil() {
   <div class="perfil-actions">
     <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
-    <button class="btn btn-outline" onclick="exportExcel()">📊 Excel Anual ${filAno}</button>
-    <button class="btn btn-outline" onclick="exportCSV()">📄 CSV ${MESES[filMes-1]}/${filAno}</button>
-    <button class="btn btn-outline" onclick="diagnosticoFotos()">🔎 Diagnóstico de anexos</button>
-    <button class="btn btn-outline" onclick="diagnosticoInstalacao()">🔎 Diagnóstico de instalação</button>
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
       ${driveOk && GDrive.isConnected() ? `
