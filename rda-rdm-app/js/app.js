@@ -32,7 +32,16 @@ let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
-const APP_VERSION = 'v82';
+/* Versão do PRODUTO — é o que o colaborador vê. Sobe quando o app ganha
+   algo que muda o uso dele, não a cada publicação. */
+const APP_VERSION = 'v1';
+
+/* Número da PUBLICAÇÃO — contador interno, sobe a cada deploy. Vive nas
+   query strings `?v=` do index.html e no CACHE do sw.js, e é ele que
+   permite verificar o que está no ar de verdade (com "v1" fixo não daria
+   para distinguir uma publicação da outra). Aparece só no diagnóstico e
+   nas telas técnicas, para suporte. */
+const APP_BUILD = 83;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -544,7 +553,7 @@ async function diagnosticoInstalacao() {
     L.push('Checagem de instalado: navegador não suporta');
   }
   L.push('');
-  L.push(`Versão do app: ${APP_VERSION}`);
+  L.push(`Versão do app: ${APP_VERSION} (publicação ${APP_BUILD})`);
   L.push(`Navegador: ${navigator.userAgent.slice(0, 110)}`);
 
   alert(L.join('\n'));
@@ -2319,7 +2328,7 @@ async function iniciarQR() {
       + 'padding-top:calc(10px + env(safe-area-inset-top,0px));';
     $('qr-overlay').appendChild(diag);
   }
-  const setDiag = t => { diag.textContent = `[${APP_VERSION}] ` + t; };
+  const setDiag = t => { diag.textContent = `[${APP_VERSION}·${APP_BUILD}] ` + t; };
   setDiag('Abrindo câmera…');
 
   // checa suporte do navegador
