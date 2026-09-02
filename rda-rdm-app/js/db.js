@@ -347,6 +347,15 @@ window.DB = (() => {
     return recuperadas;
   }
 
+  /* Conta o que ainda não subiu: notas/repasses não sincronizados + anexos
+     na fila. Alimenta o "N ⏳" ao lado do indicador de rede no topo. */
+  async function countPending() {
+    const [ns, rs, fs] = await Promise.all([_getAll('notas'), _getAll('repasses'), _getAll('fotos')]);
+    return ns.filter(n => !n.synced).length
+         + rs.filter(r => !r.synced).length
+         + fs.length;
+  }
+
   async function sync(sb, userId) {
     if (_running) return null;
     _running = true;
@@ -380,6 +389,6 @@ window.DB = (() => {
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
-    sync, setupAutoSync, getMeta, setMeta,
+    sync, setupAutoSync, getMeta, setMeta, countPending,
   };
 })();

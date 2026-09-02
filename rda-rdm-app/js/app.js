@@ -41,7 +41,7 @@ const APP_VERSION = 'v1';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 84;
+const APP_BUILD = 85;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -231,9 +231,33 @@ function setLoading(on, msg = '') {
 function syncBadge(syncing) {
   const dot = $('sync-dot');
   const txt = $('sync-txt');
-  if (syncing) { dot.className='sync-dot syncing'; txt.textContent='sincronizando'; return; }
-  if (!navigator.onLine) { dot.className='sync-dot offline'; txt.textContent='offline'; return; }
-  dot.className='sync-dot online'; txt.textContent='online';
+  if (syncing) { dot.className='sync-dot syncing'; txt.textContent='sincronizando'; }
+  else if (!navigator.onLine) { dot.className='sync-dot offline'; txt.textContent='offline'; }
+  else { dot.className='sync-dot online'; txt.textContent='online'; }
+  _pintarPendentes(txt);
+}
+
+/* Quantos lançamentos ainda estão só no aparelho, ao lado do status de rede.
+   offline + pendências fica em destaque: é o caso que pede atenção em campo. */
+async function _pintarPendentes(txtEl) {
+  let n = 0;
+  try { n = await DB.countPending(); } catch (_) {}
+  const base = txtEl.textContent.split(' · ')[0];
+  txtEl.textContent = n > 0 ? `${base} · ${n} ⏳` : base;
+  txtEl.style.fontWeight = n > 0 ? '800' : '';
+  txtEl.style.color = (n > 0 && !navigator.onLine) ? '#FFD7D7' : '';
+}
+
+/* Toque no indicador de rede no topo: envia na hora o que estiver pendente,
+   em vez de esperar o ciclo automático de 60 s. */
+async function forcarSync() {
+  if (!navigator.onLine) { toast('Sem internet — os lançamentos sobem sozinhos quando ela voltar', 'err'); return; }
+  if (!sb || !user) return;
+  let n = 0;
+  try { n = await DB.countPending(); } catch (_) {}
+  if (!n) { toast('Tudo sincronizado ✅'); return; }
+  syncBadge(true);
+  try { await DB.sync(sb, user.id); } catch (_) { syncBadge(false); }
 }
 
 /* ── Loaders sob demanda (lazy) ──────────────────────────── */
@@ -393,6 +417,8 @@ async function carregarDadosLocais() {
   if (!user) return;
   notas    = await DB.getNotasUser(user.id);
   repasses = await DB.getRepassesUser(user.id);
+  // atualiza o "N ⏳" do topo sempre que os dados locais mudam
+  if (_telaAtual === 'app') syncBadge(false);
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
     _reparoAnexosFeito = true;
@@ -607,7 +633,7 @@ function renderAuth(mode='login') {
       <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
         Escolha a senha que você vai usar a partir de agora.
       </p>
-      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 6 caracteres)" autocomplete="new-password">
+      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 8 caracteres)" autocomplete="new-password">
       <input class="inp" id="a-pass2" type="password" placeholder="Repita a nova senha" autocomplete="new-password">
       <button class="btn btn-primary btn-full" id="a-btn-nova" onclick="definirNovaSenha()">Salvar senha</button>
       <p class="auth-switch"><a onclick="cancelarRecuperacao()">Cancelar</a></p>`;
@@ -626,7 +652,7 @@ function renderAuth(mode='login') {
     <h2 class="auth-title">Criar conta</h2>
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
-    <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 6 caracteres)" autocomplete="new-password">
+    <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 8 caracteres)" autocomplete="new-password">
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
@@ -686,7 +712,7 @@ async function definirNovaSenha() {
   if (_definindoSenha) return;
   const nova  = $('a-pass').value;
   const nova2 = $('a-pass2').value;
-  if (!nova || nova.length < 6) { toast('A senha precisa de pelo menos 6 caracteres','err'); return; }
+  if (!nova || nova.length < 8) { toast('A senha precisa de pelo menos 8 caracteres','err'); return; }
   if (nova !== nova2)           { toast('As duas senhas não são iguais','err'); return; }
 
   _definindoSenha = true;
@@ -739,7 +765,7 @@ async function register() {
   const email = $('a-email').value.trim();
   const pass  = $('a-pass').value;
   if (!email||!pass) { toast('Preencha os campos','err'); return; }
-  if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres','err'); return; }
+  if (pass.length < 8) { toast('Senha deve ter ao menos 8 caracteres','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para cadastrar','err'); return; }
   const { error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
@@ -777,7 +803,9 @@ async function initDrive() {
 }
 
 function _mostrarBannerDrive() {
-  // banner descartável no topo do conteúdo
+  // banner descartável no topo do conteúdo — e o descarte é lembrado:
+  // quem fechou no × não é mais importunado (conecta depois pelo Perfil)
+  if (localStorage.getItem('drive-banner-off') === '1') return;
   const existing = $('drive-invite-banner');
   if (existing) return;
   const b = document.createElement('div');
@@ -790,7 +818,7 @@ function _mostrarBannerDrive() {
       border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
       Conectar
     </button>
-    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
+    <button onclick="localStorage.setItem('drive-banner-off','1');this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
       font-size:18px;cursor:pointer;line-height:1;padding:0 4px">×</button>`;
   const content = $('app-content');
   if (content) content.parentElement.insertBefore(b, content);
@@ -921,6 +949,7 @@ function updateDriveBadge() {
 
 /* ── Navegação ───────────────────────────────────────────── */
 function switchView(v) {
+  fecharCaptura();   // trocar de aba fecha o painel de lançamento, se estiver aberto
   viewAtual = v;
   document.querySelectorAll('.nav-btn[data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view===v)
@@ -1514,7 +1543,7 @@ function renderHome() {
     <div class="db-header">
       <div class="mes-nav">
         <button class="btn-mes-nav" onclick="mudarMes(-1)" aria-label="Período anterior">‹</button>
-        <span class="mes-label">${esc(rotulo)}</span>
+        <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${esc(rotulo)}</span>
         <button class="btn-mes-nav" onclick="mudarMes(1)" aria-label="Próximo período">›</button>
       </div>
       <div class="seg">
@@ -1576,7 +1605,7 @@ function renderHome() {
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
           <span class="db-kpi-title">Média/Nota</span>
-          ${chipDelta(mediaNota, mediaAnt, false)}
+          ${totalNotas ? chipDelta(mediaNota, mediaAnt, false) : ''}
         </div>
         <span class="db-kpi-val">${brl(mediaNota)}</span>
         <span class="db-kpi-sub">${totalNotas} nota${totalNotas === 1 ? '' : 's'} no período</span>
@@ -1722,7 +1751,7 @@ function renderNotas() {
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label">${periodo}</span>
+      <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${periodo}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
     <div class="fil-tipo">
@@ -1871,6 +1900,41 @@ function mudarMes(delta) {
   if (viewAtual==='saldo') renderSaldo();
 }
 
+/* ── Seletor de mês/ano: tocar no nome do período pula direto,
+   em vez de apertar ‹ › mês por mês ─────────────────────────── */
+let _mpAno = null;
+function abrirSeletorMes() {
+  _mpAno = filAno;
+  _renderSeletorMes();
+  $('mes-picker-overlay').style.display = 'flex';
+}
+function fecharSeletorMes() {
+  const o = $('mes-picker-overlay');
+  if (o) o.style.display = 'none';
+}
+function mesPickerAno(delta) { _mpAno += delta; _renderSeletorMes(); }
+function _renderSeletorMes() {
+  $('mp-ano').textContent = _mpAno;
+  $('mp-meses').innerHTML = MESES.map((m, i) => {
+    const ativo = (i + 1 === filMes && _mpAno === filAno);
+    return `<button class="chip${ativo ? ' active' : ''}" style="padding:9px 4px;text-align:center"
+      onclick="escolherMes(${i + 1})">${m}</button>`;
+  }).join('');
+}
+function escolherMes(m) {
+  filMes = m;
+  filAno = _mpAno;
+  /* tela em modo "ano inteiro"? escolher um mês volta ao modo mensal */
+  if (viewAtual === 'home'  && filtroPeriodo === 'anual') filtroPeriodo = 'mensal';
+  if (viewAtual === 'notas' && filtroNotasAno) filtroNotasAno = false;
+  dashBarraSel = null;
+  fecharSeletorMes();
+  if (viewAtual==='home')   renderHome();
+  if (viewAtual==='notas')  renderNotas();
+  if (viewAtual==='saldo')  renderSaldo();
+  if (viewAtual==='equipe') renderEquipe();
+}
+
 function filtrarTipo(btn) {
   document.querySelectorAll('.fil-tipo .chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -1933,7 +1997,7 @@ function renderSaldo() {
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
+      <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${MESES[filMes-1]} ${filAno}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
     <div class="export-btns">
@@ -2277,10 +2341,22 @@ function renderPerfil() {
   _pintarBotaoInstalar();
 }
 
+/* Nome próprio padronizado: "cleiton souza" / "CLEITON SOUZA" → "Cleiton Souza".
+   Importa porque esse nome vira a pasta do Drive e o cabeçalho da planilha. */
+function _capitalizarNome(s) {
+  const prep = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+  return s.toLowerCase().split(/\s+/).map((p, i) =>
+    (i > 0 && prep.has(p)) ? p : p.charAt(0).toUpperCase() + p.slice(1)
+  ).join(' ');
+}
+
 async function salvarPerfil() {
-  const nome   = $('p-nome').value.trim();
+  const nome   = _capitalizarNome($('p-nome').value.trim());
   const nucleo = $('p-nucleo').value;
   if (!nome) { toast('Informe seu nome','err'); return; }
+  if (nome.split(/\s+/).length < 2
+      && !confirm('O nome dá nome à sua pasta no Drive e ao cabeçalho da planilha.\n'
+                + `Salvar só com "${nome}", sem sobrenome?`)) return;
   user.nome   = nome;
   user.nucleo = nucleo;
   if (sb && !DEMO_MODE) {
@@ -2291,8 +2367,10 @@ async function salvarPerfil() {
 }
 
 /* ── CAPTURA: sheet seleção ──────────────────────────────── */
+/* Tocar no + com o painel aberto FECHA (alterna) — antes ele só abria,
+   e o painel ficava preso por cima das outras abas no desktop. */
 function abrirCaptura() {
-  $('capture-sheet').classList.add('open');
+  $('capture-sheet').classList.toggle('open');
 }
 function fecharCaptura() {
   $('capture-sheet').classList.remove('open');
@@ -2841,7 +2919,9 @@ async function abrirFormNota(dados = {}) {
   $('nf-chave').value    = dados.chave    || '';
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
-  $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
+  /* Categoria sem padrão silencioso: RDM salvo no "Abastecimento" automático
+     mandava foto de hospedagem p/ a pasta errada no Drive. Quem lança escolhe. */
+  $('nf-subtipo').value  = dados.subtipo  || '';
   $('nf-data').value     = dados.data     || hoje();
   $('nf-valor').value    = dados.valor    || '';
   $('nf-cnpj').value     = dados.cnpj ? BrasilAPI.formatar(dados.cnpj) : '';
@@ -3285,6 +3365,10 @@ async function _salvarNotaInterno() {
   const data  = $('nf-data').value;
   // sem valor ainda grava como "pendente" (0), mas sem anexo não grava
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
+  if (tipo === 'RDM' && !$('nf-subtipo').value) {
+    toast('Escolha a categoria da despesa (Abastecimento, Hospedagem ou Outros)', 'err');
+    return;
+  }
 
   /* ANEXO OBRIGATÓRIO — nota de prestação de contas sem comprovante não vale.
      Ao EDITAR, o anexo que a nota já tem no servidor conta: depois que a foto
@@ -3317,6 +3401,12 @@ async function _salvarNotaInterno() {
         return;
       }
     } catch (_) { /* falha na checagem online não bloqueia (a trava local já valeu) */ }
+  }
+  /* Dígito verificador da chave (módulo 11): pega erro de digitação mesmo
+     quando a nota veio pelo caminho manual. Confirma antes de bloquear —
+     o objetivo é avisar, não impedir um caso raro legítimo. */
+  if (_chaveDig.length === 44 && !SEFAZ.dvValido(_chaveDig)) {
+    if (!confirm('⚠️ O dígito verificador da chave não confere — ela pode ter sido digitada errada.\n\nSalvar assim mesmo?')) return;
   }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;
@@ -3551,6 +3641,6 @@ document.addEventListener('DOMContentLoaded', () => {
   init();
   renderAuth('login');
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') fecharFotoViewer();
+    if (e.key === 'Escape') { fecharFotoViewer(); fecharCaptura(); fecharSeletorMes(); }
   });
 });

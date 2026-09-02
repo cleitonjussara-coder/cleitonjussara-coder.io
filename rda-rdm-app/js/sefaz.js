@@ -48,9 +48,25 @@ window.SEFAZ = (() => {
      Não há rede aqui: a chave de 44 dígitos já contém UF, competência,
      CNPJ do emitente e modelo. Razão social vem da BrasilAPI e o valor,
      do OCR da foto — nenhum dos dois sai da chave. */
+  /* Dígito verificador da chave (módulo 11, pesos 2→9 da direita p/ a
+     esquerda sobre os 43 primeiros dígitos). Pega erro de digitação na
+     hora, antes de gravar uma nota com chave que o SEFAZ nunca acharia. */
+  function dvValido(c) {
+    const d = digits(c);
+    if (d.length !== 44) return false;
+    let soma = 0, peso = 2;
+    for (let i = 42; i >= 0; i--) {
+      soma += Number(d[i]) * peso;
+      peso = peso === 9 ? 2 : peso + 1;
+    }
+    const resto = soma % 11;
+    return Number(d[43]) === (resto < 2 ? 0 : 11 - resto);
+  }
+
   async function consultarChave(chave) {
     const c = digits(chave);
     if (c.length !== 44) throw new Error('Chave de acesso inválida — deve ter 44 dígitos');
+    if (!dvValido(c)) throw new Error('Chave inválida — o dígito verificador não confere. Confira os 44 dígitos.');
 
     const ano = 2000 + parseInt(c.slice(2,4), 10);
     const mes = parseInt(c.slice(4,6), 10);
@@ -79,5 +95,5 @@ window.SEFAZ = (() => {
     return `${PORTAL_NACIONAL}?tipoConsulta=resumo&nfe=${c}`;
   }
 
-  return { consultarChave, linkConsulta, UF_MAP };
+  return { consultarChave, linkConsulta, dvValido, UF_MAP };
 })();
