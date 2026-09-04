@@ -5,7 +5,9 @@
 ───────────────────────────────────────────────────────────── */
 window.DB = (() => {
   const DB_NAME = 'petermann_v1';
-  const DB_VER  = 2;
+  const DB_VER  = 3;
+  const MAX_SYNC_ATTEMPTS = 5;
+  const SYNC_RETRY_MS = 2_000;
   let _db = null;
 
   /* ── Abertura / migração ─────────────────────────────── */
@@ -32,6 +34,11 @@ window.DB = (() => {
         }
         if (!d.objectStoreNames.contains('meta')) {
           d.createObjectStore('meta', { keyPath: 'k' });
+        }
+        if (!d.objectStoreNames.contains('sync_queue')) {
+          const s = d.createObjectStore('sync_queue', { keyPath: 'id' });
+          s.createIndex('status', 'status', { unique: false });
+          s.createIndex('next_attempt_at', 'next_attempt_at', { unique: false });
         }
       };
       req.onsuccess = e => { _db = e.target.result; res(_db); };
@@ -83,6 +90,84 @@ window.DB = (() => {
       r.onerror   = e => rej(e.target.error);
     });
 
+  const _normalizeRecord = (item, fallbackStatus = 'synced') => {
+    if (!item) return item;
+    const status = item.sync_status || (item.synced === false ? 'pending' : fallbackStatus);
+    return {
+      ...item,
+      synced: typeof item.synced === 'boolean' ? item.synced : status !== 'synced',
+      sync_status: status,
+      sync_error: item.sync_error || null,
+    };
+  };
+
+  const _queueOp = async (entry) => {
+    const now = new Date().toISOString();
+    const existingItems = await _getAll('sync_queue');
+    const existingItem = existingItems.find(item =>
+      item.entity === entry.entity &&
+      item.entity_id === entry.entity_id &&
+      item.action === entry.action
+    );
+
+    const item = {
+      id: entry.id || existingItem?.id || crypto.randomUUID(),
+      entity: entry.entity,
+      entity_id: entry.entity_id,
+      action: entry.action,
+      payload: entry.payload || null,
+      status: entry.status || 'pending',
+      attempts: entry.attempts || existingItem?.attempts || 0,
+      next_attempt_at: entry.next_attempt_at || now,
+      created_at: entry.created_at || existingItem?.created_at || now,
+      updated_at: entry.updated_at || now,
+      last_error: entry.last_error || existingItem?.last_error || null,
+    };
+
+    if (existingItem) {
+      const merged = {
+        ...existingItem,
+        ...item,
+        id: existingItem.id,
+        created_at: existingItem.created_at || item.created_at,
+        status: existingItem.status === 'running' ? existingItem.status : (entry.status || 'pending'),
+        attempts: entry.attempts ?? existingItem.attempts ?? 0,
+        payload: entry.payload ?? existingItem.payload ?? null,
+        next_attempt_at: entry.next_attempt_at || (existingItem.status === 'running' ? existingItem.next_attempt_at : now),
+        last_error: entry.last_error ?? existingItem.last_error ?? null,
+        updated_at: now,
+      };
+      await _put('sync_queue', merged);
+      return merged;
+    }
+
+    await _put('sync_queue', item);
+    return item;
+  };
+
+  const _retryDelayMs = attempts => Math.min(60_000, SYNC_RETRY_MS * 2 ** Math.max(0, attempts - 1));
+
+  async function getSyncQueueSummary() {
+    const queueItems = await _getAll('sync_queue');
+    const now = Date.now();
+    const pendingItems = queueItems.filter(item => item.status !== 'running');
+    const failedItems = queueItems.filter(item => item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS);
+    const scheduledItems = pendingItems.filter(item => item.next_attempt_at && new Date(item.next_attempt_at).getTime() > now);
+    const nextAttemptAt = scheduledItems.length
+      ? scheduledItems.reduce((earliest, item) => {
+          const ts = new Date(item.next_attempt_at).getTime();
+          return ts < earliest ? ts : earliest;
+        }, new Date(scheduledItems[0].next_attempt_at).getTime())
+      : null;
+    return {
+      count: queueItems.length,
+      pendingCount: pendingItems.length,
+      failedCount: failedItems.length,
+      scheduledCount: scheduledItems.length,
+      nextAttemptAt,
+    };
+  }
+
   /* ── Meta (last_sync, etc.) ──────────────────────────── */
   const getMeta = async (k, def = null) => { const r = await _get('meta', k); return r ? r.v : def; };
   const setMeta = (k, v) => _put('meta', { k, v });
@@ -91,28 +176,47 @@ window.DB = (() => {
   async function saveNota(nota, userId) {
     const now = new Date().toISOString();
     const fotoLocal = nota.foto_local || null;
+    const id = nota.id || crypto.randomUUID();
     const obj = {
       ...nota,                                        // spread primeiro
-      id         : nota.id || crypto.randomUUID(),   // sobrescreve id undefined
+      id,
       user_id    : nota.user_id || userId,
       created_at : nota.created_at || now,
       updated_at : now,
       synced     : false,
+      sync_status: 'pending',
+      sync_error : null,
       deleted    : nota.deleted || false,
     };
-    delete obj.foto_local; // não sobe pro Supabase
-    await _put('notas', { ...obj, foto_local: fotoLocal });
-    return obj;
+    const localObj = { ...obj, foto_local: fotoLocal };
+    await _put('notas', localObj);
+    const payload = { ...localObj };
+    delete payload.foto_local;
+    delete payload.synced;
+    delete payload.sync_status;
+    delete payload.sync_error;
+    await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
+    return localObj;
   }
-
-  async function getNotasUser(userId) {
+ 
+  async function getNotasUser(userId, includeDeleted = false) {
     const all = await _getAllByIdx('notas', 'user_id', userId);
-    return all.filter(n => !n.deleted);
+    return all.filter(n => includeDeleted || !n.deleted).map(n => _normalizeRecord(n));
   }
 
   async function softDeleteNota(id) {
     const n = await _get('notas', id);
-    if (n) await _put('notas', { ...n, deleted: true, synced: false, updated_at: new Date().toISOString() });
+    if (n) {
+      const now = new Date().toISOString();
+      const updated = { ...n, deleted: true, synced: false, sync_status: 'pending', sync_error: null, updated_at: now };
+      await _put('notas', updated);
+      const payload = { ...updated };
+      delete payload.foto_local;
+      delete payload.synced;
+      delete payload.sync_status;
+      delete payload.sync_error;
+      await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
+    }
   }
 
   /* ── ANEXOS / FOTOS (blob local: foto, PDF ou XML) ────── */
@@ -120,9 +224,14 @@ window.DB = (() => {
     jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp',
     heic:'image/heic', gif:'image/gif', pdf:'application/pdf', xml:'text/xml',
   };
-  const saveFotoLocal  = (nota_id, blob, ext) => _put('fotos', { nota_id, blob, ext: (ext || 'jpg').toLowerCase() });
-  const getFotoLocal   = (nota_id) => _get('fotos', nota_id);
-  const delFotoLocal   = (nota_id) => _del('fotos', nota_id);
+  const saveFotoLocal = async (nota_id, blob, ext) => {
+    const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase() };
+    await _put('fotos', entry);
+    await _queueOp({ entity: 'foto', entity_id: nota_id, action: 'upload', payload: entry });
+    return entry;
+  };
+  const getFotoLocal = (nota_id) => _get('fotos', nota_id);
+  const delFotoLocal = (nota_id) => _del('fotos', nota_id);
 
   const EXT_POR_MIME = { ...Object.fromEntries(
     Object.entries(MIME_POR_EXT).map(([e, m]) => [m, e])), 'image/jpeg': 'jpg' };
@@ -161,40 +270,99 @@ window.DB = (() => {
   /* ── REPASSES ────────────────────────────────────────── */
   async function saveRepasse(rep, userId) {
     const now = new Date().toISOString();
+    const id = rep.id || crypto.randomUUID();
     const obj = {
       ...rep,                                        // spread primeiro
-      id         : rep.id || crypto.randomUUID(),   // sobrescreve id undefined
+      id,
       user_id    : rep.user_id || userId,
       created_at : rep.created_at || now,
       updated_at : now,
       synced     : false,
+      sync_status: 'pending',
+      sync_error : null,
       deleted    : rep.deleted || false,
     };
     await _put('repasses', obj);
+    const payload = { ...obj };
+    delete payload.synced;
+    delete payload.sync_status;
+    delete payload.sync_error;
+    await _queueOp({ entity: 'repass', entity_id: id, action: 'upsert', payload });
     return obj;
   }
-
-  async function getRepassesUser(userId) {
+ 
+  async function getRepassesUser(userId, includeDeleted = false) {
     const all = await _getAllByIdx('repasses', 'user_id', userId);
-    return all.filter(r => !r.deleted);
+    return all.filter(r => includeDeleted || !r.deleted).map(r => _normalizeRecord(r));
   }
-
+ 
   async function softDeleteRepasse(id) {
     const r = await _get('repasses', id);
-    if (r) await _put('repasses', { ...r, deleted: true, synced: false, updated_at: new Date().toISOString() });
-  }
-
-  /* ── Merge dados vindos do Drive (Drive vence se mais recente) */
-  async function upsertFromDrive(store, records) {
-    for (const rec of (records || [])) {
-      if (!rec.id) continue;
-      const local = await _get(store, rec.id);
-      if (!local || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
-        await _put(store, { ...rec, synced: true, foto_local: local?.foto_local ?? null });
-      }
+    if (r) {
+      const now = new Date().toISOString();
+      const updated = { ...r, deleted: true, synced: false, sync_status: 'pending', sync_error: null, updated_at: now };
+      await _put('repasses', updated);
+      const payload = { ...updated };
+      delete payload.synced;
+      delete payload.sync_status;
+      delete payload.sync_error;
+      await _queueOp({ entity: 'repass', entity_id: id, action: 'upsert', payload });
     }
   }
 
+  /* ── Merge dados vindos do Drive (Drive vence se mais recente) */
+  async function upsertFromDrive(store, records, userId = null) {
+    const incoming = (records || []).filter(rec => rec && rec.id);
+    const incomingIds = new Set(incoming.map(rec => rec.id));
+    const now = new Date().toISOString();
+
+    for (const rec of incoming) {
+      const local = await _get(store, rec.id);
+      const remoteDeleted = rec.deleted === true || rec.deleted_at || rec._deleted === true;
+
+      if (remoteDeleted) {
+        if (local && !local.deleted) {
+          await _put(store, {
+            ...local,
+            deleted: true,
+            synced: true,
+            sync_status: 'synced',
+            sync_error: null,
+            updated_at: now,
+          });
+        }
+        continue;
+      }
+
+      if (!local || local.deleted || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
+        await _put(store, {
+          ...rec,
+          synced: true,
+          sync_status: 'synced',
+          sync_error: null,
+          foto_local: local?.foto_local ?? null,
+        });
+      }
+    }
+
+    const localAll = await _getAll(store);
+    for (const item of localAll) {
+      if (!item?.id) continue;
+      if (userId && item.user_id !== userId) continue;
+      if (item.deleted) continue;
+      if (item.synced === false || item.sync_status === 'pending' || item.sync_status === 'failed' || item.sync_status === 'retrying') continue;
+      if (incomingIds.has(item.id)) continue;
+      await _put(store, {
+        ...item,
+        deleted: true,
+        synced: true,
+        sync_status: 'synced',
+        sync_error: null,
+        updated_at: now,
+      });
+    }
+  }
+ 
   /* ── SYNC ────────────────────────────────────────────── */
   let _running = false;
 
@@ -204,80 +372,127 @@ window.DB = (() => {
   const _ehErroQrUrl = e =>
     /qr_url/i.test(`${e?.message || ''} ${e?.details || ''} ${e?.hint || ''}`);
 
+  async function _ensureQueueFromExisting() {
+    const [allN, allR, allFotos, queueItems] = await Promise.all([
+      _getAll('notas'),
+      _getAll('repasses'),
+      _getAll('fotos'),
+      _getAll('sync_queue'),
+    ]);
+    const existing = new Set(queueItems.filter(i => i.entity === 'nota').map(i => i.entity_id));
+    for (const n of allN.filter(x => x.synced === false || x.sync_status === 'pending' || x.sync_status === 'failed' || x.sync_status === 'retrying')) {
+      if (!existing.has(n.id)) {
+        const payload = { ...n };
+        delete payload.foto_local;
+        delete payload.synced;
+        delete payload.sync_status;
+        delete payload.sync_error;
+        await _queueOp({ entity: 'nota', entity_id: n.id, action: 'upsert', payload });
+      }
+    }
+    const existingRep = new Set(queueItems.filter(i => i.entity === 'repass').map(i => i.entity_id));
+    for (const r of allR.filter(x => x.synced === false || x.sync_status === 'pending' || x.sync_status === 'failed' || x.sync_status === 'retrying')) {
+      if (!existingRep.has(r.id)) {
+        const payload = { ...r };
+        delete payload.synced;
+        delete payload.sync_status;
+        delete payload.sync_error;
+        await _queueOp({ entity: 'repass', entity_id: r.id, action: 'upsert', payload });
+      }
+    }
+    const existingFoto = new Set(queueItems.filter(i => i.entity === 'foto').map(i => i.entity_id));
+    for (const f of allFotos) {
+      if (!existingFoto.has(f.nota_id)) {
+        await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f });
+      }
+    }
+  }
+
   async function pushPending(sb) {
     if (!sb || !navigator.onLine) return { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null };
-    const [allN, allR] = await Promise.all([_getAll('notas'), _getAll('repasses')]);
+    await _ensureQueueFromExisting();
+    const queueItems = await _getAll('sync_queue');
+    const now = Date.now();
+    const dueItems = queueItems.filter(item => {
+      const isDue = !item.next_attempt_at || new Date(item.next_attempt_at).getTime() <= now;
+      if (item.status === 'running') {
+        const updatedAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+        return isDue && now - updatedAt > 30_000;
+      }
+      return isDue;
+    });
     let ok = 0, fail = 0;
-
-    // Notas
-    for (const n of allN.filter(x => !x.synced)) {
-      const payload = { ...n };
-      delete payload.foto_local; // não sobe o blob
-      delete payload.synced;     // coluna só existe localmente (IndexedDB)
-      if (_semColunaQrUrl) delete payload.qr_url;
-      try {
-        let { error } = await sb.from('notas').upsert(payload);
-        /* qr_url é coluna nova (v59). Enquanto o `alter table` não roda no
-           Supabase, o PostgREST recusa o registro inteiro por causa dela e o
-           sync parava de subir QUALQUER nota. Detecta, marca e repete sem a
-           coluna — quando a migração rodar, volta a subir sozinho. */
-        if (error && _ehErroQrUrl(error)) {
-          _semColunaQrUrl = true;
-          delete payload.qr_url;
-          ({ error } = await sb.from('notas').upsert(payload));
-        }
-        if (!error) { await _put('notas', { ...n, synced: true }); ok++; }
-        else fail++;
-      } catch (_) { fail++; }
-    }
-
-    // Anexos pendentes (foto, PDF ou XML)
     let fotosOk = 0, fotosFail = 0, erroFoto = null;
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
 
-    for (const f of await _getAll('fotos')) {
+    for (const item of dueItems) {
+      const now = new Date().toISOString();
+      await _put('sync_queue', { ...item, status: 'running', updated_at: now });
       try {
-        const nota = await _get('notas', f.nota_id);
-        // Sem a nota não há para quem o anexo pertencer — antes isso montava
-        // um caminho "undefined/…" e subia lixo para o bucket a cada sync.
-        if (!nota?.user_id) { await delFotoLocal(f.nota_id); continue; }
+        if (item.entity === 'foto') {
+          const payload = item.payload || null;
+          if (!payload?.blob) { await _del('sync_queue', item.id); continue; }
+          const nota = await _get('notas', item.entity_id);
+          if (!nota?.user_id) { await delFotoLocal(item.entity_id); await _del('sync_queue', item.id); continue; }
+          const ext = (payload.ext || 'jpg').toLowerCase();
+          const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
+          const path = `${nota.user_id}/${item.entity_id}.${ext}`;
+          const { error } = await sb.storage.from('notas-fotos').upload(path, payload.blob, { contentType: mime, upsert: true });
+          if (error) throw error;
+          const { error: erroRef } = await sb.from('notas').update({ foto_path: path }).eq('id', item.entity_id);
+          if (erroRef) throw erroRef;
+          await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
+          await delFotoLocal(item.entity_id);
+          await _del('sync_queue', item.id);
+          fotosOk++;
+          continue;
+        }
 
-        const ext  = (f.ext || 'jpg').toLowerCase();
-        const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
-        const path = `${nota.user_id}/${f.nota_id}.${ext}`;
+        const record = item.entity === 'nota' ? await _get('notas', item.entity_id) : await _get('repasses', item.entity_id);
+        if (!record) { await _del('sync_queue', item.id); continue; }
 
-        const { error } = await sb.storage.from('notas-fotos').upload(path, f.blob,
-          { contentType: mime, upsert: true });
-        if (error) { falhou(error.message); continue; }
+        const payload = { ...(item.payload || {}) };
+        delete payload.foto_local;
+        delete payload.synced;
+        delete payload.sync_status;
+        delete payload.sync_error;
+        if (_semColunaQrUrl) delete payload.qr_url;
 
-        /* O erro deste update PRECISA ser checado. Sem isso, quando ele
-           falhava (RLS, queda de rede, linha ainda não inserida) o código
-           seguia em frente, apagava o blob local e o servidor ficava sem
-           foto_path — no pull seguinte o null do servidor sobrescrevia o
-           caminho local e a foto sumia de vez, mesmo estando no Storage.
-           Falhando aqui, o blob fica e a próxima sync tenta de novo. */
-        const { error: erroRef } = await sb.from('notas')
-          .update({ foto_path: path }).eq('id', f.nota_id);
-        if (erroRef) { falhou(erroRef.message); continue; }
-
-        // grava o caminho TAMBÉM no registro local: sem isso a nota ficava sem
-        // foto_path até o próximo pull, o 📎 desaparecia da lista e o painel
-        // contava a nota como "sem anexo" mesmo com a foto já no servidor.
-        await _put('notas', { ...nota, foto_path: path, foto_local: ext });
-        await delFotoLocal(f.nota_id);
-        fotosOk++;
-      } catch (e) { falhou(e?.message || 'falha ao enviar o anexo'); }
-    }
-
-    // Repasses
-    for (const r of allR.filter(x => !x.synced)) {
-      const payload = { ...r };
-      delete payload.synced;     // coluna só existe localmente (IndexedDB)
-      try {
-        const { error } = await sb.from('repasses').upsert(payload);
-        if (!error) { await _put('repasses', { ...r, synced: true }); ok++; }
-        else fail++;
-      } catch (_) { fail++; }
+        let { error } = await sb.from(item.entity === 'nota' ? 'notas' : 'repasses').upsert(payload);
+        if (error && _ehErroQrUrl(error)) {
+          _semColunaQrUrl = true;
+          delete payload.qr_url;
+          ({ error } = await sb.from(item.entity === 'nota' ? 'notas' : 'repasses').upsert(payload));
+        }
+        if (!error) {
+          if (item.entity === 'nota') {
+            await _put('notas', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+          } else {
+            await _put('repasses', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+          }
+          await _del('sync_queue', item.id);
+          ok++;
+        } else {
+          throw error;
+        }
+      } catch (e) {
+        const message = e?.message || 'falha na sincronização';
+        const attempts = (item.attempts || 0) + 1;
+        const nextAttemptAt = new Date(Date.now() + _retryDelayMs(attempts)).toISOString();
+        const nextStatus = attempts >= MAX_SYNC_ATTEMPTS ? 'failed' : 'pending';
+        const updatedItem = { ...item, attempts, next_attempt_at: nextAttemptAt, status: nextStatus, last_error: message, updated_at: now };
+        await _put('sync_queue', updatedItem);
+        if (item.entity === 'foto') {
+          falhou(message);
+        } else {
+          const store = item.entity === 'nota' ? 'notas' : 'repasses';
+          const local = await _get(store, item.entity_id);
+          if (local) {
+            await _put(store, { ...local, synced: false, sync_status: nextStatus === 'failed' ? 'failed' : 'pending', sync_error: message, updated_at: now });
+          }
+          fail++;
+        }
+      }
     }
 
     return { ok, fail, fotosOk, fotosFail, erroFoto };
@@ -347,15 +562,6 @@ window.DB = (() => {
     return recuperadas;
   }
 
-  /* Conta o que ainda não subiu: notas/repasses não sincronizados + anexos
-     na fila. Alimenta o "N ⏳" ao lado do indicador de rede no topo. */
-  async function countPending() {
-    const [ns, rs, fs] = await Promise.all([_getAll('notas'), _getAll('repasses'), _getAll('fotos')]);
-    return ns.filter(n => !n.synced).length
-         + rs.filter(r => !r.synced).length
-         + fs.length;
-  }
-
   async function sync(sb, userId) {
     if (_running) return null;
     _running = true;
@@ -389,6 +595,6 @@ window.DB = (() => {
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
-    sync, setupAutoSync, getMeta, setMeta, countPending,
+    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary,
   };
 })();

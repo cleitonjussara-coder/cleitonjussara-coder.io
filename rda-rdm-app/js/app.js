@@ -34,14 +34,14 @@ const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','No
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
 /* Versão do PRODUTO — é o que o colaborador vê. Sobe quando o app ganha
    algo que muda o uso dele, não a cada publicação. */
-const APP_VERSION = 'v1';
+const APP_VERSION = 'v2';
 
 /* Número da PUBLICAÇÃO — contador interno, sobe a cada deploy. Vive nas
    query strings `?v=` do index.html e no CACHE do sw.js, e é ele que
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 85;
+const APP_BUILD = 92;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -228,36 +228,48 @@ function setLoading(on, msg = '') {
   }
 }
 
-function syncBadge(syncing) {
+async function syncBadge(syncing) {
   const dot = $('sync-dot');
   const txt = $('sync-txt');
-  if (syncing) { dot.className='sync-dot syncing'; txt.textContent='sincronizando'; }
-  else if (!navigator.onLine) { dot.className='sync-dot offline'; txt.textContent='offline'; }
-  else { dot.className='sync-dot online'; txt.textContent='online'; }
-  _pintarPendentes(txt);
-}
+  const banner = $('offline-banner');
+  const bannerText = $('offline-banner-text');
+  if (!dot || !txt) return;
 
-/* Quantos lançamentos ainda estão só no aparelho, ao lado do status de rede.
-   offline + pendências fica em destaque: é o caso que pede atenção em campo. */
-async function _pintarPendentes(txtEl) {
-  let n = 0;
-  try { n = await DB.countPending(); } catch (_) {}
-  const base = txtEl.textContent.split(' · ')[0];
-  txtEl.textContent = n > 0 ? `${base} · ${n} ⏳` : base;
-  txtEl.style.fontWeight = n > 0 ? '800' : '';
-  txtEl.style.color = (n > 0 && !navigator.onLine) ? '#FFD7D7' : '';
-}
+  if (syncing) {
+    dot.className = 'sync-dot syncing';
+    txt.textContent = 'sincronizando';
+    return;
+  }
 
-/* Toque no indicador de rede no topo: envia na hora o que estiver pendente,
-   em vez de esperar o ciclo automático de 60 s. */
-async function forcarSync() {
-  if (!navigator.onLine) { toast('Sem internet — os lançamentos sobem sozinhos quando ela voltar', 'err'); return; }
-  if (!sb || !user) return;
-  let n = 0;
-  try { n = await DB.countPending(); } catch (_) {}
-  if (!n) { toast('Tudo sincronizado ✅'); return; }
-  syncBadge(true);
-  try { await DB.sync(sb, user.id); } catch (_) { syncBadge(false); }
+  let summary = { count: 0, failedCount: 0, scheduledCount: 0 };
+  if (DB?.getSyncQueueSummary) {
+    try { summary = await DB.getSyncQueueSummary(); } catch (_) {}
+  }
+
+  if (!navigator.onLine) {
+    dot.className = 'sync-dot offline';
+    txt.textContent = 'offline';
+    if (banner && bannerText) {
+      bannerText.textContent = summary.count
+        ? `📡 Offline — ${summary.count} item${summary.count === 1 ? '' : 's'} aguardando sincronização`
+        : '📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.';
+      banner.style.display = 'flex';
+    }
+    return;
+  }
+
+  dot.className = 'sync-dot online';
+  txt.textContent = 'online';
+  if (banner && bannerText) {
+    if (summary.count) {
+      const suffix = summary.failedCount ? ` · ${summary.failedCount} com falha` : '';
+      const retryText = summary.scheduledCount ? ' · reprocessando em breve' : '';
+      bannerText.textContent = `🔄 ${summary.count} item${summary.count === 1 ? '' : 's'} pendente${summary.count === 1 ? '' : 's'} de sincronização${suffix}${retryText}`;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 }
 
 /* ── Loaders sob demanda (lazy) ──────────────────────────── */
@@ -315,6 +327,7 @@ function _ensureJsQR() {
 
 /* ── Inicialização ───────────────────────────────────────── */
 async function init() {
+  syncBadge(false);
   if (!DEMO_MODE) {
     try {
       await _ensureSb();
@@ -417,8 +430,6 @@ async function carregarDadosLocais() {
   if (!user) return;
   notas    = await DB.getNotasUser(user.id);
   repasses = await DB.getRepassesUser(user.id);
-  // atualiza o "N ⏳" do topo sempre que os dados locais mudam
-  if (_telaAtual === 'app') syncBadge(false);
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
     _reparoAnexosFeito = true;
@@ -633,7 +644,7 @@ function renderAuth(mode='login') {
       <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
         Escolha a senha que você vai usar a partir de agora.
       </p>
-      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 8 caracteres)" autocomplete="new-password">
+      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 6 caracteres)" autocomplete="new-password">
       <input class="inp" id="a-pass2" type="password" placeholder="Repita a nova senha" autocomplete="new-password">
       <button class="btn btn-primary btn-full" id="a-btn-nova" onclick="definirNovaSenha()">Salvar senha</button>
       <p class="auth-switch"><a onclick="cancelarRecuperacao()">Cancelar</a></p>`;
@@ -652,7 +663,7 @@ function renderAuth(mode='login') {
     <h2 class="auth-title">Criar conta</h2>
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
-    <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 8 caracteres)" autocomplete="new-password">
+    <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 6 caracteres)" autocomplete="new-password">
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
@@ -712,7 +723,7 @@ async function definirNovaSenha() {
   if (_definindoSenha) return;
   const nova  = $('a-pass').value;
   const nova2 = $('a-pass2').value;
-  if (!nova || nova.length < 8) { toast('A senha precisa de pelo menos 8 caracteres','err'); return; }
+  if (!nova || nova.length < 6) { toast('A senha precisa de pelo menos 6 caracteres','err'); return; }
   if (nova !== nova2)           { toast('As duas senhas não são iguais','err'); return; }
 
   _definindoSenha = true;
@@ -765,7 +776,7 @@ async function register() {
   const email = $('a-email').value.trim();
   const pass  = $('a-pass').value;
   if (!email||!pass) { toast('Preencha os campos','err'); return; }
-  if (pass.length < 8) { toast('Senha deve ter ao menos 8 caracteres','err'); return; }
+  if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para cadastrar','err'); return; }
   const { error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
@@ -803,9 +814,7 @@ async function initDrive() {
 }
 
 function _mostrarBannerDrive() {
-  // banner descartável no topo do conteúdo — e o descarte é lembrado:
-  // quem fechou no × não é mais importunado (conecta depois pelo Perfil)
-  if (localStorage.getItem('drive-banner-off') === '1') return;
+  // banner descartável no topo do conteúdo
   const existing = $('drive-invite-banner');
   if (existing) return;
   const b = document.createElement('div');
@@ -818,7 +827,7 @@ function _mostrarBannerDrive() {
       border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
       Conectar
     </button>
-    <button onclick="localStorage.setItem('drive-banner-off','1');this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
       font-size:18px;cursor:pointer;line-height:1;padding:0 4px">×</button>`;
   const content = $('app-content');
   if (content) content.parentElement.insertBefore(b, content);
@@ -914,8 +923,8 @@ async function pullFromDrive() {
   try {
     const remote = await GDrive.loadNotas(user.id);
     if (!remote) return;
-    await DB.upsertFromDrive('notas',    remote.notas);
-    await DB.upsertFromDrive('repasses', remote.repasses);
+    await DB.upsertFromDrive('notas',    remote.notas, user.id);
+    await DB.upsertFromDrive('repasses', remote.repasses, user.id);
     await carregarDadosLocais();
     if (viewAtual === 'home')  renderHome();
     if (viewAtual === 'notas') renderNotas();
@@ -927,7 +936,11 @@ async function syncToDrive() {
   if (!driveOk || !user || !GDrive.isConnected()) return;
   syncBadge(true);
   try {
-    await GDrive.syncNotas(user.id, notas, repasses);
+    const [notasParaDrive, repassesParaDrive] = await Promise.all([
+      DB.getNotasUser(user.id, true),
+      DB.getRepassesUser(user.id, true),
+    ]);
+    await GDrive.syncNotas(user.id, notasParaDrive, repassesParaDrive);
   } catch (e) {
     console.error('Drive sync:', e.message);
     toast('Drive: ' + e.message, 'err');
@@ -949,7 +962,6 @@ function updateDriveBadge() {
 
 /* ── Navegação ───────────────────────────────────────────── */
 function switchView(v) {
-  fecharCaptura();   // trocar de aba fecha o painel de lançamento, se estiver aberto
   viewAtual = v;
   document.querySelectorAll('.nav-btn[data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view===v)
@@ -1332,13 +1344,13 @@ function renderHome() {
   /* ── Pendências (lista interativa com transferência) ───── */
   const escopo   = modo === 'anual';
   const pendentes = A.ns.filter(n =>
-    n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
+    n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
   ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
   const resumoPend = [
     { ico:'⚠️', txt:'Sem valor',    n: pendentes.filter(n => _n(n.valor) <= 0).length, flag:'sem-valor' },
     { ico:'📎', txt:'Sem anexo',    n: pendentes.filter(n => !n.foto_path && !n.foto_local).length, flag:'sem-anexo' },
-    { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.synced === false).length, flag:'pendente' },
+    { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.sync_status === 'failed' || n.synced === false).length, flag:'pendente' },
   ];
 
   const linhaResumo = r => r.n ? `
@@ -1353,7 +1365,8 @@ function renderHome() {
     const m = [];
     if (_n(n.valor) <= 0) m.push('sem valor');
     if (!n.foto_path && !n.foto_local) m.push('sem anexo');
-    if (n.synced === false) m.push('não enviada');
+    if (n.sync_status === 'failed') m.push('falha na sincronização');
+    else if (n.synced === false) m.push('não enviada');
     if (_dataImplausivel(n)) m.push('data fora do período');
     return m.join(' · ');
   };
@@ -1397,6 +1410,11 @@ function renderHome() {
          <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
          <span class="db-pend-n">0</span>
        </div>`;
+
+  const pendingHint = pendentes.length ? `<div class="db-pend-item alerta" style="margin-bottom:8px">
+    <span class="db-pend-ico">📡</span>
+    <span class="db-pend-txt">Itens ainda não sincronizados ficam salvos no aparelho e tentam de novo quando a rede voltar.</span>
+  </div>` : '';
 
   /* ── Ritmo de gasto e projeção (só no modo mês) ──────────── */
   let ritmoHtml = '';
@@ -1543,7 +1561,7 @@ function renderHome() {
     <div class="db-header">
       <div class="mes-nav">
         <button class="btn-mes-nav" onclick="mudarMes(-1)" aria-label="Período anterior">‹</button>
-        <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${esc(rotulo)}</span>
+        <span class="mes-label">${esc(rotulo)}</span>
         <button class="btn-mes-nav" onclick="mudarMes(1)" aria-label="Próximo período">›</button>
       </div>
       <div class="seg">
@@ -1605,7 +1623,7 @@ function renderHome() {
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
           <span class="db-kpi-title">Média/Nota</span>
-          ${totalNotas ? chipDelta(mediaNota, mediaAnt, false) : ''}
+          ${chipDelta(mediaNota, mediaAnt, false)}
         </div>
         <span class="db-kpi-val">${brl(mediaNota)}</span>
         <span class="db-kpi-sub">${totalNotas} nota${totalNotas === 1 ? '' : 's'} no período</span>
@@ -1683,7 +1701,7 @@ function renderHome() {
         <span>Pendências</span>
         <a class="link" onclick="irParaNotas(null,${escopo})">Ver notas →</a>
       </div>
-      <div class="db-pend">${pendHtml}</div>
+      <div class="db-pend">${pendingHint}${pendHtml}</div>
     </div>
 
     ${ritmoHtml}
@@ -1731,9 +1749,15 @@ function limparFiltroNotas() {
 function _passaFiltroNota(n) {
   if (filtroNotasFlag === 'sem-valor')     return _n(n.valor) <= 0;
   if (filtroNotasFlag === 'sem-anexo')     return !n.foto_path && !n.foto_local;
-  if (filtroNotasFlag === 'pendente')      return n.synced === false;
+  if (filtroNotasFlag === 'pendente')      return n.sync_status === 'failed' || n.synced === false;
   if (filtroNotasFlag === 'data-suspeita') return _dataImplausivel(n);
   return true;
+}
+
+function _statusNota(n) {
+  if (n?.sync_status === 'failed') return '<span class="sync-pill failed" title="Falha na sincronização">⚠️ falhou</span>';
+  if (n?.sync_status === 'pending' || n?.synced === false) return '<span class="sync-pill pending" title="Pendente de sincronização">⏳ pendente</span>';
+  return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
 
 function renderNotas() {
@@ -1751,7 +1775,7 @@ function renderNotas() {
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${periodo}</span>
+      <span class="mes-label">${periodo}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
     <div class="fil-tipo">
@@ -1774,6 +1798,7 @@ function renderNotas() {
     html += `<div class="empty-state">
       <div class="empty-icon">📋</div>
       <p>${filtroNotasFlag ? 'Nenhuma nota com esse filtro em' : 'Nenhuma nota em'} ${periodo}</p>
+      ${!filtroNotasFlag && !filtroNotasAno ? '<p style="font-size:12px;color:var(--text2);margin-top:6px">Se ficou offline, as notas novas ficam salvas no aparelho e sincronizam depois.</p>' : ''}
       <button class="btn btn-primary" onclick="${filtroNotasFlag || filtroNotasAno
         ? 'limparFiltroNotas()' : 'abrirCaptura()'}">${filtroNotasFlag || filtroNotasAno
         ? 'Limpar filtro' : '+ Lançar'}</button>
@@ -1781,7 +1806,7 @@ function renderNotas() {
   } else {
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => {
-      const pendSync = n.synced===false ? '<span class="sync-pending" title="Pendente sync">⏳</span>' : '';
+      const pendSync = _statusNota(n);
       html += `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
         ${n.foto_path||n.foto_local ? `
@@ -1900,41 +1925,6 @@ function mudarMes(delta) {
   if (viewAtual==='saldo') renderSaldo();
 }
 
-/* ── Seletor de mês/ano: tocar no nome do período pula direto,
-   em vez de apertar ‹ › mês por mês ─────────────────────────── */
-let _mpAno = null;
-function abrirSeletorMes() {
-  _mpAno = filAno;
-  _renderSeletorMes();
-  $('mes-picker-overlay').style.display = 'flex';
-}
-function fecharSeletorMes() {
-  const o = $('mes-picker-overlay');
-  if (o) o.style.display = 'none';
-}
-function mesPickerAno(delta) { _mpAno += delta; _renderSeletorMes(); }
-function _renderSeletorMes() {
-  $('mp-ano').textContent = _mpAno;
-  $('mp-meses').innerHTML = MESES.map((m, i) => {
-    const ativo = (i + 1 === filMes && _mpAno === filAno);
-    return `<button class="chip${ativo ? ' active' : ''}" style="padding:9px 4px;text-align:center"
-      onclick="escolherMes(${i + 1})">${m}</button>`;
-  }).join('');
-}
-function escolherMes(m) {
-  filMes = m;
-  filAno = _mpAno;
-  /* tela em modo "ano inteiro"? escolher um mês volta ao modo mensal */
-  if (viewAtual === 'home'  && filtroPeriodo === 'anual') filtroPeriodo = 'mensal';
-  if (viewAtual === 'notas' && filtroNotasAno) filtroNotasAno = false;
-  dashBarraSel = null;
-  fecharSeletorMes();
-  if (viewAtual==='home')   renderHome();
-  if (viewAtual==='notas')  renderNotas();
-  if (viewAtual==='saldo')  renderSaldo();
-  if (viewAtual==='equipe') renderEquipe();
-}
-
 function filtrarTipo(btn) {
   document.querySelectorAll('.fil-tipo .chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -1997,7 +1987,7 @@ function renderSaldo() {
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
-      <span class="mes-label" style="cursor:pointer" title="Tocar para escolher o período" onclick="abrirSeletorMes()">${MESES[filMes-1]} ${filAno}</span>
+      <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
     <div class="export-btns">
@@ -2341,22 +2331,10 @@ function renderPerfil() {
   _pintarBotaoInstalar();
 }
 
-/* Nome próprio padronizado: "cleiton souza" / "CLEITON SOUZA" → "Cleiton Souza".
-   Importa porque esse nome vira a pasta do Drive e o cabeçalho da planilha. */
-function _capitalizarNome(s) {
-  const prep = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
-  return s.toLowerCase().split(/\s+/).map((p, i) =>
-    (i > 0 && prep.has(p)) ? p : p.charAt(0).toUpperCase() + p.slice(1)
-  ).join(' ');
-}
-
 async function salvarPerfil() {
-  const nome   = _capitalizarNome($('p-nome').value.trim());
+  const nome   = $('p-nome').value.trim();
   const nucleo = $('p-nucleo').value;
   if (!nome) { toast('Informe seu nome','err'); return; }
-  if (nome.split(/\s+/).length < 2
-      && !confirm('O nome dá nome à sua pasta no Drive e ao cabeçalho da planilha.\n'
-                + `Salvar só com "${nome}", sem sobrenome?`)) return;
   user.nome   = nome;
   user.nucleo = nucleo;
   if (sb && !DEMO_MODE) {
@@ -2367,10 +2345,8 @@ async function salvarPerfil() {
 }
 
 /* ── CAPTURA: sheet seleção ──────────────────────────────── */
-/* Tocar no + com o painel aberto FECHA (alterna) — antes ele só abria,
-   e o painel ficava preso por cima das outras abas no desktop. */
 function abrirCaptura() {
-  $('capture-sheet').classList.toggle('open');
+  $('capture-sheet').classList.add('open');
 }
 function fecharCaptura() {
   $('capture-sheet').classList.remove('open');
@@ -2908,7 +2884,31 @@ async function onFotoNota(e) {
 }
 
 /* ── Form Nota ───────────────────────────────────────────── */
+let _dadosLancamentoPendentes = null;
+
+function abrirSeletorTipoLancamento(dados = {}) {
+  _dadosLancamentoPendentes = dados || {};
+  const ov = $('tipo-lancamento-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function fecharSeletorTipoLancamento() {
+  const ov = $('tipo-lancamento-overlay');
+  if (ov) ov.style.display = 'none';
+  _dadosLancamentoPendentes = null;
+}
+
+function selecionarTipoLancamento(tipo) {
+  const dados = { ...(_dadosLancamentoPendentes || {}), tipo, _tipoSelecionado: true };
+  fecharSeletorTipoLancamento();
+  abrirFormNota(dados);
+}
+
 async function abrirFormNota(dados = {}) {
+  if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
+    abrirSeletorTipoLancamento(dados);
+    return;
+  }
   fotoBlob = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
@@ -2919,9 +2919,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-chave').value    = dados.chave    || '';
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
-  /* Categoria sem padrão silencioso: RDM salvo no "Abastecimento" automático
-     mandava foto de hospedagem p/ a pasta errada no Drive. Quem lança escolhe. */
-  $('nf-subtipo').value  = dados.subtipo  || '';
+  $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
   $('nf-data').value     = dados.data     || hoje();
   $('nf-valor').value    = dados.valor    || '';
   $('nf-cnpj').value     = dados.cnpj ? BrasilAPI.formatar(dados.cnpj) : '';
@@ -3365,10 +3363,6 @@ async function _salvarNotaInterno() {
   const data  = $('nf-data').value;
   // sem valor ainda grava como "pendente" (0), mas sem anexo não grava
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
-  if (tipo === 'RDM' && !$('nf-subtipo').value) {
-    toast('Escolha a categoria da despesa (Abastecimento, Hospedagem ou Outros)', 'err');
-    return;
-  }
 
   /* ANEXO OBRIGATÓRIO — nota de prestação de contas sem comprovante não vale.
      Ao EDITAR, o anexo que a nota já tem no servidor conta: depois que a foto
@@ -3401,12 +3395,6 @@ async function _salvarNotaInterno() {
         return;
       }
     } catch (_) { /* falha na checagem online não bloqueia (a trava local já valeu) */ }
-  }
-  /* Dígito verificador da chave (módulo 11): pega erro de digitação mesmo
-     quando a nota veio pelo caminho manual. Confirma antes de bloquear —
-     o objetivo é avisar, não impedir um caso raro legítimo. */
-  if (_chaveDig.length === 44 && !SEFAZ.dvValido(_chaveDig)) {
-    if (!confirm('⚠️ O dígito verificador da chave não confere — ela pode ter sido digitada errada.\n\nSalvar assim mesmo?')) return;
   }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;
@@ -3467,6 +3455,7 @@ async function _salvarNotaInterno() {
         .then(() => toast('Anexo salvo no Drive ☁️'))
         .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }
+    await syncBadge(false);
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
@@ -3482,9 +3471,42 @@ async function editarNota(id) {
   abrirFormNota(n);
 }
 
+function confirmarExclusaoNota(id) {
+  const n = notas.find(x => x.id === id);
+  if (!n) {
+    toast('Nota não encontrada', 'err');
+    return false;
+  }
+  const detalhes = [
+    n.tipo,
+    n.subtipo,
+    n.data ? fmtData(n.data) : null,
+    Number.isFinite(Number(n.valor)) ? brl(Number(n.valor)) : null,
+  ].filter(Boolean).join(' · ');
+  const confirmacao = window.confirm(
+    'Deseja realmente excluir esta nota do aplicativo e do backup remoto?'
+    + (detalhes ? `\n\n${detalhes}` : '')
+  );
+  if (!confirmacao) {
+    toast('Exclusão cancelada', 'err');
+    return false;
+  }
+  const mensagem = 'Esta ação remove a nota do aplicativo e do backup remoto.\n\n'
+    + (detalhes ? `${detalhes}\n\n` : '')
+    + 'Digite EXCLUIR para confirmar.';
+  const resposta = window.prompt(mensagem, '');
+  if (resposta === null) return false;
+  if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') {
+    toast('Exclusão cancelada', 'err');
+    return false;
+  }
+  return true;
+}
+
 async function excluirNota(id) {
-  if (!confirm('Excluir esta nota?')) return;
+  if (!confirmarExclusaoNota(id)) return;
   await DB.softDeleteNota(id);
+  await syncBadge(false);
   await carregarDadosLocais();
   renderNotas();
   syncToDrive().catch(() => {});
@@ -3581,6 +3603,7 @@ async function _salvarRepasseInterno() {
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
   await DB.saveRepasse({ tipo, valor, data, mes, ano, descricao: $('rep-desc').value.trim() || null }, user.id);
+  await syncBadge(false);
   fecharFormRepasse();
   await carregarDadosLocais();
   renderSaldo();
@@ -3593,6 +3616,7 @@ async function _salvarRepasseInterno() {
 async function excluirRepasse(id) {
   if (!confirm('Excluir este repasse?')) return;
   await DB.softDeleteRepasse(id);
+  await syncBadge(false);
   await carregarDadosLocais();
   renderSaldo();
   syncToDrive().catch(() => {});
@@ -3641,6 +3665,6 @@ document.addEventListener('DOMContentLoaded', () => {
   init();
   renderAuth('login');
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { fecharFotoViewer(); fecharCaptura(); fecharSeletorMes(); }
+    if (e.key === 'Escape') fecharFotoViewer();
   });
 });

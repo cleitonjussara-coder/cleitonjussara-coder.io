@@ -5,7 +5,7 @@
      • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Supabase API → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v85';
+const CACHE   = 'petermann-v92';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -33,6 +33,16 @@ const SHELL   = [
   './js/gsheets.js',
 ];
 
+const RUNTIME_CACHE = [
+  './',
+  './index.html',
+  './manifest.json',
+  './logo.jpg',
+  './icon-192.png',
+  './icon-512.png',
+];
+const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
+  
 const CDN = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
@@ -75,19 +85,31 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Shell (HTML/JS/CSS locais) → NETWORK FIRST
-  // Sempre tenta a rede (pega código novo na hora); cache só como reserva offline.
-  // Os scripts no HTML têm ?v=... para forçar refresh; ignoreSearch faz com que
-  // o cache offline responda independentemente da query string.
-  e.respondWith(
-    fetch(e.request)
-      .then(r => {
-        // guarda uma cópia fresca p/ uso offline (com query string original)
-        const copy = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-        return r;
-      })
-      .catch(() => caches.match(e.request, { ignoreSearch: true })
-        .then(r => r || caches.match('./index.html')))
-  );
+  // Shell + assets estáticos locais → network first, com fallback para cache.
+  const requestUrl = new URL(e.request.url);
+  const scopePrefix = (self.registration.scope || self.location.origin).replace(self.location.origin, '').replace(/\/$/, '');
+  const pathWithoutScope = requestUrl.pathname.startsWith(scopePrefix + '/')
+    ? requestUrl.pathname.slice(scopePrefix.length)
+    : requestUrl.pathname;
+  const isLocalAsset = LOCAL_ASSET_PATHS.includes(pathWithoutScope)
+    || pathWithoutScope.startsWith('/js/');
+
+  if (isLocalAsset) {
+    e.respondWith(
+      fetch(e.request)
+        .then(r => {
+          const copy = r.clone();
+          if (r.ok) {
+            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          }
+          return r;
+        })
+        .catch(() => caches.match(e.request, { ignoreSearch: true })
+          .then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Fallback padrão: tente rede e, se falhar, devolva o shell.
+  e.respondWith(fetch(e.request).catch(() => caches.match('./index.html')));
 });
