@@ -83,6 +83,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 .sync-dot.online{background:#74C69D}
 .sync-dot.offline{background:#E63946}
 .sync-dot.syncing{background:var(--warning);animation:pulse 1s infinite}
+.offline-banner{display:none;align-items:center;justify-content:center;gap:8px;padding:8px 12px;background:#fff3cd;color:#7a4a00;font-size:12px;font-weight:600;border-bottom:1px solid #f3d68f}
+.offline-banner span{line-height:1.4;text-align:center}
+.sync-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700}
+.sync-pill.pending{background:#fff3cd;color:#7a4a00}
+.sync-pill.failed{background:#ffe5e7;color:#a61e2f}
+.sync-pill.synced{background:#e8f5ee;color:#2e7d32}
 
 /* Content */
 #app-content{
@@ -683,6 +689,15 @@ select.inp{cursor:pointer}
 .modal-overlay{position:fixed;inset:0;z-index:100;
                background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
 .modal-card{background:var(--surface);border-radius:var(--radius);width:100%;max-width:400px;overflow:hidden}
+.modal-card-wide{max-width:460px}
+.tipo-lancamento-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tipo-lancamento-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 12px;border-radius:16px;border:2px solid transparent;font:inherit;cursor:pointer;box-shadow:0 8px 18px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s,border-color .15s}
+.tipo-lancamento-card:active{transform:scale(.98)}
+.tipo-lancamento-card-rda{background:linear-gradient(135deg,#e8f5ee,#f4fcf7);border-color:#8cc9a6;color:var(--primary-d)}
+.tipo-lancamento-card-rdm{background:linear-gradient(135deg,#eef4ff,#f7fbff);border-color:#9db7e6;color:#23427a}
+.tipo-lancamento-icon{font-size:28px;line-height:1}
+.tipo-lancamento-title{font-size:20px;font-weight:800;letter-spacing:.3px}
+.tipo-lancamento-subtitle{font-size:12px;font-weight:600;text-align:center;line-height:1.4;color:var(--text2)}
 .modal-hd{display:flex;align-items:center;justify-content:space-between;
           padding:16px;border-bottom:1px solid var(--border);background:var(--primary);color:#fff}
 .modal-hd h3{font-size:16px;font-weight:800}
@@ -764,6 +779,9 @@ select.inp{cursor:pointer}
 <!-- ═══════════ APP ═══════════ -->
 <div id="app-screen" class="screen" style="display:none">
   <div id="demo-banner">⚠️ Modo demonstração — dados salvos apenas neste dispositivo</div>
+  <div id="offline-banner" class="offline-banner">
+    <span id="offline-banner-text">📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.</span>
+  </div>
   <header id="app-header">
     <div class="hdr-logo">Petermann <span>App</span></div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -823,10 +841,10 @@ select.inp{cursor:pointer}
         <div class="cap-label">Foto da nota</div>
         <div class="cap-desc">Tirar foto da nota inteira</div>
       </div>
-      <div class="cap-opt" onclick="fecharCaptura();abrirFormNota({tipo:'RDA'})">
+      <div class="cap-opt" onclick="fecharCaptura();abrirSeletorTipoLancamento()">
         <div class="cap-icon">✏️</div>
         <div class="cap-label">Manual</div>
-        <div class="cap-desc">Digitar dados</div>
+        <div class="cap-desc">Escolher RDA ou RDM</div>
       </div>
       <div class="cap-opt" onclick="fecharCaptura();abrirFormRepasse()">
         <div class="cap-icon">💸</div>
@@ -884,6 +902,31 @@ select.inp{cursor:pointer}
 <!-- input oculto para foto da nota (lê QR + texto da mesma imagem) -->
 <input type="file" id="f-foto-ocr" accept="image/*" capture="environment" style="display:none"
        onchange="onFotoNota(event)">
+
+<!-- ═══════════ SELEÇÃO DE ABA DE LANÇAMENTO ═══════════ -->
+<div id="tipo-lancamento-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this) fecharSeletorTipoLancamento()">
+  <div class="modal-card modal-card-wide">
+    <div class="modal-hd">
+      <h3>Selecione a aba para iniciar o lançamento</h3>
+      <button class="btn-close-modal" onclick="fecharSeletorTipoLancamento()">×</button>
+    </div>
+    <div class="modal-bd">
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.5;color:var(--text2)">Escolha com atenção a aba correta antes de preencher a nota. Isso evita lançar a despesa na aba errada.</p>
+      <div class="tipo-lancamento-grid">
+        <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="selecionarTipoLancamento('RDA')">
+          <div class="tipo-lancamento-icon">🍽️</div>
+          <div class="tipo-lancamento-title">RDA</div>
+          <div class="tipo-lancamento-subtitle">Alimentação</div>
+        </button>
+        <button class="tipo-lancamento-card tipo-lancamento-card-rdm" onclick="selecionarTipoLancamento('RDM')">
+          <div class="tipo-lancamento-icon">💼</div>
+          <div class="tipo-lancamento-title">RDM</div>
+          <div class="tipo-lancamento-subtitle">Despesas corporativas</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════ NOTA FORM ═══════════ -->
 <div id="nota-form-overlay" class="full-overlay">
@@ -1183,22 +1226,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=84"></script>
-<script defer src="js/nfce.js?v=84"></script>
-<script defer src="js/sefaz.js?v=84"></script>
-<script defer src="js/brasilapi.js?v=84"></script>
-<script defer src="js/ocr.js?v=84"></script>
-<script defer src="js/recorte.js?v=84"></script>
-<script defer src="js/excel.js?v=84"></script>
-<script defer src="js/gestor.js?v=84"></script>
-<script defer src="js/gdrive.js?v=84"></script>
-<script defer src="js/gsheets.js?v=84"></script>
-<script defer src="js/app.js?v=84"></script>
+<script defer src="js/db.js?v=92"></script>
+<script defer src="js/nfce.js?v=92"></script>
+<script defer src="js/sefaz.js?v=92"></script>
+<script defer src="js/brasilapi.js?v=92"></script>
+<script defer src="js/ocr.js?v=92"></script>
+<script defer src="js/recorte.js?v=92"></script>
+<script defer src="js/excel.js?v=92"></script>
+<script defer src="js/gestor.js?v=92"></script>
+<script defer src="js/gdrive.js?v=92"></script>
+<script defer src="js/gsheets.js?v=92"></script>
+<script defer src="js/app.js?v=92"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=92').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

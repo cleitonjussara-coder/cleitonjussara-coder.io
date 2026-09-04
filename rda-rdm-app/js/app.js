@@ -34,14 +34,14 @@ const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','No
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
 /* Versão do PRODUTO — é o que o colaborador vê. Sobe quando o app ganha
    algo que muda o uso dele, não a cada publicação. */
-const APP_VERSION = 'v1';
+const APP_VERSION = 'v2';
 
 /* Número da PUBLICAÇÃO — contador interno, sobe a cada deploy. Vive nas
    query strings `?v=` do index.html e no CACHE do sw.js, e é ele que
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 84;
+const APP_BUILD = 92;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -228,12 +228,48 @@ function setLoading(on, msg = '') {
   }
 }
 
-function syncBadge(syncing) {
+async function syncBadge(syncing) {
   const dot = $('sync-dot');
   const txt = $('sync-txt');
-  if (syncing) { dot.className='sync-dot syncing'; txt.textContent='sincronizando'; return; }
-  if (!navigator.onLine) { dot.className='sync-dot offline'; txt.textContent='offline'; return; }
-  dot.className='sync-dot online'; txt.textContent='online';
+  const banner = $('offline-banner');
+  const bannerText = $('offline-banner-text');
+  if (!dot || !txt) return;
+
+  if (syncing) {
+    dot.className = 'sync-dot syncing';
+    txt.textContent = 'sincronizando';
+    return;
+  }
+
+  let summary = { count: 0, failedCount: 0, scheduledCount: 0 };
+  if (DB?.getSyncQueueSummary) {
+    try { summary = await DB.getSyncQueueSummary(); } catch (_) {}
+  }
+
+  if (!navigator.onLine) {
+    dot.className = 'sync-dot offline';
+    txt.textContent = 'offline';
+    if (banner && bannerText) {
+      bannerText.textContent = summary.count
+        ? `📡 Offline — ${summary.count} item${summary.count === 1 ? '' : 's'} aguardando sincronização`
+        : '📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.';
+      banner.style.display = 'flex';
+    }
+    return;
+  }
+
+  dot.className = 'sync-dot online';
+  txt.textContent = 'online';
+  if (banner && bannerText) {
+    if (summary.count) {
+      const suffix = summary.failedCount ? ` · ${summary.failedCount} com falha` : '';
+      const retryText = summary.scheduledCount ? ' · reprocessando em breve' : '';
+      bannerText.textContent = `🔄 ${summary.count} item${summary.count === 1 ? '' : 's'} pendente${summary.count === 1 ? '' : 's'} de sincronização${suffix}${retryText}`;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 }
 
 /* ── Loaders sob demanda (lazy) ──────────────────────────── */
@@ -291,6 +327,7 @@ function _ensureJsQR() {
 
 /* ── Inicialização ───────────────────────────────────────── */
 async function init() {
+  syncBadge(false);
   if (!DEMO_MODE) {
     try {
       await _ensureSb();
@@ -886,8 +923,8 @@ async function pullFromDrive() {
   try {
     const remote = await GDrive.loadNotas(user.id);
     if (!remote) return;
-    await DB.upsertFromDrive('notas',    remote.notas);
-    await DB.upsertFromDrive('repasses', remote.repasses);
+    await DB.upsertFromDrive('notas',    remote.notas, user.id);
+    await DB.upsertFromDrive('repasses', remote.repasses, user.id);
     await carregarDadosLocais();
     if (viewAtual === 'home')  renderHome();
     if (viewAtual === 'notas') renderNotas();
@@ -899,7 +936,11 @@ async function syncToDrive() {
   if (!driveOk || !user || !GDrive.isConnected()) return;
   syncBadge(true);
   try {
-    await GDrive.syncNotas(user.id, notas, repasses);
+    const [notasParaDrive, repassesParaDrive] = await Promise.all([
+      DB.getNotasUser(user.id, true),
+      DB.getRepassesUser(user.id, true),
+    ]);
+    await GDrive.syncNotas(user.id, notasParaDrive, repassesParaDrive);
   } catch (e) {
     console.error('Drive sync:', e.message);
     toast('Drive: ' + e.message, 'err');
@@ -1303,13 +1344,13 @@ function renderHome() {
   /* ── Pendências (lista interativa com transferência) ───── */
   const escopo   = modo === 'anual';
   const pendentes = A.ns.filter(n =>
-    n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
+    n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
   ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
   const resumoPend = [
     { ico:'⚠️', txt:'Sem valor',    n: pendentes.filter(n => _n(n.valor) <= 0).length, flag:'sem-valor' },
     { ico:'📎', txt:'Sem anexo',    n: pendentes.filter(n => !n.foto_path && !n.foto_local).length, flag:'sem-anexo' },
-    { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.synced === false).length, flag:'pendente' },
+    { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.sync_status === 'failed' || n.synced === false).length, flag:'pendente' },
   ];
 
   const linhaResumo = r => r.n ? `
@@ -1324,7 +1365,8 @@ function renderHome() {
     const m = [];
     if (_n(n.valor) <= 0) m.push('sem valor');
     if (!n.foto_path && !n.foto_local) m.push('sem anexo');
-    if (n.synced === false) m.push('não enviada');
+    if (n.sync_status === 'failed') m.push('falha na sincronização');
+    else if (n.synced === false) m.push('não enviada');
     if (_dataImplausivel(n)) m.push('data fora do período');
     return m.join(' · ');
   };
@@ -1368,6 +1410,11 @@ function renderHome() {
          <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
          <span class="db-pend-n">0</span>
        </div>`;
+
+  const pendingHint = pendentes.length ? `<div class="db-pend-item alerta" style="margin-bottom:8px">
+    <span class="db-pend-ico">📡</span>
+    <span class="db-pend-txt">Itens ainda não sincronizados ficam salvos no aparelho e tentam de novo quando a rede voltar.</span>
+  </div>` : '';
 
   /* ── Ritmo de gasto e projeção (só no modo mês) ──────────── */
   let ritmoHtml = '';
@@ -1654,7 +1701,7 @@ function renderHome() {
         <span>Pendências</span>
         <a class="link" onclick="irParaNotas(null,${escopo})">Ver notas →</a>
       </div>
-      <div class="db-pend">${pendHtml}</div>
+      <div class="db-pend">${pendingHint}${pendHtml}</div>
     </div>
 
     ${ritmoHtml}
@@ -1702,9 +1749,15 @@ function limparFiltroNotas() {
 function _passaFiltroNota(n) {
   if (filtroNotasFlag === 'sem-valor')     return _n(n.valor) <= 0;
   if (filtroNotasFlag === 'sem-anexo')     return !n.foto_path && !n.foto_local;
-  if (filtroNotasFlag === 'pendente')      return n.synced === false;
+  if (filtroNotasFlag === 'pendente')      return n.sync_status === 'failed' || n.synced === false;
   if (filtroNotasFlag === 'data-suspeita') return _dataImplausivel(n);
   return true;
+}
+
+function _statusNota(n) {
+  if (n?.sync_status === 'failed') return '<span class="sync-pill failed" title="Falha na sincronização">⚠️ falhou</span>';
+  if (n?.sync_status === 'pending' || n?.synced === false) return '<span class="sync-pill pending" title="Pendente de sincronização">⏳ pendente</span>';
+  return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
 
 function renderNotas() {
@@ -1745,6 +1798,7 @@ function renderNotas() {
     html += `<div class="empty-state">
       <div class="empty-icon">📋</div>
       <p>${filtroNotasFlag ? 'Nenhuma nota com esse filtro em' : 'Nenhuma nota em'} ${periodo}</p>
+      ${!filtroNotasFlag && !filtroNotasAno ? '<p style="font-size:12px;color:var(--text2);margin-top:6px">Se ficou offline, as notas novas ficam salvas no aparelho e sincronizam depois.</p>' : ''}
       <button class="btn btn-primary" onclick="${filtroNotasFlag || filtroNotasAno
         ? 'limparFiltroNotas()' : 'abrirCaptura()'}">${filtroNotasFlag || filtroNotasAno
         ? 'Limpar filtro' : '+ Lançar'}</button>
@@ -1752,7 +1806,7 @@ function renderNotas() {
   } else {
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => {
-      const pendSync = n.synced===false ? '<span class="sync-pending" title="Pendente sync">⏳</span>' : '';
+      const pendSync = _statusNota(n);
       html += `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
         ${n.foto_path||n.foto_local ? `
@@ -2830,7 +2884,31 @@ async function onFotoNota(e) {
 }
 
 /* ── Form Nota ───────────────────────────────────────────── */
+let _dadosLancamentoPendentes = null;
+
+function abrirSeletorTipoLancamento(dados = {}) {
+  _dadosLancamentoPendentes = dados || {};
+  const ov = $('tipo-lancamento-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function fecharSeletorTipoLancamento() {
+  const ov = $('tipo-lancamento-overlay');
+  if (ov) ov.style.display = 'none';
+  _dadosLancamentoPendentes = null;
+}
+
+function selecionarTipoLancamento(tipo) {
+  const dados = { ...(_dadosLancamentoPendentes || {}), tipo, _tipoSelecionado: true };
+  fecharSeletorTipoLancamento();
+  abrirFormNota(dados);
+}
+
 async function abrirFormNota(dados = {}) {
+  if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
+    abrirSeletorTipoLancamento(dados);
+    return;
+  }
   fotoBlob = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
@@ -3377,6 +3455,7 @@ async function _salvarNotaInterno() {
         .then(() => toast('Anexo salvo no Drive ☁️'))
         .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }
+    await syncBadge(false);
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
@@ -3392,9 +3471,42 @@ async function editarNota(id) {
   abrirFormNota(n);
 }
 
+function confirmarExclusaoNota(id) {
+  const n = notas.find(x => x.id === id);
+  if (!n) {
+    toast('Nota não encontrada', 'err');
+    return false;
+  }
+  const detalhes = [
+    n.tipo,
+    n.subtipo,
+    n.data ? fmtData(n.data) : null,
+    Number.isFinite(Number(n.valor)) ? brl(Number(n.valor)) : null,
+  ].filter(Boolean).join(' · ');
+  const confirmacao = window.confirm(
+    'Deseja realmente excluir esta nota do aplicativo e do backup remoto?'
+    + (detalhes ? `\n\n${detalhes}` : '')
+  );
+  if (!confirmacao) {
+    toast('Exclusão cancelada', 'err');
+    return false;
+  }
+  const mensagem = 'Esta ação remove a nota do aplicativo e do backup remoto.\n\n'
+    + (detalhes ? `${detalhes}\n\n` : '')
+    + 'Digite EXCLUIR para confirmar.';
+  const resposta = window.prompt(mensagem, '');
+  if (resposta === null) return false;
+  if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') {
+    toast('Exclusão cancelada', 'err');
+    return false;
+  }
+  return true;
+}
+
 async function excluirNota(id) {
-  if (!confirm('Excluir esta nota?')) return;
+  if (!confirmarExclusaoNota(id)) return;
   await DB.softDeleteNota(id);
+  await syncBadge(false);
   await carregarDadosLocais();
   renderNotas();
   syncToDrive().catch(() => {});
@@ -3491,6 +3603,7 @@ async function _salvarRepasseInterno() {
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
   await DB.saveRepasse({ tipo, valor, data, mes, ano, descricao: $('rep-desc').value.trim() || null }, user.id);
+  await syncBadge(false);
   fecharFormRepasse();
   await carregarDadosLocais();
   renderSaldo();
@@ -3503,6 +3616,7 @@ async function _salvarRepasseInterno() {
 async function excluirRepasse(id) {
   if (!confirm('Excluir este repasse?')) return;
   await DB.softDeleteRepasse(id);
+  await syncBadge(false);
   await carregarDadosLocais();
   renderSaldo();
   syncToDrive().catch(() => {});
