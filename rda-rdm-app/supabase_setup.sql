@@ -24,6 +24,8 @@ create table if not exists public.colaboradores (
 create table if not exists public.notas (
   id              uuid          primary key default gen_random_uuid(),
   user_id         uuid          not null references public.colaboradores(id) on delete cascade,
+  created_by      uuid          references public.colaboradores(id) on delete set null,
+  updated_by      uuid          references public.colaboradores(id) on delete set null,
   tipo            text          not null check (tipo in ('RDA','RDM')),
   subtipo         text          check (subtipo in ('Abastecimento','Hospedagem','Outros') or subtipo is null),
   cnpj            char(14),
@@ -82,6 +84,29 @@ $$;
 create or replace trigger trg_colabs_upd   before update on public.colaboradores for each row execute function public.set_updated_at();
 create or replace trigger trg_notas_upd    before update on public.notas         for each row execute function public.set_updated_at();
 create or replace trigger trg_repasses_upd before update on public.repasses      for each row execute function public.set_updated_at();
+
+create or replace function public.set_note_audit_fields()
+returns trigger language plpgsql security definer as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.created_by is null then
+      new.created_by := auth.uid();
+    end if;
+    if new.updated_by is null then
+      new.updated_by := coalesce(new.created_by, auth.uid());
+    end if;
+  elsif tg_op = 'UPDATE' then
+    if new.updated_by is null then
+      new.updated_by := auth.uid();
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_notas_audit
+  before insert or update on public.notas
+  for each row execute function public.set_note_audit_fields();
 
 -- ─── Trigger: criar perfil no cadastro ───────────────────────────────
 create or replace function public.handle_new_user()
@@ -148,7 +173,7 @@ create policy "notas_sel" on public.notas for select using (
 );
 create policy "notas_ins" on public.notas for insert with check (user_id = auth.uid());
 create policy "notas_upd" on public.notas for update using (
-  user_id = auth.uid() or public.my_role() = 'admin'
+  user_id = auth.uid() or public.my_role() in ('admin','gestor')
 );
 
 -- repasses: dono vê os seus; gestor e admin veem de TODOS os núcleos

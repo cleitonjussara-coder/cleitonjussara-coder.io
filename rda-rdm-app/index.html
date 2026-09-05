@@ -698,6 +698,13 @@ select.inp{cursor:pointer}
 .tipo-lancamento-icon{font-size:28px;line-height:1}
 .tipo-lancamento-title{font-size:20px;font-weight:800;letter-spacing:.3px}
 .tipo-lancamento-subtitle{font-size:12px;font-weight:600;text-align:center;line-height:1.4;color:var(--text2)}
+.nota-aba-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:#f7fbff;border:1px solid #dbe9f7;margin-bottom:12px}
+.nota-aba-pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.3px}
+.nota-aba-pill.rda{background:#e8f5ee;color:#2d6a4f}
+.nota-aba-pill.rdm{background:#eef4ff;color:#23427a}
+.nota-aba-switch{padding:6px 10px;font-size:12px}
+.nota-gestor-banner{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;background:#fff7e5;border:1px solid #f3d7a4;color:#7a4b00;margin-bottom:12px}
+.nota-gestor-icon{font-size:16px;line-height:1;flex-shrink:0}
 .modal-hd{display:flex;align-items:center;justify-content:space-between;
           padding:16px;border-bottom:1px solid var(--border);background:var(--primary);color:#fff}
 .modal-hd h3{font-size:16px;font-weight:800}
@@ -939,7 +946,18 @@ select.inp{cursor:pointer}
   </div>
   <div class="form-body">
     <div id="captura-badge" class="captura-badge">✏️ Manual</div>
-
+    <div id="gestor-edit-banner" class="nota-gestor-banner" style="display:none">
+      <span class="nota-gestor-icon">🛡️</span>
+      <div>
+        <strong id="gestor-edit-title">Correção de gestor</strong>
+        <div id="gestor-edit-text" style="font-size:12px;line-height:1.4;margin-top:2px">A alteração preserva o lançamento original do colaborador.</div>
+      </div>
+    </div>
+    <div id="nota-aba-banner" class="nota-aba-banner">
+      <span id="nota-aba-pill" class="nota-aba-pill rda">Aba selecionada: RDA</span>
+      <button type="button" id="nota-aba-switch" class="btn btn-sm btn-outline nota-aba-switch" onclick="alternarTipoLancamentoFormulario()">Trocar para RDM</button>
+    </div>
+  
     <div class="field-row">
       <div class="field">
         <label class="lbl">Tipo *</label>
@@ -1020,6 +1038,7 @@ select.inp{cursor:pointer}
 
     <!-- campos ocultos -->
     <input type="hidden" id="nf-id">
+    <input type="hidden" id="nf-owner-id">
     <input type="hidden" id="nf-metodo" value="manual">
     <input type="hidden" id="nf-chave">
     <input type="hidden" id="nf-uf">
@@ -1226,22 +1245,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=92"></script>
-<script defer src="js/nfce.js?v=92"></script>
-<script defer src="js/sefaz.js?v=92"></script>
-<script defer src="js/brasilapi.js?v=92"></script>
-<script defer src="js/ocr.js?v=92"></script>
-<script defer src="js/recorte.js?v=92"></script>
-<script defer src="js/excel.js?v=92"></script>
-<script defer src="js/gestor.js?v=92"></script>
-<script defer src="js/gdrive.js?v=92"></script>
-<script defer src="js/gsheets.js?v=92"></script>
-<script defer src="js/app.js?v=92"></script>
+<script defer src="js/db.js?v=95"></script>
+<script defer src="js/nfce.js?v=95"></script>
+<script defer src="js/sefaz.js?v=95"></script>
+<script defer src="js/brasilapi.js?v=95"></script>
+<script defer src="js/ocr.js?v=95"></script>
+<script defer src="js/recorte.js?v=95"></script>
+<script defer src="js/excel.js?v=95"></script>
+<script defer src="js/gestor.js?v=95"></script>
+<script defer src="js/gdrive.js?v=95"></script>
+<script defer src="js/gsheets.js?v=95"></script>
+<script defer src="js/app.js?v=95"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=92').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=95').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

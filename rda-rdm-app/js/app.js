@@ -18,6 +18,7 @@ let filMes    = new Date().getMonth() + 1;
 let filAno    = new Date().getFullYear();
 let _drivePullInterval = null;
 let filtroPeriodo = 'mensal';
+let equipePorId = {};
 
 /* câmera */
 let qrStream  = null;
@@ -34,14 +35,14 @@ const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','No
 const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
 /* Versão do PRODUTO — é o que o colaborador vê. Sobe quando o app ganha
    algo que muda o uso dele, não a cada publicação. */
-const APP_VERSION = 'v2';
+const APP_VERSION = 'v4';
 
 /* Número da PUBLICAÇÃO — contador interno, sobe a cada deploy. Vive nas
    query strings `?v=` do index.html e no CACHE do sw.js, e é ele que
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 92;
+const APP_BUILD = 95;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -367,6 +368,7 @@ async function init() {
     await carregarDadosLocais();
     if (viewAtual==='home')   renderHome();
     if (viewAtual==='notas') renderNotas();
+    if (viewAtual==='lixeira') renderNotasApagadas();
     if (viewAtual==='saldo') renderSaldo();
     const {ok,pulled,fotosFail,erroFoto} = e.detail||{};
     if ((ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
@@ -425,11 +427,53 @@ function _avisarFalhaAnexo(qtd, motivo) {
   toast(`⚠️ ${qtd} anexo${qtd > 1 ? 's' : ''} não subiu — tentando de novo`, 'err');
 }
 
+function _ehGestorOuAdmin() {
+  return user?.role === 'gestor' || user?.role === 'admin';
+}
+
+function _ehNotaDeOutroUsuario(n) {
+  return !!n?.user_id && !!user?.id && n.user_id !== user.id;
+}
+
+function _rotuloProprietario(n) {
+  if (!n) return 'Você';
+  if (n.user_id === user?.id) return user?.nome || 'Você';
+  return equipePorId[n.user_id]?.nome || n.user_nome || 'Colaborador';
+}
+
 let _reparoAnexosFeito = false;
 async function carregarDadosLocais() {
   if (!user) return;
-  notas    = await DB.getNotasUser(user.id);
-  repasses = await DB.getRepassesUser(user.id);
+  const notasLocais = await DB.getNotasUser(user.id);
+  const repassesLocais = await DB.getRepassesUser(user.id);
+  notas = notasLocais;
+  repasses = repassesLocais;
+
+  if (_ehGestorOuAdmin() && sb && !DEMO_MODE) {
+    try {
+      const nucleo = user?.nucleo || '';
+      const { data: collabs } = await sb.from('colaboradores').select('id,nome,nucleo,role').eq('nucleo', nucleo);
+      equipePorId = {};
+      (collabs || []).forEach(c => { equipePorId[c.id] = c; });
+      const ids = [...new Set([user.id, ...(collabs || []).map(c => c.id)])];
+      const { data: notasEquipe } = await sb.from('notas')
+        .select('*')
+        .in('user_id', ids)
+        .eq('deleted', false)
+        .order('created_at', { ascending: false });
+      const vistos = new Set(notasLocais.map(n => n.id));
+      const extras = (notasEquipe || []).filter(n => !vistos.has(n.id)).map(n => ({
+        ...n,
+        user_nome: equipePorId[n.user_id]?.nome || null,
+      }));
+      notas = [...notasLocais, ...extras];
+    } catch (err) {
+      console.warn('carregarDadosLocais equipe:', err.message);
+      notas = notasLocais;
+      equipePorId = {};
+    }
+  }
+
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
     _reparoAnexosFeito = true;
@@ -790,7 +834,7 @@ async function logout() {
   try {
     if (sb) await sb.auth.signOut().catch(() => {});
   } catch (_) {}
-  user = null; notas = []; repasses = [];
+  user = null; notas = []; repasses = []; equipePorId = {};
   document.getElementById('demo-banner').style.display = 'none';
   showTela('auth');
   renderAuth('login');
@@ -928,6 +972,7 @@ async function pullFromDrive() {
     await carregarDadosLocais();
     if (viewAtual === 'home')  renderHome();
     if (viewAtual === 'notas') renderNotas();
+    if (viewAtual === 'lixeira') renderNotasApagadas();
     if (viewAtual === 'saldo') renderSaldo();
   } catch (e) { console.warn('Drive pull:', e.message); }
 }
@@ -970,6 +1015,7 @@ function switchView(v) {
   el.scrollTop = 0;
   if (v==='home')    renderHome();
   else if (v==='notas')  renderNotas();
+  else if (v==='lixeira') renderNotasApagadas();
   else if (v==='saldo')  renderSaldo();
   else if (v==='equipe') renderEquipe();
   else if (v==='perfil') renderPerfil();
@@ -1760,6 +1806,76 @@ function _statusNota(n) {
   return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
 
+async function restaurarNota(id) {
+  const n = await DB.restoreNota(id);
+  if (!n) {
+    toast('Lançamento não encontrado na lixeira', 'err');
+    return;
+  }
+  await carregarDadosLocais();
+  if (viewAtual === 'lixeira') renderNotasApagadas();
+  else renderNotas();
+  syncToDrive().catch(() => {});
+  if (sb && navigator.onLine) DB.sync(sb, user.id).catch(() => {});
+  toast('Lançamento restaurado');
+}
+
+async function renderNotasApagadas() {
+  const el = $('app-content');
+  if (!user) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗑️</div><p>Faça login para ver os lançamentos apagados.</p></div>';
+    return;
+  }
+  const items = await DB.getDeletedNotasUser(user.id).catch(() => []);
+  const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
+  const fmtHora = d => {
+    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    catch (_) { return '—'; }
+  };
+
+  let html = `
+  <div class="page-hd">
+    <div class="mes-nav">
+      <button class="btn-mes-nav" onclick="switchView('notas')">‹</button>
+      <span class="mes-label">Lançamentos apagados</span>
+      <button class="btn btn-sm btn-outline" onclick="switchView('notas')">Voltar</button>
+    </div>
+  </div>`;
+
+  if (!ns.length) {
+    html += `<div class="empty-state">
+      <div class="empty-icon">🗑️</div>
+      <p>Nenhum lançamento apagado por aqui.</p>
+      <button class="btn btn-primary" onclick="switchView('notas')">Voltar para as notas</button>
+    </div>`;
+  } else {
+    html += `<div class="notas-list" id="notas-list">`;
+    ns.forEach(n => {
+      html += `
+      <div class="nota-card" data-tipo="${n.tipo}">
+        <div class="nota-head">
+          <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
+          ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
+          <span class="nota-data">${fmtHora(n.deleted_at || n.updated_at || n.created_at)}</span>
+        </div>
+        <div class="nota-body">
+          <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
+          ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
+        </div>
+        <div class="nota-foot">
+          <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
+          <div class="nota-actions">
+            <button class="btn btn-sm btn-primary" onclick="restaurarNota('${n.id}')">Restaurar</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 function renderNotas() {
   const el = $('app-content');
   const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO;
@@ -1782,6 +1898,7 @@ function renderNotas() {
       <button class="chip active" data-fil="all"  onclick="filtrarTipo(this)">Todas</button>
       <button class="chip"        data-fil="RDA"  onclick="filtrarTipo(this)">RDA</button>
       <button class="chip"        data-fil="RDM"  onclick="filtrarTipo(this)">RDM</button>
+      <button class="chip" onclick="switchView('lixeira')">🗑 Apagados</button>
     </div>
   </div>`;
 
@@ -1815,6 +1932,9 @@ function renderNotas() {
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
+          ${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
+            ? `<span class="subtipo-tag" title="Nota de outro colaborador">👤 ${esc(_rotuloProprietario(n))}</span>`
+            : ''}
           <span class="nota-data">${fmtData(n.data)}</span>
           ${pendSync}
         </div>
@@ -2915,6 +3035,7 @@ async function abrirFormNota(dados = {}) {
   ov.style.display = 'flex';
 
   $('nf-id').value       = dados.id       || '';
+  $('nf-owner-id').value = dados.user_id || user?.id || '';
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
   $('nf-chave').value    = dados.chave    || '';
   $('nf-uf').value       = dados.uf       || '';
@@ -2968,8 +3089,15 @@ async function abrirFormNota(dados = {}) {
   // link de consulta no SEFAZ (quando há chave de 44 dígitos)
   _atualizarLinkConsulta();
 
-  // título
-  $('nf-titulo').textContent = dados.id ? 'Editar Nota' : 'Nova Nota';
+  // título e banner de correção por gestor/admin
+  const isGestorEdit = _ehGestorOuAdmin() && !!dados.id && _ehNotaDeOutroUsuario(dados);
+  const banner = $('gestor-edit-banner');
+  const bannerTitle = $('gestor-edit-title');
+  const bannerText = $('gestor-edit-text');
+  if (banner) banner.style.display = isGestorEdit ? 'flex' : 'none';
+  if (bannerTitle) bannerTitle.textContent = 'Correção de gestor';
+  if (bannerText) bannerText.textContent = `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
+  $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : 'Nova Nota';
 }
 
 /* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
@@ -3035,8 +3163,31 @@ function fecharFormNota() {
   $('nota-form-overlay').style.display = 'none';
 }
 
+function atualizarBannerTipoLancamento(tipo = $('nf-tipo')?.value || 'RDA') {
+  const pill = $('nota-aba-pill');
+  const btn = $('nota-aba-switch');
+  if (!pill || !btn) return;
+  const isRda = tipo === 'RDA';
+  pill.className = `nota-aba-pill ${isRda ? 'rda' : 'rdm'}`;
+  pill.textContent = `Aba selecionada: ${isRda ? 'RDA' : 'RDM'}`;
+  btn.textContent = isRda ? 'Trocar para RDM' : 'Trocar para RDA';
+}
+
+function alternarTipoLancamentoFormulario() {
+  const tipo = $('nf-tipo').value === 'RDA' ? 'RDM' : 'RDA';
+  $('nf-tipo').value = tipo;
+  toggleSubtipo();
+}
+
 function toggleSubtipo() {
-  $('nf-subtipo-group').style.display = $('nf-tipo').value==='RDM' ? '' : 'none';
+  const tipo = $('nf-tipo').value || 'RDA';
+  $('nf-subtipo-group').style.display = tipo === 'RDM' ? '' : 'none';
+  if (tipo === 'RDM') {
+    if (!$('nf-subtipo').value) $('nf-subtipo').value = 'Abastecimento';
+  } else {
+    $('nf-subtipo').value = 'Abastecimento';
+  }
+  atualizarBannerTipoLancamento(tipo);
 }
 
 let _cnpjTimer;
@@ -3403,6 +3554,8 @@ async function _salvarNotaInterno() {
   const mes  = parseInt($('nf-mes').value, 10) || new Date(data+'T00:00:00').getMonth()+1;
   const ano  = parseInt($('nf-ano').value, 10) || new Date(data+'T00:00:00').getFullYear();
 
+  const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
+  const createdBy = _notaAtual?.created_by || _notaAtual?.user_id || user?.id || null;
   const payload = {
     id             : $('nf-id').value || undefined,
     tipo, valor, data, mes, ano,
@@ -3413,6 +3566,9 @@ async function _salvarNotaInterno() {
     chave_nfce     : $('nf-chave').value        || null,
     uf             : $('nf-uf').value           || null,
     metodo_captura : $('nf-metodo').value       || 'manual',
+    user_id        : ownerId,
+    created_by     : createdBy,
+    updated_by     : user?.id || ownerId || null,
     foto_local     : null,
   };
 
@@ -3450,8 +3606,15 @@ async function _salvarNotaInterno() {
     const saved = await DB.saveNota(payload, user.id);
     if (anexoBlob) {
       await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
+      const ownerId = saved.user_id || user.id;
+      const ownerMeta = (ownerId && equipePorId[ownerId]) || { email: user.email, nome: user.nome };
       // upload do anexo com todos os dados da nota como metadados no Drive
-      GDrive.uploadFotoComDados(anexoBlob, { ...saved, user_id: user.id, user_email: user.email, user_nome: user.nome }, anexoExt)
+      GDrive.uploadFotoComDados(anexoBlob, {
+        ...saved,
+        user_id: ownerId,
+        user_email: ownerMeta.email || user.email,
+        user_nome: ownerMeta.nome || user.nome,
+      }, anexoExt)
         .then(() => toast('Anexo salvo no Drive ☁️'))
         .catch(e => toast('Drive anexo: ' + e.message, 'err'));
     }
@@ -3508,10 +3671,11 @@ async function excluirNota(id) {
   await DB.softDeleteNota(id);
   await syncBadge(false);
   await carregarDadosLocais();
-  renderNotas();
+  if (viewAtual === 'lixeira') renderNotasApagadas();
+  else renderNotas();
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
-  toast('Nota excluída');
+  toast('Nota enviada para a lixeira');
 }
 
 async function verFoto(id) {

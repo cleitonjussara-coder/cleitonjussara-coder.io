@@ -5,7 +5,7 @@
 ───────────────────────────────────────────────────────────── */
 window.DB = (() => {
   const DB_NAME = 'petermann_v1';
-  const DB_VER  = 3;
+  const DB_VER  = 4;
   const MAX_SYNC_ATTEMPTS = 5;
   const SYNC_RETRY_MS = 2_000;
   let _db = null;
@@ -34,6 +34,11 @@ window.DB = (() => {
         }
         if (!d.objectStoreNames.contains('meta')) {
           d.createObjectStore('meta', { keyPath: 'k' });
+        }
+        if (!d.objectStoreNames.contains('lancamentos_apagados')) {
+          const s = d.createObjectStore('lancamentos_apagados', { keyPath: 'id' });
+          s.createIndex('user_id', 'user_id', { unique: false });
+          s.createIndex('deleted_at', 'deleted_at', { unique: false });
         }
         if (!d.objectStoreNames.contains('sync_queue')) {
           const s = d.createObjectStore('sync_queue', { keyPath: 'id' });
@@ -206,17 +211,70 @@ window.DB = (() => {
 
   async function softDeleteNota(id) {
     const n = await _get('notas', id);
-    if (n) {
-      const now = new Date().toISOString();
-      const updated = { ...n, deleted: true, synced: false, sync_status: 'pending', sync_error: null, updated_at: now };
-      await _put('notas', updated);
-      const payload = { ...updated };
-      delete payload.foto_local;
-      delete payload.synced;
-      delete payload.sync_status;
-      delete payload.sync_error;
-      await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
-    }
+    if (!n || n.deleted) return;
+    const now = new Date().toISOString();
+    const archived = {
+      ...n,
+      user_id: n.user_id || null,
+      deleted: true,
+      deleted_at: now,
+      deleted_from: 'local',
+      restored: false,
+      updated_at: now,
+      synced: true,
+      sync_status: 'synced',
+      sync_error: null,
+    };
+    await _put('lancamentos_apagados', archived);
+    const updated = { ...n, deleted: true, synced: false, sync_status: 'pending', sync_error: null, updated_at: now };
+    await _put('notas', updated);
+    const payload = { ...updated };
+    delete payload.foto_local;
+    delete payload.synced;
+    delete payload.sync_status;
+    delete payload.sync_error;
+    await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
+  }
+
+  async function getDeletedNotasUser(userId) {
+    const all = await _getAllByIdx('lancamentos_apagados', 'user_id', userId);
+    return all.map(n => _normalizeRecord(n));
+  }
+
+  async function restoreNota(id) {
+    const archived = await _get('lancamentos_apagados', id);
+    const current = await _get('notas', id);
+    const base = archived || current;
+    if (!base) return null;
+
+    const now = new Date().toISOString();
+    const restored = {
+      ...base,
+      id,
+      deleted: false,
+      restored_at: now,
+      synced: false,
+      sync_status: 'pending',
+      sync_error: null,
+      updated_at: now,
+    };
+    delete restored.deleted_at;
+    delete restored.deleted_from;
+    delete restored.restored;
+    delete restored.restored_at;
+    delete restored.synced;
+    delete restored.sync_status;
+    delete restored.sync_error;
+    await _put('notas', { ...restored, synced: false, sync_status: 'pending', sync_error: null, updated_at: now });
+    await _del('lancamentos_apagados', id);
+
+    const payload = { ...restored, synced: false, sync_status: 'pending', sync_error: null, updated_at: now };
+    delete payload.foto_local;
+    delete payload.synced;
+    delete payload.sync_status;
+    delete payload.sync_error;
+    await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
+    return restored;
   }
 
   /* ── ANEXOS / FOTOS (blob local: foto, PDF ou XML) ────── */
@@ -591,7 +649,7 @@ window.DB = (() => {
 
   return {
     open,
-    saveNota, getNotasUser, softDeleteNota,
+    saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
