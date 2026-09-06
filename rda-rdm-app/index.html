@@ -1053,7 +1053,7 @@ select.inp{cursor:pointer}
     <button class="btn-icon-sm" style="color:#fff;font-size:22px" onclick="fecharFormRepasse()">←</button>
     <h3>Novo Repasse</h3>
     <button class="btn btn-sm" id="rep-btn-salvar" style="background:#fff;color:var(--primary);border-color:#fff"
-            onclick="salvarRepasse()">Salvar</button>
+            onclick="salvarRepasse()">Salvar e enviar</button>
   </div>
   <div class="form-body">
     <div class="field">
@@ -1076,6 +1076,9 @@ select.inp{cursor:pointer}
     <div class="field">
       <label class="lbl">Descrição</label>
       <input class="inp" id="rep-desc" type="text" placeholder="Ex: PIX de Rayner">
+    </div>
+    <div style="font-size:12px;line-height:1.4;color:var(--text2);margin-top:-4px">
+      Ao salvar, o app abre um e-mail para <b>repasse@pmservisosagronomicos.com.br</b> com os dados do repasse.
     </div>
     <input type="hidden" id="rep-mes">
     <input type="hidden" id="rep-ano">

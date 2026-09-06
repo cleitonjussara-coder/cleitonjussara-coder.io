@@ -42,7 +42,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 95;
+const APP_BUILD = 96;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3726,6 +3726,48 @@ function abrirAjuda()  { $('ajuda-overlay').style.display = 'flex'; $('ajuda-ove
 function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */
+function _corpoEmailRepasse(payload) {
+  const valorFmt = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(payload.valor || 0);
+  const nome = user?.nome || user?.email || 'Colaborador';
+  const descricao = (payload.descricao || '').trim();
+  return [
+    'Olá,',
+    '',
+    `Solicito o repasse referente à despesa ${payload.tipo}.`,
+    '',
+    'Detalhes:',
+    `- Tipo: ${payload.tipo}`,
+    `- Valor: R$ ${valorFmt}`,
+    `- Data: ${fmtData(payload.data)}`,
+    `- Período: ${payload.mes}/${payload.ano}`,
+    descricao ? `- Descrição: ${descricao}` : '- Descrição: Sem descrição',
+    '',
+    'Atenciosamente,',
+    nome,
+  ].join('\n');
+}
+
+function abrirSolicitacaoRepasseEmail(payload) {
+  const destinatario = 'repasse@pmservisosagronomicos.com.br';
+  const assunto = `Solicitação de repasse ${payload.tipo} - ${payload.mes}/${payload.ano}`;
+  const corpo = _corpoEmailRepasse(payload);
+  const mailto = `mailto:${destinatario}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+
+  try {
+    const link = document.createElement('a');
+    link.href = mailto;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (_) {
+    window.location.href = mailto;
+  }
+
+  toast(`E-mail de solicitação preparado para ${destinatario}`);
+}
+
 function abrirFormRepasse() {
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
@@ -3766,13 +3808,15 @@ async function _salvarRepasseInterno() {
   if (!tipo||!valor||!data) { toast('Preencha os campos','err'); return; }
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
-  await DB.saveRepasse({ tipo, valor, data, mes, ano, descricao: $('rep-desc').value.trim() || null }, user.id);
+  const payload = { tipo, valor, data, mes, ano, descricao: $('rep-desc').value.trim() || null };
+  await DB.saveRepasse(payload, user.id);
   await syncBadge(false);
   fecharFormRepasse();
   await carregarDadosLocais();
   renderSaldo();
   // o tipo vai no aviso: erro de tipo é invisível no valor e só aparece no saldo
-  toast(`Repasse ${tipo} de ${brl(valor)} lançado!`);
+  toast(`Repasse ${tipo} de ${brl(valor)} lançado e e-mail preparado para o gestor.`);
+  abrirSolicitacaoRepasseEmail(payload);
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
 }
