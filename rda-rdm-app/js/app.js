@@ -1036,6 +1036,15 @@ const _n     = v => Number(v) || 0;
 const _soma  = arr => arr.reduce((a,x) => a + _n(x.valor), 0);
 const _dataDe = o => String(o?.data || o?.created_at || '');   // nunca undefined
 
+function _repasseEhPedido(rep) {
+  const kind = String(rep?.kind || '').toLowerCase();
+  return ['requested', 'request', 'pedido', 'solicitado'].includes(kind);
+}
+
+function _repasseEhRecebido(rep) {
+  return !_repasseEhPedido(rep);
+}
+
 /* Rótulo curto p/ eixo: R$ 350 · R$ 1,2 mil · R$ 1,4 mi */
 function brlCurto(v) {
   const a = Math.abs(v);
@@ -1056,7 +1065,7 @@ function _escalaTopo(pico) {
 function _agregaPeriodo(mes, ano, modo) {
   const doPeriodo = o => !o.deleted && o.ano === ano && (modo === 'anual' || o.mes === mes);
   const ns = notas.filter(doPeriodo);
-  const rs = repasses.filter(doPeriodo);
+  const rs = repasses.filter(doPeriodo).filter(_repasseEhRecebido);
   const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t));
   const rdmG = porTipo(ns,'RDM'), rdaG = porTipo(ns,'RDA');
   const rdmR = porTipo(rs,'RDM'), rdaR = porTipo(rs,'RDA');
@@ -1097,10 +1106,10 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
   const ePassado  = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) < targetKey);
   const eAtual    = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) === targetKey);
   const gastosPassados   = _soma(notas.filter(ePassado));
-  const repassesPassados = _soma(repasses.filter(ePassado));
+  const repassesPassados = _soma(repasses.filter(o => ePassado(o) && _repasseEhRecebido(o)));
   const pendenciaAnterior = repassesPassados - gastosPassados;
   const gastoMes   = _soma(notas.filter(eAtual));
-  const repasseMes = _soma(repasses.filter(eAtual));
+  const repasseMes = _soma(repasses.filter(o => eAtual(o) && _repasseEhRecebido(o)));
   const saldoMes   = repasseMes - gastoMes;
   const saldoLiquido = pendenciaAnterior + saldoMes;
   return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido };
@@ -1306,7 +1315,7 @@ function renderHome() {
   const rotulo = modo === 'mensal' ? `${MESES[filMes-1]} ${filAno}` : String(filAno);
 
   /* ── Primeiro acesso: convite em vez de painel vazio ────── */
-  if (!notas.length && !repasses.length) {
+  if (!notas.length && !repasses.some(r => _repasseEhRecebido(r))) {
     $('app-content').innerHTML = `
     <div class="db-container">
       <div class="db-card" style="align-items:center;text-align:center;gap:12px;padding:28px 20px">
@@ -2060,7 +2069,7 @@ function renderSaldo() {
   const rda = _saldoAcumuladoAte(filMes, filAno, 'RDA');
 
   const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
-  const rs = repasses.filter(r => r.mes===filMes && r.ano===filAno);
+  const rs = repasses.filter(r => !r.deleted && r.mes===filMes && r.ano===filAno);
 
   // breakdown RDM por subtipo — rotulo conforme a planilha padrao, chave inalterada
   const subs = [
@@ -2073,14 +2082,24 @@ function renderSaldo() {
     return v>0 ? `<div class="sub-row"><span>${s.lbl}</span><span>${brl(v)}</span></div>` : '';
   }).join('');
 
-  // repasses do mês
-  const repHtml = rs.length ? rs.map(r => `
-    <div class="rep-item">
-      <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
-      <span class="rep-desc">${esc(r.descricao||'Repasse')}</span>
-      <span class="rep-val">${brl(r.valor)}</span>
-      <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
-    </div>`).join('') : '<p class="muted-p">Nenhum repasse lançado.</p>';
+  const repHtml = rs.length ? rs.map(r => {
+    const pedido = _repasseEhPedido(r);
+    const label = pedido ? 'Pedido' : 'Recebido';
+    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
+    const detail = pedido
+      ? 'Solicitação pendente para o gestor'
+      : 'Registrado como repasse recebido';
+    return `
+      <div class="rep-item">
+        <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
+        <div style="flex:1;min-width:0">
+          <div class="rep-desc">${desc}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${label} · ${detail}</div>
+        </div>
+        <span class="rep-val">${brl(r.valor)}</span>
+        <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
+      </div>`;
+  }).join('') : '<p class="muted-p">Nenhum repasse registrado.</p>';
 
   /* card independente do tipo */
   const cardTipo = (lbl, d) => {
@@ -2124,7 +2143,10 @@ function renderSaldo() {
 
   <div class="section-hd">
     <span>Repasses</span>
-    <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse()">+ Repasse</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">+ Registrar recebido</button>
+      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">Solicitar repasse</button>
+    </div>
   </div>
   <div class="rep-list">${repHtml}</div>`;
 }
@@ -3726,6 +3748,53 @@ function abrirAjuda()  { $('ajuda-overlay').style.display = 'flex'; $('ajuda-ove
 function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */
+let _repasseModo = 'received';
+
+function _repasseTitulo(modo) {
+  return modo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido';
+}
+
+function _repassePlaceholder(modo) {
+  return modo === 'requested'
+    ? 'Ex: combustível, hospedagem ou custo do mês'
+    : 'Ex: repasse recebido do gestor';
+}
+
+function _repasseHelpText(modo) {
+  return modo === 'requested'
+    ? 'Este pedido gera um e-mail para o gestor e fica marcado como solicitação pendente.'
+    : 'Este registro entra no saldo como repasse recebido e não gera e-mail.';
+}
+
+function _atualizarUiRepasse() {
+  const title = $('rep-title');
+  const btnSalvar = $('rep-btn-salvar');
+  const btnReceived = $('rep-mode-received');
+  const btnRequest = $('rep-mode-request');
+  const labelDesc = $('rep-desc-label');
+  const descInput = $('rep-desc');
+  const helpText = $('rep-help');
+
+  if (title) title.textContent = _repasseTitulo(_repasseModo);
+  if (btnSalvar) btnSalvar.textContent = _repasseModo === 'requested' ? 'Salvar e enviar' : 'Salvar';
+  if (btnReceived) {
+    btnReceived.className = `btn btn-sm ${_repasseModo === 'received' ? 'btn-primary' : 'btn-outline'}`;
+    btnReceived.textContent = 'Registrar recebido';
+  }
+  if (btnRequest) {
+    btnRequest.className = `btn btn-sm ${_repasseModo === 'requested' ? 'btn-primary' : 'btn-outline'}`;
+    btnRequest.textContent = 'Solicitar repasse';
+  }
+  if (labelDesc) labelDesc.textContent = _repasseModo === 'requested' ? 'Custo / justificativa *' : 'Descrição';
+  if (descInput) descInput.placeholder = _repassePlaceholder(_repasseModo);
+  if (helpText) helpText.textContent = _repasseHelpText(_repasseModo);
+}
+
+function setRepasseModo(modo) {
+  _repasseModo = modo === 'requested' ? 'requested' : 'received';
+  _atualizarUiRepasse();
+}
+
 function _corpoEmailRepasse(payload) {
   const valorFmt = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(payload.valor || 0);
   const nome = user?.nome || user?.email || 'Colaborador';
@@ -3768,7 +3837,8 @@ function abrirSolicitacaoRepasseEmail(payload) {
   toast(`E-mail de solicitação preparado para ${destinatario}`);
 }
 
-function abrirFormRepasse() {
+function abrirFormRepasse(modo = 'received') {
+  setRepasseModo(modo);
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
@@ -3808,15 +3878,30 @@ async function _salvarRepasseInterno() {
   if (!tipo||!valor||!data) { toast('Preencha os campos','err'); return; }
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
-  const payload = { tipo, valor, data, mes, ano, descricao: $('rep-desc').value.trim() || null };
+  const kind = _repasseModo === 'requested' ? 'requested' : 'received';
+  const emailSent = _repasseModo === 'requested';
+  const payload = {
+    tipo,
+    valor,
+    data,
+    mes,
+    ano,
+    descricao: $('rep-desc').value.trim() || null,
+    kind,
+    email_sent: emailSent,
+  };
   await DB.saveRepasse(payload, user.id);
   await syncBadge(false);
   fecharFormRepasse();
   await carregarDadosLocais();
-  renderSaldo();
-  // o tipo vai no aviso: erro de tipo é invisível no valor e só aparece no saldo
-  toast(`Repasse ${tipo} de ${brl(valor)} lançado e e-mail preparado para o gestor.`);
-  abrirSolicitacaoRepasseEmail(payload);
+  if (viewAtual === 'home') renderHome();
+  else renderSaldo();
+  if (emailSent) {
+    toast(`Pedido de repasse ${tipo} registrado e e-mail preparado para o gestor.`);
+    abrirSolicitacaoRepasseEmail(payload);
+  } else {
+    toast(`Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
+  }
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
 }
@@ -3826,7 +3911,8 @@ async function excluirRepasse(id) {
   await DB.softDeleteRepasse(id);
   await syncBadge(false);
   await carregarDadosLocais();
-  renderSaldo();
+  if (viewAtual === 'home') renderHome();
+  else renderSaldo();
   syncToDrive().catch(() => {});
   toast('Repasse excluído');
 }

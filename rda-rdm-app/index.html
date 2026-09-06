@@ -1051,11 +1051,18 @@ select.inp{cursor:pointer}
 <div id="rep-overlay" class="full-overlay">
   <div class="form-hdr">
     <button class="btn-icon-sm" style="color:#fff;font-size:22px" onclick="fecharFormRepasse()">←</button>
-    <h3>Novo Repasse</h3>
+    <h3 id="rep-title">Registrar repasse recebido</h3>
     <button class="btn btn-sm" id="rep-btn-salvar" style="background:#fff;color:var(--primary);border-color:#fff"
-            onclick="salvarRepasse()">Salvar e enviar</button>
+            onclick="salvarRepasse()">Salvar</button>
   </div>
   <div class="form-body">
+    <div class="field">
+      <label class="lbl">Modo</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-sm btn-primary" id="rep-mode-received" onclick="setRepasseModo('received')">Registrar recebido</button>
+        <button type="button" class="btn btn-sm btn-outline" id="rep-mode-request" onclick="setRepasseModo('requested')">Solicitar repasse</button>
+      </div>
+    </div>
     <div class="field">
       <label class="lbl">Tipo *</label>
       <select class="inp" id="rep-tipo">
@@ -1074,11 +1081,11 @@ select.inp{cursor:pointer}
       </div>
     </div>
     <div class="field">
-      <label class="lbl">Descrição</label>
-      <input class="inp" id="rep-desc" type="text" placeholder="Ex: PIX de Rayner">
+      <label class="lbl" id="rep-desc-label">Descrição</label>
+      <input class="inp" id="rep-desc" type="text" placeholder="Ex: repasse recebido do gestor">
     </div>
-    <div style="font-size:12px;line-height:1.4;color:var(--text2);margin-top:-4px">
-      Ao salvar, o app abre um e-mail para <b>repasse@pmservisosagronomicos.com.br</b> com os dados do repasse.
+    <div id="rep-help" style="font-size:12px;line-height:1.4;color:var(--text2);margin-top:-4px">
+      Este registro entra no saldo como repasse recebido e não gera e-mail.
     </div>
     <input type="hidden" id="rep-mes">
     <input type="hidden" id="rep-ano">

@@ -59,6 +59,8 @@ create table if not exists public.repasses (
   mes         smallint      not null check (mes between 1 and 12),
   ano         smallint      not null check (ano >= 2020),
   descricao   text,
+  kind        text          not null default 'received' check (kind in ('received','requested')),
+  email_sent  boolean       not null default false,
   deleted     boolean       not null default false,
   created_at  timestamptz   not null default now(),
   updated_at  timestamptz   not null default now()
