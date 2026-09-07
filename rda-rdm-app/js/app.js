@@ -42,7 +42,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 96;
+const APP_BUILD = 97;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1956,7 +1956,7 @@ function renderNotas() {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
-            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
+            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n) ? 'Corrigir nota do colaborador' : 'Editar'}">${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n) ? '🛠️' : '✏️'}</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
         </div>
@@ -3116,10 +3116,11 @@ async function abrirFormNota(dados = {}) {
   const banner = $('gestor-edit-banner');
   const bannerTitle = $('gestor-edit-title');
   const bannerText = $('gestor-edit-text');
+  const papel = user?.role === 'admin' ? 'administrador' : 'gestor';
   if (banner) banner.style.display = isGestorEdit ? 'flex' : 'none';
-  if (bannerTitle) bannerTitle.textContent = 'Correção de gestor';
+  if (bannerTitle) bannerTitle.textContent = `Correção de ${papel}`;
   if (bannerText) bannerText.textContent = `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
-  $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : 'Nova Nota';
+  $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Corrigir nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : 'Nova Nota';
 }
 
 /* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
@@ -3644,7 +3645,12 @@ async function _salvarNotaInterno() {
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
-    toast(semValor ? '⚠️ Nota salva SEM valor — edite para completar' : 'Nota salva!', semValor ? 'err' : 'ok');
+    const isGestorEdit = _ehGestorOuAdmin() && !!_notaAtual && _ehNotaDeOutroUsuario(_notaAtual);
+    const mensagemSalva = isGestorEdit
+      ? 'Correção salva — a nota continua vinculada ao colaborador.'
+      : (semValor ? '⚠️ Nota salva SEM valor — edite para completar' : 'Nota salva!');
+    const tipoToast = isGestorEdit ? 'ok' : (semValor ? 'err' : 'ok');
+    toast(mensagemSalva, tipoToast);
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
   } finally { setLoading(false); }
