@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 106;
+const APP_BUILD = 107;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3628,27 +3628,20 @@ async function _salvarNotaInterno() {
   const ano  = parseInt($('nf-ano').value, 10) || new Date(data+'T00:00:00').getFullYear();
 
   /* Só para nota sem chave: com chave, as travas acima já resolveram.
-     Aqui avisa e deixa decidir, em vez de bloquear — duas despesas iguais no
-     mesmo dia acontecem (dois almoços, dois abastecimentos), e travar isso
-     impediria lançamento legítimo. */
+     Repetida encontrada: grava a nova e manda a anterior para a lixeira,
+     sem perguntar. A exclusão é reversível (a nota fica na lixeira), o que
+     torna o automatismo aceitável.
+     Só remove automaticamente quando a anterior é do MESMO dono: um gestor
+     enxerga as notas de toda a equipe, e apagar sozinho o lançamento de um
+     colaborador por semelhança seria longe demais. */
+  let _repetidaAnterior = null;
   if (_digitos($('nf-chave').value).length !== 44) {
     const igual = _notaSemelhante({
       tipo, cnpj: cnpjRaw, razao: $('nf-razao').value,
       valor, data, ignoreId: $('nf-id').value || null,
     });
-    if (igual) {
-      const resumo = [
-        igual.tipo,
-        igual.razao_social || (igual.cnpj ? BrasilAPI.formatar(igual.cnpj) : null),
-        igual.data ? fmtData(igual.data) : null,
-        brl(igual.valor),
-      ].filter(Boolean).join(' · ');
-      const seguir = confirm(
-        'Esta nota parece já ter sido lançada:\n\n' + resumo +
-        '\n\nMesmo tipo, mesma data, mesmo valor e mesmo fornecedor.\n\nLançar assim mesmo?'
-      );
-      if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
-    }
+    const donoDaNova = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
+    if (igual && (igual.user_id || null) === donoDaNova) _repetidaAnterior = igual;
   }
 
   const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
@@ -3701,6 +3694,13 @@ async function _salvarNotaInterno() {
     }
 
     const saved = await DB.saveNota(payload, user.id);
+
+    let _removeuRepetida = false;
+    if (_repetidaAnterior && _repetidaAnterior.id !== saved.id) {
+      await DB.softDeleteNota(_repetidaAnterior.id);
+      _removeuRepetida = true;
+    }
+
     if (anexoBlob) {
       await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
       const ownerId = saved.user_id || user.id;
@@ -3719,7 +3719,11 @@ async function _salvarNotaInterno() {
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
-    toast(semValor ? '⚠️ Nota salva SEM valor — edite para completar' : 'Nota salva!', semValor ? 'err' : 'ok');
+    toast(
+      semValor ? '⚠️ Nota salva SEM valor — edite para completar'
+      : _removeuRepetida ? 'Nota salva — a repetida anterior foi para a lixeira'
+      : 'Nota salva!',
+      semValor ? 'err' : 'ok');
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
   } finally { setLoading(false); }
