@@ -173,7 +173,9 @@ create policy "notas_sel" on public.notas for select using (
   user_id = auth.uid() or
   public.my_role() in ('admin','gestor')
 );
-create policy "notas_ins" on public.notas for insert with check (user_id = auth.uid());
+create policy "notas_ins" on public.notas for insert with check (
+  user_id = auth.uid() or public.my_role() in ('admin','gestor')
+);
 create policy "notas_upd" on public.notas for update using (
   user_id = auth.uid() or public.my_role() in ('admin','gestor')
 );
