@@ -88,8 +88,8 @@ begin
     'subject',  format('Solicitação de repasse %s - %s/%s', new.tipo, new.mes, new.ano),
     'text',     format(
       E'Olá,\n\nSolicito o repasse referente à despesa %s.\n\n'
-      E'Detalhes:\n- Tipo: %s\n- Valor: R$ %s\n- Data: %s\n- Período: %s/%s\n- Descrição: %s\n\n'
-      E'Atenciosamente,\n%s\n%s',
+      || E'Detalhes:\n- Tipo: %s\n- Valor: R$ %s\n- Data: %s\n- Período: %s/%s\n- Descrição: %s\n\n'
+      || E'Atenciosamente,\n%s\n%s',
       new.tipo, new.tipo, v_valor, to_char(new.data, 'DD/MM/YYYY'), new.mes, new.ano,
       coalesce(nullif(new.descricao, ''), 'Sem descrição'),
       coalesce(nullif(v_colab.nome, ''), 'Colaborador'),
