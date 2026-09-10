@@ -45,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 113;
+const APP_BUILD = 114;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3935,7 +3935,7 @@ function _repassePlaceholder(modo) {
 
 function _repasseHelpText(modo) {
   return modo === 'requested'
-    ? 'Este pedido gera um e-mail para o gestor e fica marcado como solicitação pendente.'
+    ? 'Este pedido envia um e-mail ao gestor automaticamente e fica marcado como solicitação pendente.'
     : 'Este registro entra no saldo como repasse recebido e não gera e-mail.';
 }
 
@@ -3966,48 +3966,6 @@ function _atualizarUiRepasse() {
 function setRepasseModo(modo) {
   _repasseModo = modo === 'requested' ? 'requested' : 'received';
   _atualizarUiRepasse();
-}
-
-function _corpoEmailRepasse(payload) {
-  const valorFmt = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(payload.valor || 0);
-  const nome = user?.nome || user?.email || 'Colaborador';
-  const descricao = (payload.descricao || '').trim();
-  return [
-    'Olá,',
-    '',
-    `Solicito o repasse referente à despesa ${payload.tipo}.`,
-    '',
-    'Detalhes:',
-    `- Tipo: ${payload.tipo}`,
-    `- Valor: R$ ${valorFmt}`,
-    `- Data: ${fmtData(payload.data)}`,
-    `- Período: ${payload.mes}/${payload.ano}`,
-    descricao ? `- Descrição: ${descricao}` : '- Descrição: Sem descrição',
-    '',
-    'Atenciosamente,',
-    nome,
-  ].join('\n');
-}
-
-function abrirSolicitacaoRepasseEmail(payload) {
-  const destinatario = 'repasse@pmservisosagronomicos.com.br';
-  const assunto = `Solicitação de repasse ${payload.tipo} - ${payload.mes}/${payload.ano}`;
-  const corpo = _corpoEmailRepasse(payload);
-  const mailto = `mailto:${destinatario}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-
-  try {
-    const link = document.createElement('a');
-    link.href = mailto;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch (_) {
-    window.location.href = mailto;
-  }
-
-  toast(`E-mail de solicitação preparado para ${destinatario}`);
 }
 
 function abrirFormRepasse(modo = 'received') {
@@ -4052,7 +4010,10 @@ async function _salvarRepasseInterno() {
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
   const kind = _repasseModo === 'requested' ? 'requested' : 'received';
-  const emailSent = _repasseModo === 'requested';
+  /* email_sent sempre false daqui: quem envia é o SERVIDOR (gatilho
+     trg_repasses_email no Supabase, via Resend) quando a solicitação chega
+     lá — inclusive se o celular estava offline e sincronizou depois. O
+     próprio gatilho marca true ao enviar, e não deixa o app rebaixar. */
   const payload = {
     tipo,
     valor,
@@ -4061,7 +4022,7 @@ async function _salvarRepasseInterno() {
     ano,
     descricao: $('rep-desc').value.trim() || null,
     kind,
-    email_sent: emailSent,
+    email_sent: false,
   };
   await DB.saveRepasse(payload, user.id);
   await syncBadge(false);
@@ -4069,9 +4030,8 @@ async function _salvarRepasseInterno() {
   await carregarDadosLocais();
   if (viewAtual === 'home') renderHome();
   else renderSaldo();
-  if (emailSent) {
-    toast(`Pedido de repasse ${tipo} registrado e e-mail preparado para o gestor.`);
-    abrirSolicitacaoRepasseEmail(payload);
+  if (kind === 'requested') {
+    toast(`Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
   } else {
     toast(`Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
   }
