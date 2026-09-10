@@ -246,6 +246,23 @@ window.DB = (() => {
      IndexedDB não indexa registro cujo valor da chave seja null — e o
      arquivamento grava `user_id: n.user_id || null`. Pelo índice, nota
      sem dono ficava invisível para sempre. */
+  /* Expurgo LOCAL da nota: some das duas stores e leva junto o anexo e
+     qualquer item de fila que ainda aponte para ela — senão a fila tentaria
+     ressincronizar uma nota que não existe mais.
+     Não fala com o servidor: quem apaga lá é o app, e só com internet, para
+     não sobrar o caso de sumir aqui e continuar existindo no Supabase (o
+     pull traria de volta na sincronização seguinte). */
+  async function purgeNotaLocal(id) {
+    if (!id) return;
+    await _del('notas', id).catch(() => {});
+    await _del('lancamentos_apagados', id).catch(() => {});
+    await _del('fotos', id).catch(() => {});
+    const fila = await _getAll('sync_queue').catch(() => []);
+    for (const item of fila) {
+      if (item.entity_id === id) await _del('sync_queue', item.id).catch(() => {});
+    }
+  }
+
   async function getDeletedNotasUser(userId) {
     /* Cada store é lida por conta própria: num aparelho que ainda não
        abriu o app novo, `lancamentos_apagados` pode não existir, e um
@@ -695,6 +712,7 @@ window.DB = (() => {
   return {
     open,
     saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
+    purgeNotaLocal,
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,

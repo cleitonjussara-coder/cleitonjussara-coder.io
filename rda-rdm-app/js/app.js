@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 109;
+const APP_BUILD = 110;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1871,6 +1871,58 @@ async function restaurarNota(id) {
   toast('Lançamento restaurado');
 }
 
+/* Definitivo é definitivo: a linha sai do banco e o anexo sai do Storage,
+   sem lixeira para voltar. Por isso só o DONO da nota e o admin — gestor
+   corrige nota de colaborador, mas apagar sem volta é outro nível — e é a
+   mesma regra das policies notas_del / fotos_del no Supabase. */
+function _podeApagarDefinitivo(n) {
+  if (!user || !n) return false;
+  return (n.user_id && n.user_id === user.id) || user.role === 'admin';
+}
+
+async function apagarDefinitivo(id) {
+  const n = (await DB.getDeletedNotasUser(user.id).catch(() => []))
+    .find(x => x.id === id) || notas.find(x => x.id === id);
+  if (!n) { toast('Lançamento não encontrado', 'err'); return; }
+  if (!_podeApagarDefinitivo(n)) { toast('Só o dono da nota ou o admin pode apagar em definitivo', 'err'); return; }
+
+  /* Sem internet não dá: apagaria só aqui, a linha continuaria no Supabase e
+     a sincronização seguinte traria a nota de volta. */
+  if (!sb || !navigator.onLine) {
+    toast('Precisa de internet para apagar em definitivo', 'err');
+    return;
+  }
+
+  const resumo = [n.tipo, n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : null),
+                  n.data ? fmtData(n.data) : null, brl(n.valor)].filter(Boolean).join(' · ');
+  const resposta = window.prompt(
+    'APAGAR EM DEFINITIVO\n\n' + resumo +
+    '\n\nA nota e o anexo saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.'
+    + '\n\nDigite EXCLUIR para confirmar.', '');
+  if (resposta === null) return;
+  if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') { toast('Exclusão cancelada', 'err'); return; }
+
+  setLoading(true);
+  try {
+    // 1) anexo no Storage — falha aqui não impede apagar a nota, mas avisa
+    if (n.foto_path) {
+      const { error } = await sb.storage.from('notas-fotos').remove([n.foto_path]);
+      if (error) console.warn('anexo nao removido:', error.message);
+    }
+    // 2) a linha no servidor — se falhar, para tudo: apagar só aqui traria de volta
+    const { error } = await sb.from('notas').delete().eq('id', id);
+    if (error) throw error;
+    // 3) só então some daqui
+    await DB.purgeNotaLocal(id);
+
+    await carregarDadosLocais();
+    if (viewAtual === 'lixeira') renderNotasApagadas(); else renderNotas();
+    toast('Lançamento apagado em definitivo');
+  } catch (e) {
+    toast('Não foi possível apagar: ' + (e.message || e), 'err');
+  } finally { setLoading(false); }
+}
+
 async function renderNotasApagadas() {
   const el = $('app-content');
   if (!user) {
@@ -1917,6 +1969,8 @@ async function renderNotasApagadas() {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             <button class="btn btn-sm btn-primary" onclick="restaurarNota('${n.id}')">Restaurar</button>
+            ${_podeApagarDefinitivo(n) ? `<button class="btn btn-sm btn-danger-outline"
+              onclick="apagarDefinitivo('${n.id}')" title="Apagar em definitivo">Apagar definitivo</button>` : ''}
           </div>
         </div>
       </div>`;
