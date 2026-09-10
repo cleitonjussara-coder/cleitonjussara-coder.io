@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 108;
+const APP_BUILD = 109;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3647,8 +3647,23 @@ async function _salvarNotaInterno() {
       tipo, cnpj: cnpjRaw, razao: $('nf-razao').value,
       valor, data, ignoreId: $('nf-id').value || null,
     });
-    const donoDaNova = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
-    if (igual && (igual.user_id || null) === donoDaNova) _repetidaAnterior = igual;
+    /* DESLIGADO: a remocao automatica estava mandando notas para a lixeira em
+       lote, em intervalos curtos demais para serem manuais. Volta o aviso com
+       confirmacao ate a causa estar entendida — nada e apagado sem que a
+       pessoa mande. */
+    if (igual) {
+      const resumo = [
+        igual.tipo,
+        igual.razao_social || (igual.cnpj ? BrasilAPI.formatar(igual.cnpj) : null),
+        igual.data ? fmtData(igual.data) : null,
+        brl(igual.valor),
+      ].filter(Boolean).join(' · ');
+      const seguir = confirm(
+        'Esta nota parece já ter sido lançada:\n\n' + resumo +
+        '\n\nLançar assim mesmo? (nada será apagado)'
+      );
+      if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
+    }
   }
 
   const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
@@ -3702,11 +3717,7 @@ async function _salvarNotaInterno() {
 
     const saved = await DB.saveNota(payload, user.id);
 
-    let _removeuRepetida = false;
-    if (_repetidaAnterior && _repetidaAnterior.id !== saved.id) {
-      await DB.softDeleteNota(_repetidaAnterior.id);
-      _removeuRepetida = true;
-    }
+    const _removeuRepetida = false;   // remocao automatica desligada
 
     if (anexoBlob) {
       await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
