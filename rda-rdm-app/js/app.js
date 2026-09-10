@@ -26,6 +26,10 @@ let qrFrame   = null;
 
 /* arquivo (foto / PDF / XML) selecionado na edição */
 let fotoBlob  = null;
+/* A foto como veio da câmera, antes do enquadramento. O QR costuma ficar
+   no rodapé do cupom, fora do recorte que a pessoa faz para ler o valor —
+   o botão "Ler QR da foto" precisa procurar na foto inteira. */
+let fotoOriginal = null;
 let fotoURL   = null;
 let fotoExt   = null;   // 'jpg' | 'png' | 'pdf' | 'xml' | …
 let fotoRender    = null;   // imagem renderizada da 1ª página do PDF (preview + QR/OCR)
@@ -41,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 111;
+const APP_BUILD = 112;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3142,7 +3146,7 @@ async function abrirFormNota(dados = {}) {
     abrirSeletorTipoLancamento(dados);
     return;
   }
-  fotoBlob = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
+  fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
@@ -3323,6 +3327,7 @@ async function onFotoNotaChange(e) {
   if (!file) return;
   _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
+  fotoOriginal = file;
   fotoExt  = 'jpg';                 // câmera sempre devolve imagem
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
@@ -3339,6 +3344,7 @@ async function onArquivoNotaChange(e) {
   if (!file) return;
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
+  fotoOriginal = file;
   fotoExt  = _extDoArquivo(file);
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
@@ -3442,7 +3448,8 @@ async function _lerQRdaImagem(file) {
 /* Botão "Ler QR da foto e inserir a chave" — usa a foto anexada
    (ou a imagem renderizada da 1ª página, no caso de PDF) */
 async function lerChaveDaFotoAnexada() {
-  const alvo = _ehImagemExt(fotoExt || 'jpg') ? fotoBlob : fotoRender;
+  // foto inteira (antes do recorte) quando houver: o QR pode ter ficado fora do enquadramento
+  const alvo = _ehImagemExt(fotoExt || 'jpg') ? (fotoOriginal || fotoBlob) : fotoRender;
   if (!alvo) { toast('Anexe uma foto da nota primeiro', 'err'); return; }
   const ov = $('ocr-overlay');
   if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Procurando QR Code na foto…'; }
