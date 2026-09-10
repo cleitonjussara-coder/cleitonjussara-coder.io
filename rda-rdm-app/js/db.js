@@ -605,8 +605,15 @@ window.DB = (() => {
         if (!data) continue;
         for (const row of data) {
           const local = await _get(table, row.id);
-          // remoto vence se local já está sincronizado (ou não existe)
-          if (!local || local.synced || new Date(row.updated_at) >= new Date(local.updated_at)) {
+          /* Remoto vence quando a linha não existe aqui ou quando é mais
+             recente. `local.synced` NÃO entra nessa conta: estar sincronizado
+             diz apenas que o push já saiu daqui, não que o servidor tenha algo
+             mais novo. Com ele na condição, uma linha antiga do servidor
+             sobrescrevia o estado local recém-gravado — era mais um caminho
+             para exclusão desfeita, igual ao que o Drive fazia.
+             O `|| 0` evita que uma data ausente vire Invalid Date e trave a
+             comparação, o que bloquearia atualizações legítimas. */
+          if (!local || new Date(row.updated_at || 0) >= new Date(local.updated_at || 0)) {
             const merge = { ...row, synced: true, foto_local: local?.foto_local || null };
             /* foto_path é a exceção ao "remoto vence": o app nunca remove
                anexo (ele é obrigatório), então null do servidor não é uma

@@ -42,7 +42,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 98;
+const APP_BUILD = 99;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -461,7 +461,14 @@ async function carregarDadosLocais() {
         .in('user_id', ids)
         .eq('deleted', false)
         .order('created_at', { ascending: false });
-      const vistos = new Set(notasLocais.map(n => n.id));
+      /* `vistos` precisa conhecer também o que foi apagado NESTE aparelho.
+         `notasLocais` já vem sem as apagadas, então uma nota recém-excluída
+         não constava aqui e voltava como "extra" — a consulta da equipe traz
+         do servidor tudo que ainda está com deleted=false, e o servidor só
+         fica sabendo da exclusão no sync, que roda depois desta função.
+         Sem isto a nota ia para a lixeira e continuava na tela. */
+      const conhecidasLocais = await DB.getNotasUser(user.id, true);
+      const vistos = new Set(conhecidasLocais.map(n => n.id));
       const extras = (notasEquipe || []).filter(n => !vistos.has(n.id)).map(n => ({
         ...n,
         user_nome: equipePorId[n.user_id]?.nome || null,
