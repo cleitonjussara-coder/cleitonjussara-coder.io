@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 105;
+const APP_BUILD = 106;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3540,6 +3540,27 @@ function _notaDuplicadaChave(chave, ignoreId) {
   return notas.find(n => n.id !== ignoreId && !n.deleted && _digitos(n.chave_nfce) === c) || null;
 }
 
+/* Duplicata SEM chave NFC-e. As travas acima dependem da chave de 44
+   dígitos, e cupom de restaurante, hospedagem e boa parte dos RDA não têm
+   chave nenhuma — essas notas podiam ser lançadas duas vezes sem nenhum
+   aviso, e era daí que vinha a maior parte dos lançamentos repetidos.
+   Compara o que identifica a nota na prática: tipo, dia, valor e fornecedor
+   (CNPJ quando existe, senão a razão social). */
+function _notaSemelhante({ tipo, cnpj, razao, valor, data, ignoreId }) {
+  const centavos = Math.round(Number(valor) * 100);
+  if (!Number.isFinite(centavos) || centavos <= 0 || !data || !tipo) return null;
+  const c = _digitos(cnpj || '');
+  const r = String(razao || '').trim().toUpperCase();
+  if (!c && !r) return null;                    // sem fornecedor não dá para afirmar nada
+  return notas.find(n =>
+    n.id !== ignoreId && !n.deleted &&
+    n.tipo === tipo && n.data === data &&
+    Math.round(Number(n.valor) * 100) === centavos &&
+    (c ? _digitos(n.cnpj || '') === c
+       : String(n.razao_social || '').trim().toUpperCase() === r)
+  ) || null;
+}
+
 /* Trava de reentrância do Salvar.
    Sem ela, um segundo toque durante os awaits (checagem online da chave,
    compressão do anexo, gravação) reentrava em salvarNota() com nf-id ainda
@@ -3605,6 +3626,30 @@ async function _salvarNotaInterno() {
   const cnpjRaw = BrasilAPI.limpar($('nf-cnpj').value);
   const mes  = parseInt($('nf-mes').value, 10) || new Date(data+'T00:00:00').getMonth()+1;
   const ano  = parseInt($('nf-ano').value, 10) || new Date(data+'T00:00:00').getFullYear();
+
+  /* Só para nota sem chave: com chave, as travas acima já resolveram.
+     Aqui avisa e deixa decidir, em vez de bloquear — duas despesas iguais no
+     mesmo dia acontecem (dois almoços, dois abastecimentos), e travar isso
+     impediria lançamento legítimo. */
+  if (_digitos($('nf-chave').value).length !== 44) {
+    const igual = _notaSemelhante({
+      tipo, cnpj: cnpjRaw, razao: $('nf-razao').value,
+      valor, data, ignoreId: $('nf-id').value || null,
+    });
+    if (igual) {
+      const resumo = [
+        igual.tipo,
+        igual.razao_social || (igual.cnpj ? BrasilAPI.formatar(igual.cnpj) : null),
+        igual.data ? fmtData(igual.data) : null,
+        brl(igual.valor),
+      ].filter(Boolean).join(' · ');
+      const seguir = confirm(
+        'Esta nota parece já ter sido lançada:\n\n' + resumo +
+        '\n\nMesmo tipo, mesma data, mesmo valor e mesmo fornecedor.\n\nLançar assim mesmo?'
+      );
+      if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
+    }
+  }
 
   const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
   const createdBy = _notaAtual?.created_by || _notaAtual?.user_id || user?.id || null;
