@@ -9,3 +9,7 @@ node_modules/
 # gerados localmente, nao versionar
 petermann-locaweb.zip
 consultas-uso-storage.sql
+
+# copia de trabalho fora do repo: backup do build 85, capturas de tela e
+# rascunhos. Fica no disco, so nao e versionada.
+SISTEMA DE NOTAS/
