@@ -50,16 +50,76 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 /* ─────────────────────────────────────────────
    AUTH
 ──────────────────────────────────────────────*/
-#auth-screen{display:flex;align-items:center;justify-content:center;background:var(--primary-d)}
-.auth-wrap{width:100%;max-width:380px;padding:24px}
-.auth-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:32px}
+/* Sem `align-items:center`: com o teclado aberto no celular, ou numa janela
+   baixa, centralizar pelo eixo corta o topo do card e ele fica inalcancavel.
+   O `margin:auto` do .auth-wrap centraliza e ainda deixa rolar. */
+#auth-screen{
+  display:flex;justify-content:center;
+  overflow-y:auto;padding:24px 16px;
+  /* dois claroes suaves sobre o verde escuro dao profundidade ao fundo,
+     no lugar da cor chapada */
+  background:
+    radial-gradient(1100px 620px at 12% -10%, rgba(116,198,157,.20), transparent 62%),
+    radial-gradient(900px 560px at 88% 108%, rgba(64,145,108,.24), transparent 60%),
+    linear-gradient(168deg, #17392B 0%, var(--primary-d) 48%, #12301F 100%)
+}
+.auth-wrap{
+  width:100%;max-width:420px;margin:auto;
+  background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05));
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:22px;padding:32px 28px;
+  box-shadow:0 24px 60px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.14);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)
+}
+.auth-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:26px}
+.auth-tag{display:none}
+
+/* Telas largas: a marca ocupa a coluna da esquerda e o formulario a direita,
+   em vez de uma faixa estreita no meio de muito espaco vazio. */
+@media (min-width:900px){
+  .auth-wrap{
+    max-width:880px;padding:48px 52px;
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:0;align-items:center
+  }
+  .auth-logo{margin-bottom:0;padding-right:46px}
+  /* filete separando a marca do formulario */
+  #auth-body{border-left:1px solid rgba(255,255,255,.13);padding-left:46px}
+  .auth-logo img{width:112px!important;height:112px!important}
+  .auth-logo-text{font-size:30px}
+  .auth-tag{
+    display:block;margin-top:14px;text-align:center;
+    color:rgba(255,255,255,.6);font-size:13.5px;line-height:1.6;max-width:260px
+  }
+}
 .auth-logo svg{width:64px;height:64px}
-.auth-logo-text{color:#fff;font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:10px}
+.auth-logo img{box-shadow:0 12px 30px rgba(0,0,0,.34)}
+.auth-logo-text{color:#fff;font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:12px}
 .auth-logo-text span{color:var(--secondary)}
-.auth-title{color:#fff;font-size:20px;font-weight:700;margin-bottom:18px}
+.auth-title{color:#fff;font-size:21px;font-weight:700;margin-bottom:18px;letter-spacing:-0.2px}
 #auth-body{display:flex;flex-direction:column;gap:10px}
-#auth-body .inp{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25);color:#fff}
-#auth-body .inp::placeholder{color:rgba(255,255,255,.5)}
+#auth-body .inp{
+  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.22);color:#fff;
+  padding:12px 14px;border-radius:11px;
+  transition:border-color .18s, background .18s, box-shadow .18s
+}
+#auth-body .inp::placeholder{color:rgba(255,255,255,.52)}
+#auth-body .inp:hover{background:rgba(255,255,255,.14)}
+#auth-body .inp:focus{
+  border-color:var(--secondary);background:rgba(255,255,255,.16);
+  box-shadow:0 0 0 3px rgba(116,198,157,.22)
+}
+/* o botao principal so aqui dentro — o resto do app mantem o estilo padrao */
+#auth-body .btn-primary{
+  background:linear-gradient(180deg, var(--primary-l), var(--primary));
+  border:0;padding:12px;border-radius:11px;font-size:15px;letter-spacing:.2px;
+  box-shadow:0 8px 20px rgba(27,67,50,.42);
+  transition:transform .15s, box-shadow .15s, filter .15s
+}
+#auth-body .btn-primary:hover{filter:brightness(1.07);box-shadow:0 12px 26px rgba(27,67,50,.5)}
+#auth-body .btn-primary:active{transform:translateY(1px);box-shadow:0 6px 16px rgba(27,67,50,.42)}
+#auth-body .btn-outline{border-radius:11px;padding:11px;transition:background .15s, border-color .15s}
+#auth-body .btn-outline:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.6)}
 .pass-wrap{position:relative}
 .pass-wrap .inp{padding-right:46px}
 .pass-toggle{
@@ -69,7 +129,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
 .pass-toggle:hover{opacity:1}
 .auth-switch{color:rgba(255,255,255,.7);font-size:13.5px;margin-top:6px;text-align:center}
-.auth-switch a{color:var(--secondary);font-weight:600;cursor:pointer;text-decoration:underline}
+.auth-switch a{
+  color:var(--secondary);font-weight:600;cursor:pointer;
+  text-decoration:none;border-bottom:1px solid rgba(116,198,157,.45);
+  padding-bottom:1px;transition:color .15s, border-color .15s
+}
+.auth-switch a:hover{color:#9BDCBB;border-color:#9BDCBB}
 
 /* ─────────────────────────────────────────────
    APP SHELL
@@ -769,6 +834,7 @@ select.inp{cursor:pointer}
     <div class="auth-logo">
       <img src="logo.jpg" alt="Petermann" style="width:80px;height:80px;border-radius:18px;object-fit:cover">
       <div class="auth-logo-text">Petermann <span>App</span></div>
+      <p class="auth-tag">Lançamento de notas RDA e RDM, com leitura de QR Code e envio automático.</p>
     </div>
     <div id="auth-body"></div>
   </div>
@@ -1246,22 +1312,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=102"></script>
-<script defer src="js/nfce.js?v=102"></script>
-<script defer src="js/sefaz.js?v=102"></script>
-<script defer src="js/brasilapi.js?v=102"></script>
-<script defer src="js/ocr.js?v=102"></script>
-<script defer src="js/recorte.js?v=102"></script>
-<script defer src="js/excel.js?v=102"></script>
-<script defer src="js/gestor.js?v=102"></script>
-<script defer src="js/gdrive.js?v=102"></script>
-<script defer src="js/gsheets.js?v=102"></script>
-<script defer src="js/app.js?v=102"></script>
+<script defer src="js/db.js?v=103"></script>
+<script defer src="js/nfce.js?v=103"></script>
+<script defer src="js/sefaz.js?v=103"></script>
+<script defer src="js/brasilapi.js?v=103"></script>
+<script defer src="js/ocr.js?v=103"></script>
+<script defer src="js/recorte.js?v=103"></script>
+<script defer src="js/excel.js?v=103"></script>
+<script defer src="js/gestor.js?v=103"></script>
+<script defer src="js/gdrive.js?v=103"></script>
+<script defer src="js/gsheets.js?v=103"></script>
+<script defer src="js/app.js?v=103"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=102').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=103').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
