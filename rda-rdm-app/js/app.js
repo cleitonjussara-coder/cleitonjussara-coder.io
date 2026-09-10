@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 107;
+const APP_BUILD = 108;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -895,6 +895,11 @@ async function initDrive() {
 }
 
 function _mostrarBannerDrive() {
+  /* Colaborador não precisa de Drive: nota, anexo e sincronização vão para o
+     Supabase de qualquer jeito. O convite dizia "conecte para salvar seus
+     dados na nuvem", o que fazia parecer obrigatório. Fica só para gestor e
+     admin, que são quem gera as planilhas e monta a pasta da empresa. */
+  if (!_ehGestorOuAdmin()) return;
   // banner descartável no topo do conteúdo
   const existing = $('drive-invite-banner');
   if (existing) return;
@@ -1033,7 +1038,7 @@ async function syncToDrive() {
 function updateDriveBadge() {
   const badge = $('drive-badge');
   if (!badge) return;
-  if (!window.GDrive?.isConfigured()) { badge.style.display = 'none'; return; }
+  if (!window.GDrive?.isConfigured() || !_ehGestorOuAdmin()) { badge.style.display = 'none'; return; }
   badge.style.display = 'flex';
   const ok  = driveOk && GDrive.isConnected();
   const min = ok ? GDrive.minutosRestantes() : 0;
@@ -2474,6 +2479,7 @@ function renderPerfil() {
   <div class="perfil-actions">
     <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
+    ${_ehGestorOuAdmin() ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
       ${driveOk && GDrive.isConnected() ? `
@@ -2500,6 +2506,7 @@ function renderPerfil() {
         </button>
       `}
     </div>
+    ` : ''}
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
   _pintarBotaoInstalar();
