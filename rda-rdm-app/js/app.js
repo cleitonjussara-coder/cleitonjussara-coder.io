@@ -42,7 +42,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 99;
+const APP_BUILD = 100;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -451,8 +451,13 @@ async function carregarDadosLocais() {
 
   if (_ehGestorOuAdmin() && sb && !DEMO_MODE) {
     try {
-      const nucleo = user?.nucleo || '';
-      const { data: collabs } = await sb.from('colaboradores').select('id,nome,nucleo,role').eq('nucleo', nucleo);
+      /* Sem recorte por núcleo: gestor e admin veem TODOS os colaboradores.
+         É o que a policy `notas_sel` já permite, o que o comentário do
+         supabase_setup.sql declara e o que a aba Equipe (gestor.js) sempre
+         fez com `select('*')`. Só esta consulta filtrava por núcleo, e o
+         efeito era o gestor não enxergar quem estivesse cadastrado em
+         outro núcleo — mesmo tendo permissão para isso no banco. */
+      const { data: collabs } = await sb.from('colaboradores').select('id,nome,nucleo,role');
       equipePorId = {};
       (collabs || []).forEach(c => { equipePorId[c.id] = c; });
       const ids = [...new Set([user.id, ...(collabs || []).map(c => c.id)])];
