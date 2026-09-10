@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 110;
+const APP_BUILD = 111;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3486,13 +3486,24 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     let ocr = ocrPronto || {};
     if (!ocrPronto) {
       /* Recorte antes do OCR: lendo a foto toda, mesa, mão e a nota do lado
-         entram no texto e viram valor/CNPJ errado. Alimenta só a leitura —
-         o anexo salvo continua sendo a foto original (evidência fiscal). */
+         entram no texto e viram valor/CNPJ errado.
+         O enquadramento confirmado vira também o ANEXO salvo — quem enquadra
+         espera ver a foto enquadrada. Sai em resolução original (o Recorte
+         corta da imagem, não do canvas reduzido), então o comprovante não
+         perde definição. "Foto inteira" mantém o original. O QR já foi lido
+         da foto inteira acima, então recortar depois não o perde. */
       let alvo = file;
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
         ov.style.display = 'flex';
+        if (alvo !== file) {
+          fotoBlob = alvo;
+          fotoExt  = 'jpg';
+          if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+          fotoURL  = URL.createObjectURL(alvo);
+          atualizarPreviewFoto(fotoURL);
+        }
       }
       $('ocr-progress').textContent = 'Lendo o texto…';
       try { ocr = await OCR.processar(alvo); } catch (_) {}

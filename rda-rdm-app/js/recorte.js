@@ -190,6 +190,14 @@ window.Recorte = (() => {
   function _aoSoltar() { _arraste = null; }
 
   /* ── Recorte final, na resolução original ───────────────── */
+  /* Corta da <img> ORIGINAL, em resolução total: o recorte agora vira o
+     anexo salvo, não só a entrada do OCR. Do canvas reduzido sairia uma foto
+     de 2400 px, e comprovante fiscal não pode perder definição.
+     Limita a 3000 px na maior dimensão — acima disso o ganho é nulo e um
+     celular modesto pode não ter memória para o canvas. O canvas reduzido
+     (_trabalho) continua servindo à detecção automática, que é onde o custo
+     importa. */
+  const MAX_ANEXO = 3000;
   function _cortar() {
     const c = _caixaImg;
     const fx = (_rect.x - c.x) / c.w;
@@ -197,15 +205,20 @@ window.Recorte = (() => {
     const fw = _rect.w / c.w;
     const fh = _rect.h / c.h;
 
-    // corta do canvas reduzido, não da <img> original: mesma área, fração do custo
-    const sx = Math.round(fx * _trabalho.width);
-    const sy = Math.round(fy * _trabalho.height);
-    const sw = Math.max(1, Math.round(fw * _trabalho.width));
-    const sh = Math.max(1, Math.round(fh * _trabalho.height));
+    const img = $('crop-img');
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const sx = Math.round(fx * W);
+    const sy = Math.round(fy * H);
+    const sw = Math.max(1, Math.round(fw * W));
+    const sh = Math.max(1, Math.round(fh * H));
+
+    const escala = Math.min(1, MAX_ANEXO / Math.max(sw, sh));
+    const dw = Math.max(1, Math.round(sw * escala));
+    const dh = Math.max(1, Math.round(sh * escala));
 
     const cv = document.createElement('canvas');
-    cv.width = sw; cv.height = sh;
-    cv.getContext('2d').drawImage(_trabalho, sx, sy, sw, sh, 0, 0, sw, sh);
+    cv.width = dw; cv.height = dh;
+    cv.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
     return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.92));
   }
 
