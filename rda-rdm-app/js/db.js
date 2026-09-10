@@ -236,9 +236,39 @@ window.DB = (() => {
     await _queueOp({ entity: 'nota', entity_id: id, action: 'upsert', payload });
   }
 
+  /* A lixeira junta DUAS origens:
+       • `lancamentos_apagados` — o arquivo que a exclusão de hoje cria;
+       • `notas` com deleted=true e SEM cópia arquivada — órfãs da versão
+         anterior do app, que só marcava a nota e não arquivava nada (a
+         store nem existia). Sem isto elas somem da lista e da lixeira ao
+         mesmo tempo, e não sobra tela nenhuma para restaurá-las.
+     A leitura é da store inteira, e não pelo índice `user_id`, porque o
+     IndexedDB não indexa registro cujo valor da chave seja null — e o
+     arquivamento grava `user_id: n.user_id || null`. Pelo índice, nota
+     sem dono ficava invisível para sempre. */
   async function getDeletedNotasUser(userId) {
-    const all = await _getAllByIdx('lancamentos_apagados', 'user_id', userId);
-    return all.map(n => _normalizeRecord(n));
+    /* Cada store é lida por conta própria: num aparelho que ainda não
+       abriu o app novo, `lancamentos_apagados` pode não existir, e um
+       Promise.all comum derrubaria também a leitura das órfãs — que são
+       justamente as que precisam aparecer ali. */
+    const [arquivadas, notas] = await Promise.all([
+      _getAll('lancamentos_apagados').catch(() => []),
+      _getAll('notas').catch(() => []),
+    ]);
+    const doUsuario = n => !userId || !n.user_id || n.user_id === userId;
+
+    const lista = arquivadas.filter(doUsuario);
+    const jaListadas = new Set(lista.map(n => n.id));
+
+    for (const n of notas) {
+      if (!n.deleted || jaListadas.has(n.id) || !doUsuario(n)) continue;
+      lista.push({
+        ...n,
+        deleted_at  : n.deleted_at   || n.updated_at || null,
+        deleted_from: n.deleted_from || 'local',
+      });
+    }
+    return lista.map(n => _normalizeRecord(n));
   }
 
   async function restoreNota(id) {
