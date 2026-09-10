@@ -4,7 +4,6 @@
 ───────────────────────────────────────────────────────────── */
 window.Gestor = (() => {
   const MESES  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
   const ROLES   = ['colaborador','gestor','admin'];
 
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -47,16 +46,6 @@ window.Gestor = (() => {
       const evo = [];
       for (let m = 1; m <= 12; m++) evo.push(soma(nsAno.filter(n => n.mes === m)));
       const maxEvo = Math.max(1, ...evo);
-
-      // Gasto por núcleo (mês)
-      const porNuc = {};
-      ns.forEach(n => {
-        const c = collabs.find(x => x.id === n.user_id);
-        const nc = c?.nucleo || 'Outro';
-        porNuc[nc] = (porNuc[nc] || 0) + Number(n.valor || 0);
-      });
-      const nucRank = Object.entries(porNuc).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
-      const maxNuc = Math.max(1, ...nucRank.map(e => e[1]));
 
       // ── Cabeçalho ──
       let html = `<div class="page-hd">
@@ -107,36 +96,20 @@ window.Gestor = (() => {
         <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
       </div>`;
 
-      // ── Gasto por núcleo (mês) ──
-      html += `<div class="dash-card">
-        <div class="dash-card-title">Gasto por núcleo · ${MESES[mes-1]}</div>
-        ${nucRank.length ? nucRank.map(([nc, v]) => `
-          <div class="nuc-row">
-            <span class="nuc-name">${esc(nc)}</span>
-            <div class="nuc-track"><div class="nuc-fill" style="width:${Math.max(4, Math.round(v / maxNuc * 100))}%"></div></div>
-            <span class="nuc-val">${brl(v)}</span>
-          </div>`).join('') : '<div class="kpi-sub">Sem gastos neste mês.</div>'}
-      </div>`;
-
       html += `<div class="section-hd">Detalhe por colaborador</div>`;
 
-      // agrupa por nucleo p/ o detalhe
-      const nucs = {};
-      collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
-      NUCLEOS.forEach(nucleo => { if (!nucs[nucleo]) nucs[nucleo] = []; });
-      for (const [nucleo, membros] of Object.entries(nucs).sort()) {
-        if (!membros.length) continue;
-        let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
+      /* Lista única, sem recorte por núcleo — `collabs` já vem ordenada por
+         nome do `.order('nome')` lá em cima. */
+      {
         let mHtml = '';
 
-        membros.forEach(m => {
+        collabs.forEach(m => {
           const mns = ns.filter(n=>n.user_id===m.id);
           const mrs = rs.filter(r=>r.user_id===m.id);
           const rdmG = mns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
           const rdmR = mrs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
           const rdaG = mns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
           const rdaR = mrs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
-          tRDMg+=rdmG; tRDMr+=rdmR; tRDAg+=rdaG; tRDAr+=rdaR;
 
           const canEdit = currentUser.role==='admin';
           mHtml += `
@@ -167,20 +140,10 @@ window.Gestor = (() => {
           </div>`;
         });
 
-        html += `
-        <div class="nucleo-block">
-          <div class="nucleo-hd">
-            <span class="nucleo-nome">${esc(nucleo)}</span>
-            <div class="nucleo-tots">
-              <span>RDM <b>${brl(tRDMr-tRDMg)}</b></span>
-              <span>RDA <b>${brl(tRDAr-tRDAg)}</b></span>
-            </div>
-          </div>
-          <div class="colab-list">${mHtml}</div>
-        </div>`;
+        html += `<div class="colab-list">${mHtml}</div>`;
       }
 
-      if (!Object.keys(nucs).length) {
+      if (!collabs.length) {
         html += '<div class="empty-state">Nenhum colaborador encontrado.</div>';
       }
 
@@ -228,10 +191,6 @@ window.Gestor = (() => {
         <div class="modal-bd">
           <label class="lbl">Nome</label>
           <input class="inp" id="g-nome" value="${esc(colab.nome||'')}">
-          <label class="lbl">Núcleo</label>
-          <select class="inp" id="g-nucleo">
-            ${NUCLEOS.map(n=>`<option value="${n}"${n===colab.nucleo?' selected':''}>${n}</option>`).join('')}
-          </select>
           <label class="lbl">Papel</label>
           <select class="inp" id="g-role">
             ${ROLES.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${r}</option>`).join('')}
@@ -251,9 +210,8 @@ window.Gestor = (() => {
 
     ov.querySelector('#g-save').onclick = async () => {
       const nome   = ov.querySelector('#g-nome').value.trim();
-      const nucleo = ov.querySelector('#g-nucleo').value;
       const role   = ov.querySelector('#g-role').value;
-      const { error } = await sb.from('colaboradores').update({ nome, nucleo, role }).eq('id', colab.id);
+      const { error } = await sb.from('colaboradores').update({ nome, role }).eq('id', colab.id);
       if (error) { alert('Erro: ' + error.message); return; }
       close(); onSaved();
     };

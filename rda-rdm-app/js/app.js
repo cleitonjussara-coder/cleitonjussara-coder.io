@@ -32,7 +32,6 @@ let fotoRender    = null;   // imagem renderizada da 1ª página do PDF (preview
 let fotoRenderURL = null;
 
 const MESES   = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const NUCLEOS = ['Cristalina','Formosa','Paracatu','Uberlândia','Outro'];
 /* Versão do PRODUTO — é o que o colaborador vê. Sobe quando o app ganha
    algo que muda o uso dele, não a cada publicação. */
 const APP_VERSION = 'v4';
@@ -42,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 100;
+const APP_BUILD = 101;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2437,17 +2436,12 @@ function renderPerfil() {
     <div class="perfil-email">${esc(user?.email||'')}</div>
     <div class="perfil-meta">
       <span class="role-pill role-${esc(user?.role||'colaborador')}">${esc(user?.role||'colaborador')}</span>
-      <span class="nucleo-pill">${esc(user?.nucleo||'')}</span>
     </div>
   </div>
 
   <div class="perfil-form">
     <label class="lbl">Nome</label>
     <input class="inp" id="p-nome"   value="${esc(user?.nome||'')}">
-    <label class="lbl">Núcleo</label>
-    <select class="inp" id="p-nucleo">
-      ${NUCLEOS.map(n=>`<option value="${n}"${n===user?.nucleo?' selected':''}>${n}</option>`).join('')}
-    </select>
     <button class="btn btn-primary" onclick="salvarPerfil()">Salvar perfil</button>
   </div>
 
@@ -2486,13 +2480,11 @@ function renderPerfil() {
 }
 
 async function salvarPerfil() {
-  const nome   = $('p-nome').value.trim();
-  const nucleo = $('p-nucleo').value;
+  const nome = $('p-nome').value.trim();
   if (!nome) { toast('Informe seu nome','err'); return; }
-  user.nome   = nome;
-  user.nucleo = nucleo;
+  user.nome = nome;
   if (sb && !DEMO_MODE) {
-    await sb.from('colaboradores').update({ nome, nucleo }).eq('id', user.id);
+    await sb.from('colaboradores').update({ nome }).eq('id', user.id);
   }
   toast('Perfil salvo!');
   renderPerfil();
