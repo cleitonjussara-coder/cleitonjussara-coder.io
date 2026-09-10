@@ -76,20 +76,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 
 /* Telas largas: a marca ocupa a coluna da esquerda e o formulario a direita,
    em vez de uma faixa estreita no meio de muito espaco vazio. */
+/* A partir daqui a pagina inteira e a tela: nada de cartao flutuando no
+   meio. A metade esquerda leva a marca, a direita o formulario, e cada uma
+   ocupa a altura toda. */
 @media (min-width:900px){
+  #auth-screen{display:block;padding:0}
   .auth-wrap{
-    max-width:880px;padding:48px 52px;
-    display:grid;grid-template-columns:1fr 1fr;
-    gap:0;align-items:center
+    max-width:none;width:100%;min-height:100%;margin:0;padding:0;
+    background:none;border:0;border-radius:0;box-shadow:none;
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    display:grid;grid-template-columns:1fr 1fr;gap:0
   }
-  .auth-logo{margin-bottom:0;padding-right:46px}
-  /* filete separando a marca do formulario */
-  #auth-body{border-left:1px solid rgba(255,255,255,.13);padding-left:46px}
-  .auth-logo img{width:112px!important;height:112px!important}
-  .auth-logo-text{font-size:30px}
+  .auth-logo{
+    margin:0;padding:56px 48px;
+    justify-content:center;
+    background:linear-gradient(160deg, rgba(255,255,255,.085), rgba(255,255,255,.015));
+    border-right:1px solid rgba(255,255,255,.12)
+  }
+  #auth-body{
+    align-self:center;justify-self:center;
+    width:100%;max-width:400px;padding:56px 48px
+  }
+  .auth-logo img{width:128px!important;height:128px!important}
+  .auth-logo-text{font-size:34px;margin-top:16px}
   .auth-tag{
     display:block;margin-top:14px;text-align:center;
-    color:rgba(255,255,255,.6);font-size:13.5px;line-height:1.6;max-width:260px
+    color:rgba(255,255,255,.62);font-size:14px;line-height:1.65;max-width:300px
   }
 }
 .auth-logo svg{width:64px;height:64px}
@@ -1312,22 +1324,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=103"></script>
-<script defer src="js/nfce.js?v=103"></script>
-<script defer src="js/sefaz.js?v=103"></script>
-<script defer src="js/brasilapi.js?v=103"></script>
-<script defer src="js/ocr.js?v=103"></script>
-<script defer src="js/recorte.js?v=103"></script>
-<script defer src="js/excel.js?v=103"></script>
-<script defer src="js/gestor.js?v=103"></script>
-<script defer src="js/gdrive.js?v=103"></script>
-<script defer src="js/gsheets.js?v=103"></script>
-<script defer src="js/app.js?v=103"></script>
+<script defer src="js/db.js?v=104"></script>
+<script defer src="js/nfce.js?v=104"></script>
+<script defer src="js/sefaz.js?v=104"></script>
+<script defer src="js/brasilapi.js?v=104"></script>
+<script defer src="js/ocr.js?v=104"></script>
+<script defer src="js/recorte.js?v=104"></script>
+<script defer src="js/excel.js?v=104"></script>
+<script defer src="js/gestor.js?v=104"></script>
+<script defer src="js/gdrive.js?v=104"></script>
+<script defer src="js/gsheets.js?v=104"></script>
+<script defer src="js/app.js?v=104"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=103').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=104').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
