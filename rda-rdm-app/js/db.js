@@ -422,7 +422,15 @@ window.DB = (() => {
         continue;
       }
 
-      if (!local || local.deleted || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
+      /* Nota apagada AQUI não volta só porque o Drive ainda tem uma cópia
+         viva dela — o snapshot do Drive costuma ser anterior à exclusão.
+         Com `local.deleted` nesta condição, toda exclusão era desfeita na
+         sincronização seguinte: a nota reaparecia na lista já marcada como
+         sincronizada, enquanto a cópia arquivada continuava na lixeira, e
+         a mesma nota aparecia nas duas telas.
+         Restauração feita em OUTRO aparelho continua chegando normalmente,
+         porque aí `rec.updated_at` é mais recente que o local. */
+      if (!local || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
         await _put(store, {
           ...rec,
           synced: true,
