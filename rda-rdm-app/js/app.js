@@ -45,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 112;
+const APP_BUILD = 113;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3494,17 +3494,21 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     if (!ocrPronto) {
       /* Recorte antes do OCR: lendo a foto toda, mesa, mão e a nota do lado
          entram no texto e viram valor/CNPJ errado.
-         O enquadramento confirmado vira também o ANEXO salvo — quem enquadra
-         espera ver a foto enquadrada. Sai em resolução original (o Recorte
-         corta da imagem, não do canvas reduzido), então o comprovante não
-         perde definição. "Foto inteira" mantém o original. O QR já foi lido
-         da foto inteira acima, então recortar depois não o perde. */
+         Se o enquadramento vira o ANEXO depende de como a nota chegou:
+           • COM chave (fluxo QR → foto): a foto é o comprovante para
+             conferência, fica INTEIRA. O recorte só alimenta a leitura.
+           • SEM chave (lançamento pela foto): a foto é tudo que identifica a
+             nota, e quem enquadra espera ver a foto enquadrada — o recorte
+             vira o anexo, em resolução original.
+         "Foto inteira" mantém o original nos dois casos. */
       let alvo = file;
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
         ov.style.display = 'flex';
-        if (alvo !== file) {
+        const veioDoQR = (qr?.chave && qr.chave.length === 44)
+                      || _digitos($('nf-chave').value).length === 44;
+        if (alvo !== file && !veioDoQR) {
           fotoBlob = alvo;
           fotoExt  = 'jpg';
           if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
