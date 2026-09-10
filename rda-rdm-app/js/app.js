@@ -41,7 +41,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 101;
+const APP_BUILD = 102;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -668,6 +668,32 @@ function _limparUrlRecuperacao() {
 }
 
 let authMode = 'login';
+/* Campo de senha com o olho de mostrar/ocultar. O botão fica por cima da
+   borda direita do input, e o `padding-right` do .pass-wrap abre espaço para
+   ele não cobrir o que a pessoa digita. */
+function _campoSenha(id, placeholder, autocomplete) {
+  return `
+    <div class="pass-wrap">
+      <input class="inp" id="${id}" type="password" placeholder="${placeholder}" autocomplete="${autocomplete}">
+      <button type="button" class="pass-toggle" aria-label="Mostrar senha"
+              title="Mostrar senha" onclick="alternarSenha('${id}', this)">👁️</button>
+    </div>`;
+}
+
+/* Alterna entre texto e senha. Devolve o foco ao campo porque clicar no botão
+   o tira, e quem está conferindo o que digitou quer continuar digitando. */
+function alternarSenha(id, btn) {
+  const inp = $(id);
+  if (!inp) return;
+  const estavaVisivel = inp.type === 'text';
+  inp.type = estavaVisivel ? 'password' : 'text';
+  btn.textContent = estavaVisivel ? '👁️' : '🙈';
+  const rotulo = estavaVisivel ? 'Mostrar senha' : 'Ocultar senha';
+  btn.setAttribute('aria-label', rotulo);
+  btn.setAttribute('title', rotulo);
+  inp.focus();
+}
+
 function renderAuth(mode='login') {
   authMode = mode;
   const rodape = `
@@ -709,7 +735,7 @@ function renderAuth(mode='login') {
   $('auth-body').innerHTML = mode==='login' ? `
     <h2 class="auth-title">Entrar</h2>
     <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
-    <input class="inp" id="a-pass"  type="password" placeholder="Senha" autocomplete="current-password">
+    ${_campoSenha('a-pass', 'Senha', 'current-password')}
     <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
     <p class="auth-switch"><a onclick="renderAuth('reset')">Esqueci minha senha</a></p>
     <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
