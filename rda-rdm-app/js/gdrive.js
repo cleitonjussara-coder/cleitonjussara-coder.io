@@ -80,10 +80,25 @@ window.GDrive = (() => {
     });
   }
 
+  /* Token que veio de fora — do login Google pelo Supabase, que pede o
+     escopo do Drive junto (build 123). É o caminho "sem botão": o app entra
+     já conectado. Vale o mesmo que um token do popup. */
+  function setToken(tok, expMs) {
+    if (!tok) return false;
+    accessToken = tok;
+    tokenExpiry = expMs;
+    try { sessionStorage.setItem(LS_KEY, JSON.stringify({ tok: accessToken, exp: tokenExpiry })); } catch (_) {}
+    _garantirIndice().catch(e => console.warn('GDrive índice:', e.message));
+    return true;
+  }
+
   /* ════════════════════════════════════════════
-     CONNECT — só chamado por clique do usuário
+     CONNECT — precisa de clique do usuário (abre popup)
+     silencioso=true: sem seletor de conta; se o consentimento já foi dado,
+     o popup fecha sozinho. Usado para renovar o token que venceu no meio
+     de uma ação (o clique da ação libera o popup).
   ════════════════════════════════════════════ */
-  function requestAccess() {
+  function requestAccess(silencioso = false) {
     if (!_gisReady) return Promise.reject(new Error('Google Identity Services não carregado'));
     return new Promise((resolve, reject) => {
       tokenClient.callback = async resp => {
@@ -103,7 +118,7 @@ window.GDrive = (() => {
         resolve(true);
       };
       // prompt: '' → tenta sem UI se já consentido; 'select_account' → mostra seletor
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
+      tokenClient.requestAccessToken({ prompt: silencioso ? '' : 'select_account' });
     });
   }
 
@@ -596,7 +611,7 @@ window.GDrive = (() => {
   }
 
   return {
-    init, requestAccess, disconnect, testarConexao,
+    init, requestAccess, setToken, disconnect, testarConexao,
     syncNotas, loadNotas,
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
     atualizarIndice, migrarParaModeloPadrao,

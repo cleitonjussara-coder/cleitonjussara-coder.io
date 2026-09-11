@@ -61,7 +61,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 122;
+const APP_BUILD = 123;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -321,6 +321,14 @@ function _ensureSb() {
       if (_ev === 'PASSWORD_RECOVERY') _recuperandoSenha = true;
       if (_recuperandoSenha) { showTela('auth'); renderAuth('nova-senha'); return; }
       if (session?.user) {
+        /* Login Google com escopo do Drive devolve o token do Google junto
+           da sessão. Entrega ao GDrive antes de abrir o app: é assim que
+           gestor/admin entram já conectados, sem botão. ~55 min de vida. */
+        if (session.provider_token && window.GDrive?.setToken) {
+          if (GDrive.setToken(session.provider_token, Date.now() + 55 * 60_000)) {
+            driveOk = true; updateDriveBadge();
+          }
+        }
         if (user && _telaAtual === 'app') return;
         await onLogin(session.user);
       } else {
@@ -408,6 +416,7 @@ async function onLogin(authUser) {
     try { perfil = JSON.parse(localStorage.getItem('perfil_' + authUser.id) || 'null'); } catch (_) {}
     user = perfil || { id:authUser.id, email:authUser.email, nome:'', role:'colaborador', nucleo:'Cristalina' };
     DB.setupAutoSync(sb, () => user?.id);
+    _driveAutomatico();                       // perfil em cache já diz se é gestor/admin
     await carregarDadosLocais();
     showTela('app');
     switchView('home');
@@ -426,6 +435,7 @@ async function onLogin(authUser) {
             if (viewAtual === 'perfil') renderPerfil();
           }
           _maybeAutoConsolidarFotos();             // papel de gestor confirmado → tenta organizar (se Drive já conectado)
+          _driveAutomatico();                      // ...e conecta o Drive se ainda não estiver
         }).catch(() => {});
     }
 
@@ -945,66 +955,55 @@ async function initDrive() {
     if (driveOk && user) {
       await pullFromDrive();
       _maybeAutoConsolidarFotos();          // gestor abriu o app com Drive → organiza fotos da equipe
-    } else if (!driveOk && GDrive.isConfigured()) {
-      // Drive configurado mas não conectado — mostra banner sutil
-      _mostrarBannerDrive();
     }
   } catch (e) { console.warn('Drive init:', e.message); }
 }
 
-function _mostrarBannerDrive() {
-  /* Colaborador não precisa de Drive: nota, anexo e sincronização vão para o
-     Supabase de qualquer jeito. O convite dizia "conecte para salvar seus
-     dados na nuvem", o que fazia parecer obrigatório. Fica só para gestor e
-     admin, que são quem gera as planilhas e monta a pasta da empresa. */
-  if (!_ehGestorOuAdmin()) return;
-  // banner descartável no topo do conteúdo
-  const existing = $('drive-invite-banner');
-  if (existing) return;
-  const b = document.createElement('div');
-  b.id = 'drive-invite-banner';
-  b.style.cssText = 'background:#1B4332;color:#fff;font-size:13px;padding:10px 16px;'
-    + 'display:flex;align-items:center;gap:10px;flex-shrink:0;';
-  b.innerHTML = `
-    <span style="flex:1">☁️ Conecte o Google Drive para salvar seus dados na nuvem</span>
-    <button onclick="connectDrive()" style="background:var(--accent);color:var(--primary-d);border:none;
-      border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
-      Conectar
-    </button>
-    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.6);
-      font-size:18px;cursor:pointer;line-height:1;padding:0 4px">×</button>`;
-  const content = $('app-content');
-  if (content) content.parentElement.insertBefore(b, content);
-}
-
-async function connectDrive() {
-  // remove banner se existir
-  $('drive-invite-banner')?.remove();
-  setLoading(true);
+/* ── Drive sem botão (build 123) ──────────────────────────────
+   Popup do Google só abre com clique, então "conectar sozinho" nunca deu
+   pelo caminho antigo. O caminho novo é o login Google do Supabase com o
+   escopo do Drive: gestor/admin que abre o app sem Drive é levado ao
+   Google (consentimento só na primeira vez, depois é uma passagem de 2 s)
+   e volta logado na MESMA conta — quem entrou por senha também, porque o
+   e-mail é o mesmo — com o token do Drive na sessão.
+   Uma tentativa por aba: se o usuário negar, não fica em loop; na próxima
+   abertura tenta de novo. Colaborador nunca passa por aqui. */
+async function _driveAutomatico() {
+  if (!_ehGestorOuAdmin() || DEMO_MODE || !sb || !navigator.onLine) return;
+  if (!window.GDrive?.isConfigured()) return;
+  if (driveOk && GDrive.isConnected()) return;
+  const K = 'drive_auto_tentado';
   try {
-    await GDrive.requestAccess();
-    driveOk = true;
-    updateDriveBadge();
-    await pullFromDrive();
-    toast('✅ Google Drive conectado!');
-    if (viewAtual === 'perfil') renderPerfil();
-    _maybeAutoConsolidarFotos();            // conectou agora → se for gestor, organiza fotos da equipe
-  } catch (e) {
-    const msg = e.message || 'Erro desconhecido';
-    if (msg.includes('negado') || msg.includes('denied')) {
-      toast('Acesso negado — autorize o app no Google', 'err');
-    } else {
-      toast('Drive: ' + msg, 'err');
-    }
-  } finally { setLoading(false); }
+    if (sessionStorage.getItem(K)) return;
+    sessionStorage.setItem(K, '1');
+  } catch (_) { return; }
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: location.origin + location.pathname,
+      scopes: 'https://www.googleapis.com/auth/drive',
+      queryParams: { login_hint: user?.email || '' },
+    },
+  });
+  if (error) console.warn('Drive automático:', error.message);
 }
 
-function disconnectDrive() {
-  GDrive.disconnect();
-  driveOk = false;
-  updateDriveBadge();
-  toast('Drive desconectado');
-  renderPerfil();
+/* Ação explícita que precisa do Drive (planilha, fotos da equipe) com o
+   token vencido: renova pelo popup silencioso — o clique da própria ação é
+   o que permite o popup abrir, e com consentimento já dado ele fecha só. */
+async function _garantirDrive() {
+  if (driveOk && GDrive.isConnected()) return true;
+  if (!window.GDrive?.isConfigured() || !navigator.onLine) {
+    toast('Sem conexão com o Google Drive', 'err'); return false;
+  }
+  try {
+    await GDrive.requestAccess(true);
+    driveOk = true; updateDriveBadge();
+    return true;
+  } catch (e) {
+    toast('Drive: ' + (e.message || 'não conectou'), 'err');
+    return false;
+  }
 }
 
 async function testarDrive() {
@@ -1021,7 +1020,7 @@ async function testarDrive() {
    ({Colaborador}/{Ano}/RDM DESPESAS CORPORATIVAS/{CATEGORIA}/{01 jan}).
    Só move arquivo — não apaga nada, e rodar de novo é inofensivo. */
 async function migrarPastasDrive() {
-  if (!GDrive.isConnected()) { toast('Conecte o Drive primeiro', 'err'); return; }
+  if (!(await _garantirDrive())) return;
   if (!confirm('Reorganizar as fotos já enviadas no padrão de pastas da empresa?\n\n'
              + 'Os arquivos são movidos, nunca apagados. As pastas antigas ficam onde estão, vazias.')) return;
 
@@ -2333,11 +2332,7 @@ function exportExcelEquipe() {
 
 /* Planilha do Google da equipe (consolidada, mês atual) */
 async function exportSheetsEquipe() {
-  if (!GDrive.isConnected()) {
-    toast('Conecte o Google Drive no Perfil primeiro', 'err');
-    switchView('perfil');
-    return;
-  }
+  if (!(await _garantirDrive())) return;
   const aba = window.open('', '_blank');   // abre no clique p/ não cair em bloqueio de popup
   setLoading(true);
   try {
@@ -2435,11 +2430,7 @@ async function diagnosticoFotos() {
    Mostra um resumo FIXO (popup) com o diagnóstico de cada etapa. */
 async function enviarFotosEquipeDrive() {
   if (!sb || DEMO_MODE) { alert('Disponível apenas com Supabase configurado.'); return; }
-  if (!GDrive.isConnected()) {
-    alert('Conecte o Google Drive no Perfil primeiro.');
-    switchView('perfil');
-    return;
-  }
+  if (!(await _garantirDrive())) return;
   if (!confirm('Enviar ao Drive as fotos de TODOS os colaboradores (todos os meses)?\nPode levar um tempo conforme a quantidade.')) return;
 
   const ov = $('ocr-overlay');
@@ -2609,18 +2600,15 @@ function renderPerfil() {
           <p style="font-size:12px;color:#5A6E60">Notas e fotos sincronizando automaticamente</p>
         </div>
         <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar acesso à pasta</button>
-        <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="migrarPastasDrive()">🗂️ Reorganizar pastas no padrão</button>
-        <button class="btn btn-danger-outline btn-full" onclick="disconnectDrive()">Desconectar Drive</button>
+        <button class="btn btn-outline btn-full" onclick="migrarPastasDrive()">🗂️ Reorganizar pastas no padrão</button>
       ` : `
-        <div style="background:#F8FAF9;border:1.5px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
+        <div style="background:#F8FAF9;border:1.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center">
           <div style="font-size:28px;margin-bottom:8px">☁️</div>
           <p style="font-size:13px;color:var(--text2);line-height:1.6">
-            Salve notas, repasses e fotos automaticamente no Google Drive compartilhado.
+            O Drive conecta sozinho quando você abre o app.<br>
+            Se não conectou, feche o app e abra de novo.
           </p>
         </div>
-        <button class="btn btn-primary btn-full" onclick="connectDrive()">
-          Entrar com Google Drive
-        </button>
       `}
     </div>
     ` : ''}
@@ -4125,11 +4113,7 @@ async function exportExcel() { await _ensureXLSX(); Excel.exportarAnual(filAno, 
 
 /* Planilha do Google "ao vivo" — cria/atualiza na pasta do Drive e abre o link */
 async function exportSheets() {
-  if (!GDrive.isConnected()) {
-    toast('Conecte o Google Drive no Perfil primeiro', 'err');
-    switchView('perfil');
-    return;
-  }
+  if (!(await _garantirDrive())) return;
   // abre a aba JÁ no clique (evita bloqueio de popup); navega quando a planilha estiver pronta
   const aba = window.open('', '_blank');
   setLoading(true);
