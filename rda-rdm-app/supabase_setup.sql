@@ -246,6 +246,7 @@ create table if not exists public.repasse_emails (
   id          uuid        primary key default gen_random_uuid(),
   repasse_id  uuid        not null references public.repasses(id) on delete cascade,
   request_id  bigint,                 -- id na fila do pg_net (net._http_response)
+  erro        text,                   -- motivo quando o gatilho desistiu (2026-09-11)
   created_at  timestamptz not null default now()
 );
 alter table public.repasse_emails enable row level security;
@@ -266,6 +267,7 @@ declare
   v_valor  text;
   v_body   jsonb;
   v_req    bigint;
+  v_erro   text;
 begin
   /* Só solicitação, só viva, só a que ainda não saiu. */
   if new.kind <> 'requested' or new.deleted then return new; end if;
@@ -279,10 +281,18 @@ begin
   end if;
   if new.email_sent then return new; end if;
 
-  select decrypted_secret into v_key
-    from vault.decrypted_secrets where name = 'resend_api_key' limit 1;
-  if v_key is null then
-    raise warning 'enviar_email_repasse: chave resend_api_key ausente no cofre — repasse % gravado sem envio', new.id;
+  begin
+    select decrypted_secret into v_key
+      from vault.decrypted_secrets where name = 'resend_api_key' limit 1;
+  exception when others then
+    v_erro := 'cofre: ' || sqlerrm;
+  end;
+  if v_erro is null and v_key is null then
+    v_erro := 'cofre: chave resend_api_key não encontrada';
+  end if;
+  if v_erro is not null then
+    raise warning 'enviar_email_repasse (%): %', new.id, v_erro;
+    insert into public.repasse_emails (repasse_id, erro) values (new.id, v_erro);
     return new;
   end if;
 
@@ -322,8 +332,13 @@ begin
   return new;
 
 exception when others then
-  /* Falha no envio NUNCA pode impedir a gravação do repasse. */
+  /* Falha no envio NUNCA pode impedir a gravação do repasse. O registro
+     do motivo também não: se até ele falhar, fica só o warning. */
   raise warning 'enviar_email_repasse (%): %', new.id, sqlerrm;
+  begin
+    insert into public.repasse_emails (repasse_id, erro) values (new.id, sqlerrm);
+  exception when others then null;
+  end;
   return new;
 end;
 $$;
