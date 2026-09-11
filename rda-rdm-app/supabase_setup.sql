@@ -244,7 +244,8 @@ create extension if not exists pg_net with schema extensions;
 -- 2) registro de cada envio (para auditoria e para achar falhas)
 create table if not exists public.repasse_emails (
   id          uuid        primary key default gen_random_uuid(),
-  repasse_id  uuid        not null references public.repasses(id) on delete cascade,
+  repasse_id  uuid        not null references public.repasses(id) on delete cascade
+                          deferrable initially deferred, -- gatilho é BEFORE INSERT: o pai só existe no commit
   request_id  bigint,                 -- id na fila do pg_net (net._http_response)
   erro        text,                   -- motivo quando o gatilho desistiu (2026-09-11)
   created_at  timestamptz not null default now()
@@ -271,6 +272,13 @@ declare
 begin
   /* Só solicitação, só viva, só a que ainda não saiu. */
   if new.kind <> 'requested' or new.deleted then return new; end if;
+
+  /* Upsert de linha que já existe: o BEFORE INSERT dispara antes de o
+     conflito ser detectado. Quem decide é o BEFORE UPDATE logo em seguida,
+     que enxerga o old.email_sent — senão todo re-push do app reenviava. */
+  if tg_op = 'INSERT' and exists (select 1 from public.repasses where id = new.id) then
+    return new;
+  end if;
 
   /* Já enviado antes: não reenvia e não deixa o app rebaixar a marca.
      O app manda o registro inteiro no upsert, e a cópia local pode estar
