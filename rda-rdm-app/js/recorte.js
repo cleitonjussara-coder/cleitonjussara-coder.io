@@ -6,9 +6,12 @@
    do lado entram no texto e viram valor/CNPJ errado. Recortando só o
    cupom, o Tesseract trabalha com muito menos ruído.
 
-   ESCOPO: o recorte alimenta SÓ o OCR. O anexo salvo continua sendo a
-   foto original — ele é a evidência fiscal da despesa e cortar poderia
-   descartar algo que uma auditoria precise ver.
+   ESCOPO: desde o build 111 o recorte É o anexo salvo (em resolução
+   original), exceto no fluxo do QR, que guarda a foto inteira. Como o
+   anexo é a evidência fiscal, cortar texto é inaceitável — daí a garantia
+   de _crescerAtePapel: a sugestão automática já nasce contendo o papel
+   inteiro, e o "Usar recorte" confere as bordas antes de salvar; se o
+   papel continua para fora, amplia, mostra e pede um segundo toque.
 
    DETECÇÃO: feita em canvas puro (Otsu + projeção de linhas/colunas), sem
    biblioteca. Um detector de bordas de verdade (OpenCV.js) custaria ~8 MB
@@ -25,6 +28,8 @@ window.Recorte = (() => {
   let _rect = null;          // { x, y, w, h } em px do palco
   let _caixaImg = null;      // onde a <img> está desenhada dentro do palco
   let _arraste = null;       // { modo, x0, y0, rect0 }
+  let _mapa = null;          // análise da foto (cinza + limiar), feita uma vez
+  let _conferido = false;    // "Usar recorte" já passou pela garantia de não cortar
 
   const MIN = 36;            // menor recorte aceitável, em px de tela
 
@@ -49,7 +54,7 @@ window.Recorte = (() => {
      pixels claros por linha e por coluna e pega a faixa onde a contagem
      passa de 35% do pico. Devolve frações (0..1) da imagem, ou null se o
      resultado não fizer sentido. */
-  function _detectar(img) {
+  function _analisar(img) {
     const W = 400;
     const H = Math.max(1, Math.round(img.height * W / img.width));
     const c = document.createElement('canvas');
@@ -80,7 +85,11 @@ window.Recorte = (() => {
       const entre = pesoB * pesoF * (mB - mF) * (mB - mF);
       if (entre > melhor) { melhor = entre; limiar = t; }
     }
+    return { W, H, cinza, limiar };
+  }
 
+  function _detectar(mapa) {
+    const { W, H, cinza, limiar } = mapa;
     const linhas = new Uint32Array(H), colunas = new Uint32Array(W);
     for (let y = 0; y < H; y++) {
       const base = y * W;
@@ -103,16 +112,12 @@ window.Recorte = (() => {
     const fx = faixa(colunas), fy = faixa(linhas);
     if (!fx || !fy) return null;
 
-    // margem de folga, para não cortar a borda do texto
-    const folgaX = (fx[1] - fx[0]) * 0.03, folgaY = (fy[1] - fy[0]) * 0.03;
     const r = {
-      x: Math.max(0, (fx[0] - folgaX) / W),
-      y: Math.max(0, (fy[0] - folgaY) / H),
-      w: Math.min(1, (fx[1] - fx[0] + 2 * folgaX) / W),
-      h: Math.min(1, (fy[1] - fy[0] + 2 * folgaY) / H),
+      x: fx[0] / W,
+      y: fy[0] / H,
+      w: (fx[1] - fx[0]) / W,
+      h: (fy[1] - fy[0]) / H,
     };
-    if (r.x + r.w > 1) r.w = 1 - r.x;
-    if (r.y + r.h > 1) r.h = 1 - r.y;
 
     // área implausível (quase tudo ou quase nada) → não vale a pena sugerir
     const area = r.w * r.h;
@@ -120,7 +125,89 @@ window.Recorte = (() => {
     return r;
   }
 
+  /* ── Garantia de não cortar a nota ──────────────────────────
+     Recebe um retângulo em frações (0..1) e devolve outro que contém o
+     papel inteiro: cada borda anda para fora enquanto a linha/coluna logo
+     além dela ainda for majoritariamente clara (papel continua), até um
+     limite de 25% da imagem — se o fundo também é claro, isso vira a foto
+     quase inteira, e é o resultado seguro. Por fim, folga de 2,5% para a
+     borda do texto não encostar no corte. `mudou` diz se alguma borda andou
+     mais que 1% — é o que decide se o usuário precisa ver o ajuste. */
+  const PAPEL    = 0.35;  // fração de pixels claros para a faixa contar como papel
+  const JANELA   = 8;     // linhas/colunas olhadas de cada vez (texto denso não é borda)
+  const MAX_CRESC = 0.25; // quanto cada borda pode andar, em fração da imagem
+  const FOLGA    = 0.025;
+  function _crescerAtePapel(f, mapa) {
+    const { W, H, cinza, limiar } = mapa;
+    let x0 = Math.max(0, Math.round(f.x * W));
+    let y0 = Math.max(0, Math.round(f.y * H));
+    let x1 = Math.min(W, Math.round((f.x + f.w) * W));
+    let y1 = Math.min(H, Math.round((f.y + f.h) * H));
+    const orig = { x0, y0, x1, y1 };
+
+    /* Média de pixels claros numa janela de linhas [ya, yb) × colunas [a, b).
+       Uma linha só engana: texto denso ou uma dobra escura parecem "fim do
+       papel". Oito linhas juntas não. */
+    const faixaClara = (ya, yb, a, b) => {
+      ya = Math.max(0, ya); yb = Math.min(H, yb);
+      if (yb <= ya || b <= a) return false;
+      let n = 0;
+      for (let y = ya; y < yb; y++) {
+        const base = y * W;
+        for (let x = a; x < b; x++) if (cinza[base + x] > limiar) n++;
+      }
+      return n >= (yb - ya) * (b - a) * PAPEL;
+    };
+    const colunaClara = (xa, xb, a, b) => {
+      xa = Math.max(0, xa); xb = Math.min(W, xb);
+      if (xb <= xa || b <= a) return false;
+      let n = 0;
+      for (let y = a; y < b; y++) {
+        const base = y * W;
+        for (let x = xa; x < xb; x++) if (cinza[base + x] > limiar) n++;
+      }
+      return n >= (xb - xa) * (b - a) * PAPEL;
+    };
+
+    const limY = Math.round(H * MAX_CRESC), limX = Math.round(W * MAX_CRESC);
+    while (y0 > 0 && orig.y0 - y0 < limY && faixaClara(y0 - JANELA, y0, x0, x1)) y0--;
+    while (y1 < H && y1 - orig.y1 < limY && faixaClara(y1, y1 + JANELA, x0, x1)) y1++;
+    while (x0 > 0 && orig.x0 - x0 < limX && colunaClara(x0 - JANELA, x0, y0, y1)) x0--;
+    while (x1 < W && x1 - orig.x1 < limX && colunaClara(x1, x1 + JANELA, y0, y1)) x1++;
+
+    /* Folga só na borda que encosta no papel (a faixa logo por dentro é
+       clara). Borda que já está sobre o fundo não precisa — e somar folga
+       nela fazia um recorte já largo contar como "ajustado". */
+    const fx = (x1 - x0) * FOLGA, fy = (y1 - y0) * FOLGA;
+    const fTop = faixaClara(y0, y0 + JANELA, x0, x1) ? fy : 0;
+    const fBot = faixaClara(y1 - JANELA, y1, x0, x1) ? fy : 0;
+    const fEsq = colunaClara(x0, x0 + JANELA, y0, y1) ? fx : 0;
+    const fDir = colunaClara(x1 - JANELA, x1, y0, y1) ? fx : 0;
+
+    const r = {
+      x: Math.max(0, (x0 - fEsq) / W),
+      y: Math.max(0, (y0 - fTop) / H),
+    };
+    r.w = Math.min(1 - r.x, (x1 + fDir) / W - r.x);
+    r.h = Math.min(1 - r.y, (y1 + fBot) / H - r.y);
+
+    const mudou = Math.abs(r.x - f.x) > 0.01 || Math.abs(r.y - f.y) > 0.01
+               || Math.abs(r.x + r.w - f.x - f.w) > 0.01
+               || Math.abs(r.y + r.h - f.y - f.h) > 0.01;
+    return { rect: r, mudou };
+  }
+
   /* ── Geometria do palco ─────────────────────────────────── */
+  /* Retângulo em frações (0..1) da imagem ↔ px do palco */
+  function _fracoes() {
+    const c = _caixaImg;
+    return { x: (_rect.x - c.x) / c.w, y: (_rect.y - c.y) / c.h, w: _rect.w / c.w, h: _rect.h / c.h };
+  }
+  function _deFracoes(f) {
+    const c = _caixaImg;
+    return { x: c.x + f.x * c.w, y: c.y + f.y * c.h, w: f.w * c.w, h: f.h * c.h };
+  }
+
   function _medirImagem() {
     const palco = $('crop-palco').getBoundingClientRect();
     const img   = $('crop-img').getBoundingClientRect();
@@ -228,6 +315,7 @@ window.Recorte = (() => {
     if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
     $('crop-img').src = ''; delete $('crop-img').dataset.url;
     _trabalho = null;                       // libera o canvas reduzido
+    _mapa = null;
     const r = _resolver; _resolver = null;
     if (r) r(valor);
   }
@@ -244,6 +332,21 @@ window.Recorte = (() => {
     window.addEventListener('pointerup',   _aoSoltar);
     window.addEventListener('pointercancel', _aoSoltar);
     $('crop-usar').addEventListener('click', async () => {
+      /* Antes de salvar, confere se o papel continua para fora do
+         retângulo. Se continuar, amplia, mostra e espera um segundo toque —
+         o usuário vê o que vai ser salvo. Uma vez por foto: se ele encolher
+         de propósito depois disso (nota vizinha, por exemplo), vale o dele. */
+      if (!_conferido && _mapa) {
+        _conferido = true;
+        let ajuste = null;
+        try { ajuste = _crescerAtePapel(_fracoes(), _mapa); } catch (_) {}
+        if (ajuste?.mudou) {
+          _rect = _limitar(_deFracoes(ajuste.rect));
+          _aplicarRect();
+          $('crop-dica').textContent = 'Ampliei para não cortar a nota — confira e toque em Usar recorte de novo';
+          return;
+        }
+      }
       let out = null;
       try { out = await _cortar(); } catch (_) {}
       _fechar(out);
@@ -276,6 +379,8 @@ window.Recorte = (() => {
     if (!carregou) { try { URL.revokeObjectURL(url); } catch (_) {} return null; }
 
     _trabalho = _prepararTrabalho(img);
+    _mapa = null; _conferido = false;
+    try { _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
 
     /* Medir direto: getBoundingClientRect força o layout, então logo após
@@ -284,15 +389,16 @@ window.Recorte = (() => {
        ficaria travada se o usuário trocasse de app no meio. */
     _medirImagem();
 
+    /* A sugestão já nasce crescida até a borda do papel: a projeção corta
+       onde o papel fica estreito (sombra, canto enrolado), e o texto do
+       topo ou do rodapé ficava de fora. */
     let sugestao = null;
-    try { sugestao = _detectar(_trabalho); } catch (_) {}
+    try {
+      sugestao = _mapa && _detectar(_mapa);
+      if (sugestao) sugestao = _crescerAtePapel(sugestao, _mapa).rect;
+    } catch (_) { sugestao = null; }
     const f = sugestao || { x: 0.05, y: 0.05, w: 0.90, h: 0.90 };
-    _rect = _limitar({
-      x: _caixaImg.x + f.x * _caixaImg.w,
-      y: _caixaImg.y + f.y * _caixaImg.h,
-      w: f.w * _caixaImg.w,
-      h: f.h * _caixaImg.h,
-    });
+    _rect = _limitar(_deFracoes(f));
     _aplicarRect();
     $('crop-dica').textContent = sugestao
       ? 'Enquadrei a nota — arraste os cantos para ajustar'
@@ -301,5 +407,5 @@ window.Recorte = (() => {
     return new Promise(res => { _resolver = res; });
   }
 
-  return { abrir, _detectar };
+  return { abrir, _detectar, _analisar, _crescerAtePapel };
 })();
