@@ -61,7 +61,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 125;
+const APP_BUILD = 126;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2446,7 +2446,7 @@ async function enviarFotosEquipeDrive() {
 
     // 2) TODAS as notas com foto (todos os meses / todos os colaboradores)
     const { data: notas, error } = await sb.from('notas')
-      .select('id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted');
+      .select('id,user_id,tipo,subtipo,valor,mes,ano,data,foto_path,deleted');
     if (error) throw new Error('notas: ' + error.message);
     const totalNotas = (notas || []).length;
     const comFoto = (notas || []).filter(n => n.foto_path && !n.deleted);
@@ -2467,32 +2467,47 @@ async function enviarFotosEquipeDrive() {
 
     // 4) baixa do Supabase e sobe pro Drive, contando cada etapa
     let ok = 0, falhaBaixar = 0, falhaSubir = 0, erroBaixar = '', erroSubir = '', i = 0;
+    /* Rede de campo cai no meio (Wi-Fi com portal, troca para 4G): numa
+       rodada de 31 fotos, 20 downloads falharam em sequência e um upload
+       recebeu uma página HTML no lugar do JSON. Cada etapa tenta duas
+       vezes, com pausa, antes de contar como falha — e a lista de quem
+       ficou de fora vai para o relatório, para rodar de novo depois. */
+    const pausa = ms => new Promise(r => setTimeout(r, ms));
+    const comRetentativa = async fn => {
+      try { return await fn(); }
+      catch (e1) { await pausa(1500); return fn(); }
+    };
+    const baixar = async path => {
+      const r = await sb.storage.from('notas-fotos').download(path);
+      if (r.error || !r.data) throw new Error(r.error?.message || 'sem dados');
+      return r.data;
+    };
+    const ficaram = [];
+
     for (const n of comFoto) {
       i++;
       setProg(`Enviando fotos ${i}/${comFoto.length}…`);
       let blob = null;
       try {
-        const r = await sb.storage.from('notas-fotos').download(n.foto_path);
-        if (r.error || !r.data) {
-          falhaBaixar++;
-          if (!erroBaixar) erroBaixar = `${r.error?.message || 'sem dados'} (${n.foto_path})`;
-          continue;
-        }
-        blob = r.data;
-      } catch (e) { falhaBaixar++; if (!erroBaixar) erroBaixar = e.message; continue; }
+        blob = await comRetentativa(() => baixar(n.foto_path));
+      } catch (e) {
+        falhaBaixar++; ficaram.push(n);
+        if (!erroBaixar) erroBaixar = `${e.message} (${n.foto_path})`;
+        continue;
+      }
 
       try {
         const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
         const c   = mapa[n.user_id] || {};
-        await GDrive.uploadFotoComDados(blob, {
+        await comRetentativa(() => GDrive.uploadFotoComDados(blob, {
           /* subtipo e data PRECISAM vir: sem subtipo toda nota RDM cai na
              pasta OUTROS, mesmo sendo Abastecimento — e o appProperties
              gravado errado ainda contamina a migração, que confia nele. */
           id: n.id, tipo: n.tipo, subtipo: n.subtipo, mes: n.mes, ano: n.ano, data: n.data,
           user_id: n.user_id, user_email: c.email, user_nome: c.nome,
-        }, ext);
+        }, ext));
         ok++;
-      } catch (e) { falhaSubir++; if (!erroSubir) erroSubir = e.message; }
+      } catch (e) { falhaSubir++; ficaram.push(n); if (!erroSubir) erroSubir = e.message; }
     }
 
     if (ov) ov.style.display = 'none';
@@ -2503,7 +2518,12 @@ async function enviarFotosEquipeDrive() {
       + `⬇️ Falha ao BAIXAR do Supabase: ${falhaBaixar}\n`
       + `☁️ Falha ao SUBIR no Drive: ${falhaSubir}\n`
       + (erroBaixar ? `\nErro ao baixar: ${erroBaixar}` : '')
-      + (erroSubir  ? `\nErro ao subir: ${erroSubir}` : ''));
+      + (erroSubir  ? `\nErro ao subir: ${erroSubir}` : '')
+      + (ficaram.length
+          ? `\n\nFicaram de fora (rode de novo com sinal melhor):\n`
+            + ficaram.slice(0, 8).map(n => `• ${fmtData(n.data)} ${n.tipo} ${brl(n.valor)} — ${mapa[n.user_id]?.nome || '?'}`).join('\n')
+            + (ficaram.length > 8 ? `\n… e mais ${ficaram.length - 8}` : '')
+          : ''));
   } catch (e) {
     if (ov) ov.style.display = 'none';
     alert('Envio ao Drive falhou: ' + e.message);
