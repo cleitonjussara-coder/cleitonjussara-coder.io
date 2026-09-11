@@ -45,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 120;
+const APP_BUILD = 121;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -702,17 +702,17 @@ function renderAuth(mode='login') {
   authMode = mode;
   const rodape = `
     <div style="margin-top:8px;text-align:center">
-      <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <hr class="auth-hr">
       <div class="install-slot"></div>
-      <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
+      <button class="btn btn-outline btn-full auth-local"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
-      <p style="color:rgba(255,255,255,.45);font-size:11px;margin-top:14px">Versão ${APP_VERSION}</p>
+      <p class="auth-versao">Versão ${APP_VERSION}</p>
     </div>`;
 
   if (mode === 'reset') {
     $('auth-body').innerHTML = `
       <h2 class="auth-title">Recuperar senha</h2>
-      <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
+      <p class="auth-texto">
         Informe o e-mail da sua conta. Você receberá um link para definir uma senha nova.
       </p>
       <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
@@ -726,7 +726,7 @@ function renderAuth(mode='login') {
   if (mode === 'nova-senha') {
     $('auth-body').innerHTML = `
       <h2 class="auth-title">Nova senha</h2>
-      <p style="color:rgba(255,255,255,.75);font-size:13px;line-height:1.6;margin-bottom:14px">
+      <p class="auth-texto">
         Escolha a senha que você vai usar a partir de agora.
       </p>
       <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 6 caracteres)" autocomplete="new-password">
@@ -752,9 +752,9 @@ function renderAuth(mode='login') {
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
-      <hr style="border-color:rgba(255,255,255,.2);margin:12px 0">
+      <hr class="auth-hr">
       <div class="install-slot"></div>
-      <button class="btn btn-outline btn-full" style="border-color:rgba(255,255,255,.4);color:rgba(255,255,255,.8)"
+      <button class="btn btn-outline btn-full auth-local"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>
     </div>
   `;

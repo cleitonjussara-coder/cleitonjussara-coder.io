@@ -53,17 +53,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 /* Sem `align-items:center`: com o teclado aberto no celular, ou numa janela
    baixa, centralizar pelo eixo corta o topo do card e ele fica inalcancavel.
    O `margin:auto` do .auth-wrap centraliza e ainda deixa rolar. */
+/* Visual claro e leve (build 121): fundo quase branco com um sopro de verde
+   e o logotipo em marca d'agua atras de tudo. O verde escuro chapado de
+   antes ficou pesado ao lado do resto do app, que e claro. */
 #auth-screen{
   display:flex;justify-content:center;
   overflow-y:auto;padding:24px 16px;
-  /* dois claroes suaves sobre o verde escuro dao profundidade ao fundo,
-     no lugar da cor chapada */
+  position:relative;isolation:isolate;
   background:
-    radial-gradient(1100px 620px at 12% -10%, rgba(116,198,157,.20), transparent 62%),
-    radial-gradient(900px 560px at 88% 108%, rgba(64,145,108,.24), transparent 60%),
-    linear-gradient(168deg, #1E4736 0%, #1B4332 48%, #173B2C 100%)
+    radial-gradient(900px 560px at 8% -6%, rgba(116,198,157,.26), transparent 62%),
+    radial-gradient(760px 520px at 96% 104%, rgba(64,145,108,.18), transparent 60%),
+    linear-gradient(170deg, #F8FBF9 0%, #F0F5F2 100%)
 }
-/* Sem cartao: o fundo da pagina e o unico fundo, do topo ao rodape. */
+/* Marca d'agua: o proprio icone do app, grande e quase transparente.
+   `multiply` faz o fundo branco do PNG sumir e so os blocos verdes ficarem. */
+#auth-screen::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:url(icon-512.png) no-repeat center 58% / min(82vmin, 520px);
+  opacity:.075;mix-blend-mode:multiply;
+}
 .auth-wrap{
   width:100%;max-width:420px;margin:auto;
   padding:32px 28px
@@ -72,23 +80,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 .auth-tag{display:none}
 
 /* Telas largas: a marca ocupa a coluna da esquerda e o formulario a direita,
-   em vez de uma faixa estreita no meio de muito espaco vazio. */
-/* A partir daqui a pagina inteira e a tela: nada de cartao flutuando no
-   meio. A metade esquerda leva a marca, a direita o formulario, e cada uma
-   ocupa a altura toda. */
+   cada uma com a altura toda. A marca d'agua vai para a coluna da marca. */
 @media (min-width:900px){
   #auth-screen{display:block;padding:0}
+  #auth-screen::before{
+    background-position:22% 50%;background-size:min(62vmin, 560px);opacity:.085
+  }
   .auth-wrap{
     max-width:none;width:100%;min-height:100%;margin:0;padding:0;
-    background:none;border:0;border-radius:0;box-shadow:none;
-    backdrop-filter:none;-webkit-backdrop-filter:none;
     display:grid;grid-template-columns:1fr 1fr;gap:0
   }
   .auth-logo{
     margin:0;padding:56px 48px;
     justify-content:center;
-    background:linear-gradient(160deg, rgba(255,255,255,.085), rgba(255,255,255,.015));
-    border-right:1px solid rgba(255,255,255,.12)
+    border-right:1px solid rgba(27,67,50,.08)
   }
   #auth-body{
     align-self:center;justify-self:center;
@@ -98,52 +103,56 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   .auth-logo-text{font-size:34px;margin-top:16px}
   .auth-tag{
     display:block;margin-top:14px;text-align:center;
-    color:rgba(255,255,255,.62);font-size:14px;line-height:1.65;max-width:300px
+    color:var(--text2);font-size:14px;line-height:1.65;max-width:300px
   }
 }
 .auth-logo svg{width:64px;height:64px}
-.auth-logo img{box-shadow:0 12px 30px rgba(0,0,0,.34)}
-.auth-logo-text{color:#fff;font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:12px}
-.auth-logo-text span{color:var(--secondary)}
-.auth-title{color:#fff;font-size:21px;font-weight:700;margin-bottom:18px;letter-spacing:-0.2px}
+.auth-logo img{box-shadow:0 10px 26px rgba(27,67,50,.18);background:#fff}
+.auth-logo-text{color:var(--primary-d);font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:12px}
+.auth-logo-text span{color:var(--primary-l)}
+.auth-title{color:var(--text);font-size:21px;font-weight:700;margin-bottom:18px;letter-spacing:-0.2px}
 #auth-body{display:flex;flex-direction:column;gap:10px}
 #auth-body .inp{
-  background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.22);color:#fff;
+  background:rgba(255,255,255,.86);border-color:rgba(27,67,50,.16);color:var(--text);
   padding:12px 14px;border-radius:11px;
   transition:border-color .18s, background .18s, box-shadow .18s
 }
-#auth-body .inp::placeholder{color:rgba(255,255,255,.52)}
-#auth-body .inp:hover{background:rgba(255,255,255,.14)}
+#auth-body .inp::placeholder{color:var(--text2)}
+#auth-body .inp:hover{background:#fff;border-color:rgba(27,67,50,.28)}
 #auth-body .inp:focus{
-  border-color:var(--secondary);background:rgba(255,255,255,.16);
-  box-shadow:0 0 0 3px rgba(116,198,157,.22)
+  border-color:var(--primary-l);background:#fff;
+  box-shadow:0 0 0 3px rgba(64,145,108,.18)
 }
 /* o botao principal so aqui dentro — o resto do app mantem o estilo padrao */
 #auth-body .btn-primary{
   background:linear-gradient(180deg, var(--primary-l), var(--primary));
   border:0;padding:12px;border-radius:11px;font-size:15px;letter-spacing:.2px;
-  box-shadow:0 8px 20px rgba(27,67,50,.42);
+  box-shadow:0 8px 20px rgba(45,106,79,.28);
   transition:transform .15s, box-shadow .15s, filter .15s
 }
-#auth-body .btn-primary:hover{filter:brightness(1.07);box-shadow:0 12px 26px rgba(27,67,50,.5)}
-#auth-body .btn-primary:active{transform:translateY(1px);box-shadow:0 6px 16px rgba(27,67,50,.42)}
-#auth-body .btn-outline{border-radius:11px;padding:11px;transition:background .15s, border-color .15s}
-#auth-body .btn-outline:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.6)}
+#auth-body .btn-primary:hover{filter:brightness(1.05);box-shadow:0 12px 26px rgba(45,106,79,.34)}
+#auth-body .btn-primary:active{transform:translateY(1px);box-shadow:0 6px 16px rgba(45,106,79,.28)}
+#auth-body .btn-outline{border-radius:11px;padding:11px;background:rgba(255,255,255,.6);transition:background .15s, border-color .15s}
+#auth-body .btn-outline:hover{background:#fff}
 .pass-wrap{position:relative}
 .pass-wrap .inp{padding-right:46px}
 .pass-toggle{
   position:absolute;top:50%;right:4px;transform:translateY(-50%);
   background:none;border:0;padding:8px;cursor:pointer;
-  font-size:16px;line-height:1;opacity:.7;transition:opacity .15s
+  font-size:16px;line-height:1;opacity:.6;transition:opacity .15s
 }
 .pass-toggle:hover{opacity:1}
-.auth-switch{color:rgba(255,255,255,.7);font-size:13.5px;margin-top:6px;text-align:center}
+.auth-switch{color:var(--text2);font-size:13.5px;margin-top:6px;text-align:center}
 .auth-switch a{
-  color:var(--secondary);font-weight:600;cursor:pointer;
-  text-decoration:none;border-bottom:1px solid rgba(116,198,157,.45);
+  color:var(--primary);font-weight:600;cursor:pointer;
+  text-decoration:none;border-bottom:1px solid rgba(45,106,79,.35);
   padding-bottom:1px;transition:color .15s, border-color .15s
 }
-.auth-switch a:hover{color:#9BDCBB;border-color:#9BDCBB}
+.auth-switch a:hover{color:var(--primary-l);border-color:var(--primary-l)}
+.auth-hr{border:0;border-top:1px solid rgba(27,67,50,.12);margin:12px 0}
+.auth-local{border-color:rgba(27,67,50,.25);color:var(--text2)}
+.auth-versao{color:var(--text2);opacity:.7;font-size:11px;margin-top:14px}
+.auth-texto{color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px}
 
 /* ─────────────────────────────────────────────
    APP SHELL
@@ -1325,22 +1334,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=120"></script>
-<script defer src="js/nfce.js?v=120"></script>
-<script defer src="js/sefaz.js?v=120"></script>
-<script defer src="js/brasilapi.js?v=120"></script>
-<script defer src="js/ocr.js?v=120"></script>
-<script defer src="js/recorte.js?v=120"></script>
-<script defer src="js/excel.js?v=120"></script>
-<script defer src="js/gestor.js?v=120"></script>
-<script defer src="js/gdrive.js?v=120"></script>
-<script defer src="js/gsheets.js?v=120"></script>
-<script defer src="js/app.js?v=120"></script>
+<script defer src="js/db.js?v=121"></script>
+<script defer src="js/nfce.js?v=121"></script>
+<script defer src="js/sefaz.js?v=121"></script>
+<script defer src="js/brasilapi.js?v=121"></script>
+<script defer src="js/ocr.js?v=121"></script>
+<script defer src="js/recorte.js?v=121"></script>
+<script defer src="js/excel.js?v=121"></script>
+<script defer src="js/gestor.js?v=121"></script>
+<script defer src="js/gdrive.js?v=121"></script>
+<script defer src="js/gsheets.js?v=121"></script>
+<script defer src="js/app.js?v=121"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=120').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=121').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
