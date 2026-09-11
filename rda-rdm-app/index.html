@@ -153,6 +153,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 .auth-local{border-color:rgba(27,67,50,.25);color:var(--text2)}
 .auth-versao{color:var(--text2);opacity:.7;font-size:11px;margin-top:14px}
 .auth-texto{color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:14px}
+/* login social: botões brancos com o logotipo da empresa, e o divisor "ou" */
+.auth-social{display:flex;flex-direction:column;gap:8px}
+.auth-social-btn{
+  display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  background:#fff;color:var(--text);border:1.5px solid rgba(27,67,50,.16);
+  border-radius:11px;padding:11px 14px;font-size:14.5px;font-weight:600;
+  transition:border-color .15s, box-shadow .15s, background .15s
+}
+.auth-social-btn:hover{border-color:rgba(27,67,50,.32);box-shadow:0 4px 14px rgba(27,67,50,.08)}
+.auth-social-btn:active{background:#F4F8F5}
+.auth-social-ico{display:inline-flex;width:20px;height:20px;flex-shrink:0}
+.auth-social-ico svg{width:100%;height:100%}
+.auth-ou{display:flex;align-items:center;gap:12px;margin:6px 0 2px;color:var(--text2);font-size:12px;letter-spacing:.6px;text-transform:uppercase}
+.auth-ou::before,.auth-ou::after{content:"";flex:1;border-top:1px solid rgba(27,67,50,.14)}
 
 /* ─────────────────────────────────────────────
    APP SHELL
@@ -1334,22 +1348,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=121"></script>
-<script defer src="js/nfce.js?v=121"></script>
-<script defer src="js/sefaz.js?v=121"></script>
-<script defer src="js/brasilapi.js?v=121"></script>
-<script defer src="js/ocr.js?v=121"></script>
-<script defer src="js/recorte.js?v=121"></script>
-<script defer src="js/excel.js?v=121"></script>
-<script defer src="js/gestor.js?v=121"></script>
-<script defer src="js/gdrive.js?v=121"></script>
-<script defer src="js/gsheets.js?v=121"></script>
-<script defer src="js/app.js?v=121"></script>
+<script defer src="js/db.js?v=122"></script>
+<script defer src="js/nfce.js?v=122"></script>
+<script defer src="js/sefaz.js?v=122"></script>
+<script defer src="js/brasilapi.js?v=122"></script>
+<script defer src="js/ocr.js?v=122"></script>
+<script defer src="js/recorte.js?v=122"></script>
+<script defer src="js/excel.js?v=122"></script>
+<script defer src="js/gestor.js?v=122"></script>
+<script defer src="js/gdrive.js?v=122"></script>
+<script defer src="js/gsheets.js?v=122"></script>
+<script defer src="js/app.js?v=122"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=121').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=122').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

@@ -7,6 +7,22 @@ const SUPABASE_URL      = 'https://alkndoafntxzkpcgscvz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsa25kb2FmbnR4emtwY2dzY3Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjcwMDMsImV4cCI6MjA5NDk0MzAwM30.sjKOuNiGYbcHbJwPQuhO65c9apYbgA-xtOqYTfCo7UY';
 const DEMO_MODE = SUPABASE_URL.includes('COLE_SUA');
 
+/* Login social (Supabase Auth → OAuth). Cada provedor só funciona depois de
+   habilitado em Authentication → Providers no painel do Supabase, com a
+   chave da empresa correspondente. `ativo:false` esconde o botão até lá —
+   provedor desligado no painel devolve "provider is not enabled" e confunde
+   quem está no campo. Ordem = ordem na tela. */
+const PROVEDORES_SOCIAIS = [
+  { id:'google',   nome:'Google',    ativo:true,
+    icone:'<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>' },
+  { id:'azure',    nome:'Microsoft', ativo:false, opcoes:{ scopes:'email' },
+    icone:'<svg viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="12" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="12" width="10" height="10" fill="#00A4EF"/><rect x="12" y="12" width="10" height="10" fill="#FFB900"/></svg>' },
+  { id:'facebook', nome:'Facebook',  ativo:false,
+    icone:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#fff" d="M15.5 12.7h-2.3V21h-3.3v-8.3H8.3V9.9h1.6V8.2c0-2.3 1-3.7 3.7-3.7h2v2.8h-1.3c-1 0-1.1.4-1.1 1.1v1.5h2.5l-.2 2.8z"/></svg>' },
+  { id:'apple',    nome:'Apple',     ativo:false,
+    icone:'<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>' },
+];
+
 /* ── Estado global ───────────────────────────────────────── */
 let sb        = null;
 let user      = null;   // { id, email, nome, role, nucleo }
@@ -45,7 +61,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 121;
+const APP_BUILD = 122;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -698,6 +714,42 @@ function alternarSenha(id, btn) {
   inp.focus();
 }
 
+/* Botões "Continuar com …" + o divisor "ou". Vazio se nenhum provedor
+   estiver ativo, e o formulário fica igual ao de sempre. */
+function _botoesSociais() {
+  const ativos = PROVEDORES_SOCIAIS.filter(p => p.ativo);
+  if (!ativos.length) return '';
+  return `
+    <div class="auth-social">
+      ${ativos.map(p => `
+      <button type="button" class="btn auth-social-btn" onclick="loginSocial('${p.id}')">
+        <span class="auth-social-ico">${p.icone}</span>Continuar com ${p.nome}
+      </button>`).join('')}
+    </div>
+    <div class="auth-ou"><span>ou</span></div>`;
+}
+
+/* Vai para a página do provedor e volta para o app já logado: o Supabase
+   troca o código da URL pela sessão e o onAuthStateChange leva para dentro.
+   A URL de volta é a própria página (sem query), para o GitHub Pages
+   servir o index e o service worker não ficar com uma URL estranha. */
+async function loginSocial(id) {
+  const p = PROVEDORES_SOCIAIS.find(x => x.id === id);
+  if (!p) return;
+  setLoading(true);
+  try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para entrar','err'); return; }
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: p.id,
+    options: { redirectTo: location.origin + location.pathname, ...(p.opcoes || {}) },
+  });
+  if (error) {
+    setLoading(false);
+    const naoAtivo = /not enabled|unsupported provider/i.test(error.message);
+    toast(naoAtivo ? `Login com ${p.nome} ainda não está liberado` : error.message, 'err');
+  }
+  /* sem erro, o navegador está saindo para o provedor — o loading fica */
+}
+
 function renderAuth(mode='login') {
   authMode = mode;
   const rodape = `
@@ -738,6 +790,7 @@ function renderAuth(mode='login') {
 
   $('auth-body').innerHTML = mode==='login' ? `
     <h2 class="auth-title">Entrar</h2>
+    ${_botoesSociais()}
     <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha', 'current-password')}
     <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
@@ -746,6 +799,7 @@ function renderAuth(mode='login') {
     ${rodape}
   ` : `
     <h2 class="auth-title">Criar conta</h2>
+    ${_botoesSociais()}
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
     <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 6 caracteres)" autocomplete="new-password">

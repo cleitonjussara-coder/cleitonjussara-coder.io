@@ -118,7 +118,12 @@ begin
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data->>'nome', split_part(new.email,'@',1))
+    coalesce(
+      nullif(new.raw_user_meta_data->>'nome', ''),        -- cadastro por e-mail/senha
+      nullif(new.raw_user_meta_data->>'full_name', ''),   -- Google, Facebook
+      nullif(new.raw_user_meta_data->>'name', ''),        -- Microsoft, Apple
+      split_part(new.email, '@', 1)
+    )
   )
   on conflict (id) do nothing;
   return new;
