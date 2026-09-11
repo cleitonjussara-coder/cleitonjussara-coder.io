@@ -274,7 +274,15 @@ window.DB = (() => {
     ]);
     const doUsuario = n => !userId || !n.user_id || n.user_id === userId;
 
-    const lista = arquivadas.filter(doUsuario);
+    /* Cópia arquivada só conta se a nota viva ainda estiver apagada. Quando
+       a restauração chega pelo servidor (outro aparelho, ou um reparo no
+       banco), `notas` volta a deleted=false mas ninguém limpa o arquivo —
+       e a mesma nota aparecia na lista e na lixeira. */
+    const vivas = new Map(notas.map(n => [n.id, n]));
+    const lista = arquivadas.filter(doUsuario).filter(a => {
+      const viva = vivas.get(a.id);
+      return !viva || viva.deleted;
+    });
     const jaListadas = new Set(lista.map(n => n.id));
 
     for (const n of notas) {
