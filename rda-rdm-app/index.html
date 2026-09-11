@@ -642,6 +642,11 @@ select.inp{cursor:pointer}
 /* o recuo lateral vinha do .nucleo-block, que deixou de existir */
 .colab-list{display:flex;flex-direction:column;gap:8px;padding:0 14px 12px}
 .colab-card{background:var(--surface);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.colab-card.clicavel{cursor:pointer;transition:transform .12s, box-shadow .12s}
+.colab-card.clicavel:active{transform:scale(.99)}
+.colab-seta{color:var(--text2);font-size:22px;line-height:1;padding-left:2px}
+.colab-resumo{font-size:11.5px;color:var(--text2);margin-top:8px}
+.colab-resumo .alerta{color:var(--accent-d);font-weight:600}
 .colab-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .avatar{
   width:40px;height:40px;border-radius:50%;background:var(--primary);color:#fff;
@@ -1348,22 +1353,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=126"></script>
-<script defer src="js/nfce.js?v=126"></script>
-<script defer src="js/sefaz.js?v=126"></script>
-<script defer src="js/brasilapi.js?v=126"></script>
-<script defer src="js/ocr.js?v=126"></script>
-<script defer src="js/recorte.js?v=126"></script>
-<script defer src="js/excel.js?v=126"></script>
-<script defer src="js/gestor.js?v=126"></script>
-<script defer src="js/gdrive.js?v=126"></script>
-<script defer src="js/gsheets.js?v=126"></script>
-<script defer src="js/app.js?v=126"></script>
+<script defer src="js/db.js?v=127"></script>
+<script defer src="js/nfce.js?v=127"></script>
+<script defer src="js/sefaz.js?v=127"></script>
+<script defer src="js/brasilapi.js?v=127"></script>
+<script defer src="js/ocr.js?v=127"></script>
+<script defer src="js/recorte.js?v=127"></script>
+<script defer src="js/excel.js?v=127"></script>
+<script defer src="js/gestor.js?v=127"></script>
+<script defer src="js/gdrive.js?v=127"></script>
+<script defer src="js/gsheets.js?v=127"></script>
+<script defer src="js/app.js?v=127"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=126').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=127').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

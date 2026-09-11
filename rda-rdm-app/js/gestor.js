@@ -9,11 +9,23 @@ window.Gestor = (() => {
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
   const ini = nome => (nome||'?').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtData = d => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
+
+  /* Detalhe de um colaborador: id aberto e o contexto do último render, para
+     abrir/fechar sem o app.js precisar saber de nada além de re-renderizar. */
+  let _detalheId = null;
+  let _ctx = null;
+  function abrir(id)  { _detalheId = id;   _ctx?.onRebuild?.(); }
+  function fechar()   { _detalheId = null; _ctx?.onRebuild?.(); }
+  function reset()    { _detalheId = null; }
 
   /* ── Dashboard principal ──────────────────────────────── */
   async function renderDashboard(el, sb, currentUser, onRebuild, options = {}) {
     const mes = options.mes || new Date().getMonth() + 1;
     const ano = options.ano || new Date().getFullYear();
+
+    _ctx = { el, sb, currentUser, onRebuild };
+    if (_detalheId) return renderColaborador(el, sb, currentUser, _detalheId, mes, ano);
 
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando gestão…</p></div>';
     const podeConsolidar = currentUser.role === 'admin' || currentUser.role === 'gestor';
@@ -24,10 +36,11 @@ window.Gestor = (() => {
       // busca o ANO inteiro (p/ a evolução); o mês é filtrado no cliente
       const [{ data: notasAno }, { data: repAno }] = await Promise.all([
         sb.from('notas').select('user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted').eq('ano', ano),
-        sb.from('repasses').select('user_id,tipo,valor,mes,ano,deleted').eq('ano', ano),
+        sb.from('repasses').select('user_id,tipo,valor,mes,ano,deleted,kind').eq('ano', ano),
       ]);
       const nsAno = (notasAno || []).filter(n => !n.deleted);
-      const rsAno = (repAno   || []).filter(r => !r.deleted);
+      /* só o que foi RECEBIDO conta como repasse; pedido pendente (kind='requested') não é dinheiro na mão */
+      const rsAno = (repAno   || []).filter(r => !r.deleted && (!r.kind || r.kind === 'received'));
       const ns = nsAno.filter(n => n.mes === mes);
       const rs = rsAno.filter(r => r.mes === mes);
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
@@ -112,8 +125,15 @@ window.Gestor = (() => {
           const rdaR = mrs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
 
           const canEdit = currentUser.role==='admin';
+          const semFotoM  = mns.filter(n => !n.foto_path).length;
+          const semValorM = mns.filter(n => Number(n.valor || 0) <= 0).length;
+          const resumo = mns.length
+            ? `${mns.length} nota${mns.length === 1 ? '' : 's'} no mês`
+              + (semFotoM  ? ` · <span class="alerta">${semFotoM} sem foto</span>` : '')
+              + (semValorM ? ` · <span class="alerta">${semValorM} sem valor</span>` : '')
+            : 'Nenhuma nota no mês';
           mHtml += `
-          <div class="colab-card">
+          <div class="colab-card clicavel" onclick="Gestor.abrir('${m.id}')" title="Ver notas de ${esc(m.nome||m.email)}">
             <div class="colab-head">
               <div class="avatar">${esc(ini(m.nome))}</div>
               <div class="colab-info">
@@ -122,6 +142,7 @@ window.Gestor = (() => {
               </div>
               <span class="role-pill role-${m.role}">${m.role}</span>
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
+              <span class="colab-seta">›</span>
             </div>
             <div class="colab-bal">
               <div class="bal-box ${rdmR-rdmG<0?'neg':'pos'}">
@@ -137,6 +158,7 @@ window.Gestor = (() => {
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>
+            <div class="colab-resumo">${resumo}</div>
           </div>`;
         });
 
@@ -150,7 +172,8 @@ window.Gestor = (() => {
       el.innerHTML = html;
 
       el.querySelectorAll('[data-eid]').forEach(btn =>
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();                   // o cartão inteiro abre o detalhe
           const c = collabs.find(x=>x.id===btn.dataset.eid);
           if (c) showEditModal(c, sb, onRebuild);
         })
@@ -160,6 +183,87 @@ window.Gestor = (() => {
 
     } catch(e) {
       el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>`;
+    }
+  }
+
+  /* ── Detalhe de um colaborador ──────────────────────────
+     Notas e repasses do mês, com o mesmo cartão da aba Notas (app.js:
+     cardNotaHTML) — miniatura, ver anexo, editar, excluir — e os saldos. */
+  async function renderColaborador(el, sb, currentUser, id, mes, ano) {
+    el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando…</p></div>';
+    try {
+      const [{ data: colab }, { data: ns, error: ne }, { data: rs }] = await Promise.all([
+        sb.from('colaboradores').select('*').eq('id', id).maybeSingle(),
+        sb.from('notas').select('*').eq('user_id', id).eq('ano', ano).eq('mes', mes).eq('deleted', false)
+          .order('data', { ascending: false }).order('created_at', { ascending: false }),
+        sb.from('repasses').select('*').eq('user_id', id).eq('ano', ano).eq('mes', mes).eq('deleted', false)
+          .order('data', { ascending: false }),
+      ]);
+      if (ne) throw ne;
+      if (!colab) { fechar(); return; }
+      const notas = ns || [], reps = rs || [];
+      const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
+      const recebido = r => !r.kind || r.kind === 'received';
+      const g = t => soma(notas.filter(n => n.tipo === t));
+      const r = t => soma(reps.filter(x => x.tipo === t && recebido(x)));
+      const bal = (t, gasto, rec) => `
+        <div class="bal-box ${rec - gasto < 0 ? 'neg' : 'pos'}">
+          <span class="bal-type">${t}</span>
+          <span class="bal-val">${brl(rec - gasto)}</span>
+          <span class="bal-detail">Gasto ${brl(gasto)}</span>
+          <span class="bal-detail">Recebido ${brl(rec)}</span>
+        </div>`;
+
+      let html = `<div class="page-hd">
+        <button class="btn btn-sm btn-outline" onclick="Gestor.fechar()">‹ Equipe</button>
+        <div class="mes-nav">
+          <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
+          <span class="mes-label">${MESES[mes-1]} ${ano}</span>
+          <button class="btn-mes-nav" onclick="mudarMesEquipe(1)">›</button>
+        </div>
+      </div>
+      <div class="colab-list">
+        <div class="colab-card">
+          <div class="colab-head">
+            <div class="avatar">${esc(ini(colab.nome))}</div>
+            <div class="colab-info">
+              <div class="colab-nome">${esc(colab.nome||colab.email)}</div>
+              <div class="colab-email">${esc(colab.email)}</div>
+            </div>
+            <span class="role-pill role-${colab.role}">${colab.role}</span>
+          </div>
+          <div class="colab-bal">${bal('RDM', g('RDM'), r('RDM'))}${bal('RDA', g('RDA'), r('RDA'))}</div>
+        </div>
+      </div>`;
+
+      html += `<div class="section-hd">Notas · ${notas.length}</div>`;
+      if (!notas.length) {
+        html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
+      } else if (typeof cardNotaHTML === 'function') {
+        if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
+        html += `<div class="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
+      }
+
+      html += `<div class="section-hd">Repasses · ${reps.length}</div>`;
+      if (!reps.length) {
+        html += '<div class="empty-state" style="padding:24px 14px">Nenhum repasse neste mês.</div>';
+      } else {
+        html += `<div class="colab-list">${reps.map(x => `
+          <div class="rep-item">
+            <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
+            <div style="flex:1;min-width:0">
+              <div class="rep-desc">${esc(x.descricao || (recebido(x) ? 'Repasse recebido' : 'Solicitação de repasse'))}</div>
+              <div style="font-size:11px;color:var(--text2);margin-top:2px">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : 'pedido pendente'}</div>
+            </div>
+            <span class="rep-val">${brl(x.valor)}</span>
+          </div>`).join('')}</div>`;
+      }
+
+      el.innerHTML = html;
+      if (typeof _carregarMiniaturas === 'function') _carregarMiniaturas(notas, 'eqthumb-').catch(() => {});
+    } catch (e) {
+      el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>
+        <div style="padding:14px"><button class="btn btn-outline" onclick="Gestor.fechar()">‹ Voltar</button></div>`;
     }
   }
 
@@ -217,5 +321,5 @@ window.Gestor = (() => {
     };
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset };
 })();

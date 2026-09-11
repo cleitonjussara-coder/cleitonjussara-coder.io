@@ -61,7 +61,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 126;
+const APP_BUILD = 127;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1112,6 +1112,7 @@ function updateDriveBadge() {
 /* ── Navegação ───────────────────────────────────────────── */
 function switchView(v) {
   viewAtual = v;
+  if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
   document.querySelectorAll('.nav-btn[data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view===v)
   );
@@ -2089,17 +2090,28 @@ function renderNotas() {
     </div>`;
   } else {
     html += `<div class="notas-list" id="notas-list">`;
-    ns.forEach(n => {
-      const pendSync = _statusNota(n);
-      html += `
+    ns.forEach(n => { html += cardNotaHTML(n); });
+    html += `</div>`;
+  }
+  el.innerHTML = html;
+  _carregarMiniaturas(ns).catch(() => {});
+}
+
+/* Cartão de uma nota na lista — o mesmo em "Notas" e no detalhe do
+   colaborador da aba Equipe (gestor.js chama daqui). Os botões procuram a
+   nota pelo id na lista global `notas`; para gestor/admin ela já inclui as
+   notas da equipe, e o detalhe garante isso antes de desenhar. */
+function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
+  const pendSync = _statusNota(n);
+  return `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
         ${n.foto_path||n.foto_local ? `
-        <button class="nota-thumb" id="thumb-${n.id}" onclick="verFoto('${n.id}')"
+        <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
                 title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
-          ${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
+          ${!opts.semDono && _ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
             ? `<span class="subtipo-tag" title="Nota de outro colaborador">👤 ${esc(_rotuloProprietario(n))}</span>`
             : ''}
           <span class="nota-data">${fmtData(n.data)}</span>
@@ -2119,11 +2131,6 @@ function renderNotas() {
           </div>
         </div>
       </div>`;
-    });
-    html += `</div>`;
-  }
-  el.innerHTML = html;
-  _carregarMiniaturas(ns).catch(() => {});
 }
 
 /* ── Miniaturas do anexo na lista de notas ───────────────── */
@@ -2317,6 +2324,16 @@ async function renderEquipe() {
   }
   const el = $('app-content');
   await Gestor.renderDashboard(el, sb, user, () => renderEquipe(), { mes: filMes, ano: filAno });
+}
+
+/* O detalhe do colaborador (gestor.js) desenha notas que vieram direto do
+   servidor; os botões do cartão procuram pelo id em `notas`. */
+function garantirNotasNaLista(lista) {
+  const ids = new Set(notas.map(n => n.id));
+  (lista || []).forEach(n => {
+    if (ids.has(n.id)) return;
+    notas.push({ ...n, user_nome: equipePorId[n.user_id]?.nome || null });
+  });
 }
 
 function mudarMesEquipe(delta) {
