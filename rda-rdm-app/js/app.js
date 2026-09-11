@@ -45,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 118;
+const APP_BUILD = 119;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -3499,21 +3499,18 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     if (!ocrPronto) {
       /* Recorte antes do OCR: lendo a foto toda, mesa, mão e a nota do lado
          entram no texto e viram valor/CNPJ errado.
-         Se o enquadramento vira o ANEXO depende de como a nota chegou:
-           • COM chave (fluxo QR → foto): a foto é o comprovante para
-             conferência, fica INTEIRA. O recorte só alimenta a leitura.
-           • SEM chave (lançamento pela foto): a foto é tudo que identifica a
-             nota, e quem enquadra espera ver a foto enquadrada — o recorte
-             vira o anexo, em resolução original.
-         "Foto inteira" mantém o original nos dois casos. */
+         O enquadramento confirmado vira o ANEXO, em resolução original —
+         no fluxo do QR também (build 118). Entre 112 e 117 o fluxo com
+         chave guardava a foto inteira, e como toda NFC-e passa por ali o
+         recorte nunca era salvo. O que permite cortar sem medo é a garantia
+         do Recorte de conter o papel inteiro. "Foto inteira" mantém o
+         original; `fotoOriginal` segue guardado para o "Ler QR da foto". */
       let alvo = file;
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
         ov.style.display = 'flex';
-        const veioDoQR = (qr?.chave && qr.chave.length === 44)
-                      || _digitos($('nf-chave').value).length === 44;
-        if (alvo !== file && !veioDoQR) {
+        if (alvo !== file) {
           fotoBlob = alvo;
           fotoExt  = 'jpg';
           if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
