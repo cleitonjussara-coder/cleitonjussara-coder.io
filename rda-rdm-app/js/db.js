@@ -416,57 +416,39 @@ window.DB = (() => {
   }
 
   /* ── Merge dados vindos do Drive (Drive vence se mais recente) */
-  async function upsertFromDrive(store, records, userId = null) {
+  /* O arquivo do Drive é CÓPIA, não fonte de verdade. Ele só serve para
+     repor o que este aparelho não tem (troca de celular, IndexedDB limpo).
+     Registro que já existe aqui fica exatamente como está — apagado,
+     restaurado, editado, o que for. Quem decide entre aparelhos é o
+     Supabase, no pullIncremental, comparando updated_at.
+
+     Histórico do que este trecho já fez de errado, para ninguém repetir:
+       • "sumiu do Drive = foi excluído": comia lançamento novo, porque o
+         push ao Supabase termina antes do upload ao Drive e o db-synced
+         relia o snapshot antigo (repasse sumindo após "enviado 1").
+       • "veio apagado do Drive = apaga aqui", sem olhar data: desfazia
+         restauração e mandava nota viva para a lixeira sempre que algum
+         aparelho tinha subido uma versão apagada antes (o "erro crônico").
+       • "veio vivo do Drive e é mais novo = sobrescreve": desfazia
+         exclusão feita aqui.
+     Os três eram a mesma ideia — confiar no Drive sobre o estado local. */
+  async function upsertFromDrive(store, records) {
     const incoming = (records || []).filter(rec => rec && rec.id);
-
+    let repostos = 0;
     for (const rec of incoming) {
+      if (rec.deleted === true || rec.deleted_at || rec._deleted === true) continue;
       const local = await _get(store, rec.id);
-      const remoteDeleted = rec.deleted === true || rec.deleted_at || rec._deleted === true;
-
-      if (remoteDeleted) {
-        if (local && !local.deleted) {
-          await _put(store, {
-            ...local,
-            deleted: true,
-            synced: true,
-            sync_status: 'synced',
-            sync_error: null,
-            updated_at: now,
-          });
-        }
-        continue;
-      }
-
-      /* Nota apagada AQUI não volta só porque o Drive ainda tem uma cópia
-         viva dela — o snapshot do Drive costuma ser anterior à exclusão.
-         Com `local.deleted` nesta condição, toda exclusão era desfeita na
-         sincronização seguinte: a nota reaparecia na lista já marcada como
-         sincronizada, enquanto a cópia arquivada continuava na lixeira, e
-         a mesma nota aparecia nas duas telas.
-         Restauração feita em OUTRO aparelho continua chegando normalmente,
-         porque aí `rec.updated_at` é mais recente que o local. */
-      if (!local || new Date(rec.updated_at || 0) >= new Date(local.updated_at || 0)) {
-        await _put(store, {
-          ...rec,
-          synced: true,
-          sync_status: 'synced',
-          sync_error: null,
-          foto_local: local?.foto_local ?? null,
-        });
-      }
+      if (local) continue;
+      await _put(store, {
+        ...rec,
+        synced: true,
+        sync_status: 'synced',
+        sync_error: null,
+        foto_local: null,
+      });
+      repostos++;
     }
-
-    /* Registro local que NÃO está no arquivo do Drive fica como está.
-       Havia aqui uma varredura que marcava esses como apagados ("sumiu do
-       Drive = foi excluído em outro aparelho"), e ela comia lançamento novo:
-       ao salvar, o push para o Supabase termina antes do upload para o Drive,
-       o evento db-synced dispara pullFromDrive, o arquivo lido ainda é o
-       snapshot antigo, e o registro recém-sincronizado — que já não estava
-       'pending' — era dado como excluído. Foi assim que a solicitação de
-       repasse sumia da lista segundos depois de "enviado 1".
-       Exclusão feita em outro aparelho chega pelo Supabase (pullIncremental
-       traz deleted=true) e pelo próprio Drive quando o registro vem marcado
-       (ramo `remoteDeleted` acima). O Drive é cópia, não fonte de verdade. */
+    return repostos;
   }
  
   /* ── SYNC ────────────────────────────────────────────── */

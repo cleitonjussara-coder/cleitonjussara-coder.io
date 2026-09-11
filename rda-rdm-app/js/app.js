@@ -45,7 +45,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 115;
+const APP_BUILD = 116;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -1010,11 +1010,16 @@ async function migrarPastasDrive() {
 
 async function pullFromDrive() {
   if (!driveOk || !user) return;
+  /* Com Supabase no ar, o Drive é só cópia de segurança: aparelho novo
+     recebe tudo pelo pullIncremental (last_sync começa em 1970). Repor a
+     partir do Drive aqui só serviria para ressuscitar o que foi apagado
+     definitivamente — o Storage e o banco não têm mais, o Drive ainda tem. */
+  if (sb && !DEMO_MODE) return;
   try {
     const remote = await GDrive.loadNotas(user.id);
     if (!remote) return;
-    await DB.upsertFromDrive('notas',    remote.notas, user.id);
-    await DB.upsertFromDrive('repasses', remote.repasses, user.id);
+    await DB.upsertFromDrive('notas',    remote.notas);
+    await DB.upsertFromDrive('repasses', remote.repasses);
     await carregarDadosLocais();
     if (viewAtual === 'home')  renderHome();
     if (viewAtual === 'notas') renderNotas();
