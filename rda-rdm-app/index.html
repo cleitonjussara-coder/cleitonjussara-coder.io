@@ -291,7 +291,11 @@ select.inp{cursor:pointer}
 .nota-card[data-tipo="RDM"]{border-left-color:var(--accent)}
 .nota-head{display:flex;align-items:center;gap:6px;padding:10px 12px 6px;flex-wrap:wrap}
 .nota-body{padding:0 12px 6px;font-size:13.5px}
-.nota-empresa{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Razão social longa: até 2 linhas, depois "…". Em linha única o texto
+   definia a largura mínima da coluna do grid e empurrava data e ícones
+   para fora do cartão. */
+.nota-empresa{font-weight:600;color:var(--text);overflow:hidden;overflow-wrap:anywhere;
+              display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
 .nota-cnpj,.nota-obs{color:var(--text2);font-size:12.5px;margin-top:2px}
 .nota-foot{display:flex;align-items:center;justify-content:space-between;
            padding:6px 12px 10px;border-top:1px solid var(--border)}
@@ -300,11 +304,11 @@ select.inp{cursor:pointer}
 .nota-data{font-size:12.5px;color:var(--text2);margin-left:auto}
 
 /* miniatura do anexo — some se a nota nao tem foto (card fica igual ao de antes) */
-.nota-card.com-thumb{display:grid;grid-template-columns:76px 1fr;align-items:start;
+.nota-card.com-thumb{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:start;
                      grid-template-areas:"thumb head" "thumb body" "foot foot"}
 .nota-card.com-thumb .nota-thumb{grid-area:thumb}
-.nota-card.com-thumb .nota-head {grid-area:head}
-.nota-card.com-thumb .nota-body {grid-area:body}
+.nota-card.com-thumb .nota-head {grid-area:head;min-width:0}
+.nota-card.com-thumb .nota-body {grid-area:body;min-width:0}
 .nota-card.com-thumb .nota-foot {grid-area:foot}
 .nota-thumb{margin:10px 0 8px 12px;width:64px;height:64px;padding:0;cursor:pointer;
             border:1px solid var(--border);border-radius:10px;background:var(--bg);
@@ -1321,22 +1325,22 @@ select.inp{cursor:pointer}
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/db.js?v=119"></script>
-<script defer src="js/nfce.js?v=119"></script>
-<script defer src="js/sefaz.js?v=119"></script>
-<script defer src="js/brasilapi.js?v=119"></script>
-<script defer src="js/ocr.js?v=119"></script>
-<script defer src="js/recorte.js?v=119"></script>
-<script defer src="js/excel.js?v=119"></script>
-<script defer src="js/gestor.js?v=119"></script>
-<script defer src="js/gdrive.js?v=119"></script>
-<script defer src="js/gsheets.js?v=119"></script>
-<script defer src="js/app.js?v=119"></script>
+<script defer src="js/db.js?v=120"></script>
+<script defer src="js/nfce.js?v=120"></script>
+<script defer src="js/sefaz.js?v=120"></script>
+<script defer src="js/brasilapi.js?v=120"></script>
+<script defer src="js/ocr.js?v=120"></script>
+<script defer src="js/recorte.js?v=120"></script>
+<script defer src="js/excel.js?v=120"></script>
+<script defer src="js/gestor.js?v=120"></script>
+<script defer src="js/gdrive.js?v=120"></script>
+<script defer src="js/gsheets.js?v=120"></script>
+<script defer src="js/app.js?v=120"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=119').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=120').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
