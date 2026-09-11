@@ -418,8 +418,6 @@ window.DB = (() => {
   /* ── Merge dados vindos do Drive (Drive vence se mais recente) */
   async function upsertFromDrive(store, records, userId = null) {
     const incoming = (records || []).filter(rec => rec && rec.id);
-    const incomingIds = new Set(incoming.map(rec => rec.id));
-    const now = new Date().toISOString();
 
     for (const rec of incoming) {
       const local = await _get(store, rec.id);
@@ -458,22 +456,17 @@ window.DB = (() => {
       }
     }
 
-    const localAll = await _getAll(store);
-    for (const item of localAll) {
-      if (!item?.id) continue;
-      if (userId && item.user_id !== userId) continue;
-      if (item.deleted) continue;
-      if (item.synced === false || item.sync_status === 'pending' || item.sync_status === 'failed' || item.sync_status === 'retrying') continue;
-      if (incomingIds.has(item.id)) continue;
-      await _put(store, {
-        ...item,
-        deleted: true,
-        synced: true,
-        sync_status: 'synced',
-        sync_error: null,
-        updated_at: now,
-      });
-    }
+    /* Registro local que NÃO está no arquivo do Drive fica como está.
+       Havia aqui uma varredura que marcava esses como apagados ("sumiu do
+       Drive = foi excluído em outro aparelho"), e ela comia lançamento novo:
+       ao salvar, o push para o Supabase termina antes do upload para o Drive,
+       o evento db-synced dispara pullFromDrive, o arquivo lido ainda é o
+       snapshot antigo, e o registro recém-sincronizado — que já não estava
+       'pending' — era dado como excluído. Foi assim que a solicitação de
+       repasse sumia da lista segundos depois de "enviado 1".
+       Exclusão feita em outro aparelho chega pelo Supabase (pullIncremental
+       traz deleted=true) e pelo próprio Drive quando o registro vem marcado
+       (ramo `remoteDeleted` acima). O Drive é cópia, não fonte de verdade. */
   }
  
   /* ── SYNC ────────────────────────────────────────────── */
