@@ -61,7 +61,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 124;
+const APP_BUILD = 125;
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -2466,7 +2466,7 @@ async function enviarFotosEquipeDrive() {
     catch (e) { idxAviso = `Aviso: não li o Drive antes (${e.message}).\n\n`; }
 
     // 4) baixa do Supabase e sobe pro Drive, contando cada etapa
-    let ok = 0, falhaBaixar = 0, falhaSubir = 0, primeiroErro = '', i = 0;
+    let ok = 0, falhaBaixar = 0, falhaSubir = 0, erroBaixar = '', erroSubir = '', i = 0;
     for (const n of comFoto) {
       i++;
       setProg(`Enviando fotos ${i}/${comFoto.length}…`);
@@ -2475,11 +2475,11 @@ async function enviarFotosEquipeDrive() {
         const r = await sb.storage.from('notas-fotos').download(n.foto_path);
         if (r.error || !r.data) {
           falhaBaixar++;
-          if (!primeiroErro) primeiroErro = `baixar: ${r.error?.message || 'sem dados'} (${n.foto_path})`;
+          if (!erroBaixar) erroBaixar = `${r.error?.message || 'sem dados'} (${n.foto_path})`;
           continue;
         }
         blob = r.data;
-      } catch (e) { falhaBaixar++; if (!primeiroErro) primeiroErro = 'baixar: ' + e.message; continue; }
+      } catch (e) { falhaBaixar++; if (!erroBaixar) erroBaixar = e.message; continue; }
 
       try {
         const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
@@ -2492,7 +2492,7 @@ async function enviarFotosEquipeDrive() {
           user_id: n.user_id, user_email: c.email, user_nome: c.nome,
         }, ext);
         ok++;
-      } catch (e) { falhaSubir++; if (!primeiroErro) primeiroErro = 'subir: ' + e.message; }
+      } catch (e) { falhaSubir++; if (!erroSubir) erroSubir = e.message; }
     }
 
     if (ov) ov.style.display = 'none';
@@ -2502,7 +2502,8 @@ async function enviarFotosEquipeDrive() {
       + `✅ Enviadas ao Drive: ${ok}\n`
       + `⬇️ Falha ao BAIXAR do Supabase: ${falhaBaixar}\n`
       + `☁️ Falha ao SUBIR no Drive: ${falhaSubir}\n`
-      + (primeiroErro ? `\nPrimeiro erro: ${primeiroErro}` : ''));
+      + (erroBaixar ? `\nErro ao baixar: ${erroBaixar}` : '')
+      + (erroSubir  ? `\nErro ao subir: ${erroSubir}` : ''));
   } catch (e) {
     if (ov) ov.style.display = 'none';
     alert('Envio ao Drive falhou: ' + e.message);
