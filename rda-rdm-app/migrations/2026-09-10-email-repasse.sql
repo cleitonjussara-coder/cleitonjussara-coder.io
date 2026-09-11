@@ -19,7 +19,7 @@
    enviado assim que a chave existir e a linha for tocada de novo.
 
    Remetente: app@pmservicosagronomicos.com.br (precisa do domínio verificado)
-   Destino:   repasse@pmservicosagronomicos.com.br
+   Destino:   cleitonjussara@gmail.com (quem aprova o repasse)
    Reply-to:  o e-mail do colaborador, para o gestor responder direto.
 
    Pode rodar mais de uma vez sem problema (idempotente).
@@ -83,7 +83,7 @@ begin
 
   v_body := jsonb_strip_nulls(jsonb_build_object(
     'from',     'Petermann App <app@pmservicosagronomicos.com.br>',
-    'to',       jsonb_build_array('repasse@pmservicosagronomicos.com.br'),
+    'to',       jsonb_build_array('cleitonjussara@gmail.com'),
     'reply_to', nullif(v_colab.email, ''),
     'subject',  format('Solicitação de repasse %s - %s/%s', new.tipo, new.mes, new.ano),
     'text',     format(

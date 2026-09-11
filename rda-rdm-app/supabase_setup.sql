@@ -296,7 +296,7 @@ begin
 
   v_body := jsonb_strip_nulls(jsonb_build_object(
     'from',     'Petermann App <app@pmservicosagronomicos.com.br>',
-    'to',       jsonb_build_array('repasse@pmservicosagronomicos.com.br'),
+    'to',       jsonb_build_array('cleitonjussara@gmail.com'),
     'reply_to', nullif(v_colab.email, ''),
     'subject',  format('Solicitação de repasse %s - %s/%s', new.tipo, new.mes, new.ano),
     'text',     format(
