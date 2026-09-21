@@ -34,6 +34,28 @@ class AdminController extends Controller
     }
 
     /**
+     * GET /admin/armazenamento — quanto o app ocupa no servidor (banco, fotos,
+     * backups, logs), último backup, histórico diário e tendência (21/09/2026).
+     * Alimenta o cartão "Armazenamento" no Perfil do admin.
+     */
+    public function armazenamento(Request $r, \App\Services\Armazenamento $a): JsonResponse
+    {
+        abort_unless($r->user()?->ehAdmin(), 403);
+
+        $m = $a->medir();
+        $hist = $a->historico();
+        if (! $hist || substr(end($hist)['em'], 0, 10) !== substr($m['em'], 0, 10)) {
+            $a->registrar($m);   // abrir o cartão também vale como amostra do dia
+            $hist = $a->historico();
+        }
+        $m['tendencia'] = $a->tendencia($hist, $m['limite_mb']);
+        $m['historico'] = array_slice($hist, -90);
+        $m['limites'] = ['aviso_pct' => config('petermann.armazenamento.aviso_pct'), 'critico_pct' => config('petermann.armazenamento.critico_pct')];
+
+        return response()->json($m);
+    }
+
+    /**
      * POST /admin/migrar — roda as migrações pendentes NO SERVIDOR.
      * É o "php artisan migrate --force" de quem não tem terminal lá: o banco
      * (SQLite) é um arquivo na hospedagem, então a migração tem que rodar

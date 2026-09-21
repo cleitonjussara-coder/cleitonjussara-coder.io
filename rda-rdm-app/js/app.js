@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 200;
+const APP_BUILD = 201;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3450,6 +3450,10 @@ function renderPerfil() {
     ` : ''}
     ${user?.role === 'admin' && sb && !DEMO_MODE ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <p class="lbl" style="margin-bottom:8px">💾 Armazenamento do servidor</p>
+      <div id="armazenamento-card" style="font-size:12.5px;color:var(--text2)">Medindo o espaço em disco…</div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">🗄️ Backup</p>
       <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">
         Banco + todas as fotos num ZIP. O servidor gera um sozinho toda semana (lista abaixo);
@@ -3469,6 +3473,85 @@ function renderPerfil() {
   _pintarBotaoInstalar();
   _mostrarAvatar();
   _listarBackupsAuto();
+  _mostrarArmazenamento();
+}
+
+/* Armazenamento do servidor (21/09/2026): quanto o app ocupa na Locaweb
+   (banco, fotos, backups, logs), % do plano, tendência e último backup.
+   O mesmo número que o cron `armazenamento:verificar` usa para avisar
+   por e-mail — aqui é a versão "olhar quando quiser". Só admin. */
+async function _mostrarArmazenamento() {
+  const el0 = $('armazenamento-card');
+  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = 'Sem conexão — abra de novo quando estiver online.'; return; }
+  try {
+    const m = await sb.admin.armazenamento();
+    const el = $('armazenamento-card');
+    if (!el) return;
+    const MB = b => (b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB';
+    const cor = { ok: '#2D6A4F', aviso: '#b45309', critico: '#b91c1c' }[m.nivel] || 'var(--text2)';
+    const rotulo = { ok: '✅ Tudo bem', aviso: '⚠️ Atenção', critico: '🔴 Crítico' }[m.nivel] || '';
+    const p = m.partes;
+    const partes = [
+      ['📷 Fotos', p.fotos.bytes, `${p.fotos.n} arquivo${p.fotos.n === 1 ? '' : 's'}`],
+      ['🗄️ Backups', p.backups.bytes, `${p.backups.n} cópia${p.backups.n === 1 ? '' : 's'}`],
+      ['🧮 Banco de dados', p.banco.bytes, `${p.banco.n} lançamentos`],
+      ['🖼️ Miniaturas', p.miniaturas.bytes, 'regeradas sozinhas'],
+      ['📜 Logs', p.logs.bytes, ''],
+    ];
+    const total = Math.max(1, m.total);
+    const barras = partes.map(([nome, bytes, extra]) => `
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px">
+        <span>${nome}${extra ? ` <span style="opacity:.7">· ${esc(extra)}</span>` : ''}</span><b>${MB(bytes)}</b>
+      </div>
+      <div style="height:6px;border-radius:4px;background:var(--border);overflow:hidden">
+        <div style="height:100%;width:${Math.max(1, Math.round(bytes / total * 100))}%;background:var(--primary,#2D6A4F)"></div>
+      </div>`).join('');
+
+    let plano;
+    if (m.pct !== null && m.limite_mb) {
+      const corBarra = m.nivel === 'critico' ? '#b91c1c' : m.nivel === 'aviso' && m.pct >= (m.limites?.aviso_pct ?? 80) ? '#b45309' : '#2D6A4F';
+      plano = `
+        <div style="display:flex;justify-content:space-between;margin-top:8px"><span>Uso do plano</span><b>${m.pct.toLocaleString('pt-BR')} % de ${(m.limite_mb / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB</b></div>
+        <div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:4px">
+          <div style="height:100%;width:${Math.min(100, m.pct)}%;background:${corBarra}"></div>
+        </div>`;
+    } else {
+      plano = `<p style="margin-top:8px;opacity:.8">Limite do plano não informado — defina <code>ARMAZENAMENTO_LIMITE_MB</code> no servidor para ver a porcentagem e receber aviso por e-mail.</p>`;
+    }
+
+    const t = m.tendencia || {};
+    let tend = '';
+    if (t.por_mes !== null && t.por_mes !== undefined && t.amostras >= 2) {
+      tend = `📈 Crescimento: <b>${t.por_mes >= 0 ? '+' : '−'}${MB(Math.abs(t.por_mes))}/mês</b>`
+        + (t.dias_ate_limite !== null && t.dias_ate_limite !== undefined ? ` · no ritmo atual o espaço acaba em <b>~${t.dias_ate_limite} dias</b>` : '')
+        + ` <span style="opacity:.7">(${t.amostras} medições)</span>`;
+    } else {
+      tend = '📈 Tendência: aparece depois de alguns dias de medição.';
+    }
+
+    const ub = m.ultimo_backup;
+    const backup = ub
+      ? `🗄️ Último backup automático: <b>há ${ub.dias} dia${ub.dias === 1 ? '' : 's'}</b> (${MB(ub.bytes)})${ub.dias > 8 ? ' <span style="color:#b45309;font-weight:700">— atrasado, confira o Crontab</span>' : ''}`
+      : '<span style="color:#b45309;font-weight:700">🗄️ Nenhum backup automático ainda.</span>';
+
+    const vol = m.volume ? `<p style="margin-top:8px;opacity:.7;font-size:11.5px">Disco da Locaweb (compartilhado com outros clientes): ${m.volume.pct_usado.toLocaleString('pt-BR')} % usado, ${(m.volume.livre / 1073741824).toFixed(0)} GB livres.</p>` : '';
+
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>Total usado pelo app</span>
+        <b style="font-size:16px;color:${cor}">${MB(m.total)}</b>
+      </div>
+      <div style="color:${cor};font-weight:700;margin-top:2px">${rotulo}</div>
+      ${plano}
+      ${barras}
+      <p style="margin-top:10px">${tend}</p>
+      <p style="margin-top:4px">${backup}</p>
+      ${vol}
+      <p style="margin-top:6px;opacity:.7;font-size:11.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR')}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
+  } catch (e) {
+    const el = $('armazenamento-card');
+    if (el) el.textContent = 'Não consegui medir o armazenamento: ' + (e.message || 'erro');
+  }
 }
 
 /* Backups automáticos (artisan backup:gerar no agendador da Locaweb):

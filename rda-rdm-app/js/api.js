@@ -308,6 +308,7 @@ window.API = (() => {
   const admin = {
     status: () => req('GET', '/admin/status'),
     migrar: () => req('POST', '/admin/migrar', { timeout: 120_000 }),
+    armazenamento: () => req('GET', '/admin/armazenamento'),   // espaço em disco (21/09/2026)
   };
 
   const cnpj = {

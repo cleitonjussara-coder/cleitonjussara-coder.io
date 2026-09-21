@@ -29,6 +29,15 @@ return [
         'max_dia' => (int) env('ALERTA_MAX_DIA', 20),
     ],
 
+    /* Monitoramento do armazenamento (21/09/2026): ARMAZENAMENTO_LIMITE_MB é o
+       espaço do plano no painel da Locaweb (0 = não informado, sem %). O cron
+       armazenamento:verificar avisa por e-mail nos percentuais abaixo. */
+    'armazenamento' => [
+        'limite_mb' => (int) env('ARMAZENAMENTO_LIMITE_MB', 0),
+        'aviso_pct' => (float) env('ARMAZENAMENTO_AVISO_PCT', 80),
+        'critico_pct' => (float) env('ARMAZENAMENTO_CRITICO_PCT', 90),
+    ],
+
     /* Validade das URLs assinadas dos anexos (segundos). O app pedia 300 ao
        Supabase; mantido. */
     'foto_url_ttl' => (int) env('FOTO_URL_TTL', 300),

@@ -90,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/backup/arquivo/{nome}', [BackupController::class, 'arquivo']);
     Route::get('/admin/status', [AdminController::class, 'status']);
     Route::post('/admin/migrar', [AdminController::class, 'migrar']);
+    Route::get('/admin/armazenamento', [AdminController::class, 'armazenamento']);   // monitoramento de disco (21/09/2026)
 
     /* frota: veículos + registros de km (16/09/2026) */
     Route::get('/veiculos', [FrotaController::class, 'veiculos']);
