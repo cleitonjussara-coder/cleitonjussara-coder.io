@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 198;
+const APP_BUILD = 199;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3014,8 +3014,12 @@ function renderSaldo() {
       <button class="btn btn-sm btn-outline" onclick="baixarRelatorioCv('pdf')">📕 PDF</button>
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
     </div>` : `<div class="export-btns">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">RDM / RDA · ${filAno}:</span>
-      <button class="btn btn-sm btn-primary" onclick="exportExcel()">📗 Excel anual</button>
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de RDM e RDA (modelo da empresa) · ${filAno}:</span>
+      <button class="btn btn-sm btn-primary" onclick="baixarRelatorioRdmRda()">📗 Excel</button>
+    </div>
+    <div class="export-btns">
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Resumo do app:</span>
+      <button class="btn btn-sm btn-outline" onclick="exportExcel()">Excel anual</button>
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
     </div>`}
   </div>
@@ -3522,6 +3526,13 @@ async function baixarRelatorioCv(formato = 'xlsx', userId = null, nome = null) {
   } finally { setLoading(false); }
 }
 
+/* Planilha de RDM e RDA no modelo oficial (21/09/2026), para quem está no
+   regime RDM/RDA. Só xlsx; o servidor limpa o exemplo e preenche. */
+function baixarRelatorioRdmRda(userId = null, nome = null) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar a planilha', 'err'); return; }
+  return _baixarBlob(sb.relatorio.rdmrda(filAno, userId), `Planilha_RDM_RDA_${(nome || user?.nome || 'colaborador').replace(/\s+/g, '_')}_${filAno}.xlsx`, 'Gerando a Planilha de RDM e RDA (modelo da empresa)… uns 20 s');
+}
+
 /* Relatório da equipe do mês em PDF (20/09/2026): resumo, quadro por
    colaborador e as notas/repasses de cada um. Gestor/admin. */
 function baixarRelatorioEquipe(ids = []) {   // ids = marcados no seletor da Equipe (21/09/2026)
@@ -3535,8 +3546,8 @@ function baixarRelatorioEquipe(ids = []) {   // ids = marcados no seletor da Equ
 function baixarCvEquipe(ids = [], modo = 'unico') {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar as planilhas', 'err'); return; }
   const n = ids.length || 'todos os';
-  const nome = modo === 'zip' ? `Planilhas_CV_Equipe_${filAno}.zip` : `Planilha_CV_Equipe_${filAno}.xlsx`;
-  return _baixarBlob(sb.relatorio.cvEquipe(filAno, ids, modo), nome, `Gerando a Planilha CV de ${n} colaborador(es) · ${filAno}… uns 5 s por pessoa`);
+  const nome = modo === 'zip' ? `Planilhas_Equipe_${filAno}.zip` : `Planilhas_Equipe_${filAno}.xlsx`;
+  return _baixarBlob(sb.relatorio.cvEquipe(filAno, ids, modo), nome, `Gerando as planilhas de ${n} colaborador(es) · ${filAno}… CV uns 5 s, RDM/RDA uns 20 s por pessoa`);
 }
 
 /* Cópia íntegra do SQLite de produção (GET /backup/banco, só admin). O

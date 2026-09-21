@@ -185,7 +185,9 @@ class RelatorioCv
         $usados = [];
         foreach ($colabs as $c) {
             $prefixo = $this->prefixoAba($c->nome ?: $c->email, $usados);
-            $ss = $this->gerar($c, $ano);
+            /* cada um no modelo do seu regime (21/09/2026): CV → PLANILHA_CV;
+               RDM/RDA → PLANILHA_RDM_RDA (abas CABEÇALHO, BANCO DE DADOS, R.D.M., R.D.A) */
+            $ss = $c->ehCV() ? $this->gerar($c, $ano) : app(RelatorioRdmRda::class)->gerar($c, $ano);
             foreach (['NORMAS', 'AJUDA DE CUSTOS'] as $t) {
                 if ($ws = $ss->getSheetByName($t)) {
                     $ss->removeSheetByIndex($ss->getIndex($ws));

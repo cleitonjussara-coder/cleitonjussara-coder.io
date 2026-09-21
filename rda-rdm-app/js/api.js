@@ -292,6 +292,7 @@ window.API = (() => {
 
   const relatorio = {
     cv: (ano, userId, formato) => req('GET', '/relatorio/cv', { query: { ano, user_id: userId || undefined, formato }, blob: true, timeout: 300_000 }),
+    rdmrda: (ano, userId) => req('GET', '/relatorio/rdmrda', { query: { ano, user_id: userId || undefined }, blob: true, timeout: 300_000 }),   // modelo RDM/RDA (21/09/2026)
     equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
     cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
   };

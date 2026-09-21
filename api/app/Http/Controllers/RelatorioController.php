@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Services\RelatorioCv;
+use App\Services\RelatorioRdmRda;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -50,6 +51,36 @@ class RelatorioController extends Controller
     }
 
     /**
+     * GET /relatorio/rdmrda?ano&user_id — Planilha de RDM e RDA no modelo da
+     * empresa (21/09/2026), para quem está no regime RDM/RDA. Só xlsx.
+     */
+    public function rdmrda(Request $r): BinaryFileResponse
+    {
+        $u = $r->user();
+        $d = $r->validate([
+            'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'user_id' => ['nullable', 'string', 'size:36'],
+        ]);
+        $ano = (int) ($d['ano'] ?? now()->year);
+        $alvoId = $d['user_id'] ?? $u->id;
+        abort_unless($alvoId === $u->id || $u->veTudo(), 403, 'Sem permissão para o relatório de outro colaborador');
+        $alvo = Colaborador::findOrFail($alvoId);
+
+        @ini_set('memory_limit', '768M');
+        @set_time_limit(180);
+        $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($alvo->nome ?: 'colaborador'));
+        $arquivo = tempnam(sys_get_temp_dir(), 'rdm_').'.xlsx';
+        $svc = app(RelatorioRdmRda::class);
+        $ss = $svc->gerar($alvo, $ano);
+        $svc->xlsx($ss, $arquivo);
+        $ss->disconnectWorksheets();
+
+        return response()->download($arquivo, "Planilha_RDM_RDA_{$nome}_{$ano}.xlsx", [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
      * GET /relatorio/cv-equipe?ano&ids=a,b,c&modo=unico|zip — Planilha de C.V.
      * (modelo da empresa) de vários colaboradores (21/09/2026). Gestor/admin.
      *   modo=unico (padrão): UM xlsx com as 4 abas de cada um (Ana_RDM_RDA…).
@@ -76,13 +107,13 @@ class RelatorioController extends Controller
         } else {
             $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
             $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-            $q->where('ativo', true)->where('regime', 'cv')->whereIn('id', $comNota->merge($comRep)->unique());   // só quem é CV tem Planilha CV (21/09/2026)
+            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->unique());   // cada um sai no modelo do seu regime (21/09/2026)
         }
         $colabs = $q->get();
         abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");
 
         @ini_set('memory_limit', '1024M');
-        @set_time_limit(600);
+        @set_time_limit(900);   // modelo RDM/RDA leva ~20 s por pessoa
 
         if ($modo === 'unico') {
             $arquivo = tempnam(sys_get_temp_dir(), 'cveq_').'.xlsx';
@@ -114,11 +145,19 @@ class RelatorioController extends Controller
                 $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($c->nome ?: 'colaborador'));
                 $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
                 $temps[] = $tmp;
-                $ss = $this->cv->gerar($c, $ano);
-                $this->cv->xlsx($ss, $tmp);
+                if ($c->ehCV()) {
+                    $ss = $this->cv->gerar($c, $ano);
+                    $this->cv->xlsx($ss, $tmp);
+                    $rotulo = 'CV';
+                } else {
+                    $svc = app(RelatorioRdmRda::class);
+                    $ss = $svc->gerar($c, $ano);
+                    $svc->xlsx($ss, $tmp);
+                    $rotulo = 'RDM_RDA';
+                }
                 $ss->disconnectWorksheets();
                 unset($ss);
-                $zip->addFile($tmp, "Planilha_CV_{$nome}_{$ano}.xlsx");
+                $zip->addFile($tmp, "Planilha_{$rotulo}_{$nome}_{$ano}.xlsx");
             }
             $zip->close();   // é aqui que os arquivos são lidos e gravados no zip
         } finally {

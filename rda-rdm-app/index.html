@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=198">
+  <link rel="manifest" href="manifest.json?v=199">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1380,7 +1380,7 @@ html{-webkit-text-size-adjust:100%}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=198" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=199" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1851,11 +1851,11 @@ html{-webkit-text-size-adjust:100%}
       <h4>💳 Regime CV × RDM/RDA (reunião de 21/09/2026)</h4>
       <p>Cada colaborador está em um <b>regime</b>, definido pelo gestor/admin em <b>Equipe → cartão → Editar → Regime de despesas</b>:</p>
       <ul>
-        <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo, <b>Excel RDM/RDA</b> anual e CSV.</li>
+        <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo. O relatório é a <b>Planilha de RDM e RDA</b> no <b>modelo oficial da empresa</b> (abas CABEÇALHO, BANCO DE DADOS, R.D.M. e R.D.A), preenchida pelo servidor com as notas do ano — o R.D.M. por categoria (Abastecimento, Hospedagens, Outros) e o R.D.A em duas colunas por mês; o BANCO DE DADOS recebe os repasses recebidos de RDM e de RDA. Continuam disponíveis o Excel anual resumido do app e o CSV.</li>
         <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? O app oferece na hora <b>Registrar reembolso</b> (data, valor e justificativa já preenchidos) — é o pedido da versão CV, e o gestor recebe a notificação. Quando o gestor marca como pago, o <b>Reembolso recebido</b> é registrado sozinho e <b>abate</b> do que foi registrado.</li>
       </ul>
       <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>reembolsos</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = reembolsos recebidos. O Início mostra "Reembolso a receber" em vez de saldo.</p>
-      <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV, <b>Excel RDM/RDA</b> anual para os demais. <b>📗 CV da equipe</b> lista só quem é CV.</p>
+      <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV; <b>Planilha RDM/RDA</b> (modelo) e <b>Excel resumo</b> para os demais. <b>📗 Planilhas</b> (topo da Equipe) gera as planilhas de quem você marcar, <b>cada um no modelo do seu regime</b> — Excel único (aba RESUMO + abas de cada pessoa, ex.: <i>Cleiton_R.D.M.</i>, <i>Maria_RDM_RDA</i>) ou ZIP. A RDM/RDA leva uns 20 s por pessoa.</p>
       <h4>🔔 Notificações e pedido de repasse pago</h4>
       <p>O <b>🔔 sininho</b> no canto superior esquerdo mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
       <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado: o app grava o <b>repasse recebido</b> para o colaborador na mesma hora e o pedido sai das pendências (e do quadro do PDF). <b>👤 Ver colaborador</b> abre o cartão dele.</p>
@@ -1905,7 +1905,7 @@ html{-webkit-text-size-adjust:100%}
       <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contabilidade, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
 
       <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
-      <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (quem não lançou nada no período começa desmarcado; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 CV da equipe</b> gera a <b>Planilha de C.V.</b> no modelo da empresa de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>
+      <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (quem não lançou nada no período começa desmarcado; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 Planilhas</b> gera as planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um) de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>
       <p class="ajuda-gestor">A tela <b>Equipe / Baixar relatórios</b> não mostra mais os quadros Gasto no mês, Recebido, Saldo e Notas (decisão de 21/09/2026: isso já está no Painel, em RDM/RDA e Planilhas e no cartão de cada pessoa). Ficam o gráfico de <b>evolução do gasto</b> da equipe, os botões de relatório e a lista. Há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>
     </div>
 
@@ -2122,25 +2122,25 @@ html{-webkit-text-size-adjust:100%}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=198"></script>
-<script defer src="js/db.js?v=198"></script>
-<script defer src="js/nfce.js?v=198"></script>
-<script defer src="js/sefaz.js?v=198"></script>
-<script defer src="js/brasilapi.js?v=198"></script>
-<script defer src="js/ocr.js?v=198"></script>
-<script defer src="js/recorte.js?v=198"></script>
-<script defer src="js/excel.js?v=198"></script>
-<script defer src="js/gestor.js?v=198"></script>
-<script defer src="js/frota.js?v=198"></script>
-<script defer src="js/ponto.js?v=198"></script>
-<script defer src="js/arquivos.js?v=198"></script>
-<script defer src="js/gdrive.js?v=198"></script>
-<script defer src="js/app.js?v=198"></script>
+<script defer src="js/api.js?v=199"></script>
+<script defer src="js/db.js?v=199"></script>
+<script defer src="js/nfce.js?v=199"></script>
+<script defer src="js/sefaz.js?v=199"></script>
+<script defer src="js/brasilapi.js?v=199"></script>
+<script defer src="js/ocr.js?v=199"></script>
+<script defer src="js/recorte.js?v=199"></script>
+<script defer src="js/excel.js?v=199"></script>
+<script defer src="js/gestor.js?v=199"></script>
+<script defer src="js/frota.js?v=199"></script>
+<script defer src="js/ponto.js?v=199"></script>
+<script defer src="js/arquivos.js?v=199"></script>
+<script defer src="js/gdrive.js?v=199"></script>
+<script defer src="js/app.js?v=199"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=198').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=199').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

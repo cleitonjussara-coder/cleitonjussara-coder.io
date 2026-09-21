@@ -92,7 +92,7 @@ window.Gestor = (() => {
         <div class="export-btns">
           <button class="btn btn-sm btn-outline" onclick="Gestor.abrirExcelEquipe()" title="Resumo do mês em Excel: escolha os colaboradores">📗 Excel</button>
           <button class="btn btn-sm btn-primary" onclick="Gestor.abrirPdfEquipe()" title="Relatório do mês em PDF: escolha os colaboradores">📕 PDF</button>
-          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilha de C.V. no modelo da empresa: escolha os colaboradores">📗 CV da equipe ${ano}</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um)">📗 Planilhas ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
           ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contabilidade, colaborador…)">✉️ Convidar</button>` : ''}
@@ -281,7 +281,8 @@ window.Gestor = (() => {
           ${colab.regime === 'cv' ? `
           <button class="cdet-acao" onclick="baixarRelatorioCv('xlsx','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
           <button class="cdet-acao" onclick="baixarRelatorioCv('pdf','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
-          <button class="cdet-acao" onclick="Gestor.excelAnualColab('${colab.id}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Excel RDM/RDA</span><span class="cdet-acao-sub">anual ${ano}</span></button>`}
+          <button class="cdet-acao" onclick="baixarRelatorioRdmRda('${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
+          <button class="cdet-acao" onclick="Gestor.excelAnualColab('${colab.id}')"><span class="cdet-acao-ico">📄</span><span class="cdet-acao-lbl">Excel resumo</span><span class="cdet-acao-sub">do app · ${ano}</span></button>`}
           <button class="cdet-acao" onclick="switchView('arquivos');setTimeout(()=>Arquivos.abrirColab('${colab.id}'),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>
           ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
@@ -397,7 +398,7 @@ window.Gestor = (() => {
             ${collabs.map(c => `
               <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer">
                 <input type="checkbox" class="sel-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
-                <span style="flex:1">${esc(c.nome || c.email)}</span>
+                <span style="flex:1">${esc(c.nome || c.email)} <span style="font-size:10.5px;color:var(--text2)">${c.regime === 'cv' ? '💳 CV' : '💰 RDM/RDA'}</span></span>
                 ${comLanc.has(c.id) ? '' : `<span style="font-size:11px;color:var(--text2)">${esc(etiqueta)}</span>`}
               </label>`).join('')}
           </div>
@@ -427,17 +428,17 @@ window.Gestor = (() => {
     btns.forEach(b => b.onclick = () => { const ids = marcados(); close(); onGerar(ids, b.dataset.modo); });
   }
 
-  /* Planilha de C.V. (modelo da empresa): Excel único com aba RESUMO ou ZIP. Base: quem lançou no ANO. */
+  /* Planilhas da equipe no modelo da empresa (21/09/2026): cada pessoa sai
+     no modelo do SEU regime — CV → Planilha CV; RDM/RDA → Planilha de RDM e
+     RDA. Excel único (aba RESUMO + abas de cada um) ou ZIP. Base: quem lançou no ANO. */
   function abrirCvEquipe() {
     if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
     const { ano, comLancAno, collabs } = _cvEquipe;
-    const cvs = collabs.filter(c => c.regime === 'cv');
-    if (!cvs.length) { toast('Nenhum colaborador está no regime CV. Defina em Equipe → cartão → Editar → Regime.', 'err'); return; }
+    const nCV = collabs.filter(c => c.regime === 'cv').length;
     abrirSelecaoColabs({
-      titulo: `Planilha de C.V. · ${ano}`,
-      dica: `Só quem está no regime <b>CV (cartão corporativo)</b> aparece aqui. Quem não lançou nada em ${ano} começa desmarcado.`,
-      apenas: cvs,
-      comLanc: comLancAno, etiqueta: 'sem lançamento no ano', segundos: 5,
+      titulo: `Planilhas da equipe · ${ano}`,
+      dica: `Cada pessoa sai no modelo do seu regime: <b>💳 CV</b> → Planilha de C.V. (${nCV}); <b>💰 RDM/RDA</b> → Planilha de RDM e RDA (${collabs.length - nCV}). Quem não lançou nada em ${ano} começa desmarcado.`,
+      comLanc: comLancAno, etiqueta: 'sem lançamento no ano', segundos: 15,
       botoes: [
         { label: '🗜️ ZIP separado', title: 'Um arquivo .xlsx completo por pessoa (+ Resumo_Geral)', modo: 'zip' },
         { label: '📗 Excel único',  title: 'Um só .xlsx: aba RESUMO + abas de cada pessoa', modo: 'unico', primario: true },
