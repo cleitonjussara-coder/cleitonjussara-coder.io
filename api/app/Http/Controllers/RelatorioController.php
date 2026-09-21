@@ -50,27 +50,50 @@ class RelatorioController extends Controller
     }
 
     /**
-     * GET /relatorio/cv-equipe?ano — ZIP com a Planilha de C.V. (modelo da
-     * empresa, xlsx) de cada colaborador ATIVO que tem nota ou repasse no
-     * ano (21/09/2026). Quem não movimentou fica de fora: a planilha sairia
-     * vazia e cada uma custa uns segundos para montar. Gestor/admin.
+     * GET /relatorio/cv-equipe?ano&ids=a,b,c&modo=unico|zip — Planilha de C.V.
+     * (modelo da empresa) de vários colaboradores (21/09/2026). Gestor/admin.
+     *   modo=unico (padrão): UM xlsx com as 4 abas de cada um (Ana_RDM_RDA…).
+     *   modo=zip: um xlsx completo por colaborador, num ZIP.
+     * `ids` = quem o gestor marcou na tela; sem `ids`, todo colaborador ativo
+     * que tem nota ou repasse no ano (planilha vazia não ajuda e custa segundos).
      */
     public function cvEquipe(Request $r): BinaryFileResponse
     {
         $u = $r->user();
         abort_unless($u->veTudo(), 403, 'Só gestor ou admin gera as planilhas da equipe');
-        $d = $r->validate(['ano' => ['nullable', 'integer', 'min:2020', 'max:2100']]);
+        $d = $r->validate([
+            'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'ids' => ['nullable', 'string', 'max:4000'],
+            'modo' => ['nullable', 'in:unico,zip'],
+        ]);
         $ano = (int) ($d['ano'] ?? now()->year);
+        $modo = $d['modo'] ?? 'unico';
 
-        $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-        $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-        $colabs = Colaborador::query()->where('ativo', true)
-            ->whereIn('id', $comNota->merge($comRep)->unique())
-            ->orderBy('nome')->get();
-        abort_if($colabs->isEmpty(), 404, "Nenhum colaborador ativo com lançamento em {$ano}");
+        $q = Colaborador::query()->orderBy('nome');
+        $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? '')))));
+        if ($ids) {
+            $q->whereIn('id', array_slice($ids, 0, 200));
+        } else {
+            $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
+            $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
+            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->unique());
+        }
+        $colabs = $q->get();
+        abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");
 
         @ini_set('memory_limit', '1024M');
         @set_time_limit(600);
+
+        if ($modo === 'unico') {
+            $arquivo = tempnam(sys_get_temp_dir(), 'cveq_').'.xlsx';
+            $ss = $this->cv->gerarUnico($colabs, $ano);
+            $this->cv->xlsxSemCalculo($ss, $arquivo);
+            $ss->disconnectWorksheets();
+
+            return response()->download($arquivo, "Planilha_CV_Equipe_{$ano}.xlsx", [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+        }
 
         $zipPath = tempnam(sys_get_temp_dir(), 'cveq_').'.zip';
         $zip = new \ZipArchive();

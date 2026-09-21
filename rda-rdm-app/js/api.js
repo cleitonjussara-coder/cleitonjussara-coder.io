@@ -282,7 +282,7 @@ window.API = (() => {
   const relatorio = {
     cv: (ano, userId, formato) => req('GET', '/relatorio/cv', { query: { ano, user_id: userId || undefined, formato }, blob: true, timeout: 300_000 }),
     equipe: (ano, mes) => req('GET', '/relatorio/equipe', { query: { ano, mes }, blob: true, timeout: 300_000 }),
-    cvEquipe: (ano) => req('GET', '/relatorio/cv-equipe', { query: { ano }, blob: true, timeout: 600_000 }),
+    cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
   };
 
   /* Arquivos no servidor, no lugar do Drive (19/09/2026). */

@@ -15,6 +15,7 @@ window.Gestor = (() => {
      abrir/fechar sem o app.js precisar saber de nada além de re-renderizar. */
   let _detalheId = null;
   let _ctx = null;
+  let _cvEquipe = null;   // { collabs, ano, comLanc } do último dashboard, para o modal CV da equipe
   function abrir(id)  { _detalheId = id;   _ctx?.onRebuild?.(); }
   /* Busca (20/09/2026): filtra os cartões na hora, sem ir ao servidor;
      abre a seção de desativados se algum deles bater. */
@@ -61,6 +62,8 @@ window.Gestor = (() => {
       const rsAno = (repAno   || []).filter(r => !r.deleted && (!r.kind || r.kind === 'received'));
       const ns = nsAno.filter(n => n.mes === mes);
       const rs = rsAno.filter(r => r.mes === mes);
+      /* para o modal "CV da equipe": quem entra na lista e quem movimentou no ano */
+      _cvEquipe = { collabs, ano, comLanc: new Set([...nsAno, ...rsAno].map(x => x.user_id)) };
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
 
       // KPIs do mês
@@ -88,7 +91,7 @@ window.Gestor = (() => {
         <div class="export-btns">
           <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">📗 Excel</button>
           <button class="btn btn-sm btn-primary" onclick="baixarRelatorioEquipe()">📕 PDF</button>
-          <button class="btn btn-sm btn-outline" onclick="baixarCvEquipe()" title="Planilha de C.V. no modelo da empresa, uma por colaborador (ZIP)">📗 CV da equipe ${ano}</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilha de C.V. no modelo da empresa: escolha os colaboradores">📗 CV da equipe ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
         </div>
@@ -382,6 +385,63 @@ window.Gestor = (() => {
     finally { setLoading(false); }
   }
 
+  /* ── Modal "CV da equipe" (21/09/2026) ────────────────────
+     Gestor marca quem entra e escolhe: um Excel só (abas Nome_RDM_RDA…) ou
+     um ZIP com a planilha completa de cada um. Quem não lançou nada no ano
+     começa desmarcado — a planilha sairia vazia. */
+  function abrirCvEquipe() {
+    if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
+    const { collabs, ano, comLanc } = _cvEquipe;
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay open';
+    ov.innerHTML = `
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-hd">
+          <h3>Planilha de C.V. · ${ano}</h3>
+          <button class="btn-close-modal">✕</button>
+        </div>
+        <div class="modal-bd">
+          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+            Marque quem entra. Quem não lançou nada em ${ano} começa desmarcado.
+          </p>
+          <div style="display:flex;gap:10px;font-size:12px;margin-bottom:8px">
+            <a href="#" id="cv-todos">marcar todos</a> · <a href="#" id="cv-nenhum">desmarcar todos</a>
+          </div>
+          <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">
+            ${collabs.map(c => `
+              <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer">
+                <input type="checkbox" class="cv-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
+                <span style="flex:1">${esc(c.nome || c.email)}</span>
+                ${comLanc.has(c.id) ? '' : '<span style="font-size:11px;color:var(--text2)">sem lançamento</span>'}
+              </label>`).join('')}
+          </div>
+          <p id="cv-qtd" style="font-size:12px;color:var(--text2);margin-top:8px"></p>
+        </div>
+        <div class="modal-ft" style="flex-wrap:wrap">
+          <button class="btn btn-outline" id="cv-zip" title="Um arquivo .xlsx completo por pessoa">🗜️ ZIP separado</button>
+          <button class="btn btn-primary" id="cv-unico" title="Um só .xlsx com as abas de cada pessoa">📗 Excel único</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.querySelector('.btn-close-modal').onclick = close;
+    const chks = () => [...ov.querySelectorAll('.cv-chk')];
+    const marcados = () => chks().filter(c => c.checked).map(c => c.value);
+    const atualizar = () => {
+      const n = marcados().length;
+      ov.querySelector('#cv-qtd').textContent = n ? `${n} colaborador${n > 1 ? 'es' : ''} selecionado${n > 1 ? 's' : ''} · uns ${Math.max(5, n * 5)} s para gerar` : 'Ninguém selecionado';
+      ov.querySelector('#cv-unico').disabled = ov.querySelector('#cv-zip').disabled = !n;
+    };
+    chks().forEach(c => c.onchange = atualizar);
+    ov.querySelector('#cv-todos').onclick  = e => { e.preventDefault(); chks().forEach(c => c.checked = true);  atualizar(); };
+    ov.querySelector('#cv-nenhum').onclick = e => { e.preventDefault(); chks().forEach(c => c.checked = false); atualizar(); };
+    atualizar();
+    const gerar = modo => { const ids = marcados(); close(); window.baixarCvEquipe(ids, modo); };
+    ov.querySelector('#cv-unico').onclick = () => gerar('unico');
+    ov.querySelector('#cv-zip').onclick   = () => gerar('zip');
+  }
+
   /* ── Modal edição de colaborador (admin only) ─────────── */
   function showEditModal(colab, sb, onSaved, currentUser) {
     const eu = currentUser || window.user || {};
@@ -518,5 +578,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe };
 })();

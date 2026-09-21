@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 190;
+const APP_BUILD = 191;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3274,11 +3274,14 @@ function baixarRelatorioEquipe() {
   return _baixarBlob(sb.relatorio.equipe(filAno, filMes), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
 }
 
-/* Planilhas de C.V. da equipe inteira (21/09/2026): ZIP com a planilha no
-   modelo da empresa de cada colaborador ativo que lançou algo no ano. */
-function baixarCvEquipe() {
+/* Planilha de C.V. de vários colaboradores (21/09/2026), escolhidos no modal
+   da Equipe (Gestor.abrirCvEquipe). modo 'unico' = um Excel com as abas de
+   cada um; 'zip' = um arquivo completo por pessoa. */
+function baixarCvEquipe(ids = [], modo = 'unico') {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar as planilhas', 'err'); return; }
-  return _baixarBlob(sb.relatorio.cvEquipe(filAno), `Planilhas_CV_Equipe_${filAno}.zip`, `Gerando a Planilha CV de cada colaborador (${filAno})… pode levar alguns minutos`);
+  const n = ids.length || 'todos os';
+  const nome = modo === 'zip' ? `Planilhas_CV_Equipe_${filAno}.zip` : `Planilha_CV_Equipe_${filAno}.xlsx`;
+  return _baixarBlob(sb.relatorio.cvEquipe(filAno, ids, modo), nome, `Gerando a Planilha CV de ${n} colaborador(es) · ${filAno}… uns 5 s por pessoa`);
 }
 
 /* Cópia íntegra do SQLite de produção (GET /backup/banco, só admin). O

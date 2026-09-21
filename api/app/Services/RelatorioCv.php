@@ -148,6 +148,69 @@ class RelatorioCv
     }
 
     /**
+     * Um arquivo só com a Planilha de C.V. de vários colaboradores (21/09/2026):
+     * as 4 abas com dados de cada um (CABEÇALHO, BANCO DE DADOS, RDM_RDA, CV
+     * REEMBOLSO) entram com o primeiro nome na frente — "Ana_RDM_RDA". NORMAS e
+     * AJUDA DE CUSTOS ficam de fora (são iguais para todos e não têm dado do app).
+     *
+     * O prefixo não tem espaço nem acento de propósito: ao renomear a aba a
+     * biblioteca troca o nome dentro das fórmulas (=CABEÇALHO!B5 vira
+     * =Ana_CABEÇALHO!B5) mas não põe as aspas que o Excel exige quando há
+     * espaço — com "Ana · CABEÇALHO" a fórmula quebrava. Limite do Excel: 31
+     * caracteres por aba; a maior das quatro tem 14, sobra 16 para o prefixo.
+     */
+    public function gerarUnico(iterable $colabs, int $ano): Spreadsheet
+    {
+        $master = new Spreadsheet();
+        $master->removeSheetByIndex(0);
+        $usados = [];
+        foreach ($colabs as $c) {
+            $prefixo = $this->prefixoAba($c->nome ?: $c->email, $usados);
+            $ss = $this->gerar($c, $ano);
+            foreach (['NORMAS', 'AJUDA DE CUSTOS'] as $t) {
+                if ($ws = $ss->getSheetByName($t)) {
+                    $ss->removeSheetByIndex($ss->getIndex($ws));
+                }
+            }
+            foreach ($ss->getAllSheets() as $ws) {
+                $ws->setTitle($prefixo.'_'.$ws->getTitle());   // atualiza as fórmulas que apontam para a aba
+            }
+            foreach ($ss->getAllSheets() as $ws) {
+                $master->addExternalSheet($ws);
+            }
+            $ss->disconnectWorksheets();
+            unset($ss);
+        }
+        $master->setActiveSheetIndex(0);
+
+        return $master;
+    }
+
+    /** Grava sem pré-calcular: com dezenas de abas o cálculo aqui demora e o Excel recalcula ao abrir. */
+    public function xlsxSemCalculo(Spreadsheet $ss, string $arquivo): void
+    {
+        $w = new Xlsx($ss);
+        $w->setPreCalculateFormulas(false);
+        $w->save($arquivo);
+    }
+
+    /** Primeiro nome sem acento/espaço, até 14 letras, único entre os já usados (Ana, Ana2, Ana3…). */
+    private function prefixoAba(string $nome, array &$usados): string
+    {
+        $primeiro = strtok(trim($nome), " \t@") ?: 'Colab';
+        $ascii = \Illuminate\Support\Str::ascii($primeiro);
+        $base = preg_replace('/[^A-Za-z0-9]/', '', $ascii) ?: 'Colab';
+        $base = mb_substr($base, 0, 14);
+        $p = $base;
+        for ($i = 2; isset($usados[$p]); $i++) {
+            $p = $base.$i;
+        }
+        $usados[$p] = true;
+
+        return $p;
+    }
+
+    /**
      * PDF: o Dompdf não dá conta das 3 abas de 712 linhas (mais de 2 min).
      * Para o PDF, então, os meses SEM lançamento saem da grade (removidos, não
      * só ocultos — o motor ainda os renderizaria) e as abas que ficaram vazias
