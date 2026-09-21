@@ -53,15 +53,21 @@ class ColaboradorController extends Controller
     {
         $u = $r->user();
         $alvo = Colaborador::findOrFail($id);
-        abort_unless($id === $u->id || $u->ehAdmin(), 403, 'Só o admin edita outros perfis');
+        /* admin edita tudo de todos; gestor edita só o REGIME (CV × RDM/RDA) dos
+           outros — decisão da reunião de 21/09/2026; cada um edita o próprio nome */
+        $soRegime = $id !== $u->id && ! $u->ehAdmin() && $u->gerencia();
+        abort_unless($id === $u->id || $u->ehAdmin() || $soRegime, 403, 'Só o admin edita outros perfis');
 
         $d = $r->validate([
             'nome' => ['sometimes', 'string', 'max:120'],
             'role' => ['sometimes', Rule::in(Colaborador::ROLES)],
             'nucleo' => ['sometimes', 'string', 'max:60'],
+            'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
         ]);
-        if (! $u->ehAdmin()) {
-            unset($d['role'], $d['nucleo']);      // colaborador não se promove
+        if ($soRegime) {
+            $d = array_intersect_key($d, ['regime' => 1]);
+        } elseif (! $u->ehAdmin()) {
+            unset($d['role'], $d['nucleo'], $d['regime']);      // colaborador não se promove nem muda o próprio regime
         }
         if (isset($d['nome'])) {
             $d['nome'] = trim($d['nome']);

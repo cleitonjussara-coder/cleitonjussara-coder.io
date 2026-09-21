@@ -149,7 +149,7 @@ window.Gestor = (() => {
                 <div class="colab-nome">${esc(m.nome||m.email)}</div>
                 <div class="colab-email">${esc(m.email)}</div>
               </div>
-              <span class="role-pill role-${m.role}">${m.role}</span>
+              <span class="role-pill role-${m.role}">${m.role}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
               ${m.exclusao_pedida_por ? `<span class="role-pill" style="background:#fde2e2;color:#9b1c1c" title="Exclusão pedida por ${esc(m.exclusao_pedida_por_nome||'')} — falta a 2ª confirmação">⏳ exclusão</span>` : ''}
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
               <span class="colab-seta">›</span>
@@ -274,12 +274,14 @@ window.Gestor = (() => {
           <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${esc(colab.foto_path||'')}" data-nome="${esc(colab.nome||colab.email)}" data-sub="${esc(colab.email)} · ${esc(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
           <div class="cdet-email">${esc(colab.email)}</div>
-          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${colab.nucleo ? `<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">📍 ${esc(colab.nucleo)}</span>` : ''}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}</div>
+          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>'}${colab.nucleo ? `<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">📍 ${esc(colab.nucleo)}</span>` : ''}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}</div>
         </div>
 
         <div class="cdet-acoes">
+          ${colab.regime === 'cv' ? `
           <button class="cdet-acao" onclick="baixarRelatorioCv('xlsx','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
-          <button class="cdet-acao" onclick="baixarRelatorioCv('pdf','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>
+          <button class="cdet-acao" onclick="baixarRelatorioCv('pdf','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
+          <button class="cdet-acao" onclick="Gestor.excelAnualColab('${colab.id}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Excel RDM/RDA</span><span class="cdet-acao-sub">anual ${ano}</span></button>`}
           <button class="cdet-acao" onclick="switchView('arquivos');setTimeout(()=>Arquivos.abrirColab('${colab.id}'),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>
           ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
@@ -375,9 +377,9 @@ window.Gestor = (() => {
      Antes de gerar Excel, PDF ou Planilha CV da equipe, o gestor marca quem
      entra. Quem não movimentou no período começa desmarcado (a saída ficaria
      vazia). botoes = [{ label, title, primario, modo }]; onGerar(ids, modo). */
-  function abrirSelecaoColabs({ titulo, dica, comLanc, etiqueta, segundos, botoes, onGerar }) {
+  function abrirSelecaoColabs({ titulo, dica, comLanc, etiqueta, segundos, botoes, onGerar, apenas = null }) {
     if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
-    const { collabs } = _cvEquipe;
+    const collabs = apenas || _cvEquipe.collabs;
     const ov = document.createElement('div');
     ov.className = 'modal-overlay open';
     ov.innerHTML = `
@@ -428,10 +430,13 @@ window.Gestor = (() => {
   /* Planilha de C.V. (modelo da empresa): Excel único com aba RESUMO ou ZIP. Base: quem lançou no ANO. */
   function abrirCvEquipe() {
     if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
-    const { ano, comLancAno } = _cvEquipe;
+    const { ano, comLancAno, collabs } = _cvEquipe;
+    const cvs = collabs.filter(c => c.regime === 'cv');
+    if (!cvs.length) { toast('Nenhum colaborador está no regime CV. Defina em Equipe → cartão → Editar → Regime.', 'err'); return; }
     abrirSelecaoColabs({
       titulo: `Planilha de C.V. · ${ano}`,
-      dica: `Marque quem entra. Quem não lançou nada em ${ano} começa desmarcado.`,
+      dica: `Só quem está no regime <b>CV (cartão corporativo)</b> aparece aqui. Quem não lançou nada em ${ano} começa desmarcado.`,
+      apenas: cvs,
       comLanc: comLancAno, etiqueta: 'sem lançamento no ano', segundos: 5,
       botoes: [
         { label: '🗜️ ZIP separado', title: 'Um arquivo .xlsx completo por pessoa (+ Resumo_Geral)', modo: 'zip' },
@@ -548,11 +553,27 @@ window.Gestor = (() => {
     };
   }
 
+  /* Excel anual RDM/RDA de outro colaborador (21/09/2026): usa as notas/repasses
+     da equipe que já estão neste aparelho (notasEquipe / repassesEquipe). */
+  async function excelAnualColab(id) {
+    const colab = _cvEquipe?.collabs.find(c => c.id === id) || (typeof equipePorId !== "undefined" ? equipePorId[id] : null);
+    if (!colab) { toast('Colaborador não encontrado', 'err'); return; }
+    const ano = _cvEquipe?.ano || new Date().getFullYear();
+    const ns = (typeof notasEquipe !== "undefined" ? notasEquipe : []).filter(n => n.user_id === id && !n.deleted);   // let global do app.js: visível aqui, mas não em window.*
+    const rs = (typeof repassesEquipe !== "undefined" ? repassesEquipe : []).filter(r => r.user_id === id && !r.deleted);
+    if (!ns.length && !rs.length) { toast(`Sem lançamentos de ${colab.nome || colab.email} neste aparelho`, 'err'); return; }
+    setLoading(true, 'Gerando o Excel anual…');
+    try { await Excel.exportarAnual(ano, ns, rs, colab); toast('Planilha gerada 📗'); }
+    catch (e) { toast('Planilha: ' + e.message, 'err'); }
+    finally { setLoading(false); }
+  }
+
   /* ── Modal edição de colaborador (admin only) ─────────── */
   function showEditModal(colab, sb, onSaved, currentUser) {
     const eu = currentUser || window.user || {};
     const ehAdmin = eu.role === 'admin';
     const souEu = colab.id === eu.id;
+    const podeRegime = !souEu && (ehAdmin || eu.role === 'gestor');   // gestor define só o regime dos outros
     const inativo = colab.ativo === false;
     const pedido = colab.exclusao_pedida_por;
     const pediEu = pedido && pedido === eu.id;
@@ -571,6 +592,12 @@ window.Gestor = (() => {
           <select class="inp" id="g-role" ${ehAdmin ? '' : 'disabled'}>
             ${ROLES.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${r}</option>`).join('')}
           </select>
+          <label class="lbl">Regime de despesas <span style="font-weight:400;color:var(--text2)">(reunião 21/09/2026)</span></label>
+          <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
+            <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
+            <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; reembolso do que sai do bolso; gera Planilha CV</option>
+          </select>
+          <p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
           ${souEu ? '' : `
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl">Situação</label>
@@ -597,7 +624,7 @@ window.Gestor = (() => {
         </div>
         <div class="modal-ft">
           <button class="btn btn-outline" id="g-cancel">Fechar</button>
-          ${ehAdmin ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
+          ${ehAdmin || podeRegime ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -611,7 +638,9 @@ window.Gestor = (() => {
     if (btnSave) btnSave.onclick = async () => {
       const nome   = ov.querySelector('#g-nome').value.trim();
       const role   = ov.querySelector('#g-role').value;
-      try { await sb.colaboradores.update(colab.id, { nome, role }); }
+      const regime = ov.querySelector('#g-regime')?.value;
+      const dados  = ehAdmin ? { nome, role, regime } : { regime };   // gestor: só o regime (o servidor também limita)
+      try { await sb.colaboradores.update(colab.id, dados); }
       catch (e) { alert('Erro: ' + e.message); return; }
       close(); onSaved();
     };
@@ -684,5 +713,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab };
 })();

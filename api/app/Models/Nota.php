@@ -12,6 +12,9 @@ class Nota extends Model
 
     public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Outros'];
 
+    /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; reembolso = do próprio bolso */
+    public const PAGAMENTOS = ['cv', 'reembolso'];
+
     /* Documento fiscal: cupom NFC-e, NF-e (XML/PDF), DANFE (NF-e impressa),
        NFS-e (serviço) ou outro comprovante (recibo). */
     public const DOCUMENTOS = ['nfce', 'nfe', 'danfe', 'nfse', 'outro'];
@@ -25,7 +28,7 @@ class Nota extends Model
     /* Tudo que o app manda no upsert. created_by/updated_by são preenchidos
        pelo controller (auditoria), nunca pelo cliente. */
     protected $fillable = [
-        'id', 'user_id', 'tipo', 'subtipo', 'cnpj', 'razao_social', 'valor',
+        'id', 'user_id', 'tipo', 'subtipo', 'pagamento', 'cnpj', 'razao_social', 'valor',
         'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie',
         'foto_path', 'qr_url', 'observacao', 'deleted', 'created_at',
     ];

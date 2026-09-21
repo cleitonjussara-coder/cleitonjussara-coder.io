@@ -76,7 +76,7 @@ class RelatorioController extends Controller
         } else {
             $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
             $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->unique());
+            $q->where('ativo', true)->where('regime', 'cv')->whereIn('id', $comNota->merge($comRep)->unique());   // só quem é CV tem Planilha CV (21/09/2026)
         }
         $colabs = $q->get();
         abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 196;
+const APP_BUILD = 197;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -703,6 +703,8 @@ function _ehGestorOuAdmin() {
 /* Papel Contabilidade (reunião de 21/09/2026): só VÊ e BAIXA — Equipe,
    cartões, relatórios, Arquivos. Não lança, não edita, não exclui. */
 function _ehContabilidade() { return user?.role === 'contabilidade'; }
+/* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
+function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 
@@ -1464,7 +1466,7 @@ function _notificacoes() {
       .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
       .forEach(r => out.push({
         id: r.id, tipo: 'pedido', rep: r,
-        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} pediu ${brl(r.valor)} (${r.tipo})`,
+        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} ${_ehCV(equipePorId[r.user_id]) ? 'registrou reembolso de' : 'pediu'} ${brl(r.valor)} (${r.tipo})`,
         sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
       }));
   }
@@ -1473,8 +1475,8 @@ function _notificacoes() {
   repasses.filter(r => _repasseEhPedido(r) && r.atendido_em && !vistos.has(r.id) && new Date(r.atendido_em).getTime() > lim)
     .forEach(r => out.push({
       id: r.id, tipo: 'atendido', rep: r,
-      titulo: `Seu pedido de ${brl(r.valor)} (${r.tipo}) foi pago ✅`,
-      sub: `Pedido de ${fmtDataBR(r.data)} · pago em ${fmtDataBR(String(r.atendido_em).slice(0, 10))}. O repasse recebido já foi registrado para você.`,
+      titulo: `Seu ${_ehCV() ? 'reembolso' : 'pedido'} de ${brl(r.valor)} (${r.tipo}) foi pago ✅`,
+      sub: `${_ehCV() ? 'Reembolso' : 'Pedido'} de ${fmtDataBR(r.data)} · pago em ${fmtDataBR(String(r.atendido_em).slice(0, 10))}. O ${_ehCV() ? 'reembolso' : 'repasse'} recebido já foi registrado para você.`,
     }));
   return out;
 }
@@ -1605,7 +1607,7 @@ function renderDespesas() {
         <span class="pnl-conteudo"><span class="pnl-ico">📝</span><span class="pnl-tit">Nota sem QR</span><span class="pnl-sub">Recibo, DANFE, NFS-e: foto ou arquivo.</span></span>
       </button>
       <button class="pnl pnl-mini" onclick="abrirFormRepasse()">
-        <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">Repasse</span><span class="pnl-sub">Recebido ou a pedir (PIX).</span></span>
+        <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span><span class="pnl-sub">${_ehCV() ? 'Pagou do bolso? Registre aqui; e o recebido.' : 'Recebido ou a pedir (PIX).'}</span></span>
       </button>
     </div>`}
 
@@ -1614,7 +1616,7 @@ function renderDespesas() {
       ${_ehContabilidade() ? '' : `
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
       <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">RDM/RDA e Planilhas</span><span class="ini-ir-sub">saldo e relatórios</span></button>`}
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_ehCV() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_ehCV() ? 'cartão, reembolsos e planilha' : 'saldo e relatórios'}</span></button>`}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">baixar relatórios</span></button>` : ''}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
@@ -1695,11 +1697,15 @@ function renderInicio() {
         <div class="ini-kpi-val">${A.ns.length}</div>
         <div class="ini-kpi-sub">${brl(A.gasto)} em despesas</div>
       </button>
-      <button class="ini-kpi ${pendTotal ? 'alerta' : ''}" onclick="${pendTotal ? "switchView('home')" : "switchView('saldo')"}">
-        <div class="ini-kpi-lbl">${pendTotal ? 'Pendências' : 'Saldo'}</div>
-        <div class="ini-kpi-val">${pendTotal ? pendTotal : brl(A.recebido - A.gasto)}</div>
-        <div class="ini-kpi-sub">${pendTotal ? esc(pendTxt) : 'recebido − gasto no mês'}</div>
-      </button>
+      ${(() => {   // CV (21/09/2026): em vez de saldo, o reembolso a receber no ano
+        if (pendTotal) return `<button class="ini-kpi alerta" onclick="switchView('home')"><div class="ini-kpi-lbl">Pendências</div><div class="ini-kpi-val">${pendTotal}</div><div class="ini-kpi-sub">${esc(pendTxt)}</div></button>`;
+        if (_ehCV()) {
+          const rsA = repasses.filter(r => !r.deleted && r.ano === filAno);
+          const aRec = rsA.filter(_repasseEhPedido).reduce((a, r) => a + Number(r.valor || 0), 0) - rsA.filter(_repasseEhRecebido).reduce((a, r) => a + Number(r.valor || 0), 0);
+          return `<button class="ini-kpi ${aRec > 0 ? 'alerta' : ''}" onclick="switchView('saldo')"><div class="ini-kpi-lbl">Reembolso a receber</div><div class="ini-kpi-val">${brl(aRec)}</div><div class="ini-kpi-sub">registrado − recebido em ${filAno}</div></button>`;
+        }
+        return `<button class="ini-kpi" onclick="switchView('saldo')"><div class="ini-kpi-lbl">Saldo</div><div class="ini-kpi-val">${brl(A.recebido - A.gasto)}</div><div class="ini-kpi-sub">recebido − gasto no mês</div></button>`;
+      })()}
     </div>`}
 
     <div class="ini-titulo">Ir para</div>
@@ -2911,11 +2917,12 @@ function renderSaldo() {
 
   const repHtml = rs.length ? rs.map(r => {
     const pedido = _repasseEhPedido(r);
-    const label = pedido ? 'Pedido' : 'Recebido';
-    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
+    const cvR = _ehCV();
+    const label = pedido ? (cvR ? 'Reembolso registrado' : 'Pedido') : (cvR ? 'Reembolso recebido' : 'Recebido');
+    const desc = esc(r.descricao || (pedido ? (cvR ? 'Reembolso a receber' : 'Pedido de repasse') : (cvR ? 'Reembolso recebido' : 'Repasse recebido')));
     const detail = pedido
-      ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅ — o recebido está registrado abaixo` : 'Solicitação pendente para o gestor')
-      : 'Registrado como repasse recebido';
+      ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅ — o recebido está registrado abaixo` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
+      : (cvR ? 'Abate dos reembolsos registrados' : 'Registrado como repasse recebido');
     return `
       <div class="rep-item">
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
@@ -2952,8 +2959,46 @@ function renderSaldo() {
   /* 21/09/2026 (reunião): a aba "Saldo" virou "RDM/RDA e Planilhas", com a
      seção "Baixar relatório" em destaque. Na fase 3 (enquadramento CV) os
      botões passam a depender do regime do colaborador. */
+  /* Fase 3 (21/09/2026) — regime CV: o cartão corporativo paga; o que circula
+     é reembolso. Cards: gasto no cartão (mês), do bolso, reembolsos. Só a
+     Planilha CV para baixar. RDM/RDA: os cards de sempre e só o Excel/CSV. */
+  const cv = _ehCV();
+  let cardsCV = '';
+  if (cv) {
+    const nsAno = notas.filter(n => !n.deleted && n.ano === filAno);
+    const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
+    const semReemb = n => n.pagamento !== 'reembolso';
+    const cartaoMes = soma(ns.filter(semReemb));
+    const bolsoMes = soma(ns.filter(n => n.pagamento === 'reembolso'));
+    const cartaoAno = soma(nsAno.filter(semReemb));
+    const rsAno = repasses.filter(r => !r.deleted && r.ano === filAno);
+    const regAno = soma(rsAno.filter(_repasseEhPedido));
+    const recAno = soma(rsAno.filter(_repasseEhRecebido));
+    const aReceber = regAno - recAno;
+    const cat = f => soma(ns.filter(n => semReemb(n) && f(n)));
+    cardsCV = `
+  <div class="saldo-grid">
+    <div class="saldo-card">
+      <div class="saldo-label">💳 Cartão corporativo · ${MESES[filMes-1]}</div>
+      <div class="saldo-val">${brl(cartaoMes)}</div>
+      <div class="saldo-detail"><span>No ano <b>${brl(cartaoAno)}</b></span><span>Do bolso no mês <b>${brl(bolsoMes)}</b></span></div>
+      <div class="sub-breakdown">
+        <div class="sub-row"><span>Alimentação (RDA)</span><span>${brl(cat(n => n.tipo === 'RDA'))}</span></div>
+        <div class="sub-row"><span>Abastecimento</span><span>${brl(cat(n => n.subtipo === 'Abastecimento'))}</span></div>
+        <div class="sub-row"><span>Hospedagens</span><span>${brl(cat(n => n.subtipo === 'Hospedagem'))}</span></div>
+        <div class="sub-row"><span>Outros</span><span>${brl(cat(n => n.tipo === 'RDM' && n.subtipo === 'Outros'))}</span></div>
+      </div>
+    </div>
+    <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
+      <div class="saldo-label">👛 Reembolsos · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
+      <div class="saldo-val">${brl(aReceber)}</div>
+      <div class="saldo-detail"><span>Registrados <b>${brl(regAno)}</b></span><span>Recebidos <b>${brl(recAno)}</b></span></div>
+      <div class="sub-breakdown"><div class="sub-row"><span>Notas pagas do bolso no ano</span><span>${brl(soma(nsAno.filter(n => n.pagamento === 'reembolso')))}</span></div></div>
+    </div>
+  </div>`;
+  }
   $('app-content').innerHTML = `
-  <div class="ini-ola" style="padding:4px 2px 6px"><h2>📊 RDM/RDA e Planilhas</h2><span>gasto, repasse e saldo por aba</span></div>
+  <div class="ini-ola" style="padding:4px 2px 6px"><h2>${cv ? '💳 C.V. e Planilha' : '📊 RDM/RDA e Planilhas'}</h2><span>${cv ? 'cartão corporativo e reembolsos' : 'gasto, repasse e saldo por aba'}</span></div>
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
@@ -2963,28 +3008,28 @@ function renderSaldo() {
   </div>
   <div class="db-card" style="gap:8px;padding:12px 14px">
     <div class="dash-card-title" style="margin:0">⬇️ Baixar relatório</div>
-    <div class="export-btns">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">RDM / RDA · ${filAno}:</span>
-      <button class="btn btn-sm btn-primary" onclick="exportExcel()">📗 Excel anual</button>
-      <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
-    </div>
-    <div class="export-btns">
+    ${cv ? `<div class="export-btns">
       <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa) · ${filAno}:</span>
       <button class="btn btn-sm btn-primary" onclick="baixarRelatorioCv('xlsx')">📗 Excel</button>
       <button class="btn btn-sm btn-outline" onclick="baixarRelatorioCv('pdf')">📕 PDF</button>
-    </div>
+      <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
+    </div>` : `<div class="export-btns">
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">RDM / RDA · ${filAno}:</span>
+      <button class="btn btn-sm btn-primary" onclick="exportExcel()">📗 Excel anual</button>
+      <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
+    </div>`}
   </div>
 
-  <div class="saldo-grid">
+  ${cv ? cardsCV : `<div class="saldo-grid">
     ${cardTipo('RDM', rdm)}
     ${cardTipo('RDA', rda)}
-  </div>
+  </div>`}
 
   <div class="section-hd">
-    <span>Repasses</span>
+    <span>${cv ? 'Reembolsos' : 'Repasses'}</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-      <button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">+ Registrar recebido</button>
-      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">Solicitar repasse</button>
+      <button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">${cv ? '+ Reembolso recebido' : '+ Registrar recebido'}</button>
+      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">${cv ? 'Registrar reembolso' : 'Solicitar repasse'}</button>
     </div>
   </div>
   <div class="rep-list">${repHtml}</div>`;
@@ -4284,6 +4329,10 @@ async function abrirFormNota(dados = {}) {
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
   $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
+  /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
+  { const donoId = dados.user_id || user?.id; const donoCV = donoId === user?.id ? _ehCV() : _ehCV(equipePorId[donoId]);
+    const g = $('nf-pagamento-group'); if (g) g.style.display = donoCV ? '' : 'none';
+    const p = $('nf-pagamento'); if (p) p.value = dados.pagamento || 'cv'; }
   _valorEditadoManual = false; _sugestaoPendente = null;
   { const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none'; }
   /* nota já com URL do QR e sem valor (ex.: importada antes do 141): busca o oficial */
@@ -5021,6 +5070,7 @@ async function _salvarNotaInterno() {
     id             : $('nf-id').value || undefined,
     tipo, valor, data, mes, ano,
     subtipo        : tipo==='RDM' ? $('nf-subtipo').value : null,
+    pagamento      : $('nf-pagamento-group')?.style.display !== 'none' ? ($('nf-pagamento')?.value || 'cv') : (_notaAtual?.pagamento || null),
     cnpj           : cnpjRaw || null,
     razao_social   : $('nf-razao').value.trim() || null,
     observacao     : $('nf-obs').value.trim()   || null,
@@ -5103,6 +5153,17 @@ async function _salvarNotaInterno() {
       semValor ? 'err' : 'ok');
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
+    /* CV pagou do bolso (21/09/2026): oferece registrar o reembolso na hora,
+       já com valor e justificativa — é o "pedido de repasse" da versão CV. */
+    if (payload.pagamento === 'reembolso' && !_idEdicao && ownerId === user?.id && valor > 0) {
+      setTimeout(() => {
+        if (confirm(`Você pagou ${brl(valor)} do próprio bolso.
+
+Registrar o REEMBOLSO agora (data, valor e justificativa já preenchidos)? O gestor recebe a notificação.`)) {
+          abrirFormRepasse('requested', { tipo, valor, data, descricao: 'Reembolso: ' + (payload.razao_social || (tipo === 'RDM' ? payload.subtipo : 'alimentação') || 'despesa') + (payload.numero ? ' · nº ' + payload.numero : '') });
+        }
+      }, 400);
+    }
   } finally { setLoading(false); }
 }
 
@@ -5207,16 +5268,22 @@ function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 let _repasseModo = 'received';
 
 function _repasseTitulo(modo) {
+  /* colaborador CV (21/09/2026): o dinheiro que circula é REEMBOLSO do que saiu do bolso */
+  if (_ehCV()) return modo === 'requested' ? 'Registrar reembolso (a receber)' : 'Registrar reembolso recebido';
   return modo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido';
 }
 
 function _repassePlaceholder(modo) {
+  if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: reembolso recebido do gestor';
   return modo === 'requested'
     ? 'Ex: combustível, hospedagem ou custo do mês'
     : 'Ex: repasse recebido do gestor';
 }
 
 function _repasseHelpText(modo) {
+  if (_ehCV()) return modo === 'requested'
+    ? 'O gestor recebe a notificação (e o e-mail). Quando marcar como pago, o reembolso recebido é registrado para você e abate deste valor.'
+    : 'Registra um reembolso que já caiu na sua conta; abate dos reembolsos registrados.';
   return modo === 'requested'
     ? 'Este pedido envia um e-mail ao gestor automaticamente e fica marcado como solicitação pendente.'
     : 'Este registro entra no saldo como repasse recebido e não gera e-mail.';
@@ -5235,11 +5302,11 @@ function _atualizarUiRepasse() {
   if (btnSalvar) btnSalvar.textContent = _repasseModo === 'requested' ? 'Salvar e enviar' : 'Salvar';
   if (btnReceived) {
     btnReceived.className = `btn btn-sm ${_repasseModo === 'received' ? 'btn-primary' : 'btn-outline'}`;
-    btnReceived.textContent = 'Registrar recebido';
+    btnReceived.textContent = _ehCV() ? 'Reembolso recebido' : 'Registrar recebido';
   }
   if (btnRequest) {
     btnRequest.className = `btn btn-sm ${_repasseModo === 'requested' ? 'btn-primary' : 'btn-outline'}`;
-    btnRequest.textContent = 'Solicitar repasse';
+    btnRequest.textContent = _ehCV() ? 'Registrar reembolso' : 'Solicitar repasse';
   }
   if (labelDesc) labelDesc.textContent = _repasseModo === 'requested' ? 'Custo / justificativa *' : 'Descrição';
   if (descInput) descInput.placeholder = _repassePlaceholder(_repasseModo);
@@ -5251,17 +5318,17 @@ function setRepasseModo(modo) {
   _atualizarUiRepasse();
 }
 
-function abrirFormRepasse(modo = 'received') {
+function abrirFormRepasse(modo = 'received', pre = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
   setRepasseModo(modo);
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
-  $('rep-tipo').value  = 'RDA';
-  $('rep-data').value  = hoje();
-  $('rep-valor').value = '';
-  $('rep-desc').value  = '';
-  $('rep-mes').value   = filMes;
-  $('rep-ano').value   = filAno;
+  $('rep-tipo').value  = pre?.tipo || 'RDA';
+  $('rep-data').value  = pre?.data || hoje();
+  $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';
+  $('rep-desc').value  = pre?.descricao || '';
+  $('rep-mes').value   = pre?.data ? Number(pre.data.slice(5, 7)) : filMes;
+  $('rep-ano').value   = pre?.data ? Number(pre.data.slice(0, 4)) : filAno;
   $('rep-overlay').style.display = 'flex';
 }
 function fecharFormRepasse() { $('rep-overlay').style.display = 'none'; }
@@ -5314,9 +5381,9 @@ async function _salvarRepasseInterno() {
   if (viewAtual === 'home') renderHome();
   else renderSaldo();
   if (kind === 'requested') {
-    toast(`Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
+    toast(_ehCV() ? `Reembolso ${tipo} de ${brl(valor)} registrado — o gestor foi notificado.` : `Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
   } else {
-    toast(`Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
+    toast(_ehCV() ? `Reembolso recebido ${tipo} de ${brl(valor)} registrado.` : `Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
   }
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});

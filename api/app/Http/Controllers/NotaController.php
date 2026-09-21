@@ -85,6 +85,7 @@ class NotaController extends Controller
             'user_id' => ['required', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
             'tipo' => ['required', Rule::in(Nota::TIPOS)],
             'subtipo' => ['nullable', Rule::in(Nota::SUBTIPOS)],
+            'pagamento' => ['nullable', Rule::in(Nota::PAGAMENTOS)],   // colaborador CV: cartão ou do bolso (21/09/2026)
             'cnpj' => ['nullable', 'string', 'max:14'],
             'razao_social' => ['nullable', 'string', 'max:255'],
             'valor' => ['required', 'numeric', 'min:0'],

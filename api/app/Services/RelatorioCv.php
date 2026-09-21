@@ -55,13 +55,27 @@ class RelatorioCv
         /* ── RDM_RDA e CV REEMBOLSO ────────────────────────── */
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->orderBy('data')->orderBy('created_at')->get();
-        /* CV REEMBOLSO tem a mesma grade e recebe os MESMOS lançamentos (RDA +
-           RDM unificados) — é dela que o BANCO DE DADOS tira o "REEMBOLSO DE"
-           (gastos − total pago). Confirmado pelo usuário em 19/09/2026. */
-        foreach (['RDM_RDA', 'CV REEMBOLSO'] as $aba) {
-            $ws = $ss->getSheetByName($aba);
-            if ($ws) {
-                $this->preencherGrade($ws, $notas);
+        /* Regime (reunião de 21/09/2026):
+           • CV (cartão corporativo): RDM_RDA ← notas pagas no cartão;
+             CV REEMBOLSO ← notas pagas do próprio bolso (pagamento=reembolso) —
+             é dela que o BANCO DE DADOS tira o "REEMBOLSO DE" (gastos − total pago).
+           • RDM/RDA (dinheiro em conta): como antes (19/09/2026) — as duas
+             grades recebem os MESMOS lançamentos. */
+        if ($c->ehCV()) {
+            $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
+            $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
+            if ($ws = $ss->getSheetByName('RDM_RDA')) {
+                $this->preencherGrade($ws, $noCartao);
+            }
+            if ($ws = $ss->getSheetByName('CV REEMBOLSO')) {
+                $this->preencherGrade($ws, $doBolso);
+            }
+        } else {
+            foreach (['RDM_RDA', 'CV REEMBOLSO'] as $aba) {
+                $ws = $ss->getSheetByName($aba);
+                if ($ws) {
+                    $this->preencherGrade($ws, $notas);
+                }
             }
         }
 
@@ -69,18 +83,22 @@ class RelatorioCv
         $bd = $ss->getSheetByName('BANCO DE DADOS');
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where('kind', 'received')->orderBy('data')->get();
-        /* Repasse RECEBIDO registrado no app entra nas duas colunas do modelo
-           (confirmado em 19/09/2026): "EXTRATO DE VALOR RECEBIDO" (B/C), que
-           alimenta o saldo de C.V., e "REEMBOLSO DE / TOTAL PAGO" (I/J), que
-           alimenta o "REEMBOLSO DE:" (gastos do CV REEMBOLSO − pago). */
+        /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
+           "EXTRATO DE VALOR RECEBIDO" (B/C), que alimenta o saldo de C.V., e
+           "REEMBOLSO DE / TOTAL PAGO" (I/J).
+           CV (21/09/2026): o colaborador não recebe dinheiro para despesas (o
+           cartão paga); o que ele recebe é REEMBOLSO do que saiu do bolso →
+           só TOTAL PAGO (I/J). O extrato B/C fica vazio. */
         $row = 15;
         foreach ($reps as $r) {
             if ($row > 94) {
                 break;
             }
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
-            $bd->setCellValue([2, $row], $dt);
-            $bd->setCellValue([3, $row], (float) $r->valor);
+            if (! $c->ehCV()) {
+                $bd->setCellValue([2, $row], $dt);
+                $bd->setCellValue([3, $row], (float) $r->valor);
+            }
             $bd->setCellValue([9, $row], $dt);
             $bd->setCellValue([10, $row], (float) $r->valor);
             $row++;

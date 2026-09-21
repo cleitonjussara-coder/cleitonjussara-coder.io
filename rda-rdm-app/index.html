@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=196">
+  <link rel="manifest" href="manifest.json?v=197">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1335,7 +1335,7 @@ body{font-size:16.5px}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=196" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=197" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1547,6 +1547,14 @@ body{font-size:16.5px}
           <option>Outros</option>
         </select>
       </div>
+    </div>
+    <!-- colaborador CV (21/09/2026): como a despesa foi paga -->
+    <div class="field" id="nf-pagamento-group" style="display:none">
+      <label class="lbl">Pagamento *</label>
+      <select class="inp" id="nf-pagamento">
+        <option value="cv">💳 Cartão corporativo (C.V.)</option>
+        <option value="reembolso">👛 Do meu bolso — pedir reembolso</option>
+      </select>
     </div>
 
     <div class="field">
@@ -1795,6 +1803,14 @@ body{font-size:16.5px}
     </div>
 
     <div class="ajuda-sec">
+      <h4>💳 Regime CV × RDM/RDA (reunião de 21/09/2026)</h4>
+      <p>Cada colaborador está em um <b>regime</b>, definido pelo gestor/admin em <b>Equipe → cartão → Editar → Regime de despesas</b>:</p>
+      <ul>
+        <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo, <b>Excel RDM/RDA</b> anual e CSV.</li>
+        <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? O app oferece na hora <b>Registrar reembolso</b> (data, valor e justificativa já preenchidos) — é o pedido da versão CV, e o gestor recebe a notificação. Quando o gestor marca como pago, o <b>Reembolso recebido</b> é registrado sozinho e <b>abate</b> do que foi registrado.</li>
+      </ul>
+      <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>reembolsos</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = reembolsos recebidos. O Início mostra "Reembolso a receber" em vez de saldo.</p>
+      <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV, <b>Excel RDM/RDA</b> anual para os demais. <b>📗 CV da equipe</b> lista só quem é CV.</p>
       <h4>🔔 Notificações e pedido de repasse pago</h4>
       <p>O <b>🔔 sininho</b> no canto superior esquerdo mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
       <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado: o app grava o <b>repasse recebido</b> para o colaborador na mesma hora e o pedido sai das pendências (e do quadro do PDF). <b>👤 Ver colaborador</b> abre o cartão dele.</p>
@@ -2061,25 +2077,25 @@ body{font-size:16.5px}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=196"></script>
-<script defer src="js/db.js?v=196"></script>
-<script defer src="js/nfce.js?v=196"></script>
-<script defer src="js/sefaz.js?v=196"></script>
-<script defer src="js/brasilapi.js?v=196"></script>
-<script defer src="js/ocr.js?v=196"></script>
-<script defer src="js/recorte.js?v=196"></script>
-<script defer src="js/excel.js?v=196"></script>
-<script defer src="js/gestor.js?v=196"></script>
-<script defer src="js/frota.js?v=196"></script>
-<script defer src="js/ponto.js?v=196"></script>
-<script defer src="js/arquivos.js?v=196"></script>
-<script defer src="js/gdrive.js?v=196"></script>
-<script defer src="js/app.js?v=196"></script>
+<script defer src="js/api.js?v=197"></script>
+<script defer src="js/db.js?v=197"></script>
+<script defer src="js/nfce.js?v=197"></script>
+<script defer src="js/sefaz.js?v=197"></script>
+<script defer src="js/brasilapi.js?v=197"></script>
+<script defer src="js/ocr.js?v=197"></script>
+<script defer src="js/recorte.js?v=197"></script>
+<script defer src="js/excel.js?v=197"></script>
+<script defer src="js/gestor.js?v=197"></script>
+<script defer src="js/frota.js?v=197"></script>
+<script defer src="js/ponto.js?v=197"></script>
+<script defer src="js/arquivos.js?v=197"></script>
+<script defer src="js/gdrive.js?v=197"></script>
+<script defer src="js/app.js?v=197"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=196').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=197').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
