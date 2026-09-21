@@ -28,14 +28,27 @@ class AuthController extends Controller
             'nome' => ['nullable', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', 'unique:colaboradores,email'],
             'password' => ['required', 'string', 'min:6', 'max:200'],
+            'convite' => ['nullable', 'string', 'max:64'],   // link do gestor (21/09/2026): define o papel
         ]);
+
+        /* Com convite, o papel vem do convite (contabilidade, p.ex.) e o
+           convite é queimado; a validade é conferida ANTES de criar a conta. */
+        $convite = null;
+        if (! empty($d['convite'])) {
+            $convite = \App\Models\Convite::where('token', $d['convite'])->first();
+            abort_unless($convite && $convite->valido(), 422, 'Convite inválido, usado ou vencido — peça outro ao gestor');
+        }
 
         $user = Colaborador::create([
             'id' => (string) Str::uuid(),
             'nome' => trim($d['nome'] ?? '') ?: Str::before($d['email'], '@'),
             'email' => strtolower($d['email']),
             'password' => $d['password'],
+            'role' => $convite?->role ?? 'colaborador',
         ]);
+        if ($convite) {
+            ConviteController::consumir($convite->token, $user);
+        }
 
         return $this->sessao($user, 201);
     }

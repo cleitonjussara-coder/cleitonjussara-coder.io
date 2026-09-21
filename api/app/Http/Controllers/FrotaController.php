@@ -36,7 +36,7 @@ class FrotaController extends Controller
     public function veiculoUpsert(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_unless($u->veTudo(), 403, 'Só gestor/admin cadastram veículos');
+        abort_unless($u->gerencia(), 403, 'Só gestor/admin cadastram veículos');
         $r->merge(['placa' => strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $r->input('placa')))]);
         $d = $r->validate([
             'placa' => ['required', 'string', 'min:7', 'max:10', Rule::unique('veiculos', 'placa')->ignore($id)],

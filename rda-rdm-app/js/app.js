@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 195;
+const APP_BUILD = 196;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -587,6 +587,15 @@ async function init() {
         _recuperacao = boot.recovery;
         _recuperandoSenha = true;
         showTela('auth'); renderAuth('nova-senha');
+      } else if (boot.convite && !(sb.auth.isLogged() && boot.user)) {
+        /* veio do link de convite do gestor: cadastro já com o papel */
+        showTela('auth');
+        try {
+          const c = await sb.convites.ver(boot.convite);
+          if (c.valido) { _convite = { token: boot.convite, ...c }; renderAuth('reg'); }
+          else { renderAuth('reg'); toast(c.motivo || 'Convite inválido', 'err'); }
+        } catch (_) { renderAuth('reg'); toast('Não consegui conferir o convite — tente de novo com internet', 'err'); }
+        try { const q = new URLSearchParams(location.search); q.delete('convite'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '')); } catch (_) {}
       } else if (sb.auth.isLogged() && boot.user) {
         await onLogin(boot.user);
       } else {
@@ -644,7 +653,9 @@ async function onLogin(authUser) {
     // perfil em cache → app abre na hora; sem cache, usa padrão
     let perfil = null;
     try { perfil = JSON.parse(localStorage.getItem('perfil_' + authUser.id) || 'null'); } catch (_) {}
-    user = perfil || { id:authUser.id, email:authUser.email, nome:'', role:'colaborador', nucleo:'Cristalina' };
+    /* sem cache: aproveita o que o login/cadastro já devolveu (papel incluso —
+       o Início e o hub Despesas mudam conforme o papel, 21/09/2026) */
+    user = perfil || { id:authUser.id, email:authUser.email, nome:authUser.nome||'', role:authUser.role||'colaborador', nucleo:authUser.nucleo||'Cristalina', foto_path:authUser.foto_path||null };
     DB.setupAutoSync(sb, () => user?.id);
     _driveAutomatico();                       // perfil em cache já diz se é gestor/admin
     await carregarDadosLocais();
@@ -662,7 +673,7 @@ async function onLogin(authUser) {
           try { localStorage.setItem('perfil_' + authUser.id, JSON.stringify(data)); } catch (_) {}
           if (mudou) {
             showTela('app');                       // atualiza menu Equipe conforme o cargo
-            if (viewAtual === 'perfil') renderPerfil();
+            if (['perfil', 'inicio', 'despesas'].includes(viewAtual)) switchView(viewAtual);   // telas que dependem do papel/foto
           }
           _maybeAutoConsolidarFotos();             // papel de gestor confirmado → tenta organizar (se Drive já conectado)
           _driveAutomatico();                      // ...e conecta o Drive se ainda não estiver
@@ -689,6 +700,11 @@ function _avisarFalhaAnexo(qtd, motivo) {
 function _ehGestorOuAdmin() {
   return user?.role === 'gestor' || user?.role === 'admin';
 }
+/* Papel Contabilidade (reunião de 21/09/2026): só VÊ e BAIXA — Equipe,
+   cartões, relatórios, Arquivos. Não lança, não edita, não exclui. */
+function _ehContabilidade() { return user?.role === 'contabilidade'; }
+/* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
+function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 
 function _ehNotaDeOutroUsuario(n) {
   return !!n?.user_id && !!user?.id && n.user_id !== user.id;
@@ -708,7 +724,7 @@ async function carregarDadosLocais() {
   notas = notasLocais;
   repasses = repassesLocais;
 
-  if (_ehGestorOuAdmin() && sb && !DEMO_MODE) {
+  if (_veEquipe() && sb && !DEMO_MODE) {
     try {
       /* Sem recorte por núcleo: gestor e admin veem TODOS os colaboradores.
          É o que a policy `notas_sel` já permite, o que o comentário do
@@ -740,6 +756,8 @@ async function carregarDadosLocais() {
     }
   }
 
+  atualizarNotificacoes().catch(() => {});
+
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
     _reparoAnexosFeito = true;
@@ -756,10 +774,11 @@ function showTela(t) {
   const authEl = $('auth-screen');
   const appEl  = $('app-screen');
   if (authEl) authEl.style.display = t === 'auth' ? 'flex' : 'none';
+  { const sino = $('hdr-sino'); if (sino && t !== 'app') sino.style.display = 'none'; }
   if (appEl)  appEl.style.display  = t === 'app'  ? 'flex' : 'none';
   if (t==='app') {
     const navEq = $('nav-equipe');
-    if (navEq) navEq.style.display = (user?.role==='gestor'||user?.role==='admin') ? 'flex' : 'none';
+    if (navEq) navEq.style.display = _veEquipe() ? 'flex' : 'none';
     syncBadge(false);
   }
 }
@@ -915,6 +934,10 @@ async function diagnosticoInstalacao() {
    prioridade sobre qualquer outra (init() e o listener da API respeitam). */
 let _recuperandoSenha = false;
 let _recuperacao = null;          // { token, email } lidos da URL por API.auth.init()
+/* Convite por link (21/09/2026): token lido da URL (?convite=…) e os dados
+   que o servidor devolveu (papel, nome sugerido, quem convidou). */
+let _convite = null;              // { token, role, nome, gestor }
+const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
 function _limparUrlRecuperacao() {
   _recuperandoSenha = false;
   _recuperacao = null;
@@ -1036,12 +1059,12 @@ function renderAuth(mode='login') {
     <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
     ${rodape}
   ` : `
-    <h2 class="auth-title">Criar conta</h2>
-    ${_botoesSociais()}
-    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words">
+    <h2 class="auth-title">${_convite ? 'Aceitar convite' : 'Criar conta'}</h2>
+    ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : _botoesSociais()}
+    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${esc(_convite?.nome || '')}">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
-    <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
+    <button class="btn btn-primary btn-full" onclick="register()">${_convite ? 'Aceitar e criar conta' : 'Criar conta'}</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
       <hr class="auth-hr">
@@ -1156,9 +1179,10 @@ async function register() {
   /* A API cria o perfil e já devolve o token: entra direto, sem e-mail de
      confirmação (era exigência do Supabase, não do app). */
   let criado;
-  try { criado = await sb.auth.register({ nome, email, password:pass }); }
+  try { criado = await sb.auth.register({ nome, email, password:pass, convite: _convite?.token }); }
   catch (e) { setLoading(false); toast(e.message,'err'); return; }
-  toast('Conta criada! Bem-vindo(a).');
+  toast(_convite ? `Conta criada como ${PAPEL_NOME[_convite.role] || _convite.role}! Bem-vindo(a).` : 'Conta criada! Bem-vindo(a).');
+  _convite = null;
   if (criado && _telaAtual !== 'app') await onLogin(criado);
   setLoading(false);
 }
@@ -1413,6 +1437,107 @@ function _instalarPuxarParaAtualizar() {
   el.addEventListener('touchcancel', soltar, { passive: true });
 }
 
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICAÇÕES NO APP (reunião de 21/09/2026)
+   • gestor/admin: pedidos de repasse PENDENTES (kind=requested, sem
+     atendido_em) de toda a equipe — botão "Marcar como pago" chama
+     PATCH /repasses/{id}/atendido; o servidor cria o repasse recebido.
+   • colaborador: os SEUS pedidos que o gestor marcou como pagos e você
+     ainda não viu (ids "vistos" ficam no aparelho).
+   O número aparece no sininho do topo e no ícone do app (Badging API:
+   Android direto; iOS só com o app instalado na tela inicial).
+═══════════════════════════════════════════════════════════ */
+let repassesEquipe = [];   // gestor/admin/contabilidade: repasses de todos (do store local)
+const K_NOTIF_VISTOS = 'notif_vistos_v1';
+function _notifVistos() { try { return new Set(JSON.parse(localStorage.getItem(K_NOTIF_VISTOS) || '[]')); } catch (_) { return new Set(); } }
+function _notifMarcarVistos(ids) {
+  try { const s = _notifVistos(); ids.forEach(i => s.add(i)); localStorage.setItem(K_NOTIF_VISTOS, JSON.stringify([...s].slice(-300))); } catch (_) {}
+}
+function _repassePendente(r) { return _repasseEhPedido(r) && !r.atendido_em && !r.deleted; }
+
+/* lista de notificações do usuário atual */
+function _notificacoes() {
+  if (!user) return [];
+  const out = [];
+  if (_ehGestorOuAdmin()) {
+    repassesEquipe.filter(_repassePendente)
+      .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
+      .forEach(r => out.push({
+        id: r.id, tipo: 'pedido', rep: r,
+        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} pediu ${brl(r.valor)} (${r.tipo})`,
+        sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
+      }));
+  }
+  const vistos = _notifVistos();
+  const lim = Date.now() - 30 * 86400_000;
+  repasses.filter(r => _repasseEhPedido(r) && r.atendido_em && !vistos.has(r.id) && new Date(r.atendido_em).getTime() > lim)
+    .forEach(r => out.push({
+      id: r.id, tipo: 'atendido', rep: r,
+      titulo: `Seu pedido de ${brl(r.valor)} (${r.tipo}) foi pago ✅`,
+      sub: `Pedido de ${fmtDataBR(r.data)} · pago em ${fmtDataBR(String(r.atendido_em).slice(0, 10))}. O repasse recebido já foi registrado para você.`,
+    }));
+  return out;
+}
+function fmtDataBR(d) { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; }
+
+async function atualizarNotificacoes() {
+  if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
+  const n = _notificacoes().length;
+  const sino = $('hdr-sino'), num = $('hdr-sino-num');
+  if (sino) { sino.style.display = user ? '' : 'none'; sino.classList.toggle('tem', n > 0); }
+  if (num) { num.textContent = n > 99 ? '99+' : String(n); num.style.display = n ? '' : 'none'; }
+  try {   // número no ícone do app (só com o app instalado)
+    if (n > 0 && navigator.setAppBadge) await navigator.setAppBadge(n);
+    else if (navigator.clearAppBadge) await navigator.clearAppBadge();
+  } catch (_) {}
+  return n;
+}
+
+function abrirNotificacoes() {
+  const itens = _notificacoes();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'notif-overlay';
+  const html = itens.length ? itens.map(it => `
+    <div class="notif-item ${it.tipo}">
+      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : '✅'}</div>
+      <div class="notif-txt">
+        <div class="notif-tit">${esc(it.titulo)}</div>
+        <div class="notif-sub">${esc(it.sub)}</div>
+        ${it.tipo === 'pedido' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" onclick="marcarPedidoPago('${it.id}', this)">✅ Marcar como pago</button>
+          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.rep.user_id}'), 400)">👤 Ver colaborador</button>` : ''}
+        </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button></div>`}
+      </div>
+    </div>`).join('') : '<div class="empty-state" style="padding:24px 8px">Nenhuma notificação. 🎉</div>';
+  ov.innerHTML = `
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3>🔔 Notificações${itens.length ? ` (${itens.length})` : ''}</h3><button class="btn-close-modal" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
+      <div class="modal-bd" style="max-height:65vh;overflow:auto">${html}</div>
+      ${itens.some(i => i.tipo === 'atendido') ? `<div class="modal-ft"><button class="btn btn-outline" onclick="dispensarTodasNotificacoes()">Marcar todas como vistas</button></div>` : ''}
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+async function marcarPedidoPago(id, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
+  const r = repassesEquipe.find(x => x.id === id);
+  const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
+  if (!confirm(`Confirmar que o repasse de ${brl(r?.valor || 0)} para ${quem} foi PAGO?\n\nO app registra o repasse recebido para ${quem} e o pedido sai das pendências.`)) return;
+  if (btn) btn.disabled = true;
+  try {
+    await sb.repasses.atendido(id);
+    toast('Pedido marcado como pago ✅');
+    if (sb && user) await DB.sync(sb, user.id).catch(() => {});
+    await carregarDadosLocais();
+    document.getElementById('notif-overlay')?.remove();
+    abrirNotificacoes();
+    if (viewAtual === 'equipe') renderEquipe();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+function dispensarNotificacao(id) { _notifMarcarVistos([id]); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); abrirNotificacoes(); }
+function dispensarTodasNotificacoes() { _notifMarcarVistos(_notificacoes().filter(i => i.tipo === 'atendido').map(i => i.id)); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); }
+
 function switchView(v) {
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
@@ -1465,6 +1590,8 @@ function renderDespesas() {
       <span>Notas RDA / RDM, repasses, painel e saldo</span>
     </div>
 
+    ${_ehContabilidade() ? `
+    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     <div class="ini-titulo">O que você quer lançar?</div>
     <button class="pnl pnl-grande" onclick="iniciarQR()">
       <span class="pnl-conteudo">
@@ -1480,15 +1607,16 @@ function renderDespesas() {
       <button class="pnl pnl-mini" onclick="abrirFormRepasse()">
         <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">Repasse</span><span class="pnl-sub">Recebido ou a pedir (PIX).</span></span>
       </button>
-    </div>
+    </div>`}
 
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
+      ${_ehContabilidade() ? '' : `
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
       <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">RDM/RDA e Planilhas</span><span class="ini-ir-sub">saldo e relatórios</span></button>
-      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">notas de todos</span></button>` : ''}
-      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">RDM/RDA e Planilhas</span><span class="ini-ir-sub">saldo e relatórios</span></button>`}
+      ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">baixar relatórios</span></button>` : ''}
+      ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
   </div>`;
 }
@@ -1546,7 +1674,7 @@ function renderInicio() {
       <span class="pnl-conteudo">
         <span class="pnl-ico">🧾</span>
         <span class="pnl-tit">Petermann – Despesas</span>
-        <span class="pnl-sub">Lançar nota e repasse · Painel · Minhas notas · RDM/RDA e Planilhas${_ehGestorOuAdmin() ? " · Equipe · Arquivos" : ""}.</span>
+        <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota e repasse · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
       </span>
     </button>
     <div class="pnl-linha">
@@ -1559,6 +1687,7 @@ function renderInicio() {
       </button>` : ''}
     </div>
 
+    ${_ehContabilidade() ? '' : `
     <div class="ini-titulo">${MESES[filMes-1]} ${filAno}</div>
     <div class="ini-resumo">
       <button class="ini-kpi" onclick="irParaNotas()">
@@ -1571,7 +1700,7 @@ function renderInicio() {
         <div class="ini-kpi-val">${pendTotal ? pendTotal : brl(A.recebido - A.gasto)}</div>
         <div class="ini-kpi-sub">${pendTotal ? esc(pendTxt) : 'recebido − gasto no mês'}</div>
       </button>
-    </div>
+    </div>`}
 
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
@@ -1580,7 +1709,7 @@ function renderInicio() {
 
     <button class="btn btn-danger-outline btn-full" style="margin-top:6px;min-height:48px" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair da conta</button>
 
-    ${ultimas.length ? `
+    ${_ehContabilidade() ? '' : ultimas.length ? `
     <div class="ini-titulo">Últimos lançamentos</div>
     <div class="notas-list">${ultimas.map(n => cardNotaHTML(n, 'inithumb-')).join('')}</div>` : `
     <div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Lançar nota pelo QR Code</b> e aponte para o QR do cupom — é o jeito mais rápido.</div>`}
@@ -2785,7 +2914,7 @@ function renderSaldo() {
     const label = pedido ? 'Pedido' : 'Recebido';
     const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
     const detail = pedido
-      ? 'Solicitação pendente para o gestor'
+      ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅ — o recebido está registrado abaixo` : 'Solicitação pendente para o gestor')
       : 'Registrado como repasse recebido';
     return `
       <div class="rep-item">
@@ -5071,7 +5200,7 @@ function fecharFotoViewer() {
 }
 
 /* ── Ajuda / Como usar ───────────────────────────────────── */
-function abrirAjuda()  { document.querySelectorAll('.ajuda-gestor').forEach(e => { e.style.display = _ehGestorOuAdmin() ? '' : 'none'; }); $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
+function abrirAjuda()  { document.querySelectorAll('.ajuda-gestor').forEach(e => { e.style.display = _veEquipe() ? '' : 'none'; }); $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
 function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */

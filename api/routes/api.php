@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CnpjController;
 use App\Http\Controllers\ColaboradorController;
+use App\Http\Controllers\ConviteController;
 use App\Http\Controllers\FotoController;
 use App\Http\Controllers\FrotaController;
 use App\Http\Controllers\NotaController;
@@ -30,6 +31,7 @@ Route::get('/ping', fn () => [
 /* ── sem token ─────────────────────────────────────────────── */
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+    Route::get('/convites/{token}', [ConviteController::class, 'ver'])->middleware('throttle:30,1');   // público: a tela de cadastro mostra o convite
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
     Route::post('/forgot', [AuthController::class, 'forgot'])->middleware('throttle:5,1');
     Route::post('/reset', [AuthController::class, 'reset'])->middleware('throttle:10,1');
@@ -49,6 +51,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/me/foto', [AuthController::class, 'removerFotoPerfil']);
 
     Route::get('/colaboradores', [ColaboradorController::class, 'index']);
+    Route::post('/convites', [ConviteController::class, 'criar']);
+    Route::get('/convites', [ConviteController::class, 'lista']);
     Route::get('/colaboradores/{id}', [ColaboradorController::class, 'show']);
     Route::patch('/colaboradores/{id}', [ColaboradorController::class, 'update']);
     /* desativar / excluir colaborador (20/09/2026) */
@@ -67,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/repasses', [RepasseController::class, 'index']);
     Route::put('/repasses/{id}', [RepasseController::class, 'upsert']);
+    Route::patch('/repasses/{id}/atendido', [RepasseController::class, 'atendido']);   // gestor marca pedido como pago (21/09/2026)
 
     Route::post('/fotos/urls', [FotoController::class, 'urls']);
 

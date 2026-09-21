@@ -53,7 +53,7 @@ class RelatorioEquipePdf
                 'notas' => $ns->count(), 'rdm' => $rdm, 'rda' => $rda, 'gasto' => $rdm + $rda, 'rec' => $rec,
                 'semFoto' => $ns->filter(fn ($n) => ! $n->foto_path)->count(),
                 'semValor' => $ns->filter(fn ($n) => (float) $n->valor <= 0)->count(),
-                'pend' => $rs->reject($recebido)->count(),
+                'pend' => $rs->reject($recebido)->filter(fn ($r) => ! $r->atendido_em)->count(),   // pedido já pago não é pendência (21/09/2026)
             ];
             foreach (['notas', 'rdm', 'rda', 'gasto', 'rec', 'semFoto', 'semValor', 'pend'] as $k) {
                 $tot[$k] += $l[$k];

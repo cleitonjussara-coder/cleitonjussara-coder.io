@@ -75,7 +75,7 @@ class ColaboradorController extends Controller
     public function ativo(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_unless($u->veTudo(), 403, 'Só gestor ou admin desativa colaborador');
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin desativa colaborador');
         abort_if($id === $u->id, 422, 'Você não pode desativar a si mesmo');
         $alvo = Colaborador::findOrFail($id);
         $d = $r->validate(['ativo' => ['required', 'boolean']]);
@@ -98,7 +98,7 @@ class ColaboradorController extends Controller
     public function excluir(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_unless($u->veTudo(), 403, 'Só gestor ou admin exclui colaborador');
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin exclui colaborador');
         abort_if($id === $u->id, 422, 'Você não pode excluir a si mesmo');
         $alvo = Colaborador::findOrFail($id);
         /* sem digitar e-mail (pedido do usuário 20/09): a proteção é a
@@ -147,7 +147,7 @@ class ColaboradorController extends Controller
     public function cancelarExclusao(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_unless($u->veTudo(), 403);
+        abort_unless($u->gerencia(), 403);
         $alvo = Colaborador::findOrFail($id);
         $alvo->forceFill(['exclusao_pedida_por' => null, 'exclusao_pedida_em' => null])->save();
         Log::info('exclusão de colaborador CANCELADA', ['alvo' => $alvo->email, 'por' => $u->email]);

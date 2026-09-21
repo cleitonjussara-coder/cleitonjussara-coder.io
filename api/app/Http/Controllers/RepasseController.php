@@ -6,6 +6,7 @@ use App\Models\Repasse;
 use App\Services\RepasseEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -13,6 +14,9 @@ use Illuminate\Validation\Rule;
  *   ver     → dono, ou gestor/admin
  *   inserir → só o dono
  *   editar  → dono, ou admin
+ *   atender → gestor/admin marca o PEDIDO como pago (21/09/2026): grava
+ *             atendido_em/por no pedido e cria o repasse RECEBIDO do
+ *             colaborador (pedido_id aponta para o pedido).
  */
 class RepasseController extends Controller
 {
@@ -71,6 +75,7 @@ class RepasseController extends Controller
         $d['kind'] = $d['kind'] ?? 'received';
         $d['deleted'] = (bool) ($d['deleted'] ?? false);
 
+        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança repasses');
         $rep = Repasse::find($id);
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->ehAdmin(), 403, 'Sem permissão para este repasse');
@@ -86,5 +91,39 @@ class RepasseController extends Controller
         $this->email->enviarSePreciso($rep);
 
         return response()->json($rep->fresh());
+    }
+
+    /** PATCH /repasses/{id}/atendido — gestor/admin. Idempotente: pedido já atendido devolve o que existe. */
+    public function atendido(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin marca o pedido como pago');
+        $pedido = Repasse::findOrFail($id);
+        abort_if($pedido->deleted, 404, 'Pedido excluído');
+        abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+
+        if ($pedido->atendido_em) {
+            $recebido = Repasse::where('pedido_id', $pedido->id)->where('deleted', false)->first();
+
+            return response()->json(['pedido' => $pedido, 'recebido' => $recebido, 'ja_estava' => true]);
+        }
+
+        $hoje = now('America/Sao_Paulo');
+        $recebido = new Repasse([
+            'id' => (string) Str::uuid(),
+            'user_id' => $pedido->user_id,
+            'tipo' => $pedido->tipo,
+            'valor' => (float) $pedido->valor,
+            'data' => $hoje->format('Y-m-d'),
+            'mes' => (int) $hoje->format('n'),
+            'ano' => (int) $hoje->format('Y'),
+            'descricao' => 'Repasse do pedido de '.$pedido->data->format('d/m/Y').($pedido->descricao ? ' — '.$pedido->descricao : ''),
+            'kind' => 'received',
+            'deleted' => false,
+        ]);
+        $recebido->forceFill(['pedido_id' => $pedido->id])->save();
+        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
+
+        return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
     }
 }

@@ -275,6 +275,7 @@ class NotaController extends Controller
 
     private function podeGravar(Colaborador $u, string $donoId): void
     {
-        abort_unless($donoId === $u->id || $u->veTudo(), 403, 'Sem permissão para esta nota');
+        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança notas');
+        abort_unless($donoId === $u->id || $u->gerencia(), 403, 'Sem permissão para esta nota');
     }
 }

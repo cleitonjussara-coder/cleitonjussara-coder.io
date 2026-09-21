@@ -19,7 +19,9 @@ class Colaborador extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
-    public const ROLES = ['colaborador', 'gestor', 'admin'];
+    /* contabilidade (reunião de 21/09/2026): só VÊ e BAIXA — Equipe, cartões,
+       relatórios. Não lança nota/repasse, não edita, não exclui. */
+    public const ROLES = ['colaborador', 'gestor', 'admin', 'contabilidade'];
 
     protected $table = 'colaboradores';
 
@@ -56,11 +58,24 @@ class Colaborador extends Authenticatable
         return $this->hasMany(Repasse::class, 'user_id');
     }
 
-    /* Gestor e admin enxergam TODOS os núcleos — é a regra das policies
-       notas_sel / rep_sel / colab_sel do Supabase. */
+    /* LEITURA de tudo (todos os núcleos): gestor, admin e contabilidade.
+       É a regra das policies notas_sel / rep_sel / colab_sel do Supabase. */
     public function veTudo(): bool
     {
+        return in_array($this->role, ['gestor', 'admin', 'contabilidade'], true);
+    }
+
+    /* ESCRITA sobre os outros (desativar, excluir, corrigir ponto, veículos,
+       feriados, gravar nota de outro): só gestor e admin. */
+    public function gerencia(): bool
+    {
         return in_array($this->role, ['gestor', 'admin'], true);
+    }
+
+    /* Contabilidade não lança nada, nem para si. */
+    public function soLeitura(): bool
+    {
+        return $this->role === 'contabilidade';
     }
 
     public function sendPasswordResetNotification($token): void

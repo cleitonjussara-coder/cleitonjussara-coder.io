@@ -4,7 +4,7 @@
 ───────────────────────────────────────────────────────────── */
 window.Gestor = (() => {
   const MESES  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const ROLES   = ['colaborador','gestor','admin'];
+  const ROLES   = ['colaborador','gestor','admin','contabilidade'];   // contabilidade: só vê e baixa (21/09/2026)
 
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
   const ini = nome => (nome||'?').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
@@ -95,6 +95,7 @@ window.Gestor = (() => {
           <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilha de C.V. no modelo da empresa: escolha os colaboradores">📗 CV da equipe ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
+          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contabilidade, colaborador…)">✉️ Convidar</button>` : ''}
         </div>
       </div>`;
 
@@ -237,7 +238,7 @@ window.Gestor = (() => {
       const saldo = rec - gasto;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
-      const pendReps = reps.filter(x => !recebido(x)).length;
+      const pendReps = reps.filter(x => !recebido(x) && !x.atendido_em).length;   // pedido já pago não é pendência (21/09/2026)
 
       /* RDM por categoria (barra proporcional) */
       const cats = [['abastecimento', '⛽ Abastecimento'], ['hospedagem', '🏨 Hospedagem'], ['outros', '🧰 Outros']];
@@ -327,11 +328,11 @@ window.Gestor = (() => {
       } else {
         html += `<div class="colab-list">${reps.map(x => `
           <div class="rep-item cdet-rep">
-            <span class="cdet-rep-ico">${recebido(x) ? '✅' : '⏳'}</span>
+            <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
             <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
             <div style="flex:1;min-width:0">
               <div class="rep-desc">${esc(x.descricao || (recebido(x) ? 'Repasse recebido' : 'Solicitação de repasse'))}</div>
-              <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : 'pedido pendente'}</div>
+              <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : x.atendido_em ? 'pedido pago ✅' : 'pedido pendente'}</div>
             </div>
             <span class="rep-val cdet-rep-val">${brl(x.valor)}</span>
           </div>`).join('')}</div>`;
@@ -462,6 +463,89 @@ window.Gestor = (() => {
       botoes: [{ label: '📕 Gerar PDF', modo: 'pdf', primario: true }],
       onGerar: ids => window.baixarRelatorioEquipe(ids),
     });
+  }
+
+  /* ── Convidar por link (21/09/2026, reunião) ─────────────────
+     Gestor/admin gera um link com o papel já definido (Contabilidade, p.ex.)
+     e manda pelo WhatsApp. Quem abre cria a conta com aquele papel. Uso
+     único, vale 7 dias. Só o admin convida gestor. */
+  const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
+  async function abrirConvite() {
+    const sb = _ctx?.sb, eu = _ctx?.currentUser || window.user || {};
+    if (!sb) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
+    if (!(eu.role === 'admin' || eu.role === 'gestor')) { toast('Só gestor ou admin convida', 'err'); return; }
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay open';
+    ov.innerHTML = `
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-hd">
+          <h3>✉️ Convidar por link</h3>
+          <button class="btn-close-modal">✕</button>
+        </div>
+        <div class="modal-bd">
+          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:10px">
+            Gere um link e mande pelo WhatsApp. Quem abrir cria a conta <b>já com o papel escolhido</b>. O link serve para <b>uma</b> pessoa e vale <b>7 dias</b>.
+          </p>
+          <label class="lbl">Papel</label>
+          <select class="inp" id="cv-role">
+            <option value="contabilidade" selected>Contabilidade — só vê e baixa relatórios</option>
+            <option value="colaborador">Colaborador — lança as próprias notas</option>
+            ${eu.role === 'admin' ? '<option value="gestor">Gestor — vê e administra a equipe</option>' : ''}
+          </select>
+          <label class="lbl">Nome de quem vai entrar (opcional)</label>
+          <input class="inp" id="cv-nome" type="text" placeholder="Ex.: Maria da Contabilidade" autocapitalize="words">
+          <button class="btn btn-primary btn-full" id="cv-gerar" style="margin-top:10px">🔗 Gerar link</button>
+          <div id="cv-resultado" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:10px">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Link gerado (vale 7 dias):</div>
+            <input class="inp" id="cv-url" readonly style="font-size:12px" onclick="this.select()">
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-outline" id="cv-copiar" style="flex:1">📋 Copiar</button>
+              <a class="btn btn-primary" id="cv-whats" style="flex:1;text-align:center;text-decoration:none" target="_blank" rel="noopener">💬 WhatsApp</a>
+            </div>
+          </div>
+          <details style="margin-top:12px;font-size:12.5px">
+            <summary style="cursor:pointer;color:var(--text2)">Convites recentes</summary>
+            <div id="cv-lista" style="margin-top:8px;color:var(--text2)">Carregando…</div>
+          </details>
+        </div>
+        <div class="modal-ft"><button class="btn btn-outline" id="cv-fechar">Fechar</button></div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.querySelector('.btn-close-modal').onclick = close;
+    ov.querySelector('#cv-fechar').onclick = close;
+
+    const listar = async () => {
+      const box = ov.querySelector('#cv-lista');
+      try {
+        const itens = await sb.convites.lista();
+        if (!itens.length) { box.textContent = 'Nenhum convite ainda.'; return; }
+        box.innerHTML = itens.map(c => {
+          const st = c.usado_em ? `✅ usado por ${esc(c.usado_por || '—')} em ${fmtData(c.usado_em)}` : c.valido ? `⏳ aguardando · vence ${fmtData(c.expira_em)}` : '⌛ vencido';
+          return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><b>${esc(PAPEL_NOME[c.role] || c.role)}</b>${c.nome ? ' · ' + esc(c.nome) : ''}<br><span style="font-size:11.5px">${st} · por ${esc(c.criado_por || '')}</span></div>`;
+        }).join('');
+      } catch (e) { box.textContent = 'Não carregou: ' + e.message; }
+    };
+    listar();
+
+    ov.querySelector('#cv-gerar').onclick = async () => {
+      const role = ov.querySelector('#cv-role').value, nome = ov.querySelector('#cv-nome').value.trim();
+      const btn = ov.querySelector('#cv-gerar'); btn.disabled = true;
+      try {
+        const r = await sb.convites.criar(role, nome);
+        ov.querySelector('#cv-url').value = r.url;
+        const msg = `Olá${nome ? ', ' + nome : ''}! Este é o seu convite para entrar no PETERMANN - DESPESAS como ${PAPEL_NOME[role] || role}. Abra o link no celular e crie sua conta (vale 7 dias): ${r.url}`;
+        ov.querySelector('#cv-whats').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+        ov.querySelector('#cv-resultado').style.display = '';
+        ov.querySelector('#cv-copiar').onclick = async () => {
+          try { await navigator.clipboard.writeText(r.url); toast('Link copiado 📋'); }
+          catch (_) { ov.querySelector('#cv-url').select(); toast('Selecione e copie o link', 'err'); }
+        };
+        listar();
+      } catch (e) { toast('Não gerou: ' + e.message, 'err'); }
+      finally { btn.disabled = false; }
+    };
   }
 
   /* ── Modal edição de colaborador (admin only) ─────────── */
@@ -600,5 +684,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite };
 })();

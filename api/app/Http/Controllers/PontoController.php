@@ -113,8 +113,8 @@ class PontoController extends Controller
             $dono = $p->user_id;
         }
         $ehDono = $dono === $u->id;
-        abort_unless($ehDono || $u->veTudo(), 403, 'Sem permissão para este ponto');
-        if ($ehDono && ! $u->veTudo()) {
+        abort_unless($ehDono || $u->gerencia(), 403, 'Sem permissão para este ponto');
+        if ($ehDono && ! $u->gerencia()) {
             /* colaborador corrige só hoje e ontem; mais antigo é com o gestor */
             $lim = Carbon::now(PontoCalculo::TZ)->subDays(1)->format('Y-m-d');
             abort_if($d['data'] < $lim, 403, 'Só é possível corrigir o ponto de hoje e de ontem; para dias anteriores, peça ao gestor');
@@ -148,7 +148,7 @@ class PontoController extends Controller
     {
         $u = $r->user();
         $p = Ponto::findOrFail($id);
-        abort_unless($u->veTudo() || ($p->user_id === $u->id && $p->data->format('Y-m-d') === Carbon::now(PontoCalculo::TZ)->format('Y-m-d')), 403, 'Sem permissão');
+        abort_unless($u->gerencia() || ($p->user_id === $u->id && $p->data->format('Y-m-d') === Carbon::now(PontoCalculo::TZ)->format('Y-m-d')), 403, 'Sem permissão');
         $p->delete();
 
         return response()->json(['ok' => true]);
@@ -229,7 +229,7 @@ class PontoController extends Controller
 
     public function feriadoUpsert(Request $r): JsonResponse
     {
-        abort_unless($r->user()->veTudo(), 403, 'Só gestor/admin mantêm feriados');
+        abort_unless($r->user()->gerencia(), 403, 'Só gestor/admin mantêm feriados');
         $d = $r->validate(['data' => ['required', 'date_format:Y-m-d'], 'nome' => ['required', 'string', 'max:80']]);
         $f = Feriado::updateOrCreate(['data' => $d['data']], ['nome' => $d['nome']]);
 
@@ -238,7 +238,7 @@ class PontoController extends Controller
 
     public function feriadoDelete(Request $r, string $data): JsonResponse
     {
-        abort_unless($r->user()->veTudo(), 403, 'Só gestor/admin mantêm feriados');
+        abort_unless($r->user()->gerencia(), 403, 'Só gestor/admin mantêm feriados');
         Feriado::where('data', $data)->delete();
 
         return response()->json(['ok' => true]);

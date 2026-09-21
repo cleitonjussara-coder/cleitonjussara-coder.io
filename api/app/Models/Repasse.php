@@ -34,6 +34,7 @@ class Repasse extends Model
             'ano' => 'integer',
             'email_sent' => 'boolean',
             'deleted' => 'boolean',
+            'atendido_em' => 'datetime',
         ];
     }
 

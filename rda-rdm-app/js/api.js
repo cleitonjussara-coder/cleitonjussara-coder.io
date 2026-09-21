@@ -102,7 +102,7 @@ window.API = (() => {
        redefinição (?reset=…&email=…), depois valida o token guardado.
        Devolve { user, recovery } — recovery = veio do e-mail de senha. */
     async init() {
-      const out = { user: null, recovery: null, googleToken: null, authError: null };
+      const out = { user: null, recovery: null, googleToken: null, authError: null, convite: null };
 
       // retorno do login Google: tudo vem no fragmento da URL
       if (location.hash && location.hash.length > 1) {
@@ -123,6 +123,8 @@ window.API = (() => {
       if (q.get('reset') && q.get('email')) {
         out.recovery = { token: q.get('reset'), email: q.get('email') };
       }
+      // link de convite do gestor (21/09/2026): ?convite=<token> → cadastro com papel pré-definido
+      if (q.get('convite')) out.convite = q.get('convite');
 
       if (_token) {
         try { _setUser(await req('GET', '/me')); out.user = _user; }
@@ -135,8 +137,8 @@ window.API = (() => {
       return out;
     },
 
-    async register({ nome, email, password }) {
-      const r = await req('POST', '/auth/register', { body: { nome, email, password } });
+    async register({ nome, email, password, convite }) {
+      const r = await req('POST', '/auth/register', { body: { nome, email, password, convite: convite || undefined } });
       _setToken(r.token); _setUser(r.user); _emit('SIGNED_IN');
       return r.user;
     },
@@ -225,6 +227,8 @@ window.API = (() => {
   const repasses = {
     list: params => req('GET', '/repasses', { query: params }),
     upsert: rec => req('PUT', `/repasses/${rec.id}`, { body: rec }),
+    /* gestor/admin marca o pedido como pago: o servidor cria o repasse recebido (21/09/2026) */
+    atendido: id => req('PATCH', `/repasses/${id}/atendido`),
   };
 
   const fotos = {
@@ -279,6 +283,13 @@ window.API = (() => {
   };
 
   /* Planilha de C.V. no modelo da empresa, preenchida pelo servidor (19/09/2026). */
+  /* Convite por link (21/09/2026): gestor/admin cria; a tela de cadastro consulta (público). */
+  const convites = {
+    criar: (role, nome) => req('POST', '/convites', { body: { role, nome: nome || undefined } }),
+    lista: () => req('GET', '/convites'),
+    ver: token => req('GET', '/auth/convites/' + encodeURIComponent(token)),
+  };
+
   const relatorio = {
     cv: (ano, userId, formato) => req('GET', '/relatorio/cv', { query: { ano, user_id: userId || undefined, formato }, blob: true, timeout: 300_000 }),
     equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
@@ -303,5 +314,5 @@ window.API = (() => {
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, req, auth, colaboradores, notas, repasses, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos };
+  return { BASE, req, auth, colaboradores, notas, repasses, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
 })();

@@ -438,6 +438,13 @@ window.DB = (() => {
     const all = await _getAllByIdx('repasses', 'user_id', userId);
     return all.filter(r => includeDeleted || !r.deleted).map(r => _normalizeRecord(r));
   }
+  /* Todos os repasses que chegaram a este aparelho (gestor/admin/contabilidade
+     recebem os de toda a equipe pelo pull) — para as notificações de pedido
+     de repasse (21/09/2026). */
+  async function getRepassesTodos() {
+    const all = await _getAll('repasses');
+    return all.filter(r => !r.deleted).map(r => _normalizeRecord(r));
+  }
  
   async function softDeleteRepasse(id) {
     const r = await _get('repasses', id);
@@ -793,7 +800,7 @@ window.DB = (() => {
     saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
     purgeNotaLocal, limparDaLixeira, purgeNotasDeUsuario,
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
-    saveRepasse, getRepassesUser, softDeleteRepasse,
+    saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse,
     upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, repararQrUrls,
     garantirAno, anosSincronizados, getNotasEquipe,

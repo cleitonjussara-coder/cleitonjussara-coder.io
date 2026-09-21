@@ -39,7 +39,7 @@ window.Arquivos = (() => {
         <button class="btn btn-outline" style="margin-top:12px" onclick="Arquivos.render()">Tentar de novo</button></div></div>`;
       return;
     }
-    if (!_ehGestorOuAdmin() && !colab) colab = { user_id: user.id, nome: user.nome || user.email };
+    if (!_veEquipe() && !colab) colab = { user_id: user.id, nome: user.nome || user.email };
     try {
       if (colab && mes) await renderMes();
       else if (colab) await renderMeses();
@@ -108,7 +108,7 @@ window.Arquivos = (() => {
     (c.meses || []).forEach(m => { porMes[m.mes] = m; });
 
     let html = `<div class="db-container">
-      ${_cabecalho(`📁 ${esc(c.nome || c.email)}`, `${c.qtd} nota${c.qtd === 1 ? '' : 's'} em ${ano} · ${brl(c.total)}`, _ehGestorOuAdmin() ? 'Arquivos.voltarColabs()' : "switchView('inicio')")}
+      ${_cabecalho(`📁 ${esc(c.nome || c.email)}`, `${c.qtd} nota${c.qtd === 1 ? '' : 's'} em ${ano} · ${brl(c.total)}`, _veEquipe() ? 'Arquivos.voltarColabs()' : "switchView('inicio')")}
       ${c.qtd ? `<button class="btn btn-primary btn-full" style="min-height:50px" onclick="Arquivos.baixarZip(null)">⬇️ Baixar ZIP do ano ${ano} (${c.com_anexo} anexo${c.com_anexo === 1 ? '' : 's'} + Planilha CV)</button>` : ''}
       <div class="arq-meses">`;
     for (let m = 1; m <= 12; m++) {
