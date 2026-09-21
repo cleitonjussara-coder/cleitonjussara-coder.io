@@ -23,14 +23,14 @@ window.BrasilAPI = (() => {
     // 1. Cache de memória
     if (MEM[c]) return MEM[c];
 
-    // 2. Cache Supabase
+    // 2. Cache no servidor (compartilhado pela equipe). Registro antigo sem
+    //    CNAE (antes de 16/09/2026) segue para a BrasilAPI uma vez, para
+    //    completar — o CNAE é a base da sugestão automática de aba.
     if (sb && navigator.onLine) {
       try {
-        const { data } = await sb.from('cnpj_cache')
-          .select('razao_social, nome_fantasia')
-          .eq('cnpj', c)
-          .maybeSingle();
-        if (data) { MEM[c] = data; return data; }
+        const data = await sb.cnpj.get(c);
+        if (data && data.cnae) { MEM[c] = data; return data; }
+        if (data && !navigator.onLine) { MEM[c] = data; return data; }
       } catch (_) {}
     }
 
@@ -47,12 +47,12 @@ window.BrasilAPI = (() => {
       const res = {
         razao_social : j.razao_social || j.nome || '',
         nome_fantasia: j.nome_fantasia || '',
+        cnae         : j.cnae_fiscal ? String(j.cnae_fiscal).replace(/\D/g, '').slice(0, 7) : '',
+        cnae_descricao: (j.cnae_fiscal_descricao || '').slice(0, 160),
       };
       MEM[c] = res;
-      // persiste no Supabase em background
-      if (sb) sb.from('cnpj_cache').upsert({
-        cnpj: c, ...res, consultado_em: new Date().toISOString()
-      }).catch(() => {});
+      // persiste no servidor em background
+      if (sb) sb.cnpj.set(c, res).catch(() => {});
       return res;
     } catch (_) { return null; }
   }

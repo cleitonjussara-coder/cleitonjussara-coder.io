@@ -1,0 +1,49 @@
+# ───────────────────────────────────────────────
+#  Petermann API — raiz do subdomínio api.pmservicosagronomicos.com.br
+#  (esta pasta é a api-petermann/public do Laravel)
+# ───────────────────────────────────────────────
+
+# A pasta de cima (api-petermann/.htaccess) nega tudo; aqui libera de novo.
+# O Apache herda o .htaccess do diretório pai, então sem isto a public/
+# também ficaria bloqueada.
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Allow from all
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Força HTTPS (o token vai no cabeçalho; nunca em texto claro)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Authorization: Bearer — o Apache da hospedagem descarta o cabeçalho
+    # sem esta regra, e todo pedido vira "Unauthenticated".
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Anexo pode ter até 20 MB (foto de cupom fica bem abaixo disso)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 20M
+    php_value post_max_size 22M
+    php_value memory_limit 256M
+</IfModule>

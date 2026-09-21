@@ -95,7 +95,24 @@ window.OCR = (() => {
     const oneLine = raw.replace(/\r?\n/g, ' ');
     const lines   = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
 
-    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null };
+    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null };
+
+    /* 0. Número e série impressos — cupom ("Nº 123456 Série 1", "NFC-e nº"),
+       DANFE ("Nº 000.001.234  SÉRIE 001") e NFS-e ("Número da NFS-e: 2026123").
+       Quando há chave de 44 dígitos o app prefere o que está nela. */
+    const numPats = [
+      /N[úu]mero\s+da\s+NFS-?e[:\s]*([0-9.]{1,14})/i,
+      /NFS-?e\s*n[º°o.]?\s*[:\s]*([0-9.]{1,14})/i,
+      /N[º°]\s*[:.]?\s*([0-9]{1,3}(?:\.[0-9]{3}){1,2}|[0-9]{3,9})\b/i,
+      /N[úu]mero\s*[:.]?\s*([0-9]{3,9})\b/i,
+      /NFC-?e\s*n[º°o.]?\s*[:\s]*([0-9]{3,9})\b/i,
+    ];
+    for (const p of numPats) {
+      const m = oneLine.match(p);
+      if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }
+    }
+    const ms = oneLine.match(/S[ée]rie\s*[:.]?\s*([0-9]{1,3})\b/i);
+    if (ms) r.serie = ms[1].replace(/^0+/, '') || '0';
 
     // 1. Chave NFCe (44 dígitos)
     const chaveM = oneLine.match(/\b(\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4})\b/);

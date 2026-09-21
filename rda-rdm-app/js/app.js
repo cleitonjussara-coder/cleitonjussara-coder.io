@@ -1,17 +1,14 @@
 'use strict';
 /* ─────────────────────────────────────────────────────────────
    app.js — Core Petermann PWA
-   Troque as duas linhas abaixo com suas credenciais Supabase.
+   Servidor: Petermann API (Laravel + MySQL na Locaweb) — ver js/api.js.
+   O endereço da API está lá; aqui não há credencial nenhuma.
 ───────────────────────────────────────────────────────────── */
-const SUPABASE_URL      = 'https://alkndoafntxzkpcgscvz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsa25kb2FmbnR4emtwY2dzY3Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNjcwMDMsImV4cCI6MjA5NDk0MzAwM30.sjKOuNiGYbcHbJwPQuhO65c9apYbgA-xtOqYTfCo7UY';
-const DEMO_MODE = SUPABASE_URL.includes('COLE_SUA');
+const DEMO_MODE = false;   // modo demo antigo (sem servidor); "Usar sem conta" continua existindo
 
-/* Login social (Supabase Auth → OAuth). Cada provedor só funciona depois de
-   habilitado em Authentication → Providers no painel do Supabase, com a
-   chave da empresa correspondente. `ativo:false` esconde o botão até lá —
-   provedor desligado no painel devolve "provider is not enabled" e confunde
-   quem está no campo. Ordem = ordem na tela. */
+/* Login social. Só o Google está ligado: o backend faz o OAuth
+   (api/auth/google/redirect) com o cliente do projeto CLEITON-PM. Os
+   outros ficam `ativo:false` até existirem no backend. Ordem = ordem na tela. */
 const PROVEDORES_SOCIAIS = [
   { id:'google',   nome:'Google',    ativo:true,
     icone:'<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>' },
@@ -26,7 +23,14 @@ const PROVEDORES_SOCIAIS = [
 /* ── Estado global ───────────────────────────────────────── */
 let sb        = null;
 let user      = null;   // { id, email, nome, role, nucleo }
-let notas     = [];
+let notas     = [];      // SÓ as minhas (20/09/2026): Minhas notas, Painel, Saldo, Início, exportações
+let notasEquipe = [];    // gestor/admin: notas dos outros, para editar/ver pelo detalhe da Equipe
+/* Uma nota pelo id, seja minha, da equipe ou desenhada num cartão avulso. */
+function _notaPorId(id) {
+  if (!id) return null;
+  return notas.find(x => x.id === id) || notasEquipe.find(x => x.id === id)
+      || (typeof _notasDesenhadas !== 'undefined' ? _notasDesenhadas.get(id) : null) || null;
+}
 let repasses  = [];
 let driveOk   = false;
 let viewAtual = 'home';
@@ -61,7 +65,11 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 127;
+const APP_BUILD = 188;
+/* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
+   colaborador não vê. false = some para todos. */
+const MODULOS_EXTRAS = true;
+const _driveDiag = { googleTokenNoRetorno: '—', setToken: '—', init: '—', automatico: '—' };   // diagnóstico do Drive (Perfil)
 
 /* Dados fixos da aba CABEÇALHO da planilha padrão da empresa */
 const EMPRESA = {
@@ -184,23 +192,38 @@ async function _renderPdfPagina1(file) {
    cabeçalho do sefaz.js). Sem ela sobra o portal nacional com a chave
    preenchida, que é palpite com captcha: por isso devolvemos {exato}, para
    a UI avisar em vez de prometer o que não entrega. */
+/* O QR da BA vem em http:// e o Chrome abre com "Não seguro" (e implica com
+   os redirecionamentos do site). O mesmo endereço em https mostra o DANFE
+   igual (conferido em 16/09/2026). Só troca em host que sabidamente aceita —
+   SEFAZ sem https daria erro de certificado no lugar da nota. */
+const _QR_HOSTS_HTTPS = ['nfe.sefaz.ba.gov.br'];
+function _qrUrlSegura(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'http:' && _QR_HOSTS_HTTPS.includes(u.hostname)) { u.protocol = 'https:'; return u.toString(); }
+  } catch (_) {}
+  return url;
+}
+
 async function resolverLinkConsulta(chaveRaw, qrUrlDaNota) {
   const chave = _digitos(chaveRaw);
   if (chave.length !== 44) return null;
 
-  if (/^https?:\/\//i.test(qrUrlDaNota || '')) return { url: qrUrlDaNota, exato: true };
+  if (/^https?:\/\//i.test(qrUrlDaNota || '')) return { url: _qrUrlSegura(qrUrlDaNota), exato: true };
 
   // notas escaneadas antes da v59 têm a URL só em meta, neste aparelho
   let raw = null;
   try { raw = await DB.getMeta('qr_' + chave); } catch (_) {}
-  if (raw) return { url: raw, exato: true };
+  if (raw) return { url: _qrUrlSegura(raw), exato: true };
 
   const fallback = window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null;
   return fallback ? { url: fallback, exato: false } : null;
 }
 
 function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
-  if (_digitos(chaveRaw).length !== 44) { toast('Esta nota não tem chave NFC-e para consulta', 'err'); return; }
+  // NFS-e: não tem chave de 44, mas o QR dela é um link direto para a nota
+  if (_digitos(chaveRaw).length !== 44 && /^https?:\/\//i.test(qrUrlDaNota || '')) { window.open(qrUrlDaNota, '_blank'); return; }
+  if (_digitos(chaveRaw).length !== 44) { toast('Esta nota não tem chave nem QR para consulta', 'err'); return; }
   const w = window.open('', '_blank');           // abre já, evita bloqueio de popup
   resolverLinkConsulta(chaveRaw, qrUrlDaNota).then(r => {
     if (!r) { if (w) w.close(); toast('Não foi possível montar o link de consulta', 'err'); return; }
@@ -209,8 +232,205 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
   });
 }
 
+/* ── Aba/categoria automática pelo fornecedor ────────────────────────────
+   Pedido em 16/09/2026 ("automatizar as informações"). Ordem de confiança:
+   1. histórico — esse CNPJ já foi lançado: repete a aba/categoria mais usada;
+   2. CNAE principal do CNPJ (BrasilAPI, guardado no cache de CNPJ);
+   3. palavras no nome (posto, hotel, restaurante, peças…).
+   Só SUGERE: a pessoa vê a aba escolhida e troca com um toque. */
+const _CNAE_ABA = [
+  [/^4731/,                         { tipo:'RDM', subtipo:'Abastecimento', rotulo:'posto de combustível' }],
+  [/^(5510|5590)/,                  { tipo:'RDM', subtipo:'Hospedagem',    rotulo:'hotel/pousada' }],
+  [/^(5611|5612|5620|4721|4722|4723|4729|1091|1092|4711|4712)/, { tipo:'RDA', subtipo:null, rotulo:'alimentação' }],
+  [/^(4530|4520|4541|4744|2219|4763|4789|4751|4752|4753|4754|4755|4759|4771|4772|4773|4774|4781|4782|4783|4784|4785|3314|9529)/, { tipo:'RDM', subtipo:'Outros', rotulo:'peças/serviços/loja' }],
+];
+const _NOME_ABA = [
+  [/\b(auto\s*posto|posto|combust[íi]ve)/i,                        { tipo:'RDM', subtipo:'Abastecimento', rotulo:'posto' }],
+  [/\b(hotel|pousada|hospedagem|motel|hostel)/i,                    { tipo:'RDM', subtipo:'Hospedagem',    rotulo:'hospedagem' }],
+  [/\b(restaurante|lanchonete|churrascaria|panificadora|padaria|pizzaria|bar\b|espetinho|marmita|sorveteria|supermercado|mercado|alimentos|refei[çc])/i, { tipo:'RDA', subtipo:null, rotulo:'alimentação' }],
+  [/\b(pe[çc]as|oficina|borracharia|pneus?|auto\s*center|ferragens|el[ée]trica|mec[âa]nica)/i, { tipo:'RDM', subtipo:'Outros', rotulo:'peças/serviços' }],
+];
+function _sugestaoPorHistorico(cnpj) {
+  const c = _digitos(cnpj);
+  if (c.length !== 14 || /^0+$/.test(c)) return null;
+  const cont = new Map();
+  for (const n of notas) {
+    if (n.deleted || _digitos(n.cnpj || '') !== c || !n.tipo) continue;
+    const k = n.tipo + '|' + (n.tipo === 'RDM' ? (n.subtipo || 'Outros') : '');
+    cont.set(k, (cont.get(k) || 0) + 1);
+  }
+  if (!cont.size) return null;
+  const [k, q] = [...cont.entries()].sort((a, b) => b[1] - a[1])[0];
+  const [tipo, subtipo] = k.split('|');
+  return { tipo, subtipo: subtipo || null, rotulo: `histórico (${q} nota${q > 1 ? 's' : ''})`, fonte: 'historico' };
+}
+function _sugestaoPorCnae(cnae) {
+  const c = _digitos(cnae);
+  if (!c) return null;
+  for (const [re, s] of _CNAE_ABA) if (re.test(c)) return { ...s, fonte: 'cnae' };
+  return null;
+}
+function _sugestaoPorNome(nome) {
+  const t = String(nome || '');
+  if (!t) return null;
+  for (const [re, s] of _NOME_ABA) if (re.test(t)) return { ...s, fonte: 'nome' };
+  return null;
+}
+/* Assíncrona só quando precisa do CNAE (BrasilAPI); histórico e nome são
+   instantâneos. Devolve {tipo, subtipo, rotulo, fonte} ou null. */
+async function sugerirAba({ cnpj, razao_social, chave } = {}) {
+  const c = _digitos(cnpj) || (_digitos(chave).length === 44 ? _digitos(chave).slice(6, 20) : '');
+  let s = _sugestaoPorHistorico(c) || _sugestaoPorNome(razao_social);
+  if (s) return s;
+  if (c.length === 14 && navigator.onLine) {
+    try {
+      const info = await Promise.race([BrasilAPI.consultar(c, sb), new Promise(r => setTimeout(() => r(null), 5000))]);
+      s = _sugestaoPorCnae(info?.cnae) || _sugestaoPorNome(info?.razao_social || info?.nome_fantasia);
+      if (s && info?.cnae_descricao && s.fonte === 'cnae') s.rotulo = info.cnae_descricao.toLowerCase().slice(0, 40);
+    } catch (_) {}
+  }
+  return s || null;
+}
+function _aplicarSugestaoNoForm(s) {
+  if (!s) return;
+  $('nf-tipo').value = s.tipo;
+  if (s.tipo === 'RDM' && s.subtipo) $('nf-subtipo').value = s.subtipo;
+  toggleSubtipo();
+}
+/* Depois que o OCR/QR revelou o fornecedor com o formulário já aberto: mostra
+   a sugestão no banner da aba, sem trocar sozinho (a pessoa já escolheu). */
+let _sugestaoPendente = null;
+async function _sugerirAbaNoFormulario() {
+  const s = await sugerirAba({ cnpj: $('nf-cnpj').value, razao_social: $('nf-razao').value, chave: $('nf-chave').value });
+  const box = $('nota-aba-sugestao');
+  if (!box) return;
+  const atualTipo = $('nf-tipo').value, atualSub = $('nf-subtipo').value;
+  const igual = s && s.tipo === atualTipo && (s.tipo !== 'RDM' || !s.subtipo || s.subtipo === atualSub);
+  if (!s || igual) { box.style.display = 'none'; _sugestaoPendente = null; return; }
+  _sugestaoPendente = s;
+  box.style.display = 'flex';
+  $('nota-aba-sugestao-txt').textContent = `Sugestão: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo})`;
+}
+function aplicarSugestaoAba() {
+  if (_sugestaoPendente) _aplicarSugestaoNoForm(_sugestaoPendente);
+  const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none';
+  _sugestaoPendente = null;
+}
+
+/* ── Valor oficial pela URL do QR (servidor abre o portal do SEFAZ) ──────
+   O QR não traz o valor; a página do SEFAZ que ele aponta traz. A API lê a
+   página (BA e GO verificados em 16/09/2026) e devolve valor/data/emitente.
+   Roda em segundo plano assim que o QR é lido; quando responde, preenche o
+   formulário se a chave ainda for a mesma e a pessoa não tiver digitado o
+   valor à mão. Falhou? Fica o OCR, como sempre. */
+const _sefazQrCache = new Map();   // chave → resultado (ou null)
+let _valorEditadoManual = false;
+async function _sefazPorQr(qrUrl, chave) {
+  const c = _digitos(chave);
+  if (!/^https?:\/\//i.test(qrUrl || '') || !sb || !navigator.onLine) return null;
+  const k = c || qrUrl;
+  if (_sefazQrCache.has(k)) return _sefazQrCache.get(k);
+  const p = sb.notas.consultarQr(qrUrl, c || null).catch(() => null);
+  _sefazQrCache.set(k, p);
+  const r = await p;
+  _sefazQrCache.set(k, r);
+  if (r) _aplicarSefazNoForm(r, c);
+  return r;
+}
+function _aplicarSefazNoForm(r, chave) {
+  const ov = $('nota-form-overlay');
+  if (!ov || !r) return;
+  if (chave && _digitos($('nf-chave').value) !== chave) return;    // já é outra nota
+  const mudou = [];
+  if (typeof r.valor === 'number' && r.valor > 0 && !_valorEditadoManual) {
+    const atual = parseFloat($('nf-valor').value);
+    if (!(Math.abs(atual - r.valor) < 0.005)) { $('nf-valor').value = r.valor.toFixed(2); mudou.push('valor'); }
+  }
+  if (r.data && /^\d{4}-\d{2}-\d{2}$/.test(r.data) && $('nf-data').value !== r.data) {
+    $('nf-data').value = r.data; mudou.push('data');
+    const d = new Date(r.data + 'T00:00:00'); $('nf-mes').value = d.getMonth() + 1; $('nf-ano').value = d.getFullYear();
+  }
+  if (r.razao_social && !$('nf-razao').value) { $('nf-razao').value = r.razao_social; mudou.push('empresa'); }
+  if (r.cnpj && !_digitos($('nf-cnpj').value)) { $('nf-cnpj').value = BrasilAPI.formatar(r.cnpj); mudou.push('CNPJ'); }
+  const b = $('captura-badge'); if (b) b.textContent = '🌐 Valor conferido no SEFAZ';
+  if (mudou.length && ov.style.display !== 'none') toast(`SEFAZ confirmou: ${mudou.join(', ')} ✔`);
+}
+
+/* ── Documento fiscal: NFC-e / NF-e / DANFE / NFS-e / outro ─────────────
+   Pedido em 16/09/2026. A chave de 44 dígitos já diz o modelo (posições
+   21–22): 65 = NFC-e, 55 = NF-e. Um 55 fotografado em papel é DANFE; vindo
+   de XML/PDF é NF-e. NFS-e (serviço, municipal) não tem chave de 44 — o
+   que a identifica é o QR/URL com "nfse". Sem nada disso, a pessoa escolhe. */
+const DOC_LABEL = { nfce:'🧾 NFC-e', nfe:'📄 NF-e', danfe:'🖨️ DANFE', nfse:'🧰 NFS-e', outro:'🗒️ Outro' };
+let _docEscolhidoManual = false;   // a pessoa mexeu no select → não sobrescrever
+
+function _docPelaChave(chave, ext) {
+  const c = _digitos(chave);
+  if (c.length !== 44) return null;
+  const modelo = c.slice(20, 22);
+  if (modelo === '65') return 'nfce';
+  if (modelo === '55') return /^(xml|pdf)$/i.test(ext || '') ? 'nfe' : 'danfe';
+  return null;
+}
+function _ehUrlNfse(txt) { return /^https?:\/\/\S+/i.test(txt || '') && /nfse/i.test(txt); }
+function docDaNota(n) {
+  if (!n) return null;
+  if (n.documento && DOC_LABEL[n.documento]) return n.documento;
+  const ext = n.foto_path ? String(n.foto_path).split('.').pop() : (n.foto_local || '');
+  return _docPelaChave(n.chave_nfce, ext) || (_ehUrlNfse(n.qr_url) ? 'nfse' : null);
+}
+function _numeroSerieHTML(n) {
+  const ns = (n?.numero) ? { numero: n.numero, serie: n.serie } : _numeroSerieDaChave(n?.chave_nfce);
+  if (!ns?.numero) return '';
+  return `<div class="nota-cnpj">nº ${esc(String(ns.numero))}${ns.serie != null && ns.serie !== '' ? ` · série ${esc(String(ns.serie))}` : ''}</div>`;
+}
+function docBadgeHTML(n) {
+  const d = docDaNota(n);
+  return d ? `<span class="doc-tag ${d}">${DOC_LABEL[d]}</span>`
+           : `<span class="doc-tag vazio" title="Documento não informado — edite a nota para escolher">documento?</span>`;
+}
+/* Número e série vêm da própria chave (série = 23–25, número = 26–34).
+   Só preenche campo vazio: o que a pessoa digitou fica. */
+function _numeroSerieDaChave(chave) {
+  const c = _digitos(chave);
+  if (c.length !== 44) return null;
+  return { numero: c.slice(25, 34).replace(/^0+/, '') || '0', serie: c.slice(22, 25).replace(/^0+/, '') || '0' };
+}
+function _preencherNumeroSerie(numero, serie, sobrescrever = false) {
+  const n = $('nf-numero'), s = $('nf-serie');
+  if (n && numero && (sobrescrever || !n.value)) n.value = String(numero);
+  if (s && serie  != null && serie !== '' && (sobrescrever || !s.value)) s.value = String(serie);
+}
+function _atualizarNumeroSerieAuto() {
+  const ns = _numeroSerieDaChave($('nf-chave').value);
+  if (ns) _preencherNumeroSerie(ns.numero, ns.serie, true);   // a chave é autoritativa
+}
+
+/* Preenche o select pelo que já se sabe (chave/anexo/QR), sem passar por
+   cima de escolha manual. */
+function _atualizarDocumentoAuto() {
+  const sel = $('nf-documento');
+  if (!sel || _docEscolhidoManual) return;
+  const salva = _notaPorId($('nf-id').value);
+  const ext = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : '') || (salva?.foto_path ? String(salva.foto_path).split('.').pop() : '');
+  const auto = _docPelaChave($('nf-chave').value, ext) || (_ehUrlNfse($('nf-qr-url').value) ? 'nfse' : null);
+  if (auto) sel.value = auto;
+  const dica = $('nf-documento-dica');
+  if (dica) {
+    const c = _digitos($('nf-chave').value);
+    dica.style.display = auto ? 'block' : 'none';
+    dica.textContent = auto === 'nfse' ? 'Identificado pelo QR da NFS-e'
+      : auto ? `Identificado pela chave (modelo ${c.slice(20, 22)})${auto === 'danfe' ? ' — anexo em foto: DANFE; se for o XML/PDF, escolha NF-e' : ''}` : '';
+  }
+}
+
+/* Cartões de nota de OUTRAS pessoas (Equipe → colaborador) não estão em
+   `notas` (só as minhas). cardNotaHTML registra cada nota que desenha aqui,
+   senão o 🔗 dessas notas dizia "não tem chave" — parecia problema do SEFAZ
+   de outro estado, mas era só a busca na lista errada. */
+const _notasDesenhadas = new Map();
 function consultarNota(id) {
-  const n = notas.find(x => x.id === id);
+  const n = _notaPorId(id);
   abrirConsultaChave(n?.chave_nfce || '', n?.qr_url || null);
 }
 
@@ -303,38 +523,23 @@ function _loadScript(src, erro) {
   });
 }
 
-/* Cliente Supabase singleton — UMA promessa, UM client, UM listener.
-   Evita corrida (2 cliques rápidos) que criava clients duplicados. */
+/* Cliente da API — `sb` continua sendo o nome da variável (é "o servidor"
+   em todo o código), mas agora aponta para window.API (js/api.js), que
+   fala com a Petermann API na Locaweb. UMA promessa, UM listener. */
 let _sbPromise = null;
 function _ensureSb() {
   if (_sbPromise) return _sbPromise;
   _sbPromise = (async () => {
-    if (typeof supabase === 'undefined') {
-      await _loadScript(
-        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
-        'Falha ao carregar autenticação');
-    }
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    sb.auth.onAuthStateChange(async (_ev, session) => {
-      /* PASSWORD_RECOVERY também chega por aqui; a sessão que vem com ele é
-         só para trocar a senha, não para entrar no app. */
-      if (_ev === 'PASSWORD_RECOVERY') _recuperandoSenha = true;
-      if (_recuperandoSenha) { showTela('auth'); renderAuth('nova-senha'); return; }
-      if (session?.user) {
-        /* Login Google com escopo do Drive devolve o token do Google junto
-           da sessão. Entrega ao GDrive antes de abrir o app: é assim que
-           gestor/admin entram já conectados, sem botão. ~55 min de vida. */
-        if (session.provider_token && window.GDrive?.setToken) {
-          if (GDrive.setToken(session.provider_token, Date.now() + 55 * 60_000)) {
-            driveOk = true; updateDriveBadge();
-          }
-        }
-        if (user && _telaAtual === 'app') return;
-        await onLogin(session.user);
-      } else {
+    if (!window.API) throw new Error('Falha ao carregar autenticação');
+    sb = window.API;
+    sb.auth.onChange(ev => {
+      /* Token revogado/expirado (401) ou logout: volta para a tela de
+         entrada. Durante a troca de senha pelo link não há sessão mesmo. */
+      if (ev === 'SIGNED_OUT' && !_recuperandoSenha && _telaAtual !== 'auth') {
         user = null;
         _telaAtual = 'auth';
         showTela('auth');
+        renderAuth('login');
       }
     });
     return sb;
@@ -359,22 +564,46 @@ async function init() {
   if (!DEMO_MODE) {
     try {
       await _ensureSb();
-      const { data:{ session } } = await sb.auth.getSession();
-      /* veio do link do e-mail: pede a nova senha antes de qualquer coisa */
-      if (_recuperandoSenha) { showTela('auth'); renderAuth('nova-senha'); }
-      else if (!session) { showTela('auth'); renderAuth(); }
+      /* Lê a URL (retorno do Google, link de senha) e valida o token guardado */
+      const boot = await sb.auth.init();
+      if (boot.authError) {
+        toast(boot.authError === 'cancelado'    ? 'Login com Google cancelado'
+            : boot.authError === 'desativada'   ? 'Conta desativada. Fale com o gestor ou o administrador.'
+            : boot.authError === 'indisponivel' ? 'Login com Google ainda não está liberado'
+            : 'Não foi possível entrar com o Google', 'err');
+      }
+      /* Login Google com escopo do Drive devolve o token do Google junto.
+         Entrega ao GDrive antes de abrir o app: é assim que gestor/admin
+         entram já conectados, sem botão. ~55 min de vida. */
+      _driveDiag.googleTokenNoRetorno = boot.googleToken ? 'sim' : 'não';
+      if (boot.googleToken && window.GDrive?.setToken) {
+        if (GDrive.setToken(boot.googleToken.token, boot.googleToken.exp || Date.now() + 55 * 60_000)) {
+          driveOk = true; updateDriveBadge();
+          _driveDiag.setToken = 'ok';
+        }
+      }
+      if (boot.recovery) {
+        /* veio do link do e-mail: pede a nova senha antes de qualquer coisa */
+        _recuperacao = boot.recovery;
+        _recuperandoSenha = true;
+        showTela('auth'); renderAuth('nova-senha');
+      } else if (sb.auth.isLogged() && boot.user) {
+        await onLogin(boot.user);
+      } else {
+        showTela('auth'); renderAuth();
+      }
     } catch (_) {
-      // sem rede no boot — mostra login mesmo assim; o botao recarrega o Supabase
+      // sem rede no boot — mostra login mesmo assim
       showTela('auth'); renderAuth();
     }
   } else {
-    // modo demo sem Supabase
+    // modo demo sem servidor
     $('demo-banner').style.display = 'flex';
     await DB.open();
     user = { id:'demo-user', email:'demo@petermann.app', nome:'Demo', role:'admin', nucleo:'Cristalina' };
     await carregarDadosLocais();
     showTela('app');
-    switchView('home');
+    switchView('inicio');
   }
 
   initDrive();
@@ -419,13 +648,13 @@ async function onLogin(authUser) {
     _driveAutomatico();                       // perfil em cache já diz se é gestor/admin
     await carregarDadosLocais();
     showTela('app');
-    switchView('home');
+    switchView('inicio');
     setLoading(false);
 
     // perfil oficial em background (não bloqueia a tela)
     if (!DEMO_MODE && sb) {
-      sb.from('colaboradores').select('*').eq('id', authUser.id).maybeSingle()
-        .then(({ data }) => {
+      sb.auth.me()
+        .then(data => {
           if (!data) return;
           const mudou = JSON.stringify(data) !== JSON.stringify(perfil);
           user = data;
@@ -486,31 +715,26 @@ async function carregarDadosLocais() {
          fez com `select('*')`. Só esta consulta filtrava por núcleo, e o
          efeito era o gestor não enxergar quem estivesse cadastrado em
          outro núcleo — mesmo tendo permissão para isso no banco. */
-      const { data: collabs } = await sb.from('colaboradores').select('id,nome,nucleo,role');
+      const collabs = navigator.onLine ? await sb.colaboradores.listTodos() : Object.values(equipePorId);   // inclui desativados: o nome deles continua nas notas antigas
       equipePorId = {};
       (collabs || []).forEach(c => { equipePorId[c.id] = c; });
-      const ids = [...new Set([user.id, ...(collabs || []).map(c => c.id)])];
-      const { data: notasEquipe } = await sb.from('notas')
-        .select('*')
-        .in('user_id', ids)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false });
-      /* `vistos` precisa conhecer também o que foi apagado NESTE aparelho.
-         `notasLocais` já vem sem as apagadas, então uma nota recém-excluída
-         não constava aqui e voltava como "extra" — a consulta da equipe traz
-         do servidor tudo que ainda está com deleted=false, e o servidor só
-         fica sabendo da exclusão no sync, que roda depois desta função.
-         Sem isto a nota ia para a lixeira e continuava na tela. */
-      const conhecidasLocais = await DB.getNotasUser(user.id, true);
-      const vistos = new Set(conhecidasLocais.map(n => n.id));
-      const extras = (notasEquipe || []).filter(n => !vistos.has(n.id)).map(n => ({
+      /* 20/09/2026: as notas da equipe já chegam neste aparelho pelo mesmo
+         pull do sync (a API devolve ao gestor as de todos). Antes havia aqui
+         um GET /notas de TUDO a cada carregamento — com centenas de notas por
+         dia ficava pesado, e era um dos caminhos que ressuscitavam nota
+         apagada. Agora lê o store local: sem rede, e a exclusão feita aqui
+         já vale (a linha local tem deleted=true). */
+      /* 20/09/2026: as notas da equipe NÃO entram mais em `notas` — o admin
+         e o gestor viam as notas de todo mundo em "Minhas notas", no Painel,
+         no Saldo e no Início. Ficam em `notasEquipe`, só para o detalhe da
+         Equipe (editar/ver anexo/excluir pelo id). */
+      notasEquipe = (await DB.getNotasEquipe(user.id)).map(n => ({
         ...n,
         user_nome: equipePorId[n.user_id]?.nome || null,
       }));
-      notas = [...notasLocais, ...extras];
     } catch (err) {
       console.warn('carregarDadosLocais equipe:', err.message);
-      notas = notasLocais;
+      notasEquipe = [];
       equipePorId = {};
     }
   }
@@ -683,30 +907,36 @@ async function diagnosticoInstalacao() {
 
 /* ── Auth ────────────────────────────────────────────────── */
 
-/* RECUPERAÇÃO DE SENHA — a trava mais importante deste bloco.
-   O link do e-mail volta para o app com um token que o Supabase troca por
-   uma SESSÃO VÁLIDA. Como o onAuthStateChange manda para dentro do app
-   sempre que há sessão, sem isto a pessoa entraria direto e a tela de nova
-   senha nunca apareceria — o link viraria um "login mágico".
-   A leitura acontece na carga do script, ANTES de createClient(), porque o
-   cliente consome e limpa o hash da URL ao iniciar. */
-let _recuperandoSenha = /type=recovery/.test(location.hash + location.search);
+/* RECUPERAÇÃO DE SENHA.
+   O link do e-mail volta para o app com ?reset=<token>&email=<e-mail>. O
+   token NÃO é sessão: só serve para POST /auth/reset, junto da senha nova.
+   Enquanto _recuperandoSenha estiver ligado, a tela de nova senha tem
+   prioridade sobre qualquer outra (init() e o listener da API respeitam). */
+let _recuperandoSenha = false;
+let _recuperacao = null;          // { token, email } lidos da URL por API.auth.init()
 function _limparUrlRecuperacao() {
   _recuperandoSenha = false;
-  try { history.replaceState(null, '', location.pathname + location.search.replace(/[?&]type=recovery[^&]*/, '')); }
-  catch (_) {}
+  _recuperacao = null;
+  try {
+    const q = new URLSearchParams(location.search);
+    q.delete('reset'); q.delete('email');
+    const qs = q.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  } catch (_) {}
 }
 
 let authMode = 'login';
 /* Campo de senha com o olho de mostrar/ocultar. O botão fica por cima da
    borda direita do input, e o `padding-right` do .pass-wrap abre espaço para
    ele não cobrir o que a pessoa digita. */
-function _campoSenha(id, placeholder, autocomplete) {
+function _campoSenha(id, placeholder, autocomplete, grande = true) {   // 19/09: grande em todas as telas
+  /* grande = botão com texto ("Mostrar"), pedido em 19/09/2026 para a tela de
+     nova senha: o olho pequeno passava despercebido. */
   return `
-    <div class="pass-wrap">
+    <div class="pass-wrap ${grande ? 'pass-wrap-grande' : ''}">
       <input class="inp" id="${id}" type="password" placeholder="${placeholder}" autocomplete="${autocomplete}">
-      <button type="button" class="pass-toggle" aria-label="Mostrar senha"
-              title="Mostrar senha" onclick="alternarSenha('${id}', this)">👁️</button>
+      <button type="button" class="pass-toggle ${grande ? 'pass-toggle-grande' : ''}" aria-label="Mostrar senha"
+              title="Mostrar senha" onclick="alternarSenha('${id}', this)">${grande ? '👁️ Mostrar' : '👁️'}</button>
     </div>`;
 }
 
@@ -717,7 +947,8 @@ function alternarSenha(id, btn) {
   if (!inp) return;
   const estavaVisivel = inp.type === 'text';
   inp.type = estavaVisivel ? 'password' : 'text';
-  btn.textContent = estavaVisivel ? '👁️' : '🙈';
+  const grande = btn.classList.contains('pass-toggle-grande');
+  btn.textContent = estavaVisivel ? (grande ? '👁️ Mostrar' : '👁️') : (grande ? '🙈 Ocultar' : '🙈');
   const rotulo = estavaVisivel ? 'Mostrar senha' : 'Ocultar senha';
   btn.setAttribute('aria-label', rotulo);
   btn.setAttribute('title', rotulo);
@@ -739,25 +970,21 @@ function _botoesSociais() {
     <div class="auth-ou"><span>ou</span></div>`;
 }
 
-/* Vai para a página do provedor e volta para o app já logado: o Supabase
-   troca o código da URL pela sessão e o onAuthStateChange leva para dentro.
-   A URL de volta é a própria página (sem query), para o GitHub Pages
-   servir o index e o service worker não ficar com uma URL estranha. */
+/* Vai para o Google (pela API) e volta para o app já logado: a API troca o
+   código pelo perfil, emite o token e devolve para FRONT_URL#token=…, que
+   API.auth.init() lê no boot. Só o Google existe no backend por enquanto. */
 async function loginSocial(id) {
   const p = PROVEDORES_SOCIAIS.find(x => x.id === id);
   if (!p) return;
+  if (p.id !== 'google') { toast(`Login com ${p.nome} ainda não está liberado`, 'err'); return; }
+  if (!navigator.onLine) { toast('Sem conexão para entrar','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para entrar','err'); return; }
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: p.id,
-    options: { redirectTo: location.origin + location.pathname, ...(p.opcoes || {}) },
-  });
-  if (error) {
-    setLoading(false);
-    const naoAtivo = /not enabled|unsupported provider/i.test(error.message);
-    toast(naoAtivo ? `Login com ${p.nome} ainda não está liberado` : error.message, 'err');
+  if (!(await sb.auth.googleDisponivel())) {
+    setLoading(false); toast('Login com Google ainda não está liberado', 'err'); return;
   }
-  /* sem erro, o navegador está saindo para o provedor — o loading fica */
+  location.href = sb.auth.googleUrl();
+  /* o navegador está saindo para o Google — o loading fica */
 }
 
 function renderAuth(mode='login') {
@@ -791,8 +1018,8 @@ function renderAuth(mode='login') {
       <p class="auth-texto">
         Escolha a senha que você vai usar a partir de agora.
       </p>
-      <input class="inp" id="a-pass"  type="password" placeholder="Nova senha (min. 6 caracteres)" autocomplete="new-password">
-      <input class="inp" id="a-pass2" type="password" placeholder="Repita a nova senha" autocomplete="new-password">
+      ${_campoSenha('a-pass', 'Nova senha (min. 6 caracteres)', 'new-password', true)}
+      ${_campoSenha('a-pass2', 'Repita a nova senha', 'new-password', true)}
       <button class="btn btn-primary btn-full" id="a-btn-nova" onclick="definirNovaSenha()">Salvar senha</button>
       <p class="auth-switch"><a onclick="cancelarRecuperacao()">Cancelar</a></p>`;
     return;
@@ -812,7 +1039,7 @@ function renderAuth(mode='login') {
     ${_botoesSociais()}
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
-    <input class="inp" id="a-pass"  type="password" placeholder="Senha (min. 6 caracteres)" autocomplete="new-password">
+    ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     <div style="margin-top:8px;text-align:center">
@@ -832,12 +1059,11 @@ async function usarSemConta() {
   user = { id:'local-user', email:'local@petermann.app', nome:'Usuário Local', role:'admin', nucleo:'Cristalina' };
   await carregarDadosLocais();
   showTela('app');
-  switchView('home');
+  switchView('inicio');
 }
 
-/* Dispara o e-mail de redefinição. O redirectTo aponta para o próprio app
-   (origem + caminho, sem hash) e PRECISA estar na lista de Redirect URLs do
-   Supabase — fora dela o link do e-mail cai numa página de erro. */
+/* Dispara o e-mail de redefinição. O link do e-mail aponta para FRONT_URL
+   (config da API) com ?reset=…&email=… — precisa ser o endereço do app. */
 let _pedindoRecuperacao = false;
 async function pedirRecuperacao() {
   if (_pedindoRecuperacao) return;
@@ -850,9 +1076,7 @@ async function pedirRecuperacao() {
   setLoading(true);
   try {
     await _ensureSb();
-    const destino = location.origin + location.pathname;
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: destino });
-    if (error) throw error;
+    await sb.auth.forgot(email);
     /* Resposta genérica de propósito: dizer "e-mail não cadastrado" revelaria
        quem tem conta para qualquer um que digite endereços na tela. */
     toast('Se este e-mail tiver conta, o link chega em instantes. Verifique também o spam.');
@@ -866,7 +1090,7 @@ async function pedirRecuperacao() {
   }
 }
 
-/* Grava a senha nova usando a sessão temporária criada pelo link. */
+/* Grava a senha nova com o token que veio no link (vale 1 h, uma vez). */
 let _definindoSenha = false;
 async function definirNovaSenha() {
   if (_definindoSenha) return;
@@ -881,12 +1105,12 @@ async function definirNovaSenha() {
   setLoading(true);
   try {
     await _ensureSb();
-    const { error } = await sb.auth.updateUser({ password: nova });
-    if (error) throw error;
-    /* Sai da sessão do link antes de mandar para o login: assim a pessoa
-       estreia a senha nova, em vez de entrar de carona no token do e-mail. */
+    if (!_recuperacao) throw new Error('link inválido');
+    await sb.auth.reset({ email: _recuperacao.email, token: _recuperacao.token, password: nova });
+    /* Manda para o login: a pessoa estreia a senha nova (o servidor já
+       derrubou as sessões antigas). */
     _limparUrlRecuperacao();
-    await sb.auth.signOut();
+    sb.auth.clearLocal();
     toast('Senha alterada! Entre com ela agora.');
     showTela('auth');
     renderAuth('login');
@@ -902,7 +1126,7 @@ async function definirNovaSenha() {
 
 async function cancelarRecuperacao() {
   _limparUrlRecuperacao();
-  try { await sb?.auth?.signOut(); } catch (_) {}
+  try { sb?.auth?.clearLocal(); } catch (_) {}
   showTela('auth');
   renderAuth('login');
 }
@@ -913,10 +1137,10 @@ async function login() {
   if (!email||!pass) { toast('Preencha e-mail e senha','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para entrar','err'); return; }
-  const { data, error } = await sb.auth.signInWithPassword({ email, password:pass });
-  if (error) { setLoading(false); toast(error.message,'err'); return; }
-  // fallback: garante a entrada mesmo se o onAuthStateChange não disparar
-  if (data?.user && _telaAtual !== 'app') await onLogin(data.user);
+  let logado;
+  try { logado = await sb.auth.login({ email, password:pass }); }
+  catch (e) { setLoading(false); toast(e.message,'err'); return; }
+  if (logado && _telaAtual !== 'app') await onLogin(logado);
   setLoading(false);
 }
 
@@ -928,16 +1152,19 @@ async function register() {
   if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para cadastrar','err'); return; }
-  const { error } = await sb.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
+  /* A API cria o perfil e já devolve o token: entra direto, sem e-mail de
+     confirmação (era exigência do Supabase, não do app). */
+  let criado;
+  try { criado = await sb.auth.register({ nome, email, password:pass }); }
+  catch (e) { setLoading(false); toast(e.message,'err'); return; }
+  toast('Conta criada! Bem-vindo(a).');
+  if (criado && _telaAtual !== 'app') await onLogin(criado);
   setLoading(false);
-  if (error) { toast(error.message,'err'); return; }
-  toast('Verifique seu e-mail para confirmar o cadastro.');
-  renderAuth('login');
 }
 
 async function logout() {
   try {
-    if (sb) await sb.auth.signOut().catch(() => {});
+    if (sb) await sb.auth.logout();
   } catch (_) {}
   user = null; notas = []; repasses = []; equipePorId = {};
   document.getElementById('demo-banner').style.display = 'none';
@@ -951,6 +1178,7 @@ async function initDrive() {
   try {
     // init() restaura token do sessionStorage sem abrir nenhum popup
     driveOk = await GDrive.init();
+    _driveDiag.init = driveOk ? 'ok' : 'sem token salvo / falhou';
     updateDriveBadge();
     if (driveOk && user) {
       await pullFromDrive();
@@ -969,23 +1197,20 @@ async function initDrive() {
    Uma tentativa por aba: se o usuário negar, não fica em loop; na próxima
    abertura tenta de novo. Colaborador nunca passa por aqui. */
 async function _driveAutomatico() {
-  if (!_ehGestorOuAdmin() || DEMO_MODE || !sb || !navigator.onLine) return;
+  if (!_ehGestorOuAdmin() || DEMO_MODE || !sb || !navigator.onLine) { _driveDiag.automatico = 'não é gestor/admin ou offline'; return; }
   if (!window.GDrive?.isConfigured()) return;
-  if (driveOk && GDrive.isConnected()) return;
+  if (driveOk && GDrive.isConnected()) { _driveDiag.automatico = 'já conectado'; return; }
   const K = 'drive_auto_tentado';
   try {
-    if (sessionStorage.getItem(K)) return;
+    if (sessionStorage.getItem(K)) { _driveDiag.automatico = 'já tentou nesta sessão'; return; }
     sessionStorage.setItem(K, '1');
-  } catch (_) { return; }
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: location.origin + location.pathname,
-      scopes: 'https://www.googleapis.com/auth/drive',
-      queryParams: { login_hint: user?.email || '' },
-    },
-  });
-  if (error) console.warn('Drive automático:', error.message);
+  } catch (_) { _driveDiag.automatico = 'sem sessionStorage'; return; }
+  _driveDiag.automatico = 'redirecionou ao Google';
+  /* A API pede o escopo do Drive ao Google e devolve o token no retorno
+     (#google_token=…); init() entrega ao GDrive. Volta logado na MESMA
+     conta porque o e-mail é o mesmo. Sem Google no servidor, não sai daqui. */
+  if (!(await sb.auth.googleDisponivel())) return;
+  location.href = sb.auth.googleUrl({ drive: true, hint: user?.email || '' });
 }
 
 /* Ação explícita que precisa do Drive (planilha, fotos da equipe) com o
@@ -1004,6 +1229,32 @@ async function _garantirDrive() {
     toast('Drive: ' + (e.message || 'não conectou'), 'err');
     return false;
   }
+}
+
+function _driveDiagTexto() {
+  const g = window.GDrive?.diagnostico?.() || {};
+  return [
+    `token do Google no retorno do login: ${_driveDiag.googleTokenNoRetorno}`,
+    `setToken: ${_driveDiag.setToken}`,
+    `init (restaurar da sessão): ${_driveDiag.init}`,
+    `conexão automática: ${_driveDiag.automatico}`,
+    `token em memória: ${g.token} (expira em ${g.expiraEm})`,
+    `Google Identity: ${g.gis} · salvo na sessão: ${g.salvoNaSessao}`,
+    `erro do init: ${g.erroInit}`,
+    `papel: ${user?.role || '—'} · online: ${navigator.onLine} · instalado: ${matchMedia('(display-mode: standalone)').matches}`,
+    `build ${APP_BUILD}`,
+  ].join('\n');
+}
+/* Popup do Google (precisa do toque) — o caminho quando o automático falhou. */
+async function conectarDriveAgora() {
+  if (await _garantirDrive()) { toast('Drive conectado ✅'); renderPerfil(); }
+  else renderPerfil();
+}
+/* Refaz o login pelo Google pedindo o Drive junto (token vem no retorno). */
+async function reconectarDrivePeloGoogle() {
+  if (!sb || !(await sb.auth.googleDisponivel())) { toast('Login com Google indisponível', 'err'); return; }
+  try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
+  location.href = sb.auth.googleUrl({ drive: true, hint: user?.email || '' });
 }
 
 async function testarDrive() {
@@ -1032,7 +1283,7 @@ async function migrarPastasDrive() {
        só com o próprio, e as pastas dos outros seguem intactas. */
     const nomePorUserId = {};
     if (sb && !DEMO_MODE) {
-      const { data: collabs } = await sb.from('colaboradores').select('id,nome');
+      const collabs = await sb.colaboradores.list().catch(() => []);
       (collabs || []).forEach(c => { if (c.nome) nomePorUserId[c.id] = c.nome; });
     }
     if (user.nome) nomePorUserId[user.id] = user.nome;   // o próprio perfil manda
@@ -1043,7 +1294,7 @@ async function migrarPastasDrive() {
     const notaPorId = {};
     notas.forEach(n => { notaPorId[n.id] = n; });
     if (sb && !DEMO_MODE) {
-      const { data } = await sb.from('notas').select('id,user_id,tipo,subtipo,mes,ano,data');
+      const data = await sb.notas.list({ fields: 'id,user_id,tipo,subtipo,mes,ano,data' }).catch(() => []);
       (data || []).forEach(n => { notaPorId[n.id] = n; });
     }
 
@@ -1112,18 +1363,162 @@ function updateDriveBadge() {
 /* ── Navegação ───────────────────────────────────────────── */
 function switchView(v) {
   viewAtual = v;
+  /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
+  { const b = $('hdr-inicio'); if (b) b.style.display = v === 'inicio' ? 'none' : ''; }
+  { const r = $('btn-inicio-rodape'); if (r) r.style.display = v === 'inicio' ? 'none' : ''; $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
-  document.querySelectorAll('.nav-btn[data-view]').forEach(b =>
-    b.classList.toggle('active', b.dataset.view===v)
-  );
+  if (v !== 'arquivos') window.Arquivos?.reset?.();
+  document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
+    const ativo = b.dataset.view === v;
+    if (ativo && !b.classList.contains('active')) {      // pulinho só ao ENTRAR na aba
+      b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
+      b.addEventListener('animationend', () => b.classList.remove('bump'), { once: true });
+    }
+    b.classList.toggle('active', ativo);
+  });
   const el = $('app-content');
   el.scrollTop = 0;
   if (v==='home')    renderHome();
+  else if (v==='inicio') renderInicio();
+  else if (v==='despesas') renderDespesas();
+  else if (v==='frota')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Frota?.render(); else switchView('inicio'); }
+  else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
+  else if (v==='arquivos') window.Arquivos?.render();
   else if (v==='notas')  renderNotas();
   else if (v==='lixeira') renderNotasApagadas();
   else if (v==='saldo')  renderSaldo();
   else if (v==='equipe') renderEquipe();
   else if (v==='perfil') renderPerfil();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VIEW: DESPESAS CORPORATIVAS PETERMANN (20/09/2026)
+   Os três lançamentos (QR, sem QR, repasse) num só lugar, com os painéis
+   grandes que estavam no Início. O Início ficou com um botão só.
+═══════════════════════════════════════════════════════════ */
+function renderDespesas() {
+  $('app-content').innerHTML = `
+  <div class="db-container">
+    <div class="ini-ola">
+      <h2>🧾 Despesas Corporativas Petermann</h2>
+      <span>Notas RDA / RDM e repasses</span>
+    </div>
+
+    <div class="ini-titulo">O que você quer lançar?</div>
+    <button class="pnl pnl-grande" onclick="iniciarQR()">
+      <span class="pnl-conteudo">
+        <span class="pnl-ico">📷</span>
+        <span class="pnl-tit">Lançar nota pelo QR Code</span>
+        <span class="pnl-sub">Aponte a câmera para o QR do cupom. Empresa, valor e data entram sozinhos.</span>
+      </span>
+    </button>
+    <div class="pnl-linha">
+      <button class="pnl pnl-mini" onclick="abrirSeletorTipoLancamento({ _manual: true })">
+        <span class="pnl-conteudo"><span class="pnl-ico">📝</span><span class="pnl-tit">Nota sem QR</span><span class="pnl-sub">Recibo, DANFE, NFS-e: foto ou arquivo.</span></span>
+      </button>
+      <button class="pnl pnl-mini" onclick="abrirFormRepasse()">
+        <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">Repasse</span><span class="pnl-sub">Recebido ou a pedir (PIX).</span></span>
+      </button>
+    </div>
+
+    <div class="ini-titulo">Ir para</div>
+    <div class="ini-ir">
+      <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">Saldo</span><span class="ini-ir-sub">RDA / RDM e planilha</span></button>
+      <button class="ini-ir-btn" onclick="switchView('inicio')"><span class="ini-ir-ico">🏠</span><span class="ini-ir-lbl">Início</span><span class="ini-ir-sub">voltar</span></button>
+    </div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VIEW: INÍCIO — tela de entrada (pedido em 16/09/2026)
+   Quem entra no sistema quer LANÇAR. Três ações grandes, em linguagem
+   de quem está no campo, um resumo do mês e atalhos para o resto.
+   Nada aqui é novo: só chama o que já existe (QR, Manual, Repasse).
+═══════════════════════════════════════════════════════════ */
+function renderInicio() {
+  const A = _agregaPeriodo(filMes, filAno, 'mensal');
+  const hora = new Date().getHours();
+  const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+  _recalcularDuplicatas(notas);
+  const pend = notas.filter(n => !n.deleted && (n.sync_status === 'failed' || n.synced === false));
+  const semAnexo = A.ns.filter(n => !n.foto_path && !n.foto_local);
+  const semValor = A.ns.filter(n => !(Number(n.valor) > 0));
+  const dups = A.ns.filter(n => _dupMapa.has(n.id));
+  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length;
+  const pendTxt = [
+    pend.length ? `${pend.length} aguardando envio` : null,
+    semAnexo.length ? `${semAnexo.length} sem anexo` : null,
+    semValor.length ? `${semValor.length} sem valor` : null,
+    dups.length ? `${dups.length} possível duplicata` : null,
+  ].filter(Boolean).join(' · ');
+
+  const ultimas = [...notas].filter(n => !n.deleted)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
+
+  $('app-content').innerHTML = `
+  <div class="db-container">
+    <div class="ini-ola">
+      <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
+      <span>${esc(hojeTxt)}</span>
+    </div>
+
+    <div class="ini-titulo">O que você quer fazer?</div>
+    <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel
+         (Despesas Corporativas Petermann) que abre a tela com os três. -->
+    <button class="pnl pnl-grande" onclick="switchView('despesas')">
+      <span class="pnl-conteudo">
+        <span class="pnl-ico">🧾</span>
+        <span class="pnl-tit">Despesas Corporativas Petermann</span>
+        <span class="pnl-sub">Lançar nota (QR ou sem QR) e registrar repasse — RDA / RDM.</span>
+      </span>
+    </button>
+    <div class="pnl-linha">
+      ${MODULOS_EXTRAS && _ehGestorOuAdmin() ? `
+      <button class="pnl pnl-mini" onclick="switchView('frota')">
+        <span class="pnl-conteudo"><span class="pnl-ico">🚗</span><span class="pnl-tit">Frota / KM</span><span class="pnl-sub">Odômetro dos veículos.</span></span>
+      </button>
+      <button class="pnl pnl-mini" onclick="switchView('ponto')">
+        <span class="pnl-conteudo"><span class="pnl-ico">⏱️</span><span class="pnl-tit">Ponto</span><span class="pnl-sub">Entrada, saída, extras.</span></span>
+      </button>` : ''}
+    </div>
+
+    <div class="ini-titulo">${MESES[filMes-1]} ${filAno}</div>
+    <div class="ini-resumo">
+      <button class="ini-kpi" onclick="irParaNotas()">
+        <div class="ini-kpi-lbl">Notas do mês</div>
+        <div class="ini-kpi-val">${A.ns.length}</div>
+        <div class="ini-kpi-sub">${brl(A.gasto)} em despesas</div>
+      </button>
+      <button class="ini-kpi ${pendTotal ? 'alerta' : ''}" onclick="${pendTotal ? "switchView('home')" : "switchView('saldo')"}">
+        <div class="ini-kpi-lbl">${pendTotal ? 'Pendências' : 'Saldo'}</div>
+        <div class="ini-kpi-val">${pendTotal ? pendTotal : brl(A.recebido - A.gasto)}</div>
+        <div class="ini-kpi-sub">${pendTotal ? esc(pendTxt) : 'recebido − gasto no mês'}</div>
+      </button>
+    </div>
+
+    <div class="ini-titulo">Ir para</div>
+    <div class="ini-ir">
+      <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
+      <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">Saldo</span><span class="ini-ir-sub">RDA / RDM e planilha</span></button>
+      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">notas de todos</span></button>` : ''}
+      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
+      <button class="ini-ir-btn" onclick="switchView('perfil')"><span class="ini-ir-ico">👤</span><span class="ini-ir-lbl">Perfil</span><span class="ini-ir-sub">conta, backup, ajuda</span></button>
+    </div>
+
+    <button class="btn btn-danger-outline btn-full" style="margin-top:6px;min-height:48px" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair da conta</button>
+
+    ${ultimas.length ? `
+    <div class="ini-titulo">Últimos lançamentos</div>
+    <div class="notas-list">${ultimas.map(n => cardNotaHTML(n, 'inithumb-')).join('')}</div>` : `
+    <div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Lançar nota pelo QR Code</b> e aponte para o QR do cupom — é o jeito mais rápido.</div>`}
+  </div>`;
+
+  if (ultimas.length) _carregarMiniaturas(ultimas, 'inithumb-').catch(() => {});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1289,6 +1684,7 @@ function abrirBarraDash() {
   filMes = d.mes; filAno = d.ano;
   dashBarraSel = null;
   renderHome();
+  _garantirAnoEmFoco();
 }
 
 /* ── Gráfico de evolução (SVG, interativo) ──────────────── */
@@ -1503,14 +1899,16 @@ function renderHome() {
 
   /* ── Pendências (lista interativa com transferência) ───── */
   const escopo   = modo === 'anual';
+  _recalcularDuplicatas(notas);   // sobre TODAS as notas: a repetida pode estar em outro mês
   const pendentes = A.ns.filter(n =>
-    n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local)
+    n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local) || _dupMapa.has(n.id)
   ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
   const resumoPend = [
     { ico:'⚠️', txt:'Sem valor',    n: pendentes.filter(n => _n(n.valor) <= 0).length, flag:'sem-valor' },
     { ico:'📎', txt:'Sem anexo',    n: pendentes.filter(n => !n.foto_path && !n.foto_local).length, flag:'sem-anexo' },
     { ico:'⏳', txt:'Aguardando envio', n: pendentes.filter(n => n.sync_status === 'failed' || n.synced === false).length, flag:'pendente' },
+    { ico:'🔁', txt:'Possíveis duplicatas', n: pendentes.filter(n => _dupMapa.has(n.id)).length, flag:'duplicata' },
   ];
 
   const linhaResumo = r => r.n ? `
@@ -1528,6 +1926,8 @@ function renderHome() {
     if (n.sync_status === 'failed') m.push('falha na sincronização');
     else if (n.synced === false) m.push('não enviada');
     if (_dataImplausivel(n)) m.push('data fora do período');
+    const d = _dupMapa.get(n.id);
+    if (d) m.push(`possível duplicata (${_MOTIVO_DUP[d.motivo]})`);
     return m.join(' · ');
   };
 
@@ -1889,6 +2289,7 @@ const _ROTULO_FLAG = {
   'sem-anexo'    : '📎 Só notas sem anexo',
   'pendente'     : '⏳ Só notas aguardando envio',
   'data-suspeita': '📅 Notas com data fora do período',
+  'duplicata'    : '🔁 Possíveis registros duplicados',
 };
 
 /* Este filtro ignora mês/ano: a nota está escondida por estar fora deles. */
@@ -1911,6 +2312,7 @@ function _passaFiltroNota(n) {
   if (filtroNotasFlag === 'sem-anexo')     return !n.foto_path && !n.foto_local;
   if (filtroNotasFlag === 'pendente')      return n.sync_status === 'failed' || n.synced === false;
   if (filtroNotasFlag === 'data-suspeita') return _dataImplausivel(n);
+  if (filtroNotasFlag === 'duplicata')     return _dupMapa.has(n.id);
   return true;
 }
 
@@ -1920,7 +2322,20 @@ function _statusNota(n) {
   return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
 
+/* Nota igual ATIVA do mesmo dono (para avisar antes de restaurar) */
+function _dupNaLixeira(n) {
+  for (const v of notas) {
+    if (v.id === n.id || v.deleted || (n.user_id && v.user_id && v.user_id !== n.user_id)) continue;
+    const m = _motivoDuplicata(n, v);
+    if (m) return { nota: v, motivo: m };
+  }
+  return null;
+}
+
 async function restaurarNota(id) {
+  const arq = (await DB.getDeletedNotasUser(user.id).catch(() => [])).find(x => x.id === id);
+  const d = arq ? _dupNaLixeira(arq) : null;
+  if (d && !confirm(`Já existe uma nota igual ativa:\n${_resumoNota(d.nota)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`)) return;
   const n = await DB.restoreNota(id);
   if (!n) {
     toast('Lançamento não encontrado na lixeira', 'err');
@@ -1945,7 +2360,7 @@ function _podeApagarDefinitivo(n) {
 
 async function apagarDefinitivo(id) {
   const n = (await DB.getDeletedNotasUser(user.id).catch(() => []))
-    .find(x => x.id === id) || notas.find(x => x.id === id);
+    .find(x => x.id === id) || _notaPorId(id);
   if (!n) { toast('Lançamento não encontrado', 'err'); return; }
   if (!_podeApagarDefinitivo(n)) { toast('Só o dono da nota ou o admin pode apagar em definitivo', 'err'); return; }
 
@@ -1967,23 +2382,36 @@ async function apagarDefinitivo(id) {
 
   setLoading(true);
   try {
-    // 1) anexo no Storage — falha aqui não impede apagar a nota, mas avisa
-    if (n.foto_path) {
-      const { error } = await sb.storage.from('notas-fotos').remove([n.foto_path]);
-      if (error) console.warn('anexo nao removido:', error.message);
-    }
-    // 2) a linha no servidor — se falhar, para tudo: apagar só aqui traria de volta
-    const { error } = await sb.from('notas').delete().eq('id', id);
-    if (error) throw error;
-    // 3) só então some daqui
+    // 1) linha + anexo no servidor (a API apaga o arquivo do disco junto) —
+    //    se falhar, para tudo: apagar só aqui traria de volta
+    await sb.notas.delete(id);
+    // 2) só então some daqui
     await DB.purgeNotaLocal(id);
 
     await carregarDadosLocais();
     if (viewAtual === 'lixeira') renderNotasApagadas(); else renderNotas();
     toast('Lançamento apagado em definitivo');
   } catch (e) {
+    if (e?.status === 404) {
+      /* já não existe no servidor (apagada por outro aparelho): o que sobrou
+         é a cópia local — some daqui e pronto */
+      await DB.purgeNotaLocal(id);
+      await carregarDadosLocais();
+      if (viewAtual === 'lixeira') renderNotasApagadas(); else renderNotas();
+      toast('Já não existia no servidor — removida deste aparelho');
+      return;
+    }
     toast('Não foi possível apagar: ' + (e.message || e), 'err');
   } finally { setLoading(false); }
+}
+
+/* Cópia órfã da lixeira (não existe no servidor): só limpa o aparelho. */
+async function limparDaLixeira(id) {
+  if (!confirm('Remover este item da lixeira deste aparelho? (ele já não existe no servidor)')) return;
+  await DB.limparDaLixeira(id, true);
+  await carregarDadosLocais();
+  renderNotasApagadas();
+  toast('Removido da lixeira');
 }
 
 async function renderNotasApagadas() {
@@ -1992,7 +2420,25 @@ async function renderNotasApagadas() {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗑️</div><p>Faça login para ver os lançamentos apagados.</p></div>';
     return;
   }
-  const items = await DB.getDeletedNotasUser(user.id).catch(() => []);
+  let items = await DB.getDeletedNotasUser(user.id).catch(() => []);
+
+  /* 20/09/2026: a lixeira guardava cópias que já não existem no servidor
+     (apagadas em definitivo por outro aparelho, ou da época do Supabase) —
+     "Apagar definitivo" falhava com 404 e "Restaurar" criava uma nota
+     repetida. Com internet, pergunta ao servidor o que ainda existe:
+       • não existe lá → "só neste aparelho": só dá para limpar daqui;
+       • existe e NÃO está apagada → foi restaurada em outro lugar: sai da
+         lixeira sozinha (o sync já trouxe a viva). */
+  const noServidor = new Map();
+  if (sb && navigator.onLine && items.length) {
+    try {
+      (await sb.notas.existem(items.map(n => n.id))).forEach(x => noServidor.set(x.id, x.deleted));
+      const limpar = items.filter(n => noServidor.has(n.id) && noServidor.get(n.id) === false);
+      for (const n of limpar) await DB.limparDaLixeira(n.id, false).catch(() => {});
+      if (limpar.length) items = items.filter(n => !limpar.includes(n));
+      items.forEach(n => { n._orfa = !noServidor.has(n.id); });
+    } catch (_) { /* offline ou erro: mostra como sempre */ }
+  }
   const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -2028,12 +2474,21 @@ async function renderNotasApagadas() {
           <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
+        ${(() => {
+          const d = _dupNaLixeira(n);
+          const avisos = [];
+          if (d) avisos.push(`⚠️ <b>Já existe uma nota igual ativa</b> (${esc(_resumoNota(d.nota))}). Restaurar vai duplicar.`);
+          if (n._orfa) avisos.push('📱 <b>Só neste aparelho</b> — não existe mais no servidor. Pode limpar daqui.');
+          return avisos.length ? `<div class="nota-obs" style="color:#b45309;background:#fff7e6;border-radius:8px;padding:6px 8px;margin:6px 0 2px">${avisos.join('<br>')}</div>` : '';
+        })()}
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
-            <button class="btn btn-sm btn-primary" onclick="restaurarNota('${n.id}')">Restaurar</button>
+            ${n._orfa
+              ? `<button class="btn btn-sm btn-danger-outline" onclick="limparDaLixeira('${n.id}')">Limpar daqui</button>`
+              : `<button class="btn btn-sm ${_dupNaLixeira(n) ? 'btn-outline' : 'btn-primary'}" onclick="restaurarNota('${n.id}')">Restaurar</button>
             ${_podeApagarDefinitivo(n) ? `<button class="btn btn-sm btn-danger-outline"
-              onclick="apagarDefinitivo('${n.id}')" title="Apagar em definitivo">Apagar definitivo</button>` : ''}
+              onclick="apagarDefinitivo('${n.id}')" title="Apagar em definitivo">Apagar definitivo</button>` : ''}`}
           </div>
         </div>
       </div>`;
@@ -2045,6 +2500,7 @@ async function renderNotasApagadas() {
 }
 
 function renderNotas() {
+  _recalcularDuplicatas(notas);
   const el = $('app-content');
   const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO;
   const noPeriodo  = n => semPeriodo || (n.ano === filAno && (filtroNotasAno || n.mes === filMes));
@@ -2102,6 +2558,7 @@ function renderNotas() {
    nota pelo id na lista global `notas`; para gestor/admin ela já inclui as
    notas da equipe, e o detalhe garante isso antes de desenhar. */
 function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
+  _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
   return `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
@@ -2110,6 +2567,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
                 title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
+          ${docBadgeHTML(n)}
+          ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${esc(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
           ${!opts.semDono && _ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
             ? `<span class="subtipo-tag" title="Nota de outro colaborador">👤 ${esc(_rotuloProprietario(n))}</span>`
@@ -2120,12 +2579,13 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
         <div class="nota-body">
           <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
           ${n.cnpj&&!n.razao_social ? `<div class="nota-cnpj">${BrasilAPI.formatar(n.cnpj)}</div>` : ''}
+          ${_numeroSerieHTML(n)}
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
-            ${n.chave_nfce ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar no SEFAZ">🔗</button>` : ''}
+            ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
@@ -2180,11 +2640,10 @@ async function _carregarMiniaturas(ns, pref = 'thumb-') {
   /* offline ou sem sessão: fica o 📎, que ainda abre o visualizador */
   if (!sb || !navigator.onLine) return;
 
-  const { data } = await sb.storage.from('notas-fotos')
-    .createSignedUrls(pendentes.map(n => n.foto_path), 300);
-  (data || []).forEach((r, i) => {
-    const n = pendentes[i];
-    if (r?.signedUrl) _pintarMiniatura($(pref + n.id), r.signedUrl, _extDeUrl(n.foto_path));
+  const urls = await sb.fotos.urls(pendentes.map(n => n.foto_path)).catch(() => ({}));
+  pendentes.forEach(n => {
+    const url = urls[n.foto_path];
+    if (url) _pintarMiniatura($(pref + n.id), url, _extDeUrl(n.foto_path));
   });
 }
 
@@ -2217,6 +2676,7 @@ function mudarMes(delta) {
   if (viewAtual==='home')  renderHome();
   if (viewAtual==='notas') renderNotas();
   if (viewAtual==='saldo') renderSaldo();
+  _garantirAnoEmFoco();
 }
 
 function filtrarTipo(btn) {
@@ -2297,7 +2757,11 @@ function renderSaldo() {
     <div class="export-btns">
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV</button>
       <button class="btn btn-sm btn-outline" onclick="exportExcel()">Excel Anual</button>
-      <button class="btn btn-sm btn-primary" onclick="exportSheets()">📊 Google Sheets</button>
+    </div>
+    <div class="export-btns" style="margin-top:8px">
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa, ${filAno}):</span>
+      <button class="btn btn-sm btn-primary" onclick="baixarRelatorioCv('xlsx')">📗 Excel</button>
+      <button class="btn btn-sm btn-outline" onclick="baixarRelatorioCv('pdf')">📕 PDF</button>
     </div>
   </div>
 
@@ -2319,7 +2783,7 @@ function renderSaldo() {
 /* ── VIEW: EQUIPE ────────────────────────────────────────── */
 async function renderEquipe() {
   if (!sb||DEMO_MODE) {
-    $('app-content').innerHTML = '<div class="empty-state">Equipe disponível com Supabase configurado.</div>';
+    $('app-content').innerHTML = '<div class="empty-state">Equipe disponível com o servidor configurado.</div>';
     return;
   }
   const el = $('app-content');
@@ -2329,10 +2793,10 @@ async function renderEquipe() {
 /* O detalhe do colaborador (gestor.js) desenha notas que vieram direto do
    servidor; os botões do cartão procuram pelo id em `notas`. */
 function garantirNotasNaLista(lista) {
-  const ids = new Set(notas.map(n => n.id));
+  const ids = new Set([...notas.map(n => n.id), ...notasEquipe.map(n => n.id)]);
   (lista || []).forEach(n => {
     if (ids.has(n.id)) return;
-    notas.push({ ...n, user_nome: equipePorId[n.user_id]?.nome || null });
+    notasEquipe.push({ ...n, user_nome: equipePorId[n.user_id]?.nome || null });
   });
 }
 
@@ -2341,6 +2805,26 @@ function mudarMesEquipe(delta) {
   if (filMes > 12) { filMes = 1;  filAno++; }
   if (filMes < 1)  { filMes = 12; filAno--; }
   renderEquipe();
+  _garantirAnoEmFoco();
+}
+
+/* Janela por ano (20/09/2026): o aparelho só guarda os anos que já pediu.
+   Ao navegar para um ano ainda não baixado, busca no servidor e redesenha. */
+let _garantindoAno = null;
+async function _garantirAnoEmFoco() {
+  if (!sb || !user || DEMO_MODE || !navigator.onLine) return;
+  const ano = filAno;
+  if (_garantindoAno === ano) return;
+  _garantindoAno = ano;
+  try {
+    const n = await DB.garantirAno(sb, user.id, ano);
+    if (n && filAno === ano) {
+      await carregarDadosLocais();
+      toast(`${n} lançamento${n > 1 ? 's' : ''} de ${ano} baixado${n > 1 ? 's' : ''}`);
+      switchView(viewAtual);
+    }
+  } catch (_) {}
+  finally { if (_garantindoAno === ano) _garantindoAno = null; }
 }
 
 function exportExcelEquipe() {
@@ -2380,7 +2864,7 @@ const _urlCarrega = url => new Promise(res => {
 });
 
 async function diagnosticoFotos() {
-  if (!sb || DEMO_MODE) { alert('Disponível apenas com Supabase configurado.'); return; }
+  if (!sb || DEMO_MODE) { alert('Disponível apenas com o servidor configurado.'); return; }
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
   $('ocr-progress').textContent = 'Verificando anexos…';
@@ -2407,11 +2891,9 @@ async function diagnosticoFotos() {
                 : (await _urlCarrega(driveUrl)) ? 'drive:carrega'
                 : 'drive:NÃO CARREGA');
       try {
-        const r = await sb.storage.from('notas-fotos').download(n.foto_path);
-        passos.push(r.error ? `supabase:ERRO ${r.error.message}`
-                  : r.data  ? `supabase:ok ${Math.round(r.data.size/1024)}kB`
-                            : 'supabase:vazio');
-      } catch (e) { passos.push('supabase:EXCEÇÃO ' + e.message); }
+        const b = await sb.fotos.download(n.foto_path);
+        passos.push(b ? `servidor:ok ${Math.round(b.size/1024)}kB` : 'servidor:vazio');
+      } catch (e) { passos.push('servidor:ERRO ' + e.message); }
       linhas.push(`${fmtData(n.data)} ${n.tipo} ${brl(n.valor)}\n  ${n.foto_path}\n  ${passos.join(' | ')}`);
     }
 
@@ -2430,9 +2912,9 @@ async function diagnosticoFotos() {
         ? `AMOSTRA (${amostra.length} mais recentes):\n\n` + linhas.join('\n\n')
         : 'Nenhuma nota com foto_path para testar.') +
       `\n\nComo ler:\n` +
-      `• supabase:ok → arquivo existe e você consegue baixar\n` +
-      `• supabase:ERRO Object not found → arquivo não está lá OU a leitura foi negada\n` +
-      `• local:não e supabase:ERRO → é este caso que deixa a nota sem imagem`
+      `• servidor:ok → arquivo existe e você consegue baixar\n` +
+      `• servidor:ERRO → arquivo não está lá OU a leitura foi negada\n` +
+      `• local:não e servidor:ERRO → é este caso que deixa a nota sem imagem`
     );
   } catch (e) {
     ov.style.display = 'none';
@@ -2446,7 +2928,7 @@ async function diagnosticoFotos() {
    já estiver no Drive, só atualiza (não duplica).
    Mostra um resumo FIXO (popup) com o diagnóstico de cada etapa. */
 async function enviarFotosEquipeDrive() {
-  if (!sb || DEMO_MODE) { alert('Disponível apenas com Supabase configurado.'); return; }
+  if (!sb || DEMO_MODE) { alert('Disponível apenas com o servidor configurado.'); return; }
   if (!(await _garantirDrive())) return;
   if (!confirm('Enviar ao Drive as fotos de TODOS os colaboradores (todos os meses)?\nPode levar um tempo conforme a quantidade.')) return;
 
@@ -2456,22 +2938,23 @@ async function enviarFotosEquipeDrive() {
 
   try {
     // 1) mapa user_id -> {nome,email} p/ nomear a pasta do colaborador
-    const { data: collabs, error: ce } = await sb.from('colaboradores').select('id,nome,email');
-    if (ce) throw new Error('colaboradores: ' + ce.message);
+    let collabs;
+    try { collabs = await sb.colaboradores.list(); }
+    catch (e) { throw new Error('colaboradores: ' + e.message, { cause: e }); }
     const mapa = {};
     (collabs || []).forEach(c => { mapa[c.id] = c; });
 
     // 2) TODAS as notas com foto (todos os meses / todos os colaboradores)
-    const { data: notas, error } = await sb.from('notas')
-      .select('id,user_id,tipo,subtipo,valor,mes,ano,data,foto_path,deleted');
-    if (error) throw new Error('notas: ' + error.message);
+    let notas;
+    try { notas = await sb.notas.list({ fields: 'id,user_id,tipo,subtipo,valor,mes,ano,data,foto_path,deleted' }); }
+    catch (e) { throw new Error('notas: ' + e.message, { cause: e }); }
     const totalNotas = (notas || []).length;
     const comFoto = (notas || []).filter(n => n.foto_path && !n.deleted);
 
     if (!comFoto.length) {
       if (ov) ov.style.display = 'none';
-      alert(`Nenhuma foto para enviar.\n\nNotas que este perfil consegue ler: ${totalNotas}\nCom foto no Supabase: 0\n\n`
-        + `Se você sabe que há fotos: ou elas ainda não foram sincronizadas ao Supabase, `
+      alert(`Nenhuma foto para enviar.\n\nNotas que este perfil consegue ler: ${totalNotas}\nCom foto no servidor: 0\n\n`
+        + `Se você sabe que há fotos: ou elas ainda não foram sincronizadas ao servidor, `
         + `ou as permissões não deixam este perfil ver as notas dos outros colaboradores.`);
       return;
     }
@@ -2482,7 +2965,7 @@ async function enviarFotosEquipeDrive() {
     try { await GDrive.atualizarIndice(); }
     catch (e) { idxAviso = `Aviso: não li o Drive antes (${e.message}).\n\n`; }
 
-    // 4) baixa do Supabase e sobe pro Drive, contando cada etapa
+    // 4) baixa do servidor e sobe pro Drive, contando cada etapa
     let ok = 0, falhaBaixar = 0, falhaSubir = 0, erroBaixar = '', erroSubir = '', i = 0;
     /* Rede de campo cai no meio (Wi-Fi com portal, troca para 4G): numa
        rodada de 31 fotos, 20 downloads falharam em sequência e um upload
@@ -2495,9 +2978,9 @@ async function enviarFotosEquipeDrive() {
       catch (e1) { await pausa(1500); return fn(); }
     };
     const baixar = async path => {
-      const r = await sb.storage.from('notas-fotos').download(path);
-      if (r.error || !r.data) throw new Error(r.error?.message || 'sem dados');
-      return r.data;
+      const b = await sb.fotos.download(path);
+      if (!b) throw new Error('sem dados');
+      return b;
     };
     const ficaram = [];
 
@@ -2532,7 +3015,7 @@ async function enviarFotosEquipeDrive() {
       + `Consolidação concluída.\n\n`
       + `Notas com foto: ${comFoto.length}\n`
       + `✅ Enviadas ao Drive: ${ok}\n`
-      + `⬇️ Falha ao BAIXAR do Supabase: ${falhaBaixar}\n`
+      + `⬇️ Falha ao BAIXAR do servidor: ${falhaBaixar}\n`
       + `☁️ Falha ao SUBIR no Drive: ${falhaSubir}\n`
       + (erroBaixar ? `\nErro ao baixar: ${erroBaixar}` : '')
       + (erroSubir  ? `\nErro ao subir: ${erroSubir}` : '')
@@ -2570,9 +3053,9 @@ async function _autoConsolidarFotosDrive() {
   await GDrive.atualizarIndice();
 
   // 2) mapa de colaboradores + todas as notas com foto
-  const [{ data: collabs }, { data: notas }] = await Promise.all([
-    sb.from('colaboradores').select('id,nome,email'),
-    sb.from('notas').select('id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted'),
+  const [collabs, notas] = await Promise.all([
+    sb.colaboradores.list(),
+    sb.notas.list({ fields: 'id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted' }),
   ]);
   const mapa = {};
   (collabs || []).forEach(c => { mapa[c.id] = c; });
@@ -2583,16 +3066,17 @@ async function _autoConsolidarFotosDrive() {
   );
   if (!pendentes.length) return;
 
-  // 4) baixa do Supabase e sobe pro Drive (para suave se a conexão cair)
+  // 4) baixa do servidor e sobe pro Drive (para suave se a conexão cair)
   let ok = 0;
   for (const n of pendentes) {
     if (!navigator.onLine || !GDrive.isConnected()) break;
     try {
-      const r = await sb.storage.from('notas-fotos').download(n.foto_path);
-      if (r.error || !r.data) continue;
+      let blob = null;
+      try { blob = await sb.fotos.download(n.foto_path); } catch (_) { blob = null; }
+      if (!blob) continue;
       const ext = (String(n.foto_path).split('.').pop() || 'jpg').toLowerCase();
       const c   = mapa[n.user_id] || {};
-      await GDrive.uploadFotoComDados(r.data, {
+      await GDrive.uploadFotoComDados(blob, {
         // subtipo/data obrigatórios — ver o comentário no envio da equipe
         id: n.id, tipo: n.tipo, subtipo: n.subtipo, mes: n.mes, ano: n.ano, data: n.data,
         user_id: n.user_id, user_email: c.email, user_nome: c.nome,
@@ -2603,12 +3087,60 @@ async function _autoConsolidarFotosDrive() {
   if (ok) toast(`Drive atualizado: ${ok} foto(s) da equipe organizada(s) ☁️`);
 }
 
+/* Foto do perfil (19/09/2026): arquivo em <user_id>/perfil.jpg no servidor,
+   caminho em colaboradores.foto_path. Reduzida no aparelho antes de subir. */
+async function _mostrarAvatar() {
+  const el = $('perfil-avatar');
+  if (!el || !user?.foto_path || !sb) return;
+  try {
+    const url = await sb.fotos.url(user.foto_path);
+    if (url && $('perfil-avatar')) { el.innerHTML = `<img src="${url}" alt="">`; el.classList.add('com-foto'); }
+  } catch (_) {}
+}
+async function enviarFotoPerfil(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!navigator.onLine) { toast('Precisa de internet para enviar a foto', 'err'); return; }
+  /* enquadramento (19/09/2026): a mesma tela de recorte das notas, agora
+     para o rosto — quem tirar a foto escolhe o pedaço que vira o avatar */
+  let escolhida = file;
+  if (window.Recorte) {
+    const tit = $('crop-overlay')?.querySelector('.crop-tit');
+    if (tit) tit.textContent = 'Enquadre o rosto';
+    try { escolhida = (await Recorte.abrir(file)) || file; } catch (_) { escolhida = file; }
+    if (tit) tit.textContent = 'Enquadre a nota';
+  }
+  setLoading(true);
+  try {
+    let blob = escolhida, ext = 'jpg';
+    try { ({ blob, ext } = await _comprimirImagem(escolhida, 'jpg')); } catch (_) {}
+    user = await sb.auth.fotoPerfil(blob, ext);
+    toast('Foto do perfil salva ✅');
+    renderPerfil();
+  } catch (err) { toast('Foto: ' + (err.message || 'não subiu'), 'err'); }
+  finally { setLoading(false); e.target.value = ''; }
+}
+async function removerFotoPerfil() {
+  if (!confirm('Remover a foto do perfil?')) return;
+  setLoading(true);
+  try { user = await sb.auth.removerFotoPerfil(); renderPerfil(); }
+  catch (err) { toast(err.message, 'err'); } finally { setLoading(false); }
+}
+
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
 function renderPerfil() {
   $('app-content').innerHTML = `
   <div class="page-hd"><h2>Perfil</h2></div>
   <div class="perfil-card">
-    <div class="perfil-avatar">${esc((user?.nome||'?')[0].toUpperCase())}</div>
+    <div class="perfil-avatar" id="perfil-avatar">${esc((user?.nome||'?')[0].toUpperCase())}</div>
+    <input type="file" id="p-foto" accept="image/*" capture="user" style="display:none" onchange="enviarFotoPerfil(event)">
+    <input type="file" id="p-foto-galeria" accept="image/*" style="display:none" onchange="enviarFotoPerfil(event)">
+    <div style="display:flex;gap:8px;justify-content:center;margin:-4px 0 10px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary" onclick="$('p-foto').click()">📷 Tirar foto</button>
+      <button class="btn btn-sm btn-outline" onclick="$('p-foto-galeria').click()">🖼️ Da galeria</button>
+      ${user?.foto_path ? `<button class="btn btn-sm btn-outline" onclick="removerFotoPerfil()">Remover</button>` : ''}
+    </div>
+    <p style="font-size:12.5px;color:var(--text2);text-align:center;margin:-4px 0 8px">Depois da foto, enquadre o rosto e toque em <b>Usar recorte</b>.</p>
     <div class="perfil-nome">${esc(user?.nome||user?.email||'')}</div>
     <div class="perfil-email">${esc(user?.email||'')}</div>
     <div class="perfil-meta">
@@ -2625,7 +3157,7 @@ function renderPerfil() {
   <div class="perfil-actions">
     <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
-    ${_ehGestorOuAdmin() ? `
+    ${_ehGestorOuAdmin() && window.GDrive?.isConfigured() ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
       ${driveOk && GDrive.isConnected() ? `
@@ -2644,15 +3176,125 @@ function renderPerfil() {
           <div style="font-size:28px;margin-bottom:8px">☁️</div>
           <p style="font-size:13px;color:var(--text2);line-height:1.6">
             O Drive conecta sozinho quando você abre o app.<br>
-            Se não conectou, feche o app e abra de novo.
+            Se não conectou, use o botão abaixo.
           </p>
         </div>
+        <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="conectarDriveAgora()">🔗 Conectar Drive agora</button>
+        <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="reconectarDrivePeloGoogle()">🔁 Entrar de novo pelo Google (com Drive)</button>
+        <details style="margin-top:10px;font-size:11.5px;color:var(--text2)">
+          <summary style="cursor:pointer">🩺 Diagnóstico do Drive</summary>
+          <pre style="white-space:pre-wrap;font-size:11px;line-height:1.5;margin-top:6px">${esc(_driveDiagTexto())}</pre>
+        </details>
       `}
+    </div>
+    ` : ''}
+    ${user?.role === 'admin' && sb && !DEMO_MODE ? `
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <p class="lbl" style="margin-bottom:8px">🗄️ Backup</p>
+      <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">
+        Banco + todas as fotos num ZIP. O servidor gera um sozinho toda semana (lista abaixo);
+        baixe uma cópia de vez em quando e guarde fora da Locaweb.
+      </p>
+      <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
+      <div id="backups-auto" style="margin-top:10px;font-size:12.5px;color:var(--text2)">Carregando backups automáticos…</div>
+      <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
+      <button class="btn btn-outline btn-full" id="btn-migrar" style="margin-top:8px" onclick="atualizarBanco()">🛠️ Atualizar estrutura do banco</button>
+      <p style="font-size:11px;color:var(--text2);margin-top:6px">
+        Use "Atualizar" só quando uma nova versão da API pedir (ele aplica as migrações pendentes no servidor).
+      </p>
     </div>
     ` : ''}
     <button class="btn btn-danger-outline" onclick="logout()">Sair</button>
   </div>`;
   _pintarBotaoInstalar();
+  _mostrarAvatar();
+  _listarBackupsAuto();
+}
+
+/* Backups automáticos (artisan backup:gerar no agendador da Locaweb):
+   lista com link para baixar cada um. Só admin. */
+async function _listarBackupsAuto() {
+  const el0 = $('backups-auto');
+  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
+  try {
+    const { backups = [] } = await sb.backup.lista();
+    const el = $('backups-auto');            // o Perfil pode ter sido redesenhado enquanto esperava
+    if (!el) return;
+    if (!backups.length) {
+      el.innerHTML = '⚠️ Nenhum backup automático ainda. Cadastre no painel da Locaweb (Agendador de tarefas) o comando <code>backup:gerar</code> — está no guia.';
+      return;
+    }
+    /* crontab parado é silencioso: se o mais novo tem mais de 8 dias, avisa */
+    const dias = Math.floor((Date.now() - new Date(backups[0].em).getTime()) / 86_400_000);
+    const alerta = dias > 8 ? `<div style="color:#b45309;font-weight:700;margin-bottom:4px">⚠️ Último backup automático há ${dias} dias — confira o Crontab no painel da Locaweb.</div>` : '';
+    el.innerHTML = alerta + '<b>Automáticos no servidor:</b><br>' + backups.slice(0, 8).map(b =>
+      `<a class="link" onclick="baixarBackupAuto('${esc(b.nome)}')">${esc(b.nome)}</a> · ${(b.bytes / 1048576).toFixed(1)} MB`).join('<br>');
+  } catch (e) { const el = $('backups-auto'); if (el) el.textContent = 'Não consegui listar os backups: ' + (e.message || 'erro'); }
+}
+async function _baixarBlob(promessa, nomeArquivo, msg) {
+  if (!navigator.onLine) { toast('Sem conexão', 'err'); return; }
+  setLoading(true, msg || 'Gerando…');
+  try {
+    const blob = await promessa;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nomeArquivo;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    toast(`Baixado (${(blob.size / 1048576).toFixed(1)} MB) ✅`);
+  } catch (e) { toast('Não foi possível baixar: ' + (e.message || 'erro'), 'err'); }
+  finally { setLoading(false); }
+}
+function baixarBackupCompleto() { return _baixarBlob(sb.backup.completo(), `petermann-completo-${hoje()}.zip`, 'Montando o backup (banco + fotos)… pode levar 1 min'); }
+function baixarBackupAuto(nome) { return _baixarBlob(sb.backup.arquivo(nome), nome, 'Baixando ' + nome + '…'); }
+
+/* Planilha de C.V. no modelo oficial (PLANILHA DE CV), preenchida pelo
+   servidor com as notas/repasses do ano — sem depender do Drive. Gestor e
+   admin passam o user_id do colaborador; o colaborador baixa a própria. */
+async function baixarRelatorioCv(formato = 'xlsx', userId = null, nome = null) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar a planilha', 'err'); return; }
+  setLoading(true, formato === 'pdf' ? 'Gerando o PDF… (até 1 min)' : 'Gerando a planilha…');
+  try {
+    const blob = await sb.relatorio.cv(filAno, userId, formato);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Planilha_CV_${(nome || user?.nome || 'colaborador').replace(/\s+/g, '_')}_${filAno}.${formato}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    toast(`${formato === 'pdf' ? 'PDF' : 'Planilha'} gerado ✅`);
+  } catch (e) {
+    toast('Não foi possível gerar: ' + (e.message || 'erro'), 'err');
+  } finally { setLoading(false); }
+}
+
+/* Relatório da equipe do mês em PDF (20/09/2026): resumo, quadro por
+   colaborador e as notas/repasses de cada um. Gestor/admin. */
+function baixarRelatorioEquipe() {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
+  return _baixarBlob(sb.relatorio.equipe(filAno, filMes), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
+}
+
+/* Cópia íntegra do SQLite de produção (GET /backup/banco, só admin). O
+   arquivo desce pelo navegador como petermann-AAAA-MM-DD.sqlite. */
+async function baixarBackupBanco() {
+  if (!navigator.onLine) { toast('Sem conexão', 'err'); return; }
+  const btn = $('btn-backup');
+  if (btn) btn.disabled = true;
+  setLoading(true, 'Gerando backup…');
+  try {
+    const blob = await sb.backup.banco();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `petermann-${hoje()}.sqlite`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    toast(`Backup baixado (${Math.round(blob.size / 1024)} kB)`);
+  } catch (e) {
+    toast('Não foi possível gerar o backup: ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+    setLoading(false);
+  }
 }
 
 async function salvarPerfil() {
@@ -2660,15 +3302,43 @@ async function salvarPerfil() {
   if (!nome) { toast('Informe seu nome','err'); return; }
   user.nome = nome;
   if (sb && !DEMO_MODE) {
-    await sb.from('colaboradores').update({ nome }).eq('id', user.id);
+    try { await sb.auth.updateMe(nome); }
+    catch (e) { toast('Não salvou no servidor: ' + e.message, 'err'); return; }
   }
   toast('Perfil salvo!');
   renderPerfil();
 }
 
+/* Roda as migrações pendentes NO SERVIDOR (POST /admin/migrar, só admin).
+   É o "php artisan migrate" de quem não tem terminal na hospedagem. */
+async function atualizarBanco() {
+  if (!navigator.onLine) { toast('Sem conexão', 'err'); return; }
+  const btn = $('btn-migrar');
+  if (btn) btn.disabled = true;
+  setLoading(true, 'Conferindo o banco…');
+  try {
+    const st = await sb.admin.status();
+    const pend = st?.migracoes_pendentes || [];
+    if (!pend.length) { toast('Banco já está atualizado'); return; }
+    if (!confirm(`${pend.length} atualização(ões) pendente(s):\n\n${pend.join('\n')}\n\nAplicar agora? Baixe um backup antes, se ainda não baixou.`)) return;
+    setLoading(true, 'Atualizando…');
+    const r = await sb.admin.migrar();
+    if (!r?.ok) throw new Error(r?.saida || 'falha');
+    toast('Banco atualizado');
+    console.info('[migrar]', r.saida);
+  } catch (e) {
+    toast('Não foi possível atualizar: ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+    setLoading(false);
+  }
+}
+
 /* ── CAPTURA: sheet seleção ──────────────────────────────── */
+/* Sem o botão + (16/09/2026): "lançar" de qualquer tela leva ao Início,
+   onde estão as três ações. A folha antiga fica só como reserva. */
 function abrirCaptura() {
-  $('capture-sheet').classList.add('open');
+  switchView('inicio');
 }
 function fecharCaptura() {
   $('capture-sheet').classList.remove('open');
@@ -2730,6 +3400,18 @@ async function iniciarQR() {
       if (caps.focusMode && caps.focusMode.includes('continuous')) {
         track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
+      /* zoom da câmera (19/09/2026): QR pequeno lê melhor aproximando pela
+         lente do que chegando o celular — o foco não perde. Slider só aparece
+         onde a câmera tem zoom (Android Chrome). */
+      const zoomEl = $('qr-zoom');
+      if (zoomEl && caps.zoom && caps.zoom.max > caps.zoom.min) {
+        zoomEl.min = caps.zoom.min; zoomEl.max = Math.min(caps.zoom.max, 5); zoomEl.step = caps.zoom.step || 0.1;
+        zoomEl.value = Math.min(zoomEl.max, Math.max(caps.zoom.min, 1.5));
+        track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
+        zoomEl.oninput = () => track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
+        zoomEl.parentElement.style.display = 'flex';
+      } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
+      _detectorNativo().then(d => { const st = $('qr-motor'); if (st) st.textContent = d ? 'Leitor nativo do Android ativo' : 'Leitor: jsQR'; });
     } catch (_) {}
 
     const start = () => {
@@ -2780,15 +3462,58 @@ let _qrSkip = 0;
 let _qrSeen = 0;
 async function loopQR(ctx, video, canvas) {
   if (!qrStream) return;
+  /* Qualquer erro aqui dentro (biblioteca que não carregou, frame
+     inválido…) matava o laço em silêncio: a câmera ficava aberta e nada
+     era lido, sem nenhuma pista. Agora o erro vai para o banner e o laço
+     continua tentando. */
+  try {
+    await _lerFrameQR(ctx, video, canvas);
+  } catch (e) {
+    const d = document.getElementById('qr-diag');
+    if (d) d.textContent = `[${APP_VERSION}·${APP_BUILD}] ERRO na leitura: ${e?.message || e}`;
+    console.error('loopQR:', e);
+  }
+  if (qrStream) qrFrame = requestAnimationFrame(() => loopQR(ctx, video, canvas));
+}
+
+/* Leitor nativo do Android/Chrome (BarcodeDetector = o mesmo motor do leitor
+   de QR do sistema/Google Lens). Pedido em 19/09/2026: lê muito melhor que o
+   jsQR em cupom amassado/desbotado. Onde não existe (iPhone antigo, PC),
+   fica o jsQR. */
+let _qrNativo = null, _qrNativoTentado = false;
+async function _detectorNativo() {
+  if (_qrNativoTentado) return _qrNativo;
+  _qrNativoTentado = true;
+  try {
+    if ('BarcodeDetector' in window) {
+      let fmts = [];
+      try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (_) {}
+      if (!fmts.length || fmts.includes('qr_code')) _qrNativo = new window.BarcodeDetector({ formats: ['qr_code'] });
+    }
+  } catch (_) { _qrNativo = null; }
+  return _qrNativo;
+}
+
+async function _lerFrameQR(ctx, video, canvas) {
   // decodifica a cada 2 frames — equilíbrio entre CPU e velocidade de leitura
   _qrSkip = (_qrSkip + 1) % 2;
   if (_qrSkip === 0 && video.videoWidth) {
     if (canvas.width !== video.videoWidth)  canvas.width  = video.videoWidth;
     if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
-    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+    let code = null;
+    const det = await _detectorNativo();
+    if (det) {
+      try {
+        const codes = await det.detect(video);        // direto no vídeo, sem copiar pixels
+        if (codes?.length && codes[0].rawValue) code = { data: codes[0].rawValue };
+      } catch (_) { /* frame ruim: cai no jsQR abaixo */ }
+    }
+    if (!code) {
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
+      code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+    }
     if (code?.data) {
       // aceita pela chave/cnpj OU por qualquer sequência de 44 dígitos no conteúdo
       let parsed = NFCE.fromScan(code.data);
@@ -2803,9 +3528,18 @@ async function loopQR(ctx, video, canvas) {
         if (parsed.chave) {
           _salvarUrlQR(parsed.chave, code.data);   // guarda o link real da consulta
           navigator.clipboard?.writeText(parsed.chave).catch(() => {});
+          if (/^https?:\/\//i.test(code.data)) parsed.qr_url = code.data;
         }
         fecharQR();
         await _finalizarCapturaQR(parsed, frameBlob);
+        return;
+      }
+      // QR de NFS-e (nota de serviço): não tem chave de 44, mas o link abre a nota
+      if (_ehUrlNfse(code.data)) {
+        let frameBlob = null;
+        try { frameBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92)); } catch (_) {}
+        fecharQR();
+        await _finalizarCapturaQR({ qr_url: code.data, documento: 'nfse' }, frameBlob);
         return;
       }
       // QR foi lido mas não parece ser de NFC-e — avisa em vez de ficar mudo
@@ -2816,7 +3550,6 @@ async function loopQR(ctx, video, canvas) {
       }
     }
   }
-  qrFrame = requestAnimationFrame(() => loopQR(ctx, video, canvas));
 }
 
 function fecharQR() {
@@ -2842,9 +3575,15 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
     return;
   }
 
-  await abrirFormNota(dados);   // chave/CNPJ/UF já entram; fotoBlob fica null
-  _pedirFotoPasso2();           // Passo 2: destaca e pede a foto (abre no TOQUE)
-  toast('Chave lida! 🔑 Passo 2: toque no botão destacado para fotografar a nota.');
+  /* Pedido em 16/09/2026: depois da chave, a FOTO vem antes do formulário.
+     A câmera só abre em gesto do usuário, então passa pelo seletor RDA/RDM
+     e pela tela "Comprovante da nota" (um toque = abre a câmera); o
+     formulário só aparece quando o OCR terminar, já com o máximo preenchido. */
+  if (dados.qr_url && dados.chave) _sefazPorQr(dados.qr_url, dados.chave);   // valor oficial, em paralelo
+  abrirSeletorTipoLancamento({ ...dados, _manual: true });
+  toast(dados.documento === 'nfse'
+    ? 'QR da NFS-e lido! 🧰 Escolha a aba e fotografe a nota.'
+    : 'Chave lida! 🔑 Escolha a aba e fotografe a nota.');
 }
 
 /* Passo 2 do fluxo "QR → foto": destaca o botão de foto como chamada de ação.
@@ -2985,7 +3724,8 @@ async function onChaveNFCe(raw) {
   try {
     const result = await SEFAZ.consultarChave(raw);
     const isNFe = result.modelo === '55';
-    abrirFormNota({
+    // igual ao QR lido: aba → comprovante (foto/arquivo) → OCR → formulário
+    abrirSeletorTipoLancamento({
       cnpj           : result.cnpj || '',
       valor          : result.valor || '',
       data           : result.data || hoje(),
@@ -2996,8 +3736,9 @@ async function onChaveNFCe(raw) {
       metodo_captura : isNFe ? `nfe_${result.fonte}` : `chave_nfce_${result.fonte}`,
       mes            : result.mes,
       ano            : result.ano,
+      _manual        : true,
     });
-    toast(isNFe ? 'NF-e identificada pela chave' : 'NFC-e identificada pela chave');
+    toast(isNFe ? 'NF-e identificada pela chave — agora a foto' : 'NFC-e identificada pela chave — agora a foto');
   } catch (e) {
     toast(e.message, 'err');
   } finally { setLoading(false); }
@@ -3031,8 +3772,10 @@ function _blobToImg(blob) {
    PDF e XML passam intactos. Qualquer falha (HEIC do iPhone, que o
    canvas não decodifica) devolve o original: comprimir é otimização,
    nunca motivo para perder o anexo. */
-const _FOTO_LADO_MAX   = 1800;
-const _FOTO_QUALIDADE  = 0.75;
+/* 20/09/2026: 1800 px/q0,75 dava ~1 MB por nota; 1400 px/q0,72 fica em
+   ~400 KB e o cupom continua legível (QR e OCR rodam antes, no original). */
+const _FOTO_LADO_MAX   = 1400;
+const _FOTO_QUALIDADE  = 0.72;
 const _FOTO_MIN_COMPRIMIR = 400 * 1024;   // abaixo disso não vale o esforço
 
 async function _comprimirImagem(blob, ext) {
@@ -3212,18 +3955,89 @@ function abrirSeletorTipoLancamento(dados = {}) {
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
+  /* Fornecedor conhecido (chave/CNPJ/nome) → sugere a aba e pula o passo 1.
+     Assíncrono: se a pessoa tocar antes, a escolha dela vale. */
+  const d = _dadosLancamentoPendentes;
+  if (d.cnpj || d.chave || d.razao_social) {
+    sugerirAba(d).then(s => {
+      if (!s || _dadosLancamentoPendentes !== d) return;                // já escolheu/fechou
+      if ($('tipo-lancamento-passo1').style.display === 'none') return; // já está no passo 2
+      d._sugestao = s;
+      d.subtipo = s.subtipo || d.subtipo;
+      selecionarTipoLancamento(s.tipo);
+    }).catch(() => {});
+  }
 }
 
 function fecharSeletorTipoLancamento() {
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'none';
+  const p1 = $('tipo-lancamento-passo1'), p2 = $('tipo-lancamento-passo2');
+  if (p1) p1.style.display = '';
+  if (p2) p2.style.display = 'none';
+  const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
   _dadosLancamentoPendentes = null;
 }
 
 function selecionarTipoLancamento(tipo) {
   const dados = { ...(_dadosLancamentoPendentes || {}), tipo, _tipoSelecionado: true };
+  /* Lançamento MANUAL: em vez de abrir o formulário vazio, pergunta já o
+     comprovante (pedido em 16/09/2026). O anexo é obrigatório de qualquer
+     jeito, e a câmera só abre em gesto do usuário — por isso um toque a mais
+     aqui, e não um "abrir sozinho" que o celular bloquearia. */
+  if (dados._manual) {
+    _dadosLancamentoPendentes = dados;
+    const pill = $('tipo-lancamento-passo2-aba');
+    const s = dados._sugestao;
+    if (pill) {
+      pill.textContent = tipo + (s && s.tipo === tipo ? ` · ${s.subtipo && tipo === 'RDM' ? s.subtipo + ' · ' : ''}sugerido: ${s.rotulo}` : '');
+      pill.className = `nota-aba-pill ${tipo === 'RDA' ? 'rda' : 'rdm'}`;
+    }
+    const trocar = $('tipo-lancamento-trocar'); if (trocar) trocar.style.display = '';
+    $('tipo-lancamento-passo1').style.display = 'none';
+    $('tipo-lancamento-passo2').style.display = '';
+    const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Comprovante da nota';
+    return;
+  }
   fecharSeletorTipoLancamento();
   abrirFormNota(dados);
+}
+
+/* Passo 2 do manual: abre o formulário e, no MESMO gesto, a câmera ou o
+   seletor de arquivo. abrirFormNota preenche os campos de forma síncrona
+   antes de qualquer await, então o input já está dentro do formulário certo
+   quando o onchange chegar. */
+let _formEsperandoLeitura = false;   // formulário montado mas escondido até o OCR acabar
+function voltarEscolhaAba() {
+  $('tipo-lancamento-passo2').style.display = 'none';
+  $('tipo-lancamento-passo1').style.display = '';
+  const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
+  if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; }
+}
+function lancarManualComAnexo(modo) {
+  const dados = { ...(_dadosLancamentoPendentes || {}) };
+  delete dados._manual; delete dados._sugestao;
+  fecharSeletorTipoLancamento();
+  abrirFormNota(dados);                // parte síncrona: campos preenchidos e overlay aberto
+  if (modo === 'foto' || modo === 'arquivo') {
+    /* Foto ANTES do formulário: a pessoa só vê a tela depois que QR/OCR
+       leram o que dava (valor, CNPJ, número…) — menos digitação. Se cancelar
+       a câmera, o formulário aparece do mesmo jeito (evento cancel). */
+    _formEsperandoLeitura = true;
+    $('nota-form-overlay').style.display = 'none';
+    const inp = $(modo === 'foto' ? 'f-foto-nota' : 'f-arq-nota');
+    inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
+    inp?.click();
+  } else {
+    _pedirFotoPasso2();
+  }
+}
+function _mostrarFormAposLeitura() {
+  if (!_formEsperandoLeitura) return;
+  _formEsperandoLeitura = false;
+  const ov = $('nota-form-overlay');
+  if (ov) ov.style.display = 'flex';
+  if (!fotoBlob) _pedirFotoPasso2();   // cancelou a câmera: continua pedindo o anexo
 }
 
 async function abrirFormNota(dados = {}) {
@@ -3239,10 +4053,19 @@ async function abrirFormNota(dados = {}) {
   $('nf-id').value       = dados.id       || '';
   $('nf-owner-id').value = dados.user_id || user?.id || '';
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
-  $('nf-chave').value    = dados.chave    || '';
+  $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
+  $('nf-qr-url').value   = dados.qr_url   || '';
+  _docEscolhidoManual = false;
+  $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento : '';
+  $('nf-numero').value   = dados.numero   || '';
+  $('nf-serie').value    = dados.serie    || '';
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
   $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
+  _valorEditadoManual = false; _sugestaoPendente = null;
+  { const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none'; }
+  /* nota já com URL do QR e sem valor (ex.: importada antes do 141): busca o oficial */
+  if (dados.qr_url && dados.chave_nfce && !(Number(dados.valor) > 0)) _sefazPorQr(dados.qr_url, dados.chave_nfce);
   $('nf-data').value     = dados.data     || hoje();
   $('nf-valor').value    = dados.valor    || '';
   $('nf-cnpj').value     = dados.cnpj ? BrasilAPI.formatar(dados.cnpj) : '';
@@ -3317,9 +4140,11 @@ function _atualizarLinkConsulta() {
   const cl = $('nf-consulta');
   _mostrarChaveNota();   // mostra/esconde a chave abaixo da foto
   if (!cl) return;
-  if (_digitos($('nf-chave').value).length === 44) {
+  const qrUrl = $('nf-qr-url')?.value || '';
+  if (_digitos($('nf-chave').value).length === 44 || /^https?:\/\//i.test(qrUrl)) {
     cl.style.display = 'inline-block';
-    cl.onclick = () => abrirConsultaChave($('nf-chave').value);
+    cl.textContent = /^https?:\/\//i.test(qrUrl) && _digitos($('nf-chave').value).length !== 44 ? '🔗 Abrir a NFS-e no portal' : '🔗 Consultar nota no SEFAZ';
+    cl.onclick = () => abrirConsultaChave($('nf-chave').value, qrUrl || null);
   } else {
     cl.style.display = 'none';
     cl.onclick = null;
@@ -3362,6 +4187,7 @@ async function enriquecerViaSefaz(chave) {
 }
 
 function fecharFormNota() {
+  _formEsperandoLeitura = false;
   $('nota-form-overlay').style.display = 'none';
 }
 
@@ -3417,7 +4243,8 @@ async function onFotoNotaChange(e) {
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
   // lê a própria foto anexada (OCR) e preenche os campos vazios
-  await extrairDadosDaFoto(file);
+  try { await extrairDadosDaFoto(file); }
+  finally { _mostrarFormAposLeitura(); }
 }
 
 /* Anexar arquivo já existente no aparelho: imagem, PDF ou XML da NF-e.
@@ -3433,9 +4260,11 @@ async function onArquivoNotaChange(e) {
   fotoExt  = _extDoArquivo(file);
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
-  if (_ehImagemExt(fotoExt))      await extrairDadosDaFoto(file);
-  else if (fotoExt === 'xml')     await extrairDadosDoXML(file);
-  else /* pdf */                  await extrairDadosDoPDF(file);
+  try {
+    if (_ehImagemExt(fotoExt))      await extrairDadosDaFoto(file);
+    else if (fotoExt === 'xml')     await extrairDadosDoXML(file);
+    else /* pdf */                  await extrairDadosDoPDF(file);
+  } finally { _mostrarFormAposLeitura(); }
 }
 
 /* PDF anexado → renderiza a 1ª página como imagem (vira o preview)
@@ -3482,6 +4311,9 @@ async function extrairDadosDoXML(file) {
       _atualizarLinkConsulta();
     }
 
+    // número e série (<ide><nNF>, <ide><serie>)
+    if (T('ide nNF')) { _preencherNumeroSerie(T('ide nNF').replace(/^0+/, ''), T('ide serie').replace(/^0+/, '') || '0', true); preencheu.push('número'); }
+
     // CNPJ + razão social do emitente
     const cnpj = _digitos(T('emit CNPJ'));
     if (cnpj.length === 14) {
@@ -3526,7 +4358,11 @@ async function _lerQRdaImagem(file) {
     const m = String(data).replace(/\D/g, '').match(/\d{44}/);
     if (m) p = NFCE.parseChave44(m[0]);
   }
-  if (p?.chave) _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
+  if (p?.chave) {
+    _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
+    if (/^https?:\/\//i.test(data)) p.qr_url = data;
+  }
+  if (!(p?.chave) && _ehUrlNfse(data)) return { qr_url: data, documento: 'nfse' };
   return p;
 }
 
@@ -3547,6 +4383,12 @@ async function lerChaveDaFotoAnexada() {
     _atualizarLinkConsulta();
     _mostrarChaveNota();
     toast('Chave inserida pelo QR! 🔑');
+  } else if (qr?.documento === 'nfse') {
+    $('nf-qr-url').value = qr.qr_url;
+    _docEscolhidoManual = false;
+    _atualizarDocumentoAuto();
+    _atualizarLinkConsulta();
+    toast('QR de NFS-e lido — link da nota guardado 🧰');
   } else {
     toast('Não achei QR nesta foto. Use uma foto mais nítida do QR Code.', 'err');
   }
@@ -3561,6 +4403,8 @@ function _mostrarChaveNota() {
     else { el.style.display = 'none'; el.textContent = ''; }
   }
   _atualizarBotaoLerChave();   // chave mudou → reavalia se mostra o botão de reserva
+  _atualizarDocumentoAuto();   // chave/anexo mudou → reclassifica o documento
+  _atualizarNumeroSerieAuto(); // número/série saem da chave
 }
 
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
@@ -3602,6 +4446,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       try { ocr = await OCR.processar(alvo); } catch (_) {}
     }
 
+    if (qr?.documento === 'nfse' && !$('nf-qr-url').value) { $('nf-qr-url').value = qr.qr_url; _atualizarDocumentoAuto(); }
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido
     let chave = (qr?.chave && qr.chave.length === 44) ? qr.chave : _digitos($('nf-chave').value);
     if (chave.length !== 44 && _digitos(ocr.chave).length === 44) chave = _digitos(ocr.chave);
@@ -3634,6 +4479,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
         $('nf-chave').value = ocr.chave; _atualizarLinkConsulta();
       }
       if (ocr.razao_social && !$('nf-razao').value) { $('nf-razao').value = ocr.razao_social; }
+      if (ocr.numero && !$('nf-numero').value) { _preencherNumeroSerie(ocr.numero, ocr.serie); preencheu.push('número'); }
       if (ocr.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
         $('nf-data').value = ocr.data; preencheu.push('data');
       }
@@ -3651,6 +4497,16 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     toast(preencheu.length
       ? `Preenchido: ${preencheu.join(', ')}. Confira o valor e o tipo.`
       : 'Confira os campos manualmente', preencheu.length ? 'ok' : 'err');
+
+    // valor oficial (se a consulta do QR já respondeu, aplica por cima do OCR)
+    const _k = _digitos($('nf-chave').value);
+    if (_k && _sefazQrCache.has(_k)) { const r = _sefazQrCache.get(_k); if (r && typeof r.then !== 'function') _aplicarSefazNoForm(r, _k); }
+    else if (_k && $('nf-qr-url').value) _sefazPorQr($('nf-qr-url').value, _k);
+    // aba/categoria pelo fornecedor (só sugere; a pessoa já escolheu)
+    _sugerirAbaNoFormulario().catch(() => {});
+
+    // já lançada? avisa agora, com o que o OCR leu (número, fornecedor, valor, dia)
+    _avisarDuplicataAposLeitura();
   } catch (err) {
     ov.style.display = 'none';
     toast('Erro ao ler a foto: ' + err.message, 'err');
@@ -3685,6 +4541,7 @@ function atualizarPreviewFoto(url) {
   }
   $('btn-foto-label').textContent = '📷 Trocar foto';
   _atualizarBotaoLerChave();
+  _atualizarDocumentoAuto();   // anexo XML/PDF x foto decide NF-e x DANFE
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:
@@ -3695,6 +4552,27 @@ function _atualizarBotaoLerChave() {
   const legivel  = (!!fotoBlob && (!fotoExt || _ehImagemExt(fotoExt))) || !!fotoRender;
   const temChave = _digitos($('nf-chave').value).length === 44;
   btn.style.display = (legivel && !temChave) ? 'block' : 'none';
+  // sem chave ainda: sempre dá para digitar (a opção da folha "Lançar" saiu em 16/09/2026)
+  const dig = $('btn-digitar-chave'); if (dig) dig.style.display = temChave ? 'none' : 'block';
+}
+
+/* Chave digitada DENTRO do formulário aberto: preenche o que a chave carrega
+   (CNPJ, UF, mês/ano, documento, número/série) sem abrir outra nota. */
+function digitarChaveNoFormulario() {
+  const raw = prompt('Digite ou cole a chave de acesso de 44 dígitos (NF-e ou NFC-e):');
+  if (!raw || !raw.trim()) return;
+  const c = _digitos(raw);
+  if (c.length !== 44) { toast(`Chave com ${c.length} dígitos — precisa ter 44`, 'err'); return; }
+  if (window.SEFAZ?.dvValido && !SEFAZ.dvValido(c)) { toast('Chave inválida (dígito verificador não confere) — confira os números', 'err'); return; }
+  if (_notaDuplicadaChave(c, $('nf-id').value || null)) { toast('⚠️ Esta chave já está registrada em outra nota', 'err'); return; }
+  const p = NFCE.parseChave44(c);
+  $('nf-chave').value = c;
+  if (p?.uf)  $('nf-uf').value  = p.uf;
+  if (p?.mes) $('nf-mes').value = p.mes;
+  if (p?.ano) $('nf-ano').value = p.ano;
+  if (p?.cnpj) { $('nf-cnpj').value = BrasilAPI.formatar(p.cnpj); if (!$('nf-razao').value) buscarRazaoSocial(p.cnpj); }
+  _atualizarLinkConsulta();   // mostra a chave, classifica o documento, número/série
+  toast('Chave inserida 🔑 — confira o valor e a data');
 }
 
 /* nota (não deletada) do usuário com a MESMA chave NFC-e já registrada;
@@ -3712,18 +4590,110 @@ function _notaDuplicadaChave(chave, ignoreId) {
    Compara o que identifica a nota na prática: tipo, dia, valor e fornecedor
    (CNPJ quando existe, senão a razão social). */
 function _notaSemelhante({ tipo, cnpj, razao, valor, data, ignoreId }) {
-  const centavos = Math.round(Number(valor) * 100);
-  if (!Number.isFinite(centavos) || centavos <= 0 || !data || !tipo) return null;
-  const c = _digitos(cnpj || '');
-  const r = String(razao || '').trim().toUpperCase();
-  if (!c && !r) return null;                    // sem fornecedor não dá para afirmar nada
-  return notas.find(n =>
-    n.id !== ignoreId && !n.deleted &&
-    n.tipo === tipo && n.data === data &&
-    Math.round(Number(n.valor) * 100) === centavos &&
-    (c ? _digitos(n.cnpj || '') === c
-       : String(n.razao_social || '').trim().toUpperCase() === r)
-  ) || null;
+  return _acharDuplicata({ tipo, cnpj, razao_social: razao, valor, data }, ignoreId)?.nota || null;
+}
+
+/* ── Registros duplicados (detectar e avisar; NUNCA apagar sozinho) ──────
+   Três sinais, do mais forte ao mais fraco:
+   1. mesma chave de 44 dígitos;
+   2. mesmo número da nota + mesmo fornecedor (CNPJ ou razão social) — vale
+      para recibo, DANFE e NFS-e lidos por OCR, que não têm chave;
+   3. mesmo tipo + mesmo dia + mesmo valor + mesmo fornecedor.
+   Pedido em 16/09/2026 ("reconhecer recibos duplicados pelo OCR"). */
+/* Mesmo fornecedor: CNPJ igual quando os dois têm; senão razão social igual
+   (um recibo lido por OCR pode ter só o nome, e a nota antiga só o CNPJ). */
+function _mesmoFornecedor(a, b) {
+  // BrasilAPI.limpar('') devolve 14 zeros: zero não é CNPJ
+  const cnpjDe = x => { const c = _digitos(x?.cnpj || ''); return (c.length === 14 && !/^0+$/.test(c)) ? c : ''; };
+  const ca = cnpjDe(a), cb = cnpjDe(b);
+  if (ca && cb) return ca === cb;
+  const norm = x => String(x || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const ra = norm(a?.razao_social), rb = norm(b?.razao_social);
+  return !!ra && ra === rb;
+}
+function _motivoDuplicata(a, b) {
+  const ka = _digitos(a.chave_nfce || ''), kb = _digitos(b.chave_nfce || '');
+  if (ka.length === 44 && ka === kb) return 'chave';
+  if (!_mesmoFornecedor(a, b)) return null;
+  const na = String(a.numero || '').replace(/^0+/, ''), nb = String(b.numero || '').replace(/^0+/, '');
+  if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))) return 'numero';
+  const va = Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
+  if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo) return 'igual';
+  return null;
+}
+const _MOTIVO_DUP = { chave: 'mesma chave de acesso', numero: 'mesmo número de nota e fornecedor', igual: 'mesmo fornecedor, dia e valor' };
+function _acharDuplicata(candidata, ignoreId = null) {
+  for (const n of notas) {
+    if (n.id === ignoreId || n.deleted) continue;
+    const m = _motivoDuplicata(candidata, n);
+    if (m) return { nota: n, motivo: m };
+  }
+  return null;
+}
+/* Mapa id → {nota, motivo} para as listas (Home/Notas). Recalculado a cada
+   render; para o volume de um ano isso é instantâneo. */
+let _dupMapa = new Map();
+function _recalcularDuplicatas(lista) {
+  /* 20/09/2026: era par a par (n²) — com 20 mil notas no aparelho do gestor
+     eram 200 milhões de comparações a cada render. Agora agrupa em baldes
+     (mesma chave; mesmo fornecedor+número; mesmo fornecedor+dia+valor+tipo)
+     e só compara dentro do balde: linear. As regras são as de
+     _motivoDuplicata, que continua valendo para o aviso na hora do lançamento. */
+  _dupMapa = new Map();
+  const vivas = (lista || notas).filter(n => !n.deleted);
+  const marcar = (a, b, m) => {
+    if (!_dupMapa.has(a.id)) _dupMapa.set(a.id, { nota: b, motivo: m });
+    if (!_dupMapa.has(b.id)) _dupMapa.set(b.id, { nota: a, motivo: m });
+  };
+  const fornDe = n => {
+    const c = _digitos(n.cnpj || '');
+    if (c.length === 14 && !/^0+$/.test(c)) return 'c' + c;
+    const r = String(n.razao_social || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return r ? 'r' + r : null;
+  };
+  const baldes = new Map();
+  const por = (chave, n) => { if (!chave) return; const b = baldes.get(chave); if (b) b.push(n); else baldes.set(chave, [n]); };
+  for (const n of vivas) {
+    const k = _digitos(n.chave_nfce || '');
+    if (k.length === 44) por('K' + k, n);
+    const f = fornDe(n);
+    if (!f) continue;
+    const num = String(n.numero || '').replace(/^0+/, '');
+    if (num) por('N' + f + '|' + num, n);
+    const v = Math.round(Number(n.valor) * 100);
+    if (v > 0 && n.data) por('I' + f + '|' + n.data + '|' + v + '|' + (n.tipo || ''), n);
+  }
+  for (const [chave, grupo] of baldes) {
+    if (grupo.length < 2) continue;
+    const motivo = chave[0] === 'K' ? 'chave' : chave[0] === 'N' ? 'numero' : 'igual';
+    for (let i = 0; i < grupo.length; i++) {
+      for (let j = i + 1; j < grupo.length; j++) {
+        let m = motivo;
+        if (motivo === 'numero') { m = _motivoDuplicata(grupo[i], grupo[j]); if (!m) continue; }   // confere a série
+        marcar(grupo[i], grupo[j], m);
+      }
+    }
+  }
+  return _dupMapa;
+}
+function _resumoNota(n) {
+  return [n.tipo, n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : null),
+          n.numero ? `nº ${n.numero}` : null, n.data ? fmtData(n.data) : null, brl(n.valor)]
+    .filter(Boolean).join(' · ');
+}
+/* Depois da leitura (OCR/QR da foto) avisa na hora, antes de a pessoa
+   preencher o resto — e oferece abrir a que já existe. */
+function _avisarDuplicataAposLeitura() {
+  const cand = {
+    tipo: $('nf-tipo').value, data: $('nf-data').value, valor: parseFloat($('nf-valor').value),
+    cnpj: _digitos($('nf-cnpj').value), razao_social: $('nf-razao').value,
+    chave_nfce: $('nf-chave').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
+  };
+  const d = _acharDuplicata(cand, $('nf-id').value || null);
+  if (!d) return false;
+  const abrir = confirm(`⚠️ Parece registro duplicado (${_MOTIVO_DUP[d.motivo]}):\n\n${_resumoNota(d.nota)}\n\nAbrir a nota que já existe? (Cancelar = continuar este lançamento)`);
+  if (abrir) { fecharFormNota(); editarNota(d.nota.id); }
+  return true;
 }
 
 /* Trava de reentrância do Salvar.
@@ -3758,7 +4728,7 @@ async function _salvarNotaInterno() {
      sobe, o blob local é apagado e `fotoBlob` fica null. Sem essa ressalva,
      nenhuma nota já sincronizada poderia mais ser corrigida. */
   const _idEdicao  = $('nf-id').value || null;
-  const _notaAtual = _idEdicao ? notas.find(n => n.id === _idEdicao) : null;
+  const _notaAtual = _notaPorId(_idEdicao);
   const _temAnexoSalvo = !!(_notaAtual && (_notaAtual.foto_path || _notaAtual.foto_local));
   if (!fotoBlob && !_temAnexoSalvo) {
     toast('Anexe a foto ou o arquivo da nota antes de salvar', 'err');
@@ -3772,14 +4742,12 @@ async function _salvarNotaInterno() {
     return;
   }
   // TRAVA de EQUIPE (online): a mesma chave já existe em QUALQUER colaborador?
-  // usa a função chave_nfce_existe (SECURITY DEFINER) — só devolve sim/não.
+  // POST /notas/chave-existe — só devolve sim/não, não expõe dados de outros.
   const _chaveDig = _digitos($('nf-chave').value);
   if (_chaveDig.length === 44 && sb && navigator.onLine) {
     try {
-      const { data: existe, error } = await sb.rpc('chave_nfce_existe', {
-        p_chave: _chaveDig, p_ignore_id: $('nf-id').value || null,
-      });
-      if (!error && existe) {
+      const existe = await sb.notas.chaveExiste(_chaveDig, $('nf-id').value || null);
+      if (existe) {
         toast('⚠️ Esta nota já foi registrada por outro colaborador da equipe.', 'err');
         return;
       }
@@ -3801,10 +4769,11 @@ async function _salvarNotaInterno() {
      colaborador por semelhança seria longe demais. */
   let _repetidaAnterior = null;
   if (_digitos($('nf-chave').value).length !== 44) {
-    const igual = _notaSemelhante({
-      tipo, cnpj: cnpjRaw, razao: $('nf-razao').value,
-      valor, data, ignoreId: $('nf-id').value || null,
-    });
+    const dup = _acharDuplicata({
+      tipo, cnpj: cnpjRaw, razao_social: $('nf-razao').value, valor, data,
+      numero: $('nf-numero').value, serie: $('nf-serie').value,
+    }, $('nf-id').value || null);
+    const igual = dup?.nota || null;
     /* DESLIGADO: a remocao automatica estava mandando notas para a lixeira em
        lote, em intervalos curtos demais para serem manuais. Volta o aviso com
        confirmacao ate a causa estar entendida — nada e apagado sem que a
@@ -3817,7 +4786,7 @@ async function _salvarNotaInterno() {
         brl(igual.valor),
       ].filter(Boolean).join(' · ');
       const seguir = confirm(
-        'Esta nota parece já ter sido lançada:\n\n' + resumo +
+        `Esta nota parece já ter sido lançada (${_MOTIVO_DUP[dup.motivo]}):\n\n` + resumo +
         '\n\nLançar assim mesmo? (nada será apagado)'
       );
       if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
@@ -3834,6 +4803,10 @@ async function _salvarNotaInterno() {
     razao_social   : $('nf-razao').value.trim() || null,
     observacao     : $('nf-obs').value.trim()   || null,
     chave_nfce     : $('nf-chave').value        || null,
+    documento      : $('nf-documento').value    || null,
+    numero         : ($('nf-numero').value || '').trim() || null,
+    serie          : ($('nf-serie').value  || '').trim() || null,
+    qr_url         : $('nf-qr-url').value       || null,
     uf             : $('nf-uf').value           || null,
     metodo_captura : $('nf-metodo').value       || 'manual',
     user_id        : ownerId,
@@ -3848,7 +4821,7 @@ async function _salvarNotaInterno() {
      referência — sumia o 📎 e ela voltava a contar como "sem anexo".
      Se um anexo novo for enviado, o pushPending sobrescreve com o caminho certo. */
   if (_notaAtual?.foto_path) payload.foto_path = _notaAtual.foto_path;
-  if (_notaAtual?.qr_url)    payload.qr_url    = _notaAtual.qr_url;
+  if (_notaAtual?.qr_url && !payload.qr_url) payload.qr_url = _notaAtual.qr_url;
 
   setLoading(true);
   try {
@@ -3872,13 +4845,19 @@ async function _salvarNotaInterno() {
       // quando sobe. Guardar o blob aqui enchia o aparelho para sempre.
       payload.foto_local = anexoExt || 'jpg';
     }
+    /* documento: o que a pessoa escolheu; senão o que a chave/anexo dizem.
+       Fica null só quando não há como saber — o cartão mostra "documento?". */
+    if (!payload.documento) {
+      const extRef = anexoExt || (_notaAtual?.foto_path ? String(_notaAtual.foto_path).split('.').pop() : '');
+      payload.documento = _docPelaChave(payload.chave_nfce, extRef) || (_ehUrlNfse(payload.qr_url) ? 'nfse' : null);
+    }
 
     const saved = await DB.saveNota(payload, user.id);
 
     const _removeuRepetida = false;   // remocao automatica desligada
 
-    if (anexoBlob) {
-      await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
+    if (anexoBlob) await DB.saveFotoLocal(saved.id, anexoBlob, anexoExt);
+    if (anexoBlob && window.GDrive?.isConnected?.()) {
       const ownerId = saved.user_id || user.id;
       const ownerMeta = (ownerId && equipePorId[ownerId]) || { email: user.email, nome: user.nome };
       // upload do anexo com todos os dados da nota como metadados no Drive
@@ -3906,13 +4885,13 @@ async function _salvarNotaInterno() {
 }
 
 async function editarNota(id) {
-  const n = notas.find(x=>x.id===id);
+  const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);
 }
 
 function confirmarExclusaoNota(id) {
-  const n = notas.find(x => x.id === id);
+  const n = _notaPorId(id);
   if (!n) {
     toast('Nota não encontrada', 'err');
     return false;
@@ -3956,7 +4935,7 @@ async function excluirNota(id) {
 }
 
 async function verFoto(id) {
-  const n = notas.find(x=>x.id===id);
+  const n = _notaPorId(id);
   if (!n) return;
 
   let url = null, ext = null;
@@ -3965,13 +4944,13 @@ async function verFoto(id) {
   const local = await DB.getFotoLocal(id);
   if (local?.blob) { url = URL.createObjectURL(local.blob); ext = local.ext || _extDoArquivo(local.blob); }
 
-  /* 2. Supabase Storage — ANTES do Drive. A URL do Drive leva o token na
-     query (?alt=media&access_token=…), formato que a API do Google não
-     aceita mais para autorizar: a imagem não carrega e o visualizador
-     abria vazio, mesmo com o arquivo íntegro no Supabase. */
+  /* 2. Servidor (URL assinada) — ANTES do Drive. A URL do Drive leva o
+     token na query (?alt=media&access_token=…), formato que a API do Google
+     não aceita mais para autorizar: a imagem não carrega e o visualizador
+     abria vazio, mesmo com o arquivo íntegro no servidor. */
   if (!url && n.foto_path && sb) {
-    const { data } = await sb.storage.from('notas-fotos').createSignedUrl(n.foto_path, 300);
-    if (data?.signedUrl) { url = data.signedUrl; ext = _extDeUrl(n.foto_path); }
+    const assinada = await sb.fotos.url(n.foto_path).catch(() => null);
+    if (assinada) { url = assinada; ext = _extDeUrl(n.foto_path); }
   }
 
   // 3. Google Drive — último recurso (nota que só existe no Drive)
@@ -3999,7 +4978,7 @@ function fecharFotoViewer() {
 }
 
 /* ── Ajuda / Como usar ───────────────────────────────────── */
-function abrirAjuda()  { $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
+function abrirAjuda()  { document.querySelectorAll('.ajuda-gestor').forEach(e => { e.style.display = _ehGestorOuAdmin() ? '' : 'none'; }); $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
 function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 
 /* ── Form Repasse ────────────────────────────────────────── */
@@ -4133,21 +5112,17 @@ async function excluirRepasse(id) {
 }
 
 /* ── Exportações ─────────────────────────────────────────── */
-let _xlsxLoaded = false;
-async function _ensureXLSX() {
-  if (typeof XLSX !== 'undefined') { _xlsxLoaded = true; return; }
-  if (_xlsxLoaded) return;
+/* A lib SheetJS é baixada pelo próprio Excel.carregar() na 1ª exportação. */
+async function exportCSV() {
   setLoading(true);
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
-    s.onload  = () => { _xlsxLoaded = true; setLoading(false); res(); };
-    s.onerror = () => { setLoading(false); rej(new Error('Falha ao carregar exportação')); };
-    document.head.appendChild(s);
-  });
+  try { await Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
+  catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
 }
-async function exportCSV()   { await _ensureXLSX(); Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
-async function exportExcel() { await _ensureXLSX(); Excel.exportarAnual(filAno, notas, repasses, user); }
+async function exportExcel() {
+  setLoading(true, 'Gerando a planilha…');
+  try { await Excel.exportarAnual(filAno, notas, repasses, user); }
+  catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
+}
 
 /* Planilha do Google "ao vivo" — cria/atualiza na pasta do Drive e abre o link */
 async function exportSheets() {

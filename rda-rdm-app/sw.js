@@ -2,10 +2,10 @@
    Service Worker — Petermann App
    Estratégia:
      • Shell (HTML/JS/CSS locais) → Network First (cache só como reserva offline)
-     • CDN externos (Supabase, Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
-     • Supabase API → Network Only (não faz sentido cachear)
+     • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
+     • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v127';
+const CACHE   = 'petermann-v189';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -17,10 +17,11 @@ const SHELL   = [
   './',
   './index.html',
   './manifest.json',
-  './logo.jpg',
-  './icon-192.png',
-  './icon-512.png',
+  './logo.jpg?v=159',
+  './icon-192.png?v=160',
+  './icon-512.png?v=160',
   './js/app.js',
+  './js/api.js',
   './js/db.js',
   './js/nfce.js',
   './js/sefaz.js',
@@ -29,22 +30,24 @@ const SHELL   = [
   './js/recorte.js',
   './js/excel.js',
   './js/gestor.js',
+  './js/frota.js',
+  './js/ponto.js',
+  './js/arquivos.js',
+  './topo.png?v=188',
   './js/gdrive.js',
-  './js/gsheets.js',
 ];
 
 const RUNTIME_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './logo.jpg',
-  './icon-192.png',
-  './icon-512.png',
+  './logo.jpg?v=159',
+  './icon-192.png?v=160',
+  './icon-512.png?v=160',
 ];
 const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
   
 const CDN = [
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
 ];
 
@@ -70,9 +73,6 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // Supabase API → sempre rede
-  if (url.includes('.supabase.co')) return;
-
   // CDN → stale-while-revalidate
   if (CDN.some(u => url.startsWith(u.split('?')[0]))) {
     e.respondWith(
@@ -85,8 +85,12 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Shell + assets estáticos locais → network first, com fallback para cache.
+  // Petermann API e qualquer outra origem → sempre rede. Sem isto, a API
+  // fora do ar devolveria o index.html do cache no lugar do JSON.
   const requestUrl = new URL(e.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+
+  // Shell + assets estáticos locais → network first, com fallback para cache.
   const scopePrefix = (self.registration.scope || self.location.origin).replace(self.location.origin, '').replace(/\/$/, '');
   const pathWithoutScope = requestUrl.pathname.startsWith(scopePrefix + '/')
     ? requestUrl.pathname.slice(scopePrefix.length)

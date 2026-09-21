@@ -13,3 +13,10 @@ consultas-uso-storage.sql
 # copia de trabalho fora do repo: backup do build 85, capturas de tela e
 # rascunhos. Fica no disco, so nao e versionada.
 SISTEMA DE NOTAS/
+
+# pacotes gerados por scripts/empacotar.js
+petermann-app.zip
+petermann-api.zip
+petermann-fotos.zip
+.empacotar-tmp/
+petermann-banco.zip

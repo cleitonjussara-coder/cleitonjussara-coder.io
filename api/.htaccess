@@ -1,0 +1,10 @@
+# A pasta do Laravel NUNCA deve ser servida diretamente — só a public/.
+# Se algum subdomínio for apontado aqui por engano, isto barra tudo
+# (.env, storage/, vendor/) em vez de expor.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

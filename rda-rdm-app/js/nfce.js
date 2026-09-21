@@ -83,6 +83,12 @@ window.NFCE = (() => {
             if (raw.length >= 44) chave = raw.slice(0, 44);
           }
 
+          /* QR versão 2/3 (chave|versão|tpAmb|cIdToken|vNF|…): o valor vem
+             no 5º campo — visto em GO em 19/09/2026 ("…|3|1|18|124.36|||hash") */
+          if (digits(parts[0]).length === 44 && parts.length >= 5) {
+            const v5 = parseFloat(String(parts[4] || '').replace(',', '.'));
+            if (!isNaN(v5) && v5 > 0) valor = v5;
+          }
           // vNF = índice 10
           const candidate = parts[10];
           if (candidate) {

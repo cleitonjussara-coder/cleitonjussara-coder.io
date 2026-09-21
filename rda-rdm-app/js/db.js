@@ -2,6 +2,7 @@
 /* ─────────────────────────────────────────────────────────────
    DB.js — IndexedDB offline-first + engine de sincronização
    Stores: notas | repasses | fotos | meta
+   O parâmetro `sb` das funções de sync é o cliente da API (js/api.js).
 ───────────────────────────────────────────────────────────── */
 window.DB = (() => {
   const DB_NAME = 'petermann_v1';
@@ -29,7 +30,7 @@ window.DB = (() => {
           s.createIndex('synced',  'synced',  { unique: false });
         }
         if (!d.objectStoreNames.contains('fotos')) {
-          // armazena blob local até o upload pro Supabase
+          // armazena blob local até o upload pro servidor
           d.createObjectStore('fotos', { keyPath: 'nota_id' });
         }
         if (!d.objectStoreNames.contains('meta')) {
@@ -263,6 +264,35 @@ window.DB = (() => {
     }
   }
 
+  /* Colaborador excluído de vez (20/09/2026): as linhas dele já não voltam
+     do servidor, então saem daqui também. */
+  async function purgeNotasDeUsuario(userId) {
+    if (!userId) return 0;
+    let n = 0;
+    for (const store of ['notas', 'lancamentos_apagados', 'repasses']) {
+      const rows = await _getAll(store).catch(() => []);
+      for (const r of rows) {
+        if (r.user_id === userId) { await _del(store, r.id).catch(() => {}); n++; }
+      }
+    }
+    return n;
+  }
+
+  /* Tira um item da lixeira local. tudo=true apaga também a linha em
+     `notas` e a foto (cópia órfã: não existe mais no servidor); false só
+     limpa o arquivo (a nota viva voltou pelo sync). */
+  async function limparDaLixeira(id, tudo) {
+    await _del('lancamentos_apagados', id).catch(() => {});
+    if (tudo) {
+      await _del('notas', id).catch(() => {});
+      await _del('fotos', id).catch(() => {});
+      const fila = await _getAll('sync_queue').catch(() => []);
+      for (const item of fila) {
+        if (item.entity_id === id) await _del('sync_queue', item.id).catch(() => {});
+      }
+    }
+  }
+
   async function getDeletedNotasUser(userId) {
     /* Cada store é lida por conta própria: num aparelho que ainda não
        abriu o app novo, `lancamentos_apagados` pode não existir, e um
@@ -462,12 +492,6 @@ window.DB = (() => {
   /* ── SYNC ────────────────────────────────────────────── */
   let _running = false;
 
-  /* Vira true se o Supabase ainda não tem a coluna qr_url; volta a false a
-     cada recarga do app, então a migração é detectada sem limpar nada. */
-  let _semColunaQrUrl = false;
-  const _ehErroQrUrl = e =>
-    /qr_url/i.test(`${e?.message || ''} ${e?.details || ''} ${e?.hint || ''}`);
-
   async function _ensureQueueFromExisting() {
     const [allN, allR, allFotos, queueItems] = await Promise.all([
       _getAll('notas'),
@@ -517,6 +541,15 @@ window.DB = (() => {
       }
       return isDue;
     });
+    /* Anexos ANTES dos registros, e na ordem em que entraram na fila. A API
+       só aceita nota NOVA se o arquivo dela já estiver no disco (anexo
+       obrigatório vale no servidor também), e o POST da foto aceita nota que
+       ainda não existe lá. Se a foto falhar, a nota cai no catch (422) e as
+       duas tentam de novo juntas. O getAll devolve pelo id (UUID, aleatório),
+       por isso a ordenação explícita. */
+    dueItems.sort((a, b) =>
+      ((b.entity === 'foto') - (a.entity === 'foto')) ||
+      String(a.created_at || '').localeCompare(String(b.created_at || '')));
     let ok = 0, fail = 0;
     let fotosOk = 0, fotosFail = 0, erroFoto = null;
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
@@ -532,11 +565,12 @@ window.DB = (() => {
           if (!nota?.user_id) { await delFotoLocal(item.entity_id); await _del('sync_queue', item.id); continue; }
           const ext = (payload.ext || 'jpg').toLowerCase();
           const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
-          const path = `${nota.user_id}/${item.entity_id}.${ext}`;
-          const { error } = await sb.storage.from('notas-fotos').upload(path, payload.blob, { contentType: mime, upsert: true });
-          if (error) throw error;
-          const { error: erroRef } = await sb.from('notas').update({ foto_path: path }).eq('id', item.entity_id);
-          if (erroRef) throw erroRef;
+          /* A API grava o arquivo em disco (user_id/nota_id.ext) e, se a nota
+             já existe lá, atualiza o foto_path dela na mesma chamada. Se ainda
+             não existe, o arquivo fica esperando e o upsert da nota (logo em
+             seguida) o encontra pelo id — por isso vai o user_id junto. */
+          const blob = payload.blob instanceof Blob ? payload.blob : new Blob([payload.blob], { type: mime });
+          const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id);
           await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
           await delFotoLocal(item.entity_id);
           await _del('sync_queue', item.id);
@@ -552,25 +586,21 @@ window.DB = (() => {
         delete payload.synced;
         delete payload.sync_status;
         delete payload.sync_error;
-        if (_semColunaQrUrl) delete payload.qr_url;
+        delete payload.updated_at;       // quem carimba é o servidor
+        delete payload.user_nome;        // campo só de tela (notas da equipe)
+        if (item.entity === 'repass') delete payload.email_sent;   // decisão do servidor
 
-        let { error } = await sb.from(item.entity === 'nota' ? 'notas' : 'repasses').upsert(payload);
-        if (error && _ehErroQrUrl(error)) {
-          _semColunaQrUrl = true;
-          delete payload.qr_url;
-          ({ error } = await sb.from(item.entity === 'nota' ? 'notas' : 'repasses').upsert(payload));
-        }
-        if (!error) {
-          if (item.entity === 'nota') {
-            await _put('notas', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
-          } else {
-            await _put('repasses', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
-          }
-          await _del('sync_queue', item.id);
-          ok++;
+        /* lança em caso de erro → catch abaixo agenda a nova tentativa */
+        if (item.entity === 'nota') await sb.notas.upsert(payload);
+        else                        await sb.repasses.upsert(payload);
+
+        if (item.entity === 'nota') {
+          await _put('notas', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
         } else {
-          throw error;
+          await _put('repasses', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
         }
+        await _del('sync_queue', item.id);
+        ok++;
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
         const attempts = (item.attempts || 0) + 1;
@@ -594,16 +624,10 @@ window.DB = (() => {
     return { ok, fail, fotosOk, fotosFail, erroFoto };
   }
 
-  async function pullIncremental(sb, userId) {
-    if (!sb || !navigator.onLine || !userId) return 0;
-    const since = await getMeta('last_sync', '1970-01-01T00:00:00Z');
+  /* Mescla linhas vindas do servidor no store local. Devolve quantas entraram. */
+  async function _mesclarRemotas(table, data) {
     let pulled = 0;
-
-    for (const table of ['notas', 'repasses']) {
-      try {
-        const { data } = await sb.from(table).select('*').gte('updated_at', since);
-        if (!data) continue;
-        for (const row of data) {
+    for (const row of (data || [])) {
           const local = await _get(table, row.id);
           /* Remoto vence quando a linha não existe aqui ou quando é mais
              recente. `local.synced` NÃO entra nessa conta: estar sincronizado
@@ -619,56 +643,128 @@ window.DB = (() => {
                anexo (ele é obrigatório), então null do servidor não é uma
                remoção intencional — é a linha que ficou para trás. Deixar
                sobrescrever apagava a referência de uma foto que está no
-               Storage, e a nota ficava sem imagem para sempre. */
+               disco do servidor, e a nota ficava sem imagem para sempre. */
             if (table === 'notas' && !row.foto_path && local?.foto_path) {
               merge.foto_path = local.foto_path;
             }
             await _put(table, merge);
             pulled++;
           }
-        }
-      } catch (_) {}
+    }
+    return pulled;
+  }
+
+  /* ── Janela por ano (20/09/2026) ────────────────────────────
+     Antes, o primeiro sync de um aparelho pedia TUDO (since=1970): para o
+     gestor, todas as notas de todos os colaboradores, de todos os anos.
+     Com centenas de notas por dia isso vira minutos de download e um
+     IndexedDB de dezenas de MB só para olhar o mês atual.
+     Agora o primeiro sync traz só o ANO ATUAL; outros anos entram quando a
+     pessoa navega até eles (garantirAno, chamado pelo app ao mudar filAno).
+     Depois disso, o since= traz apenas o que mudou, de qualquer ano — como
+     sempre. Aparelho antigo (last_sync já gravado) já tem tudo: marcado
+     com '*' para não baixar de novo. */
+  const ANOS_KEY = 'anos_sync';
+  async function garantirAno(sb, userId, ano) {
+    ano = parseInt(ano, 10);
+    if (!sb || !navigator.onLine || !userId || !(ano >= 2000 && ano <= 2100)) return 0;
+    let anos = await getMeta(ANOS_KEY, null);
+    if (!Array.isArray(anos)) {
+      anos = (await getMeta('last_sync', null)) ? ['*'] : [];
+      await setMeta(ANOS_KEY, anos);
+    }
+    if (anos.includes('*') || anos.includes(ano)) return 0;
+    const data = await sb.notas.list({ ano });
+    const n = await _mesclarRemotas('notas', data);
+    anos.push(ano);
+    await setMeta(ANOS_KEY, anos);
+    return n;
+  }
+  async function anosSincronizados() {
+    const a = await getMeta(ANOS_KEY, null);
+    return Array.isArray(a) ? a : [];
+  }
+
+  async function pullIncremental(sb, userId) {
+    if (!sb || !navigator.onLine || !userId) return 0;
+    const since = await getMeta('last_sync', null);
+    let pulled = 0;
+
+    if (!since) {
+      /* primeiro sync deste aparelho: notas só do ano atual; repasses são
+         poucos e vêm inteiros */
+      try {
+        await setMeta(ANOS_KEY, []);
+        pulled += await garantirAno(sb, userId, new Date().getFullYear());
+        pulled += await _mesclarRemotas('repasses', await sb.repasses.list({}));
+      } catch (_) { return pulled; }   // sem last_sync gravado: tenta de novo no próximo
+    } else {
+      for (const table of ['notas', 'repasses']) {
+        try {
+          const data = await (table === 'notas' ? sb.notas : sb.repasses).list({ since });
+          pulled += await _mesclarRemotas(table, data);
+        } catch (_) {}
+      }
     }
 
     await setMeta('last_sync', new Date().toISOString());
     return pulled;
   }
 
+  /* Notas de OUTROS colaboradores guardadas neste aparelho (gestor/admin
+     recebem as da equipe no mesmo pull). Sem as apagadas. */
+  async function getNotasEquipe(meuId) {
+    const all = await _getAll('notas');
+    return all.filter(n => n.user_id !== meuId && !n.deleted).map(n => _normalizeRecord(n));
+  }
+
   /* Recupera notas que perderam o foto_path mas cujo arquivo continua no
-     Storage — o estrago que o update não checado (corrigido acima) já fez.
-     O caminho é determinístico (user_id/nota_id.ext), então basta listar a
-     pasta do usuário e casar pelo id da nota. Só reconecta referência: não
-     apaga nem sobe nada. */
+     disco do servidor. O caminho é determinístico (user_id/nota_id.ext),
+     então o servidor lista a pasta do usuário e casa pelo id da nota
+     (POST /notas/reparar-fotos). Só reconecta referência: não apaga nem
+     sobe nada. */
   async function repararFotosOrfas(sb, userId) {
     if (!sb || !navigator.onLine || !userId) return 0;
     const orfas = (await _getAllByIdx('notas', 'user_id', userId))
       .filter(n => !n.deleted && !n.foto_path);
     if (!orfas.length) return 0;
 
-    const { data: arquivos, error } = await sb.storage.from('notas-fotos')
-      .list(userId, { limit: 1000 });
-    if (error || !arquivos?.length) return 0;
-
-    const porId = new Map();
-    arquivos.forEach(a => porId.set(String(a.name).replace(/\.[^.]+$/, ''), a.name));
-
+    const r = await sb.notas.repararFotos();
     let recuperadas = 0;
-    for (const n of orfas) {
-      const arq = porId.get(n.id);
-      if (!arq) continue;
-      const path = `${userId}/${arq}`;
-      const { error: e } = await sb.from('notas').update({ foto_path: path }).eq('id', n.id);
-      if (e) continue;
-      await _put('notas', { ...n, foto_path: path });
+    for (const { id, foto_path } of (r?.notas || [])) {
+      const n = orfas.find(x => x.id === id);
+      if (!n || !foto_path) continue;
+      await _put('notas', { ...n, foto_path });
       recuperadas++;
     }
     return recuperadas;
+  }
+
+  /* Notas lidas por QR antes da v59 têm a URL real só em meta ('qr_<chave>'),
+     neste aparelho — o servidor ficou sem qr_url e o 🔗 delas caía no portal
+     nacional, que não mostra NFC-e. Reenfileira cada uma com a URL achada;
+     roda a cada sync, mas só toca nas que ainda estão sem. */
+  async function repararQrUrls(userId) {
+    const minhas = await _getAllByIdx('notas', 'user_id', userId).catch(() => []);
+    let n = 0;
+    for (const nota of minhas) {
+      if (nota.deleted || nota.qr_url) continue;
+      const chave = String(nota.chave_nfce || '').replace(/\D/g, '');
+      if (chave.length !== 44) continue;
+      const url = await getMeta('qr_' + chave).catch(() => null);
+      if (!url || !/^https?:\/\//i.test(url)) continue;
+      await saveNota({ ...nota, qr_url: url }, userId);
+      n++;
+    }
+    if (n) console.info(`[qr] ${n} nota(s) reenviada(s) com a URL do QR guardada neste aparelho`);
+    return n;
   }
 
   async function sync(sb, userId) {
     if (_running) return null;
     _running = true;
     try {
+      try { await repararQrUrls(userId); } catch (_) {}
       const push   = await pushPending(sb);
       const pulled = await pullIncremental(sb, userId);
       let recuperadas = 0;
@@ -695,10 +791,11 @@ window.DB = (() => {
   return {
     open,
     saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
-    purgeNotaLocal,
+    purgeNotaLocal, limparDaLixeira, purgeNotasDeUsuario,
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, softDeleteRepasse,
     upsertFromDrive,
-    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary,
+    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, repararQrUrls,
+    garantirAno, anosSincronizados, getNotasEquipe,
   };
 })();

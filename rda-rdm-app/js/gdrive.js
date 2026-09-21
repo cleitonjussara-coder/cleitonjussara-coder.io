@@ -34,6 +34,7 @@ window.GDrive = (() => {
   let fileIndex    = {};
   let _folderCache = {};   // chave `${paiId}/${nome}` → Promise<id> (evita criar 2x)
   let _gisReady    = false;
+  let _initErro    = null;   // último motivo de init() falhar (diagnóstico no Perfil)
 
   /* ════════════════════════════════════════════
      INIT — restaura token salvo, SEM popup
@@ -60,13 +61,28 @@ window.GDrive = (() => {
 
       accessToken = tok;
       tokenExpiry = exp;
+      _initErro = null;
       // índice em segundo plano: abrir o app não espera pela varredura
       _garantirIndice().catch(e => console.warn('GDrive índice:', e.message));
       return true;
     } catch (e) {
+      _initErro = e.message || String(e);
       console.warn('GDrive.init:', e.message);
       return false;
     }
+  }
+
+  /* O que o Perfil mostra quando o Drive não conectou — sem segredos. */
+  function diagnostico() {
+    let salvo = null;
+    try { salvo = sessionStorage.getItem(LS_KEY) ? 'sim' : 'não'; } catch (_) { salvo = 'sessionStorage indisponível'; }
+    return {
+      token: accessToken ? 'sim' : 'não',
+      expiraEm: accessToken ? Math.max(0, Math.round((tokenExpiry - Date.now()) / 60000)) + ' min' : '—',
+      gis: _gisReady ? 'carregado' : 'não carregado',
+      salvoNaSessao: salvo,
+      erroInit: _initErro || '—',
+    };
   }
 
   function _loadGIS() {
@@ -84,7 +100,7 @@ window.GDrive = (() => {
      escopo do Drive junto (build 123). É o caminho "sem botão": o app entra
      já conectado. Vale o mesmo que um token do popup. */
   function setToken(tok, expMs) {
-    if (!tok) return false;
+    if (!tok || DESATIVADO) return false;
     accessToken = tok;
     tokenExpiry = expMs;
     try { sessionStorage.setItem(LS_KEY, JSON.stringify({ tok: accessToken, exp: tokenExpiry })); } catch (_) {}
@@ -599,8 +615,14 @@ window.GDrive = (() => {
     throw new Error(`Drive (${filename}): ${msg} [${reason}]`);
   }
 
-  function isConnected()  { return !!accessToken && Date.now() < tokenExpiry; }
-  function isConfigured() { return !CLIENT_ID.includes('SEU_CLIENT'); }
+  /* DESLIGADO em 19/09/2026 (Fase 12): os anexos ficam no servidor da
+     Locaweb e o gestor usa Início → Arquivos (miniaturas + ZIP na pasta
+     modelo). Com isConfigured() falso, nada aqui roda: sem popup, sem
+     token, sem upload — o resto do app já testa isConfigured/isConnected.
+     Para reativar: DESATIVADO = false (o código continua inteiro). */
+  const DESATIVADO = true;
+  function isConnected()  { return !DESATIVADO && !!accessToken && Date.now() < tokenExpiry; }
+  function isConfigured() { return !DESATIVADO && !CLIENT_ID.includes('SEU_CLIENT'); }
 
   /* token + pasta expostos p/ o módulo Google Sheets (mesmo escopo 'drive') */
   function getToken()    { _checkConnected(); return accessToken; }
@@ -615,7 +637,7 @@ window.GDrive = (() => {
     syncNotas, loadNotas,
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
     atualizarIndice, migrarParaModeloPadrao,
-    isConnected, isConfigured, minutosRestantes,
+    isConnected, isConfigured, minutosRestantes, diagnostico,
     getToken, getFolderId,
   };
 })();
