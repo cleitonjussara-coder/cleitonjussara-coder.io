@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 194;
+const APP_BUILD = 195;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -618,6 +618,7 @@ async function init() {
     }
   });
   window.addEventListener('offline', () => syncBadge(false));
+  _instalarPuxarParaAtualizar();
   window.addEventListener('db-synced', async e => {
     syncBadge(false);
     if (driveOk) await pullFromDrive().catch(() => {});
@@ -1037,7 +1038,7 @@ function renderAuth(mode='login') {
   ` : `
     <h2 class="auth-title">Criar conta</h2>
     ${_botoesSociais()}
-    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome">
+    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
     <button class="btn btn-primary btn-full" onclick="register()">Criar conta</button>
@@ -1361,6 +1362,57 @@ function updateDriveBadge() {
 }
 
 /* ── Navegação ───────────────────────────────────────────── */
+/* ── Puxar para atualizar (21/09/2026, reunião) ─────────────────
+   Com a tela no topo, arrastar o dedo para baixo mostra "solte para
+   atualizar"; soltando, sincroniza com o servidor, recarrega os dados
+   locais, procura versão nova do app e redesenha a tela atual. */
+function _instalarPuxarParaAtualizar() {
+  const el = $('app-content');
+  if (!el || el.dataset.ptr) return;
+  el.dataset.ptr = '1';
+  const ind = document.createElement('div');
+  ind.id = 'ptr-indicador';
+  ind.innerHTML = '<span class="ptr-seta">↓</span><span class="ptr-txt">Puxe para atualizar</span>';
+  el.parentNode.insertBefore(ind, el);
+  const LIMIAR = 72;
+  let y0 = null, dy = 0, ocupado = false;
+  el.addEventListener('touchstart', e => {
+    if (ocupado || el.scrollTop > 0 || document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0 || el.scrollTop > 0) { ind.style.height = '0px'; return; }
+    const h = Math.min(dy * 0.55, 90);
+    ind.style.height = h + 'px';
+    ind.classList.toggle('pronto', dy > LIMIAR);
+    ind.querySelector('.ptr-txt').textContent = dy > LIMIAR ? 'Solte para atualizar' : 'Puxe para atualizar';
+  }, { passive: true });
+  const soltar = async () => {
+    if (y0 === null) return;
+    const puxou = dy > LIMIAR; y0 = null;
+    if (!puxou) { ind.style.height = '0px'; ind.classList.remove('pronto'); return; }
+    ocupado = true;
+    ind.classList.add('girando'); ind.style.height = '54px';
+    ind.querySelector('.ptr-txt').textContent = 'Atualizando…';
+    try {
+      if (sb && user && navigator.onLine) { await DB.sync(sb, user.id); }
+      await carregarDadosLocais();
+      navigator.serviceWorker?.getRegistration?.().then(r => r?.update()).catch(() => {});
+      switchView(viewAtual);
+      toast(navigator.onLine ? 'Atualizado ✅' : 'Sem internet — mostrando o que está no aparelho', navigator.onLine ? 'ok' : 'err');
+    } catch (e) { toast('Não atualizou: ' + (e.message || 'erro'), 'err'); }
+    finally {
+      ind.classList.remove('girando', 'pronto'); ind.style.height = '0px';
+      ind.querySelector('.ptr-txt').textContent = 'Puxe para atualizar';
+      ocupado = false;
+    }
+  };
+  el.addEventListener('touchend', soltar, { passive: true });
+  el.addEventListener('touchcancel', soltar, { passive: true });
+}
+
 function switchView(v) {
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
@@ -1434,7 +1486,7 @@ function renderDespesas() {
     <div class="ini-ir">
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
       <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">Saldo</span><span class="ini-ir-sub">RDA / RDM e planilha</span></button>
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">RDM/RDA e Planilhas</span><span class="ini-ir-sub">saldo e relatórios</span></button>
       ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">notas de todos</span></button>` : ''}
       ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
@@ -1470,11 +1522,19 @@ function renderInicio() {
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
 
+  /* 21/09/2026 (reunião): a saudação mostra a FOTO do colaborador e o PAPEL
+     dele. O avatar usa a mesma classe da Equipe — o observador do gestor.js
+     baixa a imagem sozinho quando vê .avatar[data-foto]. */
+  const PAPEL = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
+  const papel = user?.role || 'colaborador';
   $('app-content').innerHTML = `
   <div class="db-container">
-    <div class="ini-ola">
-      <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
-      <span>${esc(hojeTxt)}</span>
+    <div class="ini-ola ini-ola-foto">
+      <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome||'')}" data-sub="${esc(PAPEL[papel]||papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome||user?.email||'?')[0].toUpperCase())}</div>
+      <div class="ini-ola-txt">
+        <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
+        <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL[papel] || papel)}</span> · ${esc(hojeTxt)}</span>
+      </div>
     </div>
 
     <div class="ini-titulo">O que você quer fazer?</div>
@@ -1486,7 +1546,7 @@ function renderInicio() {
       <span class="pnl-conteudo">
         <span class="pnl-ico">🧾</span>
         <span class="pnl-tit">Petermann – Despesas</span>
-        <span class="pnl-sub">Lançar nota e repasse · Painel · Minhas notas · Saldo${_ehGestorOuAdmin() ? " · Equipe · Arquivos" : ""}.</span>
+        <span class="pnl-sub">Lançar nota e repasse · Painel · Minhas notas · RDM/RDA e Planilhas${_ehGestorOuAdmin() ? " · Equipe · Arquivos" : ""}.</span>
       </span>
     </button>
     <div class="pnl-linha">
@@ -2124,6 +2184,11 @@ function renderHome() {
   $('app-content').innerHTML = `
   <div class="db-container">
 
+    <!-- 21/09/2026 (reunião): atalho direto do Painel para a Despesa Corporativa -->
+    <button class="pnl pnl-mini pnl-atalho" onclick="switchView('despesas')">
+      <span class="pnl-conteudo"><span class="pnl-ico">🧾</span><span class="pnl-tit">Petermann – Despesas</span><span class="pnl-sub">Lançar nota ou repasse agora.</span></span>
+    </button>
+
     ${cabecalhoHtml}
 
     <div class="db-header">
@@ -2755,19 +2820,27 @@ function renderSaldo() {
     </div>`;
   };
 
+  /* 21/09/2026 (reunião): a aba "Saldo" virou "RDM/RDA e Planilhas", com a
+     seção "Baixar relatório" em destaque. Na fase 3 (enquadramento CV) os
+     botões passam a depender do regime do colaborador. */
   $('app-content').innerHTML = `
+  <div class="ini-ola" style="padding:4px 2px 6px"><h2>📊 RDM/RDA e Planilhas</h2><span>gasto, repasse e saldo por aba</span></div>
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
       <span class="mes-label">${MESES[filMes-1]} ${filAno}</span>
       <button class="btn-mes-nav" onclick="mudarMes(1)">›</button>
     </div>
+  </div>
+  <div class="db-card" style="gap:8px;padding:12px 14px">
+    <div class="dash-card-title" style="margin:0">⬇️ Baixar relatório</div>
     <div class="export-btns">
-      <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV</button>
-      <button class="btn btn-sm btn-outline" onclick="exportExcel()">Excel Anual</button>
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">RDM / RDA · ${filAno}:</span>
+      <button class="btn btn-sm btn-primary" onclick="exportExcel()">📗 Excel anual</button>
+      <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
     </div>
-    <div class="export-btns" style="margin-top:8px">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa, ${filAno}):</span>
+    <div class="export-btns">
+      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa) · ${filAno}:</span>
       <button class="btn btn-sm btn-primary" onclick="baixarRelatorioCv('xlsx')">📗 Excel</button>
       <button class="btn btn-sm btn-outline" onclick="baixarRelatorioCv('pdf')">📕 PDF</button>
     </div>
@@ -3158,7 +3231,7 @@ function renderPerfil() {
 
   <div class="perfil-form">
     <label class="lbl">Nome</label>
-    <input class="inp" id="p-nome"   value="${esc(user?.nome||'')}">
+    <input class="inp" id="p-nome"   value="${esc(user?.nome||'')}" autocomplete="name" autocapitalize="words">
     <button class="btn btn-primary" onclick="salvarPerfil()">Salvar perfil</button>
   </div>
 
@@ -3973,16 +4046,18 @@ function abrirSeletorTipoLancamento(dados = {}) {
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
-  /* Fornecedor conhecido (chave/CNPJ/nome) → sugere a aba e pula o passo 1.
-     Assíncrono: se a pessoa tocar antes, a escolha dela vale. */
+  /* Fornecedor conhecido (chave/CNPJ/nome): até 20/09 o app escolhia a aba
+     sozinho e pulava o passo 1. Reunião de 21/09/2026: a escolha é SEMPRE
+     manual — a sugestão vira só um aviso embaixo do título, e a pessoa toca
+     em RDA ou RDM. (Na fase 3 entra o CV, conforme o regime do colaborador.) */
   const d = _dadosLancamentoPendentes;
+  const dica = $('tipo-lancamento-dica'); if (dica) dica.textContent = '';
   if (d.cnpj || d.chave || d.razao_social) {
     sugerirAba(d).then(s => {
       if (!s || _dadosLancamentoPendentes !== d) return;                // já escolheu/fechou
-      if ($('tipo-lancamento-passo1').style.display === 'none') return; // já está no passo 2
       d._sugestao = s;
       d.subtipo = s.subtipo || d.subtipo;
-      selecionarTipoLancamento(s.tipo);
+      if (dica) dica.textContent = `Sugestão para este fornecedor: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo}). Você decide.`;
     }).catch(() => {});
   }
 }

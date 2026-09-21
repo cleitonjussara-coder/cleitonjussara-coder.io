@@ -82,7 +82,8 @@ window.Gestor = (() => {
       const maxEvo = Math.max(1, ...evo);
 
       // ── Cabeçalho ──
-      let html = `<div class="page-hd">
+      let html = `<div class="ini-ola" style="padding:4px 2px 6px"><h2>👥 Equipe / Baixar relatórios</h2><span>${collabs.length} colaborador${collabs.length===1?"":"es"} ativo${collabs.length===1?"":"s"}</span></div>
+      <div class="page-hd">
         <div class="mes-nav">
           <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
           <span class="mes-label">${MESES[mes-1]} ${ano}</span>
@@ -97,29 +98,9 @@ window.Gestor = (() => {
         </div>
       </div>`;
 
-      // ── KPIs ──
-      html += `<div class="dash-kpis">
-        <div class="kpi warn">
-          <div class="kpi-label">💸 Gasto no mês</div>
-          <div class="kpi-val">${brl(gasto)}</div>
-          <div class="kpi-sub">RDA ${brl(gRDA)} · RDM ${brl(gRDM)}</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">💰 Recebido</div>
-          <div class="kpi-val">${brl(recebido)}</div>
-          <div class="kpi-sub">repasses do mês</div>
-        </div>
-        <div class="kpi ${saldo < 0 ? 'neg' : ''}">
-          <div class="kpi-label">📊 Saldo</div>
-          <div class="kpi-val">${brl(saldo)}</div>
-          <div class="kpi-sub">recebido − gasto</div>
-        </div>
-        <div class="kpi ${pend ? 'warn' : ''}">
-          <div class="kpi-label">🧾 Notas (${ns.length})</div>
-          <div class="kpi-val">${ativos}<span style="font-size:12px;font-weight:600;color:var(--text2)"> ativos</span></div>
-          <div class="kpi-sub">${pend} s/ valor · ${semFoto} s/ foto</div>
-        </div>
-      </div>`;
+      /* 21/09/2026 (reunião): os 4 KPIs (Gasto no mês, Recebido, Saldo, Notas)
+         saíram daqui — já aparecem no Painel, em RDM/RDA e Planilhas e no
+         cartão de cada colaborador. A Equipe é "Equipe / Baixar relatórios". */
 
       // ── Evolução (ano) ──
       html += `<div class="dash-card">
@@ -501,7 +482,7 @@ window.Gestor = (() => {
         </div>
         <div class="modal-bd">
           <label class="lbl">Nome</label>
-          <input class="inp" id="g-nome" value="${esc(colab.nome||'')}" ${ehAdmin ? '' : 'disabled'}>
+          <input class="inp" id="g-nome" value="${esc(colab.nome||'')}" autocapitalize="words" ${ehAdmin ? '' : 'disabled'}>
           <label class="lbl">Papel</label>
           <select class="inp" id="g-role" ${ehAdmin ? '' : 'disabled'}>
             ${ROLES.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${r}</option>`).join('')}

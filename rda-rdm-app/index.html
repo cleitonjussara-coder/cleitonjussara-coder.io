@@ -7,11 +7,11 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Petermann">
-  <link rel="manifest" href="manifest.json?v=161">
+  <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
+  <link rel="manifest" href="manifest.json?v=195">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
-  <title>Petermann</title>
+  <title>PETERMANN - DESPESAS</title>
 <style>
 /* ─────────────────────────────────────────────
    RESET + VARIÁVEIS
@@ -109,7 +109,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
 .auth-logo svg{width:64px;height:64px}
 .auth-logo img{box-shadow:0 10px 26px rgba(27,67,50,.18);background:#fff}
-.auth-logo-text{color:var(--primary-d);font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-top:12px}
+.auth-logo-text{color:var(--primary-d);font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-top:12px}
 .auth-logo-text span{color:var(--primary-l)}
 .auth-title{color:var(--text);font-size:21px;font-weight:700;margin-bottom:18px;letter-spacing:-0.2px}
 #auth-body{display:flex;flex-direction:column;gap:10px}
@@ -217,6 +217,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   -webkit-overflow-scrolling:touch;
   overscroll-behavior-y:contain;
 }
+/* puxar para atualizar (21/09/2026) */
+#ptr-indicador{height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--bg);color:var(--text2);font-size:12.5px;font-weight:700;transition:height .18s ease}
+#ptr-indicador .ptr-seta{display:inline-block;transition:transform .2s}
+#ptr-indicador.pronto .ptr-seta{transform:rotate(180deg)}
+#ptr-indicador.girando .ptr-seta{animation:ptr-gira .8s linear infinite}
+@keyframes ptr-gira{to{transform:rotate(360deg)}}
 /* entrada suave do conteúdo ao trocar de aba */
 #app-content > *{animation:viewIn .22s ease both}
 #app-content::-webkit-scrollbar{display:none}
@@ -778,6 +785,14 @@ select.inp{cursor:pointer}
 .ini-ola{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:4px 2px 0}
 .ini-ola h2{margin:0;font-size:20px;font-weight:800;color:var(--text)}
 .ini-ola span{font-size:12px;color:var(--text2)}
+/* Início com foto e papel (21/09/2026) */
+.ini-ola-foto{align-items:center;justify-content:flex-start;gap:12px}
+.ini-ola-foto .avatar{flex:0 0 auto;width:52px;height:52px;font-size:19px}
+.ini-ola-txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ini-ola-txt > span{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ini-ola-txt .role-pill{text-shadow:none;font-size:11px;opacity:1}
+.ini-ola-txt .role-colaborador{color:#1E40AF}.ini-ola-txt .role-gestor{color:#78350F}.ini-ola-txt .role-admin{color:#9D174D}.ini-ola-txt .role-contabilidade{color:#065F46}
+.role-contabilidade{background:#D1FAE5;color:#065F46}
 .ini-titulo{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);margin:6px 2px -4px}
 .ini-acoes{display:flex;flex-direction:column;gap:10px}
 .ini-acao{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:2px solid transparent;border-radius:16px;padding:16px 16px;font:inherit;cursor:pointer;box-shadow:var(--shadow);background:var(--surface);transition:transform .12s}
@@ -838,6 +853,12 @@ select.inp{cursor:pointer}
 @media (min-width:640px){.pnl-linha{grid-template-columns:repeat(4,1fr)}}
 .pnl-mini .pnl-conteudo{min-height:132px;padding:12px 10px 14px;justify-content:flex-end}
 .pnl-mini .pnl-ico{font-size:26px}
+/* atalho compacto no topo do Painel (21/09/2026) */
+.pnl-atalho{width:100%}
+.pnl-atalho .pnl-conteudo{min-height:0;flex-direction:row;align-items:center;gap:12px;padding:12px 14px}
+.pnl-atalho .pnl-ico{font-size:28px}
+.pnl-atalho .pnl-tit{font-size:16px}
+.pnl-atalho .pnl-sub{margin-left:auto;text-align:right}
 .pnl-mini .pnl-tit{font-size:13.5px;line-height:1.15}
 .pnl-mini .pnl-sub{font-size:10.5px;display:none}
 @media (min-width:480px){.pnl-mini .pnl-sub{display:block}}
@@ -1286,8 +1307,8 @@ body{font-size:16.5px}
   <div class="auth-wrap">
     <div class="auth-logo">
       <img src="logo.jpg?v=160" alt="Petermann" style="width:110px;height:auto;border-radius:14px;object-fit:contain">
-      <div class="auth-logo-text">Petermann <span>App</span></div>
-      <p class="auth-tag">Lançamento de notas RDA e RDM, com leitura de QR Code e envio automático.</p>
+      <div class="auth-logo-text">PETERMANN <span>– DESPESAS</span></div>
+      <p class="auth-tag">App RDA/RDM e CV — notas, repasses e cartão corporativo, com leitura de QR Code e envio automático.</p>
     </div>
     <div id="auth-body"></div>
   </div>
@@ -1302,7 +1323,7 @@ body{font-size:16.5px}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=194" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=195" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1429,6 +1450,7 @@ body{font-size:16.5px}
     </div>
     <div class="modal-bd" id="tipo-lancamento-passo1">
       <p style="margin:0 0 14px;font-size:14px;line-height:1.5;color:var(--text2)">Escolha com atenção a aba correta antes de preencher a nota. Isso evita lançar a despesa na aba errada.</p>
+      <p id="tipo-lancamento-dica" style="margin:-8px 0 12px;font-size:12.5px;line-height:1.4;color:var(--primary-d);font-weight:700"></p>
       <div class="tipo-lancamento-grid">
         <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="selecionarTipoLancamento('RDA')">
           <div class="tipo-lancamento-icon">🍽️</div>
@@ -1544,7 +1566,7 @@ body{font-size:16.5px}
       </div>
       <div class="field">
         <label class="lbl">Valor (R$) *</label>
-        <input class="inp" id="nf-valor" type="number" step="0.01" min="0" placeholder="0,00" oninput="_valorEditadoManual = true">
+        <input class="inp" id="nf-valor" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" oninput="_valorEditadoManual = true">
       </div>
     </div>
 
@@ -1559,7 +1581,7 @@ body{font-size:16.5px}
 
     <div class="field">
       <label class="lbl">Razão Social</label>
-      <input class="inp" id="nf-razao" type="text" placeholder="Preenchido pelo CNPJ…">
+      <input class="inp" id="nf-razao" type="text" autocapitalize="words" autocomplete="off" placeholder="Preenchido pelo CNPJ…">
     </div>
 
     <div class="field">
@@ -1643,12 +1665,12 @@ body{font-size:16.5px}
       </div>
       <div class="field">
         <label class="lbl">Valor (R$) *</label>
-        <input class="inp" id="rep-valor" type="number" step="0.01" min="0" placeholder="0,00">
+        <input class="inp" id="rep-valor" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00">
       </div>
     </div>
     <div class="field">
       <label class="lbl" id="rep-desc-label">Descrição</label>
-      <input class="inp" id="rep-desc" type="text" placeholder="Ex: repasse recebido do gestor">
+      <input class="inp" id="rep-desc" type="text" autocapitalize="sentences" placeholder="Ex: repasse recebido do gestor">
     </div>
     <div id="rep-help" style="font-size:12px;line-height:1.4;color:var(--text2);margin-top:-4px">
       Este registro entra no saldo como repasse recebido e não gera e-mail.
@@ -1674,7 +1696,9 @@ body{font-size:16.5px}
         <li>📝 <b>Lançar nota sem QR</b> — recibo, DANFE em papel, nota de serviço, PDF ou XML.</li>
         <li>💸 <b>Registrar repasse</b> — dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>Saldo</b> e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas.</p>
+      <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
+      <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
+      <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
       <p>No <b>Início</b> ficam o <b>resumo do mês</b>, as <b>pendências</b> (toque para ver quais), os últimos lançamentos, o atalho <b>Perfil</b> e o botão <b>🚪 Sair da conta</b>.</p>
       <p>Para voltar: dentro de Painel, Notas, Saldo, Equipe ou Arquivos o botão fixo de baixo é <b>‹ Despesas</b> (volta um nível); nas outras telas é <b>🏠 Início</b>. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
       <p class="ajuda-note">Gestor e admin veem ainda os painéis <b>Frota / KM</b> e <b>Ponto</b> ao lado — o colaborador não.</p>
@@ -1684,7 +1708,7 @@ body{font-size:16.5px}
       <h4>📷 Lançar pelo QR Code (passo a passo)</h4>
       <ul>
         <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque em <b>Lançar nota pelo QR Code</b> e aponte a câmera para o QR do cupom. Leu? O app avisa.</li>
-        <li><b>2.</b> Ele já sugere a aba (<b>RDA</b> ou <b>RDM</b>) pelo fornecedor — posto vira RDM · Abastecimento, restaurante vira RDA. Toque em <b>Trocar</b> se não for isso.</li>
+        <li><b>2.</b> Escolha a aba: <b>RDA</b> ou <b>RDM</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026): se o fornecedor for conhecido, o app só mostra uma <i>sugestão</i> embaixo do título — posto costuma ser RDM · Abastecimento, restaurante RDA — mas não escolhe por você.</li>
         <li><b>3.</b> Toque em <b>Tirar foto</b> e fotografe o cupom inteiro (ou <b>Anexar arquivo</b>). O anexo é obrigatório — sem ele a nota não salva.</li>
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
         <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>
@@ -1795,12 +1819,12 @@ body{font-size:16.5px}
       <h4>👥 Papéis da equipe</h4>
       <ul>
         <li><b>Colaborador:</b> vê só as próprias notas.</li>
-        <li><b>Gestor:</b> vê as notas de todos na aba <b>Equipe</b>. Em <b>Minhas notas</b>, Painel, Saldo e Início aparecem só as dele.</li>
+        <li><b>Gestor:</b> vê a equipe e baixa os relatórios de todos na aba <b>Equipe / Baixar relatórios</b>. Em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as dele.</li>
         <li><b>Admin:</b> vê todos, edita papéis/núcleos e tem os botões de <b>backup</b> e <b>atualização do banco</b> no Perfil.</li>
       </ul>
       <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
       <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (quem não lançou nada no período começa desmarcado; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 CV da equipe</b> gera a <b>Planilha de C.V.</b> no modelo da empresa de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>
-      <p class="ajuda-gestor">Na <b>Equipe</b> há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>
+      <p class="ajuda-gestor">A tela <b>Equipe / Baixar relatórios</b> não mostra mais os quadros Gasto no mês, Recebido, Saldo e Notas (decisão de 21/09/2026: isso já está no Painel, em RDM/RDA e Planilhas e no cartão de cada pessoa). Ficam o gráfico de <b>evolução do gasto</b> da equipe, os botões de relatório e a lista. Há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>
     </div>
 
     <div class="ajuda-sec ajuda-gestor">
@@ -1821,7 +1845,7 @@ body{font-size:16.5px}
 
     <div class="ajuda-sec">
       <h4>📊 Planilha de C.V. e pastas</h4>
-      <p>Na aba <b>Saldo</b>, os botões <b>Planilha de C.V.</b> (Excel ou PDF) geram a sua planilha do ano no <b>modelo padrão da empresa</b>, preenchida pelo servidor com as notas e repasses lançados — abas CABEÇALHO, BANCO DE DADOS, RDM_RDA e CV REEMBOLSO. O PDF sai em A4 paisagem, um mês por bloco. Ao lado ficam <b>CSV</b> (mês atual) e <b>Excel Anual</b>. O gestor gera a de qualquer colaborador em <b>Equipe → cartão do colaborador</b>.</p>
+      <p>Na aba <b>RDM/RDA e Planilhas</b>, o quadro <b>⬇️ Baixar relatório</b> reúne tudo: <b>Excel anual</b> e <b>CSV do mês</b> (RDM/RDA) e a <b>Planilha de C.V.</b>. Os botões <b>Planilha de C.V.</b> (Excel ou PDF) geram a sua planilha do ano no <b>modelo padrão da empresa</b>, preenchida pelo servidor com as notas e repasses lançados — abas CABEÇALHO, BANCO DE DADOS, RDM_RDA e CV REEMBOLSO. O PDF sai em A4 paisagem, um mês por bloco. O gestor gera a de qualquer colaborador em <b>Equipe → cartão do colaborador</b>.</p>
       <p>No ZIP de <b>Início → Arquivos</b>, as <b>fotos</b> vêm na árvore oficial:</p>
       <ul>
         <li><b>RDM</b> → Seu nome / Ano / <b>RDM DESPESAS CORPORATIVAS</b> / categoria / mês</li>
@@ -1871,7 +1895,7 @@ body{font-size:16.5px}
     </div>
     <div class="field">
       <label class="lbl">Observação</label>
-      <input class="inp" id="km-obs" type="text" placeholder="Ex.: saída para Cristalina, abastecimento…">
+      <input class="inp" id="km-obs" type="text" autocapitalize="sentences" placeholder="Ex.: saída para Cristalina, abastecimento…">
     </div>
     <div class="field">
       <label class="lbl">Foto do painel (opcional)</label>
@@ -1921,7 +1945,7 @@ body{font-size:16.5px}
     </div>
     <div class="field">
       <label class="lbl">Observação</label>
-      <input class="inp" id="pt-obs" type="text" placeholder="Ex.: esqueci de bater a saída; plantão no campo…">
+      <input class="inp" id="pt-obs" type="text" autocapitalize="sentences" placeholder="Ex.: esqueci de bater a saída; plantão no campo…">
     </div>
     <p style="font-size:12px;color:var(--text2);line-height:1.5">Colaborador corrige só hoje e ontem; dias anteriores, o gestor. Domingos e feriados contam 100% de extra; dia útil, o que passar de 8h (sábado 4h) conta 50%.</p>
   </div>
@@ -1939,11 +1963,11 @@ body{font-size:16.5px}
     <div class="field-row">
       <div class="field">
         <label class="lbl">Placa *</label>
-        <input class="inp" id="vei-placa" type="text" maxlength="8" placeholder="ABC1D23" style="text-transform:uppercase">
+        <input class="inp" id="vei-placa" type="text" maxlength="8" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABC1D23" style="text-transform:uppercase">
       </div>
       <div class="field">
         <label class="lbl">Modelo</label>
-        <input class="inp" id="vei-modelo" type="text" maxlength="80" placeholder="Ex.: Hilux 2022">
+        <input class="inp" id="vei-modelo" type="text" maxlength="80" autocapitalize="words" placeholder="Ex.: Hilux 2022">
       </div>
     </div>
     <div class="field">
@@ -2016,25 +2040,25 @@ body{font-size:16.5px}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=194"></script>
-<script defer src="js/db.js?v=194"></script>
-<script defer src="js/nfce.js?v=194"></script>
-<script defer src="js/sefaz.js?v=194"></script>
-<script defer src="js/brasilapi.js?v=194"></script>
-<script defer src="js/ocr.js?v=194"></script>
-<script defer src="js/recorte.js?v=194"></script>
-<script defer src="js/excel.js?v=194"></script>
-<script defer src="js/gestor.js?v=194"></script>
-<script defer src="js/frota.js?v=194"></script>
-<script defer src="js/ponto.js?v=194"></script>
-<script defer src="js/arquivos.js?v=194"></script>
-<script defer src="js/gdrive.js?v=194"></script>
-<script defer src="js/app.js?v=194"></script>
+<script defer src="js/api.js?v=195"></script>
+<script defer src="js/db.js?v=195"></script>
+<script defer src="js/nfce.js?v=195"></script>
+<script defer src="js/sefaz.js?v=195"></script>
+<script defer src="js/brasilapi.js?v=195"></script>
+<script defer src="js/ocr.js?v=195"></script>
+<script defer src="js/recorte.js?v=195"></script>
+<script defer src="js/excel.js?v=195"></script>
+<script defer src="js/gestor.js?v=195"></script>
+<script defer src="js/frota.js?v=195"></script>
+<script defer src="js/ponto.js?v=195"></script>
+<script defer src="js/arquivos.js?v=195"></script>
+<script defer src="js/gdrive.js?v=195"></script>
+<script defer src="js/app.js?v=195"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=194').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=195').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

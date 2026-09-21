@@ -1,7 +1,7 @@
 {
-  "name": "Petermann App",
-  "short_name": "Petermann",
-  "description": "Lançamento de notas RDA/RDM com QR Code, OCR e sync offline",
+  "name": "PETERMANN - DESPESAS",
+  "short_name": "PETERMANN - DESPESAS",
+  "description": "App RDA/RDM e CV — notas, repasses e cartão corporativo Petermann & Morais, com QR Code, OCR e sync offline",
   "id": "/rda-rdm-app/",
   "start_url": "./",
   "scope": "./",
