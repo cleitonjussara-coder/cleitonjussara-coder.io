@@ -1,3 +1,15 @@
+> ## ✅ Migração concluída em 21/09/2026
+> App e API rodam na Locaweb desde 16/09/2026 (fases 1–8). Fase 9 fechada em
+> 21/09/2026: backup semanal conferido (cron domingo 03:30, rotação de 8) e
+> cópia guardada em `Área de Trabalho/Backups Petermann/` (repetir todo mês);
+> `SUPABASE_*` removido do `.env` de produção (cópia em
+> `.env.bak-antes-fase9-20260921`); repositório commitado (`36ae60d` em
+> diante). Pendências manuais do Cleiton: pausar o projeto no Supabase e
+> desligar o GitHub Pages (hoje só redireciona para o domínio novo).
+> O Supabase pode ser apagado a partir de ~21/10/2026, se nada faltar.
+> **Publicar hoje = `node scripts/empacotar.js app` + scp/unzip via SSH**
+> (ver "O que muda no dia a dia"). Este documento fica como histórico.
+
 # Migrar o Petermann App para a Locaweb (Hospedagem II)
 
 **O que muda:** o sistema inteiro sai do Supabase e passa a rodar na sua

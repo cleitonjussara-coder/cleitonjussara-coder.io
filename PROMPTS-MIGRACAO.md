@@ -11,9 +11,11 @@ repositório) na hora daquela fase. O guia técnico de referência é o
 3. Onde estiver `«…»`, troque pelo valor real antes de colar.
 4. Os prompts para o **suporte da Locaweb** e para o **Google Cloud** estão no
    fim — são textos para o chat/ticket deles, não para o Claude.
-5. Fases 1–8 concluídas em 16/09/2026 (app no ar na Locaweb). Fase 9 fica
-   para ~1 semana depois. Fases 10 (SvelteKit) e 11 (certificado digital)
-   são evoluções independentes, para depois da 9.
+5. Fases 1–8 concluídas em 16/09/2026 (app no ar na Locaweb). **Fase 9
+   concluída em 21/09/2026** (backup guardado fora, SUPABASE_* fora do .env,
+   repo commitado; faltam só os cliques do Cleiton: pausar Supabase e
+   desligar GitHub Pages). Fases 10 (SvelteKit) e 11 (certificado digital)
+   são evoluções independentes; a 12 (arquivos no servidor) já foi feita.
 
 ---
 
