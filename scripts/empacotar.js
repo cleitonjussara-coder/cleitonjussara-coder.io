@@ -69,7 +69,11 @@ function zipar(pasta, saida) {
   const tar = process.platform === 'win32'
     ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')   // o do Git Bash lê "C:" como host remoto
     : 'tar';
-  execSync(`"${tar}" -a -cf "${saida}" -C "${pasta}" .`, { stdio: 'inherit' });
+  /* Lista os itens da raiz em vez de passar "." — com "." o bsdtar grava os
+     nomes como "./rda-rdm-app/js/app.js", e o Explorador do Windows (e alguns
+     gerenciadores de hospedagem) mostram o zip VAZIO (21/09/2026). */
+  const itens = fs.readdirSync(pasta).map(n => `"${n}"`).join(' ');
+  execSync(`"${tar}" -a -cf "${saida}" -C "${pasta}" ${itens}`, { stdio: 'inherit' });
   const mb = (fs.statSync(saida).size / 1048576).toFixed(1);
   console.log(`✔ ${path.basename(saida)}  (${mb} MB)`);
 }
