@@ -1302,7 +1302,7 @@ body{font-size:16.5px}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=189" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=190" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1798,7 +1798,7 @@ body{font-size:16.5px}
         <li><b>Admin:</b> vê todos, edita papéis/núcleos e tem os botões de <b>backup</b> e <b>atualização do banco</b> no Perfil.</li>
       </ul>
       <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
-      <p class="ajuda-gestor">No topo da <b>Equipe</b>, <b>📗 Excel</b> exporta o mês e <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um).</p>
+      <p class="ajuda-gestor">No topo da <b>Equipe</b>, <b>📗 Excel</b> exporta o resumo do mês, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um) e <b>📗 CV da equipe</b> baixa um <b>ZIP</b> com a <b>Planilha de C.V.</b> no modelo da empresa de cada colaborador ativo que lançou algo no ano — pode levar alguns minutos.</p>
       <p class="ajuda-gestor">Na <b>Equipe</b> há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>
     </div>
 
@@ -2015,25 +2015,25 @@ body{font-size:16.5px}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=189"></script>
-<script defer src="js/db.js?v=189"></script>
-<script defer src="js/nfce.js?v=189"></script>
-<script defer src="js/sefaz.js?v=189"></script>
-<script defer src="js/brasilapi.js?v=189"></script>
-<script defer src="js/ocr.js?v=189"></script>
-<script defer src="js/recorte.js?v=189"></script>
-<script defer src="js/excel.js?v=189"></script>
-<script defer src="js/gestor.js?v=189"></script>
-<script defer src="js/frota.js?v=189"></script>
-<script defer src="js/ponto.js?v=189"></script>
-<script defer src="js/arquivos.js?v=189"></script>
-<script defer src="js/gdrive.js?v=189"></script>
-<script defer src="js/app.js?v=189"></script>
+<script defer src="js/api.js?v=190"></script>
+<script defer src="js/db.js?v=190"></script>
+<script defer src="js/nfce.js?v=190"></script>
+<script defer src="js/sefaz.js?v=190"></script>
+<script defer src="js/brasilapi.js?v=190"></script>
+<script defer src="js/ocr.js?v=190"></script>
+<script defer src="js/recorte.js?v=190"></script>
+<script defer src="js/excel.js?v=190"></script>
+<script defer src="js/gestor.js?v=190"></script>
+<script defer src="js/frota.js?v=190"></script>
+<script defer src="js/ponto.js?v=190"></script>
+<script defer src="js/arquivos.js?v=190"></script>
+<script defer src="js/gdrive.js?v=190"></script>
+<script defer src="js/app.js?v=190"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=189').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=190').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

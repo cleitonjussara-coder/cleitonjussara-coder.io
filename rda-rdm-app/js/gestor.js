@@ -88,6 +88,7 @@ window.Gestor = (() => {
         <div class="export-btns">
           <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">📗 Excel</button>
           <button class="btn btn-sm btn-primary" onclick="baixarRelatorioEquipe()">📕 PDF</button>
+          <button class="btn btn-sm btn-outline" onclick="baixarCvEquipe()" title="Planilha de C.V. no modelo da empresa, uma por colaborador (ZIP)">📗 CV da equipe ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
         </div>

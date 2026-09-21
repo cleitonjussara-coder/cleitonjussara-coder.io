@@ -72,6 +72,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/relatorio/cv', [RelatorioController::class, 'cv']);
     Route::get('/relatorio/equipe', [RelatorioController::class, 'equipe']);
+    Route::get('/relatorio/cv-equipe', [RelatorioController::class, 'cvEquipe']);
 
     /* arquivos no servidor, no lugar do Drive (19/09/2026) */
     Route::get('/arquivos/resumo', [ArquivosController::class, 'resumo']);

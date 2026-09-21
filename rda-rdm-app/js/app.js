@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 189;
+const APP_BUILD = 190;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3272,6 +3272,13 @@ async function baixarRelatorioCv(formato = 'xlsx', userId = null, nome = null) {
 function baixarRelatorioEquipe() {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
   return _baixarBlob(sb.relatorio.equipe(filAno, filMes), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
+}
+
+/* Planilhas de C.V. da equipe inteira (21/09/2026): ZIP com a planilha no
+   modelo da empresa de cada colaborador ativo que lançou algo no ano. */
+function baixarCvEquipe() {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar as planilhas', 'err'); return; }
+  return _baixarBlob(sb.relatorio.cvEquipe(filAno), `Planilhas_CV_Equipe_${filAno}.zip`, `Gerando a Planilha CV de cada colaborador (${filAno})… pode levar alguns minutos`);
 }
 
 /* Cópia íntegra do SQLite de produção (GET /backup/banco, só admin). O
