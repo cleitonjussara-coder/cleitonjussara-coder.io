@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=201">
+  <link rel="manifest" href="manifest.json?v=202">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1380,7 +1380,7 @@ html{-webkit-text-size-adjust:100%}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=201" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=202" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1924,7 +1924,7 @@ html{-webkit-text-size-adjust:100%}
       <p>Em <b>Perfil → 🗄️ Backup</b>: o servidor gera sozinho, <b>todo domingo de madrugada</b>, um ZIP com o banco e todas as fotos (fica a lista dos últimos 8). Toque num deles para baixar, ou em <b>Baixar backup completo</b> para gerar na hora. Guarde uma cópia por mês fora do servidor. Se o backup mais novo tiver mais de 8 dias, a tela avisa.</p>
       <p>Qualquer erro do servidor (ou backup que falhar) chega por <b>e-mail</b> ao admin; e um monitor externo avisa se o site sair do ar.</p>
       <h4>💾 Armazenamento do servidor (admin)</h4>
-      <p>Em <b>Perfil → 💾 Armazenamento do servidor</b> você vê quanto o app ocupa na Locaweb, separado em fotos, backups, banco, miniaturas e logs; a <b>porcentagem do plano</b> (quando o limite está informado no servidor); o <b>crescimento por mês</b> e uma estimativa de quando o espaço acaba; e a idade do último backup. Verde = tudo bem, laranja = atenção (acima de 80 % ou backup com mais de 8 dias), vermelho = crítico (acima de 90 %).</p>
+      <p>Em <b>Perfil → 💾 Armazenamento do servidor</b> você vê quanto o app ocupa na Locaweb, separado em fotos, backups, banco, miniaturas e logs; a porcentagem de um <b>teto de alerta</b> (o plano da Locaweb é ilimitado em disco; o teto, 20 GB, serve para pegar crescimento anormal); o <b>crescimento por mês</b> e uma estimativa de quando o espaço acaba; e a idade do último backup. Verde = tudo bem, laranja = atenção (acima de 80 % ou backup com mais de 8 dias), vermelho = crítico (acima de 90 %).</p>
       <p>Você não precisa abrir para vigiar: o servidor mede sozinho <b>todo dia às 04:10</b> e manda <b>e-mail</b> ao admin quando passar dos limites, quando o backup atrasar ou quando, no ritmo atual, o espaço for acabar em menos de 60 dias. Para liberar espaço: guarde menos cópias de backup ou peça mais espaço no painel da Locaweb.</p>
     </div>
 
@@ -2125,25 +2125,25 @@ html{-webkit-text-size-adjust:100%}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=201"></script>
-<script defer src="js/db.js?v=201"></script>
-<script defer src="js/nfce.js?v=201"></script>
-<script defer src="js/sefaz.js?v=201"></script>
-<script defer src="js/brasilapi.js?v=201"></script>
-<script defer src="js/ocr.js?v=201"></script>
-<script defer src="js/recorte.js?v=201"></script>
-<script defer src="js/excel.js?v=201"></script>
-<script defer src="js/gestor.js?v=201"></script>
-<script defer src="js/frota.js?v=201"></script>
-<script defer src="js/ponto.js?v=201"></script>
-<script defer src="js/arquivos.js?v=201"></script>
-<script defer src="js/gdrive.js?v=201"></script>
-<script defer src="js/app.js?v=201"></script>
+<script defer src="js/api.js?v=202"></script>
+<script defer src="js/db.js?v=202"></script>
+<script defer src="js/nfce.js?v=202"></script>
+<script defer src="js/sefaz.js?v=202"></script>
+<script defer src="js/brasilapi.js?v=202"></script>
+<script defer src="js/ocr.js?v=202"></script>
+<script defer src="js/recorte.js?v=202"></script>
+<script defer src="js/excel.js?v=202"></script>
+<script defer src="js/gestor.js?v=202"></script>
+<script defer src="js/frota.js?v=202"></script>
+<script defer src="js/ponto.js?v=202"></script>
+<script defer src="js/arquivos.js?v=202"></script>
+<script defer src="js/gdrive.js?v=202"></script>
+<script defer src="js/app.js?v=202"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=201').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=202').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

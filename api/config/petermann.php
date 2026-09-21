@@ -29,8 +29,8 @@ return [
         'max_dia' => (int) env('ALERTA_MAX_DIA', 20),
     ],
 
-    /* Monitoramento do armazenamento (21/09/2026): ARMAZENAMENTO_LIMITE_MB é o
-       espaço do plano no painel da Locaweb (0 = não informado, sem %). O cron
+    /* Monitoramento do armazenamento (21/09/2026): ARMAZENAMENTO_LIMITE_MB é um
+       teto de alerta (o plano é ilimitado; 0 = sem teto, sem %). O cron
        armazenamento:verificar avisa por e-mail nos percentuais abaixo. */
     'armazenamento' => [
         'limite_mb' => (int) env('ARMAZENAMENTO_LIMITE_MB', 0),

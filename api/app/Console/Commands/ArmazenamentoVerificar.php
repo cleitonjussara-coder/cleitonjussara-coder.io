@@ -35,7 +35,7 @@ class ArmazenamentoVerificar extends Command
         $resumo = sprintf('armazenamento: total %s (banco %s, fotos %s em %d arquivos, backups %s em %d, logs %s)%s; último backup %s; nível %s',
             $mb($m['total']), $mb($m['partes']['banco']['bytes']), $mb($m['partes']['fotos']['bytes']), $m['partes']['fotos']['n'],
             $mb($m['partes']['backups']['bytes']), $m['partes']['backups']['n'], $mb($m['partes']['logs']['bytes']),
-            $m['pct'] !== null ? " = {$m['pct']} % de {$m['limite_mb']} MB" : ' (limite do plano não informado)',
+            $m['pct'] !== null ? " = {$m['pct']} % do teto de {$m['limite_mb']} MB" : ' (teto de alerta não definido)',
             $m['ultimo_backup'] ? "há {$m['ultimo_backup']['dias']} dia(s)" : 'NENHUM',
             $m['nivel']);
         $this->info($resumo);
@@ -53,9 +53,9 @@ class ArmazenamentoVerificar extends Command
             .'reduza a rotação do backup (--manter) ou peça mais espaço no painel da Locaweb.';
 
         if ($m['nivel'] === 'critico') {
-            $alerta->avisar("Armazenamento CRÍTICO: {$m['pct']} % do plano", $detalhe, 'armazenamento-critico-'.$dia);
+            $alerta->avisar("Armazenamento CRÍTICO: {$m['pct']} % do teto de alerta", $detalhe, 'armazenamento-critico-'.$dia);
         } elseif ($m['pct'] !== null && $m['pct'] >= (float) config('petermann.armazenamento.aviso_pct', 80)) {
-            $alerta->avisar("Armazenamento em {$m['pct']} % do plano", $detalhe, 'armazenamento-aviso-'.$dia);
+            $alerta->avisar("Armazenamento em {$m['pct']} % do teto de alerta", $detalhe, 'armazenamento-aviso-'.$dia);
         }
         if (! $m['ultimo_backup'] || $m['ultimo_backup']['dias'] > 8) {
             $alerta->avisar('Backup automático atrasado', 'O backup semanal (backup:gerar) não roda há '

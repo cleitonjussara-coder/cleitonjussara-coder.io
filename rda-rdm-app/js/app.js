@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 201;
+const APP_BUILD = 202;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3511,12 +3511,12 @@ async function _mostrarArmazenamento() {
     if (m.pct !== null && m.limite_mb) {
       const corBarra = m.nivel === 'critico' ? '#b91c1c' : m.nivel === 'aviso' && m.pct >= (m.limites?.aviso_pct ?? 80) ? '#b45309' : '#2D6A4F';
       plano = `
-        <div style="display:flex;justify-content:space-between;margin-top:8px"><span>Uso do plano</span><b>${m.pct.toLocaleString('pt-BR')} % de ${(m.limite_mb / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB</b></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px"><span>Uso do teto de alerta</span><b>${m.pct.toLocaleString('pt-BR')} % de ${(m.limite_mb / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB</b></div>
         <div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:4px">
           <div style="height:100%;width:${Math.min(100, m.pct)}%;background:${corBarra}"></div>
         </div>`;
     } else {
-      plano = `<p style="margin-top:8px;opacity:.8">Limite do plano não informado — defina <code>ARMAZENAMENTO_LIMITE_MB</code> no servidor para ver a porcentagem e receber aviso por e-mail.</p>`;
+      plano = `<p style="margin-top:8px;opacity:.8">Teto de alerta não definido — grave <code>ARMAZENAMENTO_LIMITE_MB</code> no servidor para ver a porcentagem e receber aviso por e-mail.</p>`;
     }
 
     const t = m.tendencia || {};
