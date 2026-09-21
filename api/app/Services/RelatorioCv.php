@@ -163,6 +163,7 @@ class RelatorioCv
     {
         $master = new Spreadsheet();
         $master->removeSheetByIndex(0);
+        $this->abaResumo($master, $colabs, $ano);   // primeira aba: somatório geral
         $usados = [];
         foreach ($colabs as $c) {
             $prefixo = $this->prefixoAba($c->nome ?: $c->email, $usados);
@@ -184,6 +185,198 @@ class RelatorioCv
         $master->setActiveSheetIndex(0);
 
         return $master;
+    }
+
+    /**
+     * Aba RESUMO (21/09/2026): o somatório de todo mundo numa aba só, para o
+     * gestor não caçar os totais nas abas de cada pessoa. Três quadros:
+     * por colaborador, por mês (equipe inteira) e colaborador × mês, cada um
+     * com TOTAL GERAL. Valores calculados aqui (não fórmulas), com a mesma
+     * regra de categoria da grade RDM_RDA; "Recebido" = repasse received.
+     */
+    public function abaResumo(Spreadsheet $master, iterable $colabs, int $ano): void
+    {
+        $colabs = collect($colabs)->values();
+        $ids = $colabs->pluck('id')->all();
+        $cats = ['abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'alimentacao' => 'Alimentação (RDA)', 'outros' => 'Outros'];
+        $meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        /* ── agrega: [user][cat], [user][mes], [mes][cat], recebido por user e por mes ── */
+        $gCat = $gMes = $mCat = $rec = $recMes = [];
+        foreach ($ids as $id) {
+            $gCat[$id] = array_fill_keys(array_keys($cats), 0.0);
+            $gMes[$id] = array_fill(1, 12, 0.0);
+            $rec[$id] = 0.0;
+        }
+        for ($m = 1; $m <= 12; $m++) {
+            $mCat[$m] = array_fill_keys(array_keys($cats), 0.0);
+            $recMes[$m] = 0.0;
+        }
+        Nota::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)
+            ->select('user_id', 'tipo', 'subtipo', 'valor', 'mes')->cursor()->each(function (Nota $n) use (&$gCat, &$gMes, &$mCat) {
+                $m = (int) $n->mes;
+                if ($m < 1 || $m > 12) {
+                    return;
+                }
+                $c = $this->categoria($n);
+                $v = (float) $n->valor;
+                $gCat[$n->user_id][$c] += $v;
+                $gMes[$n->user_id][$m] += $v;
+                $mCat[$m][$c] += $v;
+            });
+        Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)->where('kind', 'received')
+            ->select('user_id', 'valor', 'mes')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes) {
+                $m = (int) $r->mes;
+                $rec[$r->user_id] += (float) $r->valor;
+                if ($m >= 1 && $m <= 12) {
+                    $recMes[$m] += (float) $r->valor;
+                }
+            });
+
+        /* ── estilos ── */
+        $ws = $master->createSheet();
+        $ws->setTitle('RESUMO');
+        $verde = '2D6A4F';
+        $brl = 'R$ #,##0.00;[Red]-R$ #,##0.00';
+        $hdr = ['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => $verde]],
+            'alignment' => ['horizontal' => 'center', 'vertical' => 'center', 'wrapText' => true], 'borders' => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'BBBBBB']]]];
+        $cel = ['borders' => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'DDDDDD']]]];
+        $tot = ['font' => ['bold' => true], 'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => 'D1FAE5']],
+            'borders' => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'BBBBBB']], 'top' => ['borderStyle' => 'medium', 'color' => ['rgb' => $verde]]]];
+        $titulo = ['font' => ['bold' => true, 'size' => 13, 'color' => ['rgb' => $verde]]];
+        $nomeColab = fn ($c) => $c->nome ?: $c->email;
+        $colL = fn (int $n) => \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($n);
+
+        $r = 1;
+        $ws->mergeCells([1, $r, 14, $r]);
+        $ws->setCellValue([1, $r], "PETERMANN — RESUMO GERAL DA PLANILHA DE C.V. · {$ano}");
+        $ws->getStyle([1, $r])->applyFromArray(['font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => $verde]]]);
+        $r++;
+        $ws->mergeCells([1, $r, 14, $r]);
+        $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · Saldo = Recebido − Total gasto (negativo = a reembolsar)', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i')));
+        $ws->getStyle([1, $r])->getFont()->setItalic(true)->setSize(10)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF666666'));
+        $r += 2;
+
+        /* ── Quadro 1: por colaborador ── */
+        $ws->mergeCells([1, $r, 8, $r]);
+        $ws->setCellValue([1, $r], '1 · POR COLABORADOR');
+        $ws->getStyle([1, $r])->applyFromArray($titulo);
+        $r++;
+        $cab = array_merge(['Colaborador'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo']);
+        foreach ($cab as $i => $h) {
+            $ws->setCellValue([$i + 1, $r], $h);
+        }
+        $ws->getStyle([1, $r, count($cab), $r])->applyFromArray($hdr);
+        $ws->getRowDimension($r)->setRowHeight(28);
+        $hdr1 = $r;
+        $r++;
+        $ini1 = $r;
+        $totCat = array_fill_keys(array_keys($cats), 0.0);
+        $totRec = 0.0;
+        foreach ($colabs as $c) {
+            $id = $c->id;
+            $gasto = array_sum($gCat[$id]);
+            $ws->setCellValue([1, $r], $nomeColab($c));
+            $i = 2;
+            foreach (array_keys($cats) as $k) {
+                $ws->setCellValue([$i++, $r], round($gCat[$id][$k], 2));
+                $totCat[$k] += $gCat[$id][$k];
+            }
+            $ws->setCellValue([$i++, $r], round($gasto, 2));
+            $ws->setCellValue([$i++, $r], round($rec[$id], 2));
+            $ws->setCellValue([$i, $r], round($rec[$id] - $gasto, 2));
+            $totRec += $rec[$id];
+            $r++;
+        }
+        $fim1 = $r - 1;
+        $ws->setCellValue([1, $r], 'TOTAL GERAL');
+        $i = 2;
+        foreach (array_keys($cats) as $k) {
+            $ws->setCellValue([$i++, $r], round($totCat[$k], 2));
+        }
+        $totGasto = array_sum($totCat);
+        $ws->setCellValue([$i++, $r], round($totGasto, 2));
+        $ws->setCellValue([$i++, $r], round($totRec, 2));
+        $ws->setCellValue([$i, $r], round($totRec - $totGasto, 2));
+        $ws->getStyle([1, $ini1, count($cab), $fim1])->applyFromArray($cel);
+        $ws->getStyle([1, $r, count($cab), $r])->applyFromArray($tot);
+        $ws->getStyle([2, $ini1, count($cab), $r])->getNumberFormat()->setFormatCode($brl);
+        $ws->setAutoFilter([1, $hdr1, count($cab), $fim1]);
+        $r += 3;
+
+        /* ── Quadro 2: por mês (equipe inteira) ── */
+        $ws->mergeCells([1, $r, 8, $r]);
+        $ws->setCellValue([1, $r], '2 · POR MÊS (EQUIPE INTEIRA)');
+        $ws->getStyle([1, $r])->applyFromArray($titulo);
+        $r++;
+        $cab2 = array_merge(['Mês'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo']);
+        foreach ($cab2 as $i => $h) {
+            $ws->setCellValue([$i + 1, $r], $h);
+        }
+        $ws->getStyle([1, $r, count($cab2), $r])->applyFromArray($hdr);
+        $ws->getRowDimension($r)->setRowHeight(28);
+        $r++;
+        $ini2 = $r;
+        for ($m = 1; $m <= 12; $m++) {
+            $gasto = array_sum($mCat[$m]);
+            $ws->setCellValue([1, $r], $meses[$m - 1]);
+            $i = 2;
+            foreach (array_keys($cats) as $k) {
+                $ws->setCellValue([$i++, $r], round($mCat[$m][$k], 2));
+            }
+            $ws->setCellValue([$i++, $r], round($gasto, 2));
+            $ws->setCellValue([$i++, $r], round($recMes[$m], 2));
+            $ws->setCellValue([$i, $r], round($recMes[$m] - $gasto, 2));
+            $r++;
+        }
+        $ws->setCellValue([1, $r], 'TOTAL GERAL');
+        for ($c = 2; $c <= count($cab2); $c++) {
+            $L = $colL($c);
+            $ws->setCellValue([$c, $r], "=SUM({$L}{$ini2}:{$L}".($r - 1).')');
+        }
+        $ws->getStyle([1, $ini2, count($cab2), $r - 1])->applyFromArray($cel);
+        $ws->getStyle([1, $r, count($cab2), $r])->applyFromArray($tot);
+        $ws->getStyle([2, $ini2, count($cab2), $r])->getNumberFormat()->setFormatCode($brl);
+        $r += 3;
+
+        /* ── Quadro 3: colaborador × mês (gasto total) ── */
+        $ws->mergeCells([1, $r, 14, $r]);
+        $ws->setCellValue([1, $r], '3 · GASTO POR COLABORADOR × MÊS');
+        $ws->getStyle([1, $r])->applyFromArray($titulo);
+        $r++;
+        $cab3 = array_merge(['Colaborador'], $meses, ['Total']);
+        foreach ($cab3 as $i => $h) {
+            $ws->setCellValue([$i + 1, $r], $h);
+        }
+        $ws->getStyle([1, $r, count($cab3), $r])->applyFromArray($hdr);
+        $r++;
+        $ini3 = $r;
+        foreach ($colabs as $c) {
+            $ws->setCellValue([1, $r], $nomeColab($c));
+            for ($m = 1; $m <= 12; $m++) {
+                $ws->setCellValue([$m + 1, $r], round($gMes[$c->id][$m], 2));
+            }
+            $ws->setCellValue([14, $r], "=SUM(B{$r}:M{$r})");
+            $r++;
+        }
+        $ws->setCellValue([1, $r], 'TOTAL GERAL');
+        for ($c = 2; $c <= 14; $c++) {
+            $L = $colL($c);
+            $ws->setCellValue([$c, $r], "=SUM({$L}{$ini3}:{$L}".($r - 1).')');
+        }
+        $ws->getStyle([1, $ini3, 14, $r - 1])->applyFromArray($cel);
+        $ws->getStyle([1, $r, 14, $r])->applyFromArray($tot);
+        $ws->getStyle([2, $ini3, 14, $r])->getNumberFormat()->setFormatCode('#,##0.00;[Red]-#,##0.00');
+        $ws->getStyle([14, $ini3, 14, $r])->getFont()->setBold(true);
+
+        /* ── larguras e painel ── */
+        $ws->getColumnDimension('A')->setWidth(30);
+        for ($c = 2; $c <= 14; $c++) {
+            $ws->getColumnDimension($colL($c))->setWidth(15);
+        }
+        $ws->freezePane('B5');
+        $ws->getSheetView()->setZoomScale(90);
+        $ws->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)->setFitToWidth(1)->setFitToHeight(0);
     }
 
     /** Grava sem pré-calcular: com dezenas de abas o cálculo aqui demora e o Excel recalcula ao abrir. */

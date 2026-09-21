@@ -100,6 +100,16 @@ class RelatorioController extends Controller
         abort_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
         $temps = [];
         try {
+            /* o mesmo RESUMO do Excel único, como arquivo próprio no ZIP */
+            $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
+            $temps[] = $tmp;
+            $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $ss->removeSheetByIndex(0);
+            $this->cv->abaResumo($ss, $colabs, $ano);
+            $this->cv->xlsxSemCalculo($ss, $tmp);
+            $ss->disconnectWorksheets();
+            $zip->addFile($tmp, "Resumo_Geral_{$ano}.xlsx");
+
             foreach ($colabs as $c) {
                 $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($c->nome ?: 'colaborador'));
                 $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
