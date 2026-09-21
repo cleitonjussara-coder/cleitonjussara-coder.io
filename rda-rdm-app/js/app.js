@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 193;
+const APP_BUILD = 194;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1365,7 +1365,16 @@ function switchView(v) {
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
   { const b = $('hdr-inicio'); if (b) b.style.display = v === 'inicio' ? 'none' : ''; }
-  { const r = $('btn-inicio-rodape'); if (r) r.style.display = v === 'inicio' ? 'none' : ''; $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
+  { const r = $('btn-inicio-rodape'); if (r) { r.style.display = v === 'inicio' ? 'none' : '';
+      /* 21/09/2026: Painel, Notas, Saldo, Equipe e Arquivos vivem dentro de
+         "Petermann – Despesas" — o rodapé volta um nível; o "‹ Início" do
+         cabeçalho continua levando direto ao Início. */
+      const filhoDespesas = ['home', 'notas', 'lixeira', 'saldo', 'equipe', 'arquivos'].includes(v);
+      r.textContent = filhoDespesas ? '‹ Despesas' : '🏠 Início';
+      r.setAttribute('aria-label', filhoDespesas ? 'Voltar para Petermann – Despesas' : 'Voltar ao Início');
+      r.onclick = () => switchView(filhoDespesas ? 'despesas' : 'inicio');
+    }
+    $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
   if (v !== 'arquivos') window.Arquivos?.reset?.();
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
@@ -1400,8 +1409,8 @@ function renderDespesas() {
   $('app-content').innerHTML = `
   <div class="db-container">
     <div class="ini-ola">
-      <h2>🧾 Despesas Corporativas Petermann</h2>
-      <span>Notas RDA / RDM e repasses</span>
+      <h2>🧾 Petermann – Despesas</h2>
+      <span>Notas RDA / RDM, repasses, painel e saldo</span>
     </div>
 
     <div class="ini-titulo">O que você quer lançar?</div>
@@ -1424,8 +1433,10 @@ function renderDespesas() {
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
+      <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
       <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">Saldo</span><span class="ini-ir-sub">RDA / RDM e planilha</span></button>
-      <button class="ini-ir-btn" onclick="switchView('inicio')"><span class="ini-ir-ico">🏠</span><span class="ini-ir-lbl">Início</span><span class="ini-ir-sub">voltar</span></button>
+      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">notas de todos</span></button>` : ''}
+      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
   </div>`;
 }
@@ -1467,13 +1478,15 @@ function renderInicio() {
     </div>
 
     <div class="ini-titulo">O que você quer fazer?</div>
-    <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel
-         (Despesas Corporativas Petermann) que abre a tela com os três. -->
+    <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
+         tela com os três. 21/09/2026: virou "Petermann – Despesas" e passou a
+         guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos — o
+         Início ficou só com os módulos (Despesas, Frota, Ponto) e o Perfil. -->
     <button class="pnl pnl-grande" onclick="switchView('despesas')">
       <span class="pnl-conteudo">
         <span class="pnl-ico">🧾</span>
-        <span class="pnl-tit">Despesas Corporativas Petermann</span>
-        <span class="pnl-sub">Lançar nota (QR ou sem QR) e registrar repasse — RDA / RDM.</span>
+        <span class="pnl-tit">Petermann – Despesas</span>
+        <span class="pnl-sub">Lançar nota e repasse · Painel · Minhas notas · Saldo${_ehGestorOuAdmin() ? " · Equipe · Arquivos" : ""}.</span>
       </span>
     </button>
     <div class="pnl-linha">
@@ -1502,11 +1515,6 @@ function renderInicio() {
 
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
-      <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">💰</span><span class="ini-ir-lbl">Saldo</span><span class="ini-ir-sub">RDA / RDM e planilha</span></button>
-      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">notas de todos</span></button>` : ''}
-      ${_ehGestorOuAdmin() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
       <button class="ini-ir-btn" onclick="switchView('perfil')"><span class="ini-ir-ico">👤</span><span class="ini-ir-lbl">Perfil</span><span class="ini-ir-sub">conta, backup, ajuda</span></button>
     </div>
 

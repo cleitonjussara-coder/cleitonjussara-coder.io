@@ -1302,7 +1302,7 @@ body{font-size:16.5px}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=193" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=194" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1668,21 +1668,22 @@ body{font-size:16.5px}
 
     <div class="ajuda-sec">
       <h4>🏠 Tela Início — por onde tudo começa</h4>
-      <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Despesas Corporativas Petermann</b> abre a tela de lançamentos, com três opções:</p>
+      <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Petermann – Despesas</b> reúne tudo de despesas: a tela abre com três opções de lançamento…</p>
       <ul>
         <li>📷 <b>Lançar nota pelo QR Code</b> — para cupom fiscal (posto, mercado, restaurante). É o caminho mais rápido: quase tudo entra sozinho.</li>
         <li>📝 <b>Lançar nota sem QR</b> — recibo, DANFE em papel, nota de serviço, PDF ou XML.</li>
         <li>💸 <b>Registrar repasse</b> — dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p>Embaixo ficam o <b>resumo do mês</b>, as <b>pendências</b> (toque para ver quais), os últimos lançamentos, os atalhos <b>Ir para</b> e o botão <b>🚪 Sair da conta</b>.</p>
-      <p>Para voltar ao Início de qualquer tela, toque no botão <b>🏠 Início</b> que fica fixo na parte de baixo — ou na <b>logomarca</b> no topo.</p>
+      <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>Saldo</b> e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas.</p>
+      <p>No <b>Início</b> ficam o <b>resumo do mês</b>, as <b>pendências</b> (toque para ver quais), os últimos lançamentos, o atalho <b>Perfil</b> e o botão <b>🚪 Sair da conta</b>.</p>
+      <p>Para voltar: dentro de Painel, Notas, Saldo, Equipe ou Arquivos o botão fixo de baixo é <b>‹ Despesas</b> (volta um nível); nas outras telas é <b>🏠 Início</b>. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
       <p class="ajuda-note">Gestor e admin veem ainda os painéis <b>Frota / KM</b> e <b>Ponto</b> ao lado — o colaborador não.</p>
     </div>
 
     <div class="ajuda-sec">
       <h4>📷 Lançar pelo QR Code (passo a passo)</h4>
       <ul>
-        <li><b>1.</b> Em <b>Despesas Corporativas Petermann</b>, toque em <b>Lançar nota pelo QR Code</b> e aponte a câmera para o QR do cupom. Leu? O app avisa.</li>
+        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque em <b>Lançar nota pelo QR Code</b> e aponte a câmera para o QR do cupom. Leu? O app avisa.</li>
         <li><b>2.</b> Ele já sugere a aba (<b>RDA</b> ou <b>RDM</b>) pelo fornecedor — posto vira RDM · Abastecimento, restaurante vira RDA. Toque em <b>Trocar</b> se não for isso.</li>
         <li><b>3.</b> Toque em <b>Tirar foto</b> e fotografe o cupom inteiro (ou <b>Anexar arquivo</b>). O anexo é obrigatório — sem ele a nota não salva.</li>
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
@@ -2015,25 +2016,25 @@ body{font-size:16.5px}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=193"></script>
-<script defer src="js/db.js?v=193"></script>
-<script defer src="js/nfce.js?v=193"></script>
-<script defer src="js/sefaz.js?v=193"></script>
-<script defer src="js/brasilapi.js?v=193"></script>
-<script defer src="js/ocr.js?v=193"></script>
-<script defer src="js/recorte.js?v=193"></script>
-<script defer src="js/excel.js?v=193"></script>
-<script defer src="js/gestor.js?v=193"></script>
-<script defer src="js/frota.js?v=193"></script>
-<script defer src="js/ponto.js?v=193"></script>
-<script defer src="js/arquivos.js?v=193"></script>
-<script defer src="js/gdrive.js?v=193"></script>
-<script defer src="js/app.js?v=193"></script>
+<script defer src="js/api.js?v=194"></script>
+<script defer src="js/db.js?v=194"></script>
+<script defer src="js/nfce.js?v=194"></script>
+<script defer src="js/sefaz.js?v=194"></script>
+<script defer src="js/brasilapi.js?v=194"></script>
+<script defer src="js/ocr.js?v=194"></script>
+<script defer src="js/recorte.js?v=194"></script>
+<script defer src="js/excel.js?v=194"></script>
+<script defer src="js/gestor.js?v=194"></script>
+<script defer src="js/frota.js?v=194"></script>
+<script defer src="js/ponto.js?v=194"></script>
+<script defer src="js/arquivos.js?v=194"></script>
+<script defer src="js/gdrive.js?v=194"></script>
+<script defer src="js/app.js?v=194"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=193').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=194').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
