@@ -51,8 +51,9 @@ class RelatorioController extends Controller
     }
 
     /**
-     * GET /relatorio/rdmrda?ano&user_id — Planilha de RDM e RDA no modelo da
-     * empresa (21/09/2026), para quem está no regime RDM/RDA. Só xlsx.
+     * GET /relatorio/rdmrda?ano&user_id&formato=xlsx|pdf — Planilha de RDM e RDA
+     * no modelo da empresa (21/09/2026), para quem está no regime RDM/RDA.
+     * xlsx = o próprio modelo preenchido; pdf = montado dos dados (RelatorioRdmRdaPdf).
      */
     public function rdmrda(Request $r): BinaryFileResponse
     {
@@ -60,23 +61,29 @@ class RelatorioController extends Controller
         $d = $r->validate([
             'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'user_id' => ['nullable', 'string', 'size:36'],
+            'formato' => ['nullable', 'in:xlsx,pdf'],
         ]);
         $ano = (int) ($d['ano'] ?? now()->year);
         $alvoId = $d['user_id'] ?? $u->id;
         abort_unless($alvoId === $u->id || $u->veTudo(), 403, 'Sem permissão para o relatório de outro colaborador');
         $alvo = Colaborador::findOrFail($alvoId);
+        $formato = $d['formato'] ?? 'xlsx';
 
         @ini_set('memory_limit', '768M');
         @set_time_limit(180);
         $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($alvo->nome ?: 'colaborador'));
-        $arquivo = tempnam(sys_get_temp_dir(), 'rdm_').'.xlsx';
-        $svc = app(RelatorioRdmRda::class);
-        $ss = $svc->gerar($alvo, $ano);
-        $svc->xlsx($ss, $arquivo);
-        $ss->disconnectWorksheets();
+        $arquivo = tempnam(sys_get_temp_dir(), 'rdm_').'.'.$formato;
+        if ($formato === 'pdf') {
+            app(\App\Services\RelatorioRdmRdaPdf::class)->gerar($alvo, $ano, $arquivo);
+        } else {
+            $svc = app(RelatorioRdmRda::class);
+            $ss = $svc->gerar($alvo, $ano);
+            $svc->xlsx($ss, $arquivo);
+            $ss->disconnectWorksheets();
+        }
 
-        return response()->download($arquivo, "Planilha_RDM_RDA_{$nome}_{$ano}.xlsx", [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        return response()->download($arquivo, "Planilha_RDM_RDA_{$nome}_{$ano}.{$formato}", [
+            'Content-Type' => $formato === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
     }
 

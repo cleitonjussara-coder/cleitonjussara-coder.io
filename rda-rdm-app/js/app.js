@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 199;
+const APP_BUILD = 200;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3016,6 +3016,7 @@ function renderSaldo() {
     </div>` : `<div class="export-btns">
       <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de RDM e RDA (modelo da empresa) · ${filAno}:</span>
       <button class="btn btn-sm btn-primary" onclick="baixarRelatorioRdmRda()">📗 Excel</button>
+      <button class="btn btn-sm btn-outline" onclick="baixarRelatorioRdmRda(null, null, 'pdf')">📕 PDF</button>
     </div>
     <div class="export-btns">
       <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Resumo do app:</span>
@@ -3527,10 +3528,12 @@ async function baixarRelatorioCv(formato = 'xlsx', userId = null, nome = null) {
 }
 
 /* Planilha de RDM e RDA no modelo oficial (21/09/2026), para quem está no
-   regime RDM/RDA. Só xlsx; o servidor limpa o exemplo e preenche. */
-function baixarRelatorioRdmRda(userId = null, nome = null) {
+   regime RDM/RDA. xlsx = o modelo preenchido pelo servidor (limpa o exemplo
+   antes); pdf = montado dos dados no padrão do modelo. */
+function baixarRelatorioRdmRda(userId = null, nome = null, formato = 'xlsx') {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar a planilha', 'err'); return; }
-  return _baixarBlob(sb.relatorio.rdmrda(filAno, userId), `Planilha_RDM_RDA_${(nome || user?.nome || 'colaborador').replace(/\s+/g, '_')}_${filAno}.xlsx`, 'Gerando a Planilha de RDM e RDA (modelo da empresa)… uns 20 s');
+  const arq = `Planilha_RDM_RDA_${(nome || user?.nome || 'colaborador').replace(/\s+/g, '_')}_${filAno}.${formato}`;
+  return _baixarBlob(sb.relatorio.rdmrda(filAno, userId, formato), arq, formato === 'pdf' ? 'Gerando o PDF de RDM e RDA…' : 'Gerando a Planilha de RDM e RDA (modelo da empresa)… uns 20 s');
 }
 
 /* Relatório da equipe do mês em PDF (20/09/2026): resumo, quadro por
