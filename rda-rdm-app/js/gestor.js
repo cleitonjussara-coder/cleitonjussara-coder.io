@@ -15,7 +15,7 @@ window.Gestor = (() => {
      abrir/fechar sem o app.js precisar saber de nada além de re-renderizar. */
   let _detalheId = null;
   let _ctx = null;
-  let _cvEquipe = null;   // { collabs, ano, comLanc } do último dashboard, para o modal CV da equipe
+  let _cvEquipe = null;   // { collabs, mes, ano, comLancAno, comLancMes } do último dashboard, para o seletor de colaboradores
   function abrir(id)  { _detalheId = id;   _ctx?.onRebuild?.(); }
   /* Busca (20/09/2026): filtra os cartões na hora, sem ir ao servidor;
      abre a seção de desativados se algum deles bater. */
@@ -63,7 +63,7 @@ window.Gestor = (() => {
       const ns = nsAno.filter(n => n.mes === mes);
       const rs = rsAno.filter(r => r.mes === mes);
       /* para o modal "CV da equipe": quem entra na lista e quem movimentou no ano */
-      _cvEquipe = { collabs, ano, comLanc: new Set([...nsAno, ...rsAno].map(x => x.user_id)) };
+      _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id)) };
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
 
       // KPIs do mês
@@ -89,8 +89,8 @@ window.Gestor = (() => {
           <button class="btn-mes-nav" onclick="mudarMesEquipe(1)">›</button>
         </div>
         <div class="export-btns">
-          <button class="btn btn-sm btn-outline" onclick="exportExcelEquipe()">📗 Excel</button>
-          <button class="btn btn-sm btn-primary" onclick="baixarRelatorioEquipe()">📕 PDF</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirExcelEquipe()" title="Resumo do mês em Excel: escolha os colaboradores">📗 Excel</button>
+          <button class="btn btn-sm btn-primary" onclick="Gestor.abrirPdfEquipe()" title="Relatório do mês em PDF: escolha os colaboradores">📕 PDF</button>
           <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilha de C.V. no modelo da empresa: escolha os colaboradores">📗 CV da equipe ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
@@ -375,71 +375,112 @@ window.Gestor = (() => {
     return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(r=>!r.deleted), mes, ano };
   }
 
-  async function exportEquipeExcel(sb, currentUser, mes, ano) {
+  async function exportEquipeExcel(sb, currentUser, mes, ano, ids = []) {
     setLoading(true, 'Gerando a planilha da equipe…');
     try {
-      const { collabs, notas, repasses, mes: m, ano: a } = await renderForExcel(sb, currentUser, mes, ano);
+      let { collabs, notas, repasses, mes: m, ano: a } = await renderForExcel(sb, currentUser, mes, ano);
+      if (ids.length) {   // só os marcados no seletor (21/09/2026)
+        const sel = new Set(ids);
+        collabs = collabs.filter(c => sel.has(c.id)); notas = notas.filter(n => sel.has(n.user_id)); repasses = repasses.filter(r => sel.has(r.user_id));
+      }
       await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome);
       toast('Planilha gerada 📗');
     } catch (e) { toast('Erro ao exportar: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }
 
-  /* ── Modal "CV da equipe" (21/09/2026) ────────────────────
-     Gestor marca quem entra e escolhe: um Excel só (abas Nome_RDM_RDA…) ou
-     um ZIP com a planilha completa de cada um. Quem não lançou nada no ano
-     começa desmarcado — a planilha sairia vazia. */
-  function abrirCvEquipe() {
+  /* ── Seletor de colaboradores (21/09/2026) ─────────────────
+     Antes de gerar Excel, PDF ou Planilha CV da equipe, o gestor marca quem
+     entra. Quem não movimentou no período começa desmarcado (a saída ficaria
+     vazia). botoes = [{ label, title, primario, modo }]; onGerar(ids, modo). */
+  function abrirSelecaoColabs({ titulo, dica, comLanc, etiqueta, segundos, botoes, onGerar }) {
     if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
-    const { collabs, ano, comLanc } = _cvEquipe;
+    const { collabs } = _cvEquipe;
     const ov = document.createElement('div');
     ov.className = 'modal-overlay open';
     ov.innerHTML = `
       <div class="modal-card" onclick="event.stopPropagation()">
         <div class="modal-hd">
-          <h3>Planilha de C.V. · ${ano}</h3>
+          <h3>${esc(titulo)}</h3>
           <button class="btn-close-modal">✕</button>
         </div>
         <div class="modal-bd">
-          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">
-            Marque quem entra. Quem não lançou nada em ${ano} começa desmarcado.
-          </p>
+          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">${dica}</p>
           <div style="display:flex;gap:10px;font-size:12px;margin-bottom:8px">
-            <a href="#" id="cv-todos">marcar todos</a> · <a href="#" id="cv-nenhum">desmarcar todos</a>
+            <a href="#" id="sel-todos">marcar todos</a> · <a href="#" id="sel-nenhum">desmarcar todos</a>
           </div>
           <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">
             ${collabs.map(c => `
               <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer">
-                <input type="checkbox" class="cv-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
+                <input type="checkbox" class="sel-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
                 <span style="flex:1">${esc(c.nome || c.email)}</span>
-                ${comLanc.has(c.id) ? '' : '<span style="font-size:11px;color:var(--text2)">sem lançamento</span>'}
+                ${comLanc.has(c.id) ? '' : `<span style="font-size:11px;color:var(--text2)">${esc(etiqueta)}</span>`}
               </label>`).join('')}
           </div>
-          <p id="cv-qtd" style="font-size:12px;color:var(--text2);margin-top:8px"></p>
+          <p id="sel-qtd" style="font-size:12px;color:var(--text2);margin-top:8px"></p>
         </div>
         <div class="modal-ft" style="flex-wrap:wrap">
-          <button class="btn btn-outline" id="cv-zip" title="Um arquivo .xlsx completo por pessoa">🗜️ ZIP separado</button>
-          <button class="btn btn-primary" id="cv-unico" title="Um só .xlsx com as abas de cada pessoa">📗 Excel único</button>
+          ${botoes.map(b => `<button class="btn ${b.primario ? 'btn-primary' : 'btn-outline'}" data-modo="${b.modo}" title="${esc(b.title || '')}">${b.label}</button>`).join('')}
         </div>
       </div>`;
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
     ov.querySelector('.btn-close-modal').onclick = close;
-    const chks = () => [...ov.querySelectorAll('.cv-chk')];
+    const chks = () => [...ov.querySelectorAll('.sel-chk')];
     const marcados = () => chks().filter(c => c.checked).map(c => c.value);
+    const btns = [...ov.querySelectorAll('.modal-ft button')];
     const atualizar = () => {
       const n = marcados().length;
-      ov.querySelector('#cv-qtd').textContent = n ? `${n} colaborador${n > 1 ? 'es' : ''} selecionado${n > 1 ? 's' : ''} · uns ${Math.max(5, n * 5)} s para gerar` : 'Ninguém selecionado';
-      ov.querySelector('#cv-unico').disabled = ov.querySelector('#cv-zip').disabled = !n;
+      const tempo = segundos ? ` · uns ${Math.max(segundos, n * segundos)} s para gerar` : '';
+      ov.querySelector('#sel-qtd').textContent = n ? `${n} colaborador${n > 1 ? 'es' : ''} selecionado${n > 1 ? 's' : ''}${tempo}` : 'Ninguém selecionado';
+      btns.forEach(b => b.disabled = !n);
     };
     chks().forEach(c => c.onchange = atualizar);
-    ov.querySelector('#cv-todos').onclick  = e => { e.preventDefault(); chks().forEach(c => c.checked = true);  atualizar(); };
-    ov.querySelector('#cv-nenhum').onclick = e => { e.preventDefault(); chks().forEach(c => c.checked = false); atualizar(); };
+    ov.querySelector('#sel-todos').onclick  = e => { e.preventDefault(); chks().forEach(c => c.checked = true);  atualizar(); };
+    ov.querySelector('#sel-nenhum').onclick = e => { e.preventDefault(); chks().forEach(c => c.checked = false); atualizar(); };
     atualizar();
-    const gerar = modo => { const ids = marcados(); close(); window.baixarCvEquipe(ids, modo); };
-    ov.querySelector('#cv-unico').onclick = () => gerar('unico');
-    ov.querySelector('#cv-zip').onclick   = () => gerar('zip');
+    btns.forEach(b => b.onclick = () => { const ids = marcados(); close(); onGerar(ids, b.dataset.modo); });
+  }
+
+  /* Planilha de C.V. (modelo da empresa): Excel único com aba RESUMO ou ZIP. Base: quem lançou no ANO. */
+  function abrirCvEquipe() {
+    if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
+    const { ano, comLancAno } = _cvEquipe;
+    abrirSelecaoColabs({
+      titulo: `Planilha de C.V. · ${ano}`,
+      dica: `Marque quem entra. Quem não lançou nada em ${ano} começa desmarcado.`,
+      comLanc: comLancAno, etiqueta: 'sem lançamento no ano', segundos: 5,
+      botoes: [
+        { label: '🗜️ ZIP separado', title: 'Um arquivo .xlsx completo por pessoa (+ Resumo_Geral)', modo: 'zip' },
+        { label: '📗 Excel único',  title: 'Um só .xlsx: aba RESUMO + abas de cada pessoa', modo: 'unico', primario: true },
+      ],
+      onGerar: (ids, modo) => window.baixarCvEquipe(ids, modo),
+    });
+  }
+
+  /* Excel resumido e PDF do MÊS: base = quem lançou no mês escolhido. */
+  function abrirExcelEquipe() {
+    if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
+    const { mes, ano, comLancMes } = _cvEquipe;
+    abrirSelecaoColabs({
+      titulo: `Excel da equipe · ${MESES[mes - 1]} ${ano}`,
+      dica: `Resumo do mês (gasto, repasse e saldo RDM/RDA por pessoa). Quem não lançou nada em ${MESES[mes - 1]} começa desmarcado.`,
+      comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
+      botoes: [{ label: '📗 Gerar Excel', modo: 'xlsx', primario: true }],
+      onGerar: ids => window.exportExcelEquipe(ids),
+    });
+  }
+  function abrirPdfEquipe() {
+    if (!_cvEquipe) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
+    const { mes, ano, comLancMes } = _cvEquipe;
+    abrirSelecaoColabs({
+      titulo: `Relatório da equipe (PDF) · ${MESES[mes - 1]} ${ano}`,
+      dica: `Resumo do mês, quadro por colaborador e as notas e repasses de cada um. Quem não lançou nada em ${MESES[mes - 1]} começa desmarcado.`,
+      comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
+      botoes: [{ label: '📕 Gerar PDF', modo: 'pdf', primario: true }],
+      onGerar: ids => window.baixarRelatorioEquipe(ids),
+    });
   }
 
   /* ── Modal edição de colaborador (admin only) ─────────── */
@@ -578,5 +619,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe };
 })();

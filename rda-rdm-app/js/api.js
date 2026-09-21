@@ -281,7 +281,7 @@ window.API = (() => {
   /* Planilha de C.V. no modelo da empresa, preenchida pelo servidor (19/09/2026). */
   const relatorio = {
     cv: (ano, userId, formato) => req('GET', '/relatorio/cv', { query: { ano, user_id: userId || undefined, formato }, blob: true, timeout: 300_000 }),
-    equipe: (ano, mes) => req('GET', '/relatorio/equipe', { query: { ano, mes }, blob: true, timeout: 300_000 }),
+    equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
     cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
   };
 

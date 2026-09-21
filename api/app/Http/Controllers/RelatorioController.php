@@ -137,14 +137,16 @@ class RelatorioController extends Controller
         $d = $r->validate([
             'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'ids' => ['nullable', 'string', 'max:4000'],   // colaboradores marcados na tela (21/09/2026)
         ]);
         $ano = (int) ($d['ano'] ?? now()->year);
         $mes = (int) ($d['mes'] ?? now()->month);
+        $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? ''))))) ?: null;
 
         @ini_set('memory_limit', '512M');
         @set_time_limit(120);
         $arquivo = tempnam(sys_get_temp_dir(), 'eq_').'.pdf';
-        app(\App\Services\RelatorioEquipePdf::class)->gerar($ano, $mes, $arquivo, $u);
+        app(\App\Services\RelatorioEquipePdf::class)->gerar($ano, $mes, $arquivo, $u, $ids);
 
         return response()->download($arquivo, sprintf('Relatorio_Equipe_%d-%02d.pdf', $ano, $mes), ['Content-Type' => 'application/pdf'])
             ->deleteFileAfterSend(true);

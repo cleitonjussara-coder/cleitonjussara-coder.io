@@ -19,9 +19,10 @@ class RelatorioEquipePdf
 
     private const CAT = ['abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'outros' => 'Outros'];
 
-    public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null): void
+    /** @param string[]|null $ids só estes colaboradores (marcados na tela, 21/09/2026); null = todos */
+    public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null, ?array $ids = null): void
     {
-        $colabs = Colaborador::query()->orderBy('nome')->get();
+        $colabs = Colaborador::query()->when($ids, fn ($q) => $q->whereIn('id', $ids))->orderBy('nome')->get();
         $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
             ->orderBy('data')->orderBy('created_at')->get()->groupBy('user_id');
         $reps = Repasse::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)

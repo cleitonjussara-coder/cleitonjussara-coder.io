@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 192;
+const APP_BUILD = 193;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2827,8 +2827,8 @@ async function _garantirAnoEmFoco() {
   finally { if (_garantindoAno === ano) _garantindoAno = null; }
 }
 
-function exportExcelEquipe() {
-  Gestor.exportEquipeExcel(sb, user, filMes, filAno);
+function exportExcelEquipe(ids = []) {   // ids = marcados no seletor da Equipe (21/09/2026)
+  Gestor.exportEquipeExcel(sb, user, filMes, filAno, ids);
 }
 
 /* Planilha do Google da equipe (consolidada, mês atual) */
@@ -3269,9 +3269,9 @@ async function baixarRelatorioCv(formato = 'xlsx', userId = null, nome = null) {
 
 /* Relatório da equipe do mês em PDF (20/09/2026): resumo, quadro por
    colaborador e as notas/repasses de cada um. Gestor/admin. */
-function baixarRelatorioEquipe() {
+function baixarRelatorioEquipe(ids = []) {   // ids = marcados no seletor da Equipe (21/09/2026)
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
-  return _baixarBlob(sb.relatorio.equipe(filAno, filMes), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
+  return _baixarBlob(sb.relatorio.equipe(filAno, filMes, ids), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
 }
 
 /* Planilha de C.V. de vários colaboradores (21/09/2026), escolhidos no modal
