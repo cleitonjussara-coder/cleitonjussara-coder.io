@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=197">
+  <link rel="manifest" href="manifest.json?v=198">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1310,6 +1310,51 @@ body{font-size:16.5px}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
+/* ═══════════════════════════════════════════════════════════
+   iOS / telas estreitas (reunião de 21/09/2026, item 7) —
+   correções de CORTE e DESFOQUE vistas em iPhone 14+.
+═══════════════════════════════════════════════════════════ */
+html{-webkit-text-size-adjust:100%}
+/* 1) altura real da tela: 100% no Safari inclui a área atrás da barra de
+   baixo; dvh acompanha a barra e o teclado. */
+@supports (height:100dvh){ html,body{height:100dvh} }
+/* 2) modal nunca maior que a tela: cabeçalho e rodapé fixos, corpo rola.
+   Antes o overflow:hidden sem altura máxima escondia o botão Salvar. */
+.modal-card{display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
+@supports (height:100dvh){ .modal-card{max-height:calc(100dvh - 32px)} }
+.modal-hd,.modal-ft{flex:0 0 auto}
+.modal-bd{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;min-height:0}
+/* valores nunca quebram depois do sinal de menos ("-" numa linha, "R$ 128,70" na outra) */
+.saldo-val,.ini-kpi-val,.cdet-kpi-val,.kpi-val,.rep-val{white-space:nowrap}
+/* 3) botões de exportar quebram linha em vez de sair pela direita */
+.export-btns{flex-wrap:wrap;justify-content:flex-end}
+/* 4) botão fixo do rodapé centralizado sem translate (meio pixel = texto borrado no iOS) */
+#btn-inicio-rodape{left:0;right:0;margin:0 auto;width:max-content;transform:none}
+#btn-inicio-rodape:active{transform:scale(.96)}
+/* 5) só iOS (-webkit-touch-callout existe só no Safari móvel): sem animar
+   transform nos painéis com texto — o Safari rasteriza e deixa borrado — e
+   sombra de texto no lugar do filter no ícone. */
+@supports (-webkit-touch-callout:none){
+  .pnl,.ini-ir-btn,.ini-kpi,.cdet-acao,.tipo-lancamento-card,.avatar.clicavel{transition:box-shadow .14s,opacity .14s}
+  .pnl:active,.ini-ir-btn:active,.ini-kpi:active,.cdet-acao:active,.tipo-lancamento-card:active,.avatar.clicavel:active{transform:none;opacity:.88}
+  .pnl-ico{filter:none;text-shadow:0 2px 3px rgba(0,0,0,.5)}
+  /* 6) marca d'água do login: sem blend nem fixed (borrava e pesava) */
+  #auth-screen::before{position:absolute;mix-blend-mode:normal;opacity:.05}
+  /* texto nítido em camadas compostas */
+  .pnl-tit,.pnl-sub,.ini-kpi-val,.ini-kpi-lbl,.saldo-val{-webkit-font-smoothing:antialiased}
+}
+/* iPhone estreito (≤ 400px): painel grande usa a largura toda, valores menores */
+@media (max-width:400px){
+  .pnl-grande .pnl-conteudo{max-width:100%;min-height:132px}
+  .pnl-grande .pnl-tit{font-size:20px}
+  .saldo-val{font-size:20px}
+  .ini-ir{grid-template-columns:repeat(2,1fr)}
+  .page-hd .export-btns{width:100%}
+  /* título + subtítulo das telas em coluna: lado a lado o título quebrava no meio */
+  .ini-ola:not(.ini-ola-foto){flex-direction:column;align-items:flex-start;gap:2px}
+  .ini-ola h2{font-size:19px}
+}
+
 </style>
 </head>
 <body>
@@ -1335,7 +1380,7 @@ body{font-size:16.5px}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=197" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=198" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2077,25 +2122,25 @@ body{font-size:16.5px}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=197"></script>
-<script defer src="js/db.js?v=197"></script>
-<script defer src="js/nfce.js?v=197"></script>
-<script defer src="js/sefaz.js?v=197"></script>
-<script defer src="js/brasilapi.js?v=197"></script>
-<script defer src="js/ocr.js?v=197"></script>
-<script defer src="js/recorte.js?v=197"></script>
-<script defer src="js/excel.js?v=197"></script>
-<script defer src="js/gestor.js?v=197"></script>
-<script defer src="js/frota.js?v=197"></script>
-<script defer src="js/ponto.js?v=197"></script>
-<script defer src="js/arquivos.js?v=197"></script>
-<script defer src="js/gdrive.js?v=197"></script>
-<script defer src="js/app.js?v=197"></script>
+<script defer src="js/api.js?v=198"></script>
+<script defer src="js/db.js?v=198"></script>
+<script defer src="js/nfce.js?v=198"></script>
+<script defer src="js/sefaz.js?v=198"></script>
+<script defer src="js/brasilapi.js?v=198"></script>
+<script defer src="js/ocr.js?v=198"></script>
+<script defer src="js/recorte.js?v=198"></script>
+<script defer src="js/excel.js?v=198"></script>
+<script defer src="js/gestor.js?v=198"></script>
+<script defer src="js/frota.js?v=198"></script>
+<script defer src="js/ponto.js?v=198"></script>
+<script defer src="js/arquivos.js?v=198"></script>
+<script defer src="js/gdrive.js?v=198"></script>
+<script defer src="js/app.js?v=198"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=197').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=198').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
