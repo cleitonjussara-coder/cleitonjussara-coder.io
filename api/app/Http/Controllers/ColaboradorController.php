@@ -68,8 +68,10 @@ class ColaboradorController extends Controller
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
         ]);
         if ($gereOutro && ! $u->ehAdmin()) {
+            /* 22/09/2026, decisão do Cleiton: o gestor PROMOVE a administrador.
+               Continua sem editar o perfil de quem já é admin — para mexer num
+               administrador, é outro administrador. */
             abort_if($alvo->ehAdmin(), 403, 'Só um administrador edita o perfil de outro administrador');
-            abort_if(($d['role'] ?? null) === 'admin', 403, 'Só o administrador promove alguém a administrador');
         } elseif (! $u->ehAdmin()) {
             unset($d['role'], $d['nucleo'], $d['regime']);      // ninguém se promove nem muda o próprio regime
         }

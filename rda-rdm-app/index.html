@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=207">
+  <link rel="manifest" href="manifest.json?v=208">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1434,7 +1434,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=207" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=208" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1956,8 +1956,8 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <h4>👥 Papéis da equipe</h4>
       <ul>
         <li><b>Colaborador:</b> vê só as próprias notas.</li>
-        <li><b>Gestor:</b> vê a equipe e baixa os relatórios de todos na aba <b>Equipe / Baixar relatórios</b>. Em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as dele. Desde 22/09/2026 faz quase tudo o que o admin faz: <b>edita o papel, o nome e o regime</b> de quem quiser em Equipe → Editar, <b>convida</b> até gestor, e tem no Perfil <b>as ferramentas de servidor</b> (armazenamento, backup, cópia no Google Drive, atualizar estrutura do banco).</li>
-        <li><b>Admin:</b> tudo o que o gestor faz e mais duas coisas que só ele pode: <b>promover alguém a administrador</b> e <b>editar o perfil de outro administrador</b>. Também é quem apaga lançamento em definitivo. Essas travas existem para que um gestor recém-promovido não consiga rebaixar quem o promoveu; no resto, gestor e admin são iguais.</li>
+        <li><b>Gestor:</b> vê a equipe e baixa os relatórios de todos na aba <b>Equipe / Baixar relatórios</b>. Em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as dele. Desde 22/09/2026 faz quase tudo o que o admin faz: <b>edita o papel, o nome e o regime</b> de quem quiser em Equipe → Editar (inclusive promover a administrador), <b>convida</b> até gestor, e tem no Perfil <b>as ferramentas de servidor</b> (armazenamento, backup, cópia no Google Drive, atualizar estrutura do banco).</li>
+        <li><b>Admin:</b> tudo o que o gestor faz e mais: <b>apaga lançamento em definitivo</b> e é o único que <b>edita o perfil de outro administrador</b>. O gestor <b>promove</b> alguém a administrador (o app pede confirmação), mas, feito isso, só outro administrador altera o cadastro dessa pessoa.</li>
         <li><b>Contabilidade</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início e o Petermann – Despesas dela mostram só Equipe e Arquivos.</li>
       </ul>
       <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contabilidade, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
@@ -2186,25 +2186,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=207"></script>
-<script defer src="js/db.js?v=207"></script>
-<script defer src="js/nfce.js?v=207"></script>
-<script defer src="js/sefaz.js?v=207"></script>
-<script defer src="js/brasilapi.js?v=207"></script>
-<script defer src="js/ocr.js?v=207"></script>
-<script defer src="js/recorte.js?v=207"></script>
-<script defer src="js/excel.js?v=207"></script>
-<script defer src="js/gestor.js?v=207"></script>
-<script defer src="js/frota.js?v=207"></script>
-<script defer src="js/ponto.js?v=207"></script>
-<script defer src="js/arquivos.js?v=207"></script>
-<script defer src="js/gdrive.js?v=207"></script>
-<script defer src="js/app.js?v=207"></script>
+<script defer src="js/api.js?v=208"></script>
+<script defer src="js/db.js?v=208"></script>
+<script defer src="js/nfce.js?v=208"></script>
+<script defer src="js/sefaz.js?v=208"></script>
+<script defer src="js/brasilapi.js?v=208"></script>
+<script defer src="js/ocr.js?v=208"></script>
+<script defer src="js/recorte.js?v=208"></script>
+<script defer src="js/excel.js?v=208"></script>
+<script defer src="js/gestor.js?v=208"></script>
+<script defer src="js/frota.js?v=208"></script>
+<script defer src="js/ponto.js?v=208"></script>
+<script defer src="js/arquivos.js?v=208"></script>
+<script defer src="js/gdrive.js?v=208"></script>
+<script defer src="js/app.js?v=208"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=207').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=208').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

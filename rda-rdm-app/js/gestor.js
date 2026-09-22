@@ -582,13 +582,13 @@ window.Gestor = (() => {
     const eu = currentUser || window.user || {};
     const ehAdmin = eu.role === 'admin';
     const souEu = colab.id === eu.id;
-    /* 22/09/2026: o gestor edita nome, papel e regime dos OUTROS. Duas travas
-       (o servidor repete as duas): não mexe no perfil de um admin e não
-       promove ninguém a admin — quem foi promovido não derruba quem promoveu. */
+    /* 22/09/2026: o gestor edita nome, papel e regime dos OUTROS, inclusive
+       promover a administrador (decisão do Cleiton). A única trava que ficou,
+       repetida no servidor: quem já é admin só é editado por outro admin. */
     const alvoAdmin = colab.role === 'admin';
     const podeEditar = !souEu && (ehAdmin || eu.role === 'gestor') && (ehAdmin || !alvoAdmin);
     const podeRegime = podeEditar;
-    const papeis = ehAdmin || alvoAdmin ? ROLES : ROLES.filter(r => r !== 'admin');
+    const papeis = ROLES;
     const inativo = colab.ativo === false;
     const pedido = colab.exclusao_pedida_por;
     const pediEu = pedido && pedido === eu.id;
@@ -609,7 +609,7 @@ window.Gestor = (() => {
           </select>
           ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor ou ao administrador.</p>'
             : alvoAdmin && !ehAdmin ? '<p style="font-size:12px;color:#b45309;line-height:1.4;margin-top:4px">Perfil de <b>administrador</b>: só outro administrador edita.</p>'
-            : !ehAdmin ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Promover a <b>administrador</b> é só o administrador quem faz.</p>' : ''}
+            : '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Quem vira <b>administrador</b> passa a editar qualquer perfil — inclusive o seu — e a apagar lançamento em definitivo.</p>'}
           <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
@@ -658,6 +658,10 @@ window.Gestor = (() => {
       const role   = ov.querySelector('#g-role').value;
       const regime = ov.querySelector('#g-regime')?.value;
       const dados  = { nome, role, regime };   // o servidor filtra o que este papel pode gravar
+      /* promover a admin é o único que não tem volta pela tela de quem promove:
+         daí em diante só outro admin edita essa pessoa. Confirma antes. */
+      if (role === 'admin' && colab.role !== 'admin' &&
+          !confirm(`Tornar ${colab.nome || colab.email} ADMINISTRADOR?\n\nEle passa a poder editar qualquer perfil (inclusive o seu), mudar papéis e apagar lançamento em definitivo.\n\nDepois disso, só outro administrador consegue alterar o cadastro dele.`)) return;
       try { await sb.colaboradores.update(colab.id, dados); }
       catch (e) { alert('Erro: ' + e.message); return; }
       close(); onSaved();
