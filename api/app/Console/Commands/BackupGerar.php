@@ -9,19 +9,25 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 /**
- * php84 artisan backup:gerar [--manter=12] [--meses=12] [--sem-drive]
+ * php84 artisan backup:gerar [--manter=2] [--meses=0] [--sem-drive]
  *
  * É a linha do Agendador de tarefas do painel da Locaweb (1x por semana):
  *   /usr/bin/php84 /home/.../api-petermann/artisan backup:gerar
- * Gera storage/app/backups/petermann-AAAA-MM-DD-HHMM.zip (banco + fotos),
- * guarda as --manter cópias mais novas + a 1ª de cada mês nos últimos
- * --meses meses (disco é ilimitado, 21/09/2026) e, se o admin conectou o
- * Drive pelo Perfil, sobe a cópia para lá com a mesma rotação.
- * O admin vê e baixa pelo Perfil.
+ * Gera storage/app/backups/petermann-AAAA-MM-DD-HHMM.zip (banco + fotos) e
+ * guarda no SERVIDOR só as --manter cópias mais novas (2, pedido do Cleiton
+ * em 22/09/2026 para ocupar menos espaço; --meses=0 = sem cópia mensal).
+ * No GOOGLE DRIVE a rotação é mais folgada (--drive-manter/--drive-meses):
+ * lá o espaço é do próprio Drive e é a cópia que sobrevive se a Locaweb
+ * perder o disco. O gestor/admin vê e baixa tudo pelo Perfil.
  */
 class BackupGerar extends Command
 {
-    protected $signature = 'backup:gerar {--manter=12 : cópias semanais guardadas} {--meses=12 : meses com uma cópia mensal} {--sem-drive : não enviar ao Drive}';
+    protected $signature = 'backup:gerar
+        {--manter=2 : cópias guardadas no servidor}
+        {--meses=0 : meses com uma cópia mensal no servidor (0 = nenhuma)}
+        {--drive-manter=12 : cópias guardadas no Google Drive}
+        {--drive-meses=12 : meses com uma cópia mensal no Drive}
+        {--sem-drive : não enviar ao Drive}';
 
     protected $description = 'Backup completo (banco + fotos) em storage/app/backups, com rotação e cópia no Google Drive';
 
@@ -56,7 +62,7 @@ class BackupGerar extends Command
         }
         $t2 = microtime(true);
         try {
-            $d = $drive->enviar($r['arquivo'], $manter, $meses);
+            $d = $drive->enviar($r['arquivo'], (int) $this->option('drive-manter'), (int) $this->option('drive-meses'));
             $msg = sprintf('drive ok: %s enviado em %.0fs (%d antigo(s) apagado(s) no Drive)', $d['nome'], microtime(true) - $t2, $d['apagados']);
             $this->info($msg);
             Log::info($msg);

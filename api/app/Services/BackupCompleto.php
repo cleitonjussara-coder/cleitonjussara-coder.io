@@ -149,17 +149,21 @@ class BackupCompleto
         $recentes = array_slice($lista, 0, max(0, $manter));
         $fica = array_column($recentes, 'nome', 'nome');
 
-        $limiteMes = now(self::TZ)->startOfMonth()->subMonths(max(0, $meses))->format('Y-m');
-        $porMes = [];
-        foreach (array_reverse($lista) as $b) {   // do mais antigo para o mais novo: o 1º de cada mês ganha
-            if (! preg_match('/-(\d{4}-\d{2})-\d{2}-\d{4}/', $b['nome'], $m)) {
-                continue;
+        /* $meses = 0 → sem cópia mensal: fica exatamente o número pedido em
+           $manter (22/09/2026, pedido do Cleiton para ocupar menos espaço). */
+        if ($meses > 0) {
+            $limiteMes = now(self::TZ)->startOfMonth()->subMonths($meses)->format('Y-m');
+            $porMes = [];
+            foreach (array_reverse($lista) as $b) {   // do mais antigo para o mais novo: o 1º de cada mês ganha
+                if (! preg_match('/-(\d{4}-\d{2})-\d{2}-\d{4}/', $b['nome'], $m)) {
+                    continue;
+                }
+                if ($m[1] >= $limiteMes && ! isset($porMes[$m[1]])) {
+                    $porMes[$m[1]] = $b['nome'];
+                }
             }
-            if ($m[1] >= $limiteMes && ! isset($porMes[$m[1]])) {
-                $porMes[$m[1]] = $b['nome'];
-            }
+            $fica += array_combine($porMes, $porMes);
         }
-        $fica += array_combine($porMes, $porMes);
 
         return array_values(array_filter($lista, fn ($b) => ! isset($fica[$b['nome']])));
     }
