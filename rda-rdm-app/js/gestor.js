@@ -610,7 +610,7 @@ window.Gestor = (() => {
           ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor ou ao administrador.</p>'
             : alvoAdmin && !ehAdmin ? '<p style="font-size:12px;color:#b45309;line-height:1.4;margin-top:4px">Perfil de <b>administrador</b>: só outro administrador edita.</p>'
             : !ehAdmin ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Promover a <b>administrador</b> é só o administrador quem faz.</p>' : ''}
-          <label class="lbl">Regime de despesas <span style="font-weight:400;color:var(--text2)">(reunião 21/09/2026)</span></label>
+          <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
             <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; reembolso do que sai do bolso; gera Planilha CV</option>
