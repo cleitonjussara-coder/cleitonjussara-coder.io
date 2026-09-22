@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 203;
+const APP_BUILD = 204;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1609,6 +1609,77 @@ function switchView(v) {
    Os três lançamentos (QR, sem QR, repasse) num só lugar, com os painéis
    grandes que estavam no Início. O Início ficou com um botão só.
 ═══════════════════════════════════════════════════════════ */
+/* ─── Abas RDA e RDM do hub (22/09/2026) ─────────────────────────
+   Pedido do Cleiton: duas abas grandes dentro de "Petermann – Despesas",
+   e o lançamento (QR e sem QR) DENTRO de cada uma. A aba aberta fica
+   guardada em _abaDespesa; quem já escolheu não precisa escolher de novo
+   no modal — o tipo vai junto e o app pula direto para o comprovante. */
+const ABAS_DESPESA = {
+  RDA: { ico: '🍽️', nome: 'Alimentação',
+         sub: 'Refeição, lanche, café e água — a nota do restaurante ou do mercado.' },
+  RDM: { ico: '💼', nome: 'Despesas corporativas',
+         sub: 'Abastecimento, hospedagem e outros gastos de serviço.' },
+};
+let _abaDespesa = null;          // 'RDA' | 'RDM' | null — aba aberta no hub
+let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
+
+function _abaCard(tipo) {
+  const a = ABAS_DESPESA[tipo];
+  const aberta = _abaDespesa === tipo;
+  const doMes = notas.filter(n => !n.deleted && n.tipo === tipo && n.mes === filMes && n.ano === filAno);
+  const total = doMes.reduce((s, n) => s + _n(n.valor), 0);
+  const mesTxt = doMes.length
+    ? `${MESES[filMes - 1]}: ${brlCurto(total)} · ${doMes.length} nota${doMes.length === 1 ? '' : 's'}`
+    : `${MESES[filMes - 1]}: nenhuma nota`;
+  return `
+    <div class="aba-hero aba-hero-${tipo.toLowerCase()} ${aberta ? 'aberta' : ''}" id="aba-${tipo}">
+      <span class="aba-hero-mes">${esc(mesTxt)}</span>
+      <button class="aba-hero-cab" aria-expanded="${aberta}" onclick="abrirAbaDespesa('${tipo}')">
+        <span class="aba-hero-ico">${a.ico}</span>
+        <span class="aba-hero-txt">
+          <span class="aba-hero-sigla">${tipo}</span>
+          <span class="aba-hero-nome">${esc(a.nome)}</span>
+          <span class="aba-hero-sub">${aberta ? 'Escolha como quer lançar 👇' : esc(a.sub)}</span>
+        </span>
+        <span class="aba-hero-seta">${aberta ? '▲' : '▼'}</span>
+      </button>
+      ${aberta ? `
+      <div class="aba-hero-acoes">
+        <button class="aba-acao aba-acao-destaque" onclick="lancarNaAba('${tipo}','qr')">
+          <span class="aba-acao-ico">📷</span>
+          <span class="aba-acao-txt">
+            <span class="aba-acao-tit">Nota pelo QR Code</span>
+            <span class="aba-acao-sub">Aponte a câmera: empresa, valor e data entram sozinhos.</span>
+          </span>
+        </button>
+        <button class="aba-acao" onclick="lancarNaAba('${tipo}','manual')">
+          <span class="aba-acao-ico">📝</span>
+          <span class="aba-acao-txt">
+            <span class="aba-acao-tit">Nota sem QR</span>
+            <span class="aba-acao-sub">Recibo, DANFE ou NFS-e: foto ou arquivo.</span>
+          </span>
+        </button>
+      </div>` : ''}
+    </div>`;
+}
+
+function abrirAbaDespesa(tipo) {
+  _abaDespesa = _abaDespesa === tipo ? null : tipo;   // tocar de novo fecha
+  renderDespesas();
+  if (_abaDespesa) {
+    const el = $('aba-' + _abaDespesa);
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
+  }
+}
+
+/* Lança já na aba escolhida: o modal não pergunta RDA/RDM de novo (o botão
+   "Trocar" continua lá, para o caso de a pessoa ter aberto a aba errada). */
+function lancarNaAba(tipo, modo) {
+  _abaPreEscolhida = tipo;
+  if (modo === 'qr') iniciarQR();
+  else abrirSeletorTipoLancamento({ _manual: true, tipo });
+}
+
 function renderDespesas() {
   $('app-content').innerHTML = `
   <div class="db-container">
@@ -1619,22 +1690,12 @@ function renderDespesas() {
 
     ${_ehContabilidade() ? `
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
-    <div class="ini-titulo">O que você quer lançar?</div>
-    <button class="pnl pnl-grande" onclick="iniciarQR()">
-      <span class="pnl-conteudo">
-        <span class="pnl-ico">📷</span>
-        <span class="pnl-tit">Lançar nota pelo QR Code</span>
-        <span class="pnl-sub">Aponte a câmera para o QR do cupom. Empresa, valor e data entram sozinhos.</span>
-      </span>
-    </button>
-    <div class="pnl-linha">
-      <button class="pnl pnl-mini" onclick="abrirSeletorTipoLancamento({ _manual: true })">
-        <span class="pnl-conteudo"><span class="pnl-ico">📝</span><span class="pnl-tit">Nota sem QR</span><span class="pnl-sub">Recibo, DANFE, NFS-e: foto ou arquivo.</span></span>
-      </button>
-      <button class="pnl pnl-mini" onclick="abrirFormRepasse()">
-        <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span><span class="pnl-sub">${_ehCV() ? 'Pagou do bolso? Registre aqui; e o recebido.' : 'Recebido ou a pedir (PIX).'}</span></span>
-      </button>
-    </div>`}
+    <div class="ini-titulo">Escolha a aba e lance a nota</div>
+    ${_abaCard('RDA')}
+    ${_abaCard('RDM')}
+    <button class="pnl pnl-atalho" style="margin-top:12px" onclick="abrirFormRepasse()">
+      <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span><span class="pnl-sub">${_ehCV() ? 'pagou do bolso · e o recebido' : 'recebido ou a pedir (PIX)'}</span></span>
+    </button>`}
 
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
@@ -4032,10 +4093,10 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
      e pela tela "Comprovante da nota" (um toque = abre a câmera); o
      formulário só aparece quando o OCR terminar, já com o máximo preenchido. */
   if (dados.qr_url && dados.chave) _sefazPorQr(dados.qr_url, dados.chave);   // valor oficial, em paralelo
+  const aba = _abaPreEscolhida;                    // veio de uma aba do hub (22/09/2026)
   abrirSeletorTipoLancamento({ ...dados, _manual: true });
-  toast(dados.documento === 'nfse'
-    ? 'QR da NFS-e lido! 🧰 Escolha a aba e fotografe a nota.'
-    : 'Chave lida! 🔑 Escolha a aba e fotografe a nota.');
+  const lido = dados.documento === 'nfse' ? 'QR da NFS-e lido! 🧰' : 'Chave lida! 🔑';
+  toast(aba ? `${lido} Agora fotografe a nota (aba ${aba}).` : `${lido} Escolha a aba e fotografe a nota.`);
 }
 
 /* Passo 2 do fluxo "QR → foto": destaca o botão de foto como chamada de ação.
@@ -4404,9 +4465,14 @@ async function onFotoNota(e) {
 let _dadosLancamentoPendentes = null;
 
 function abrirSeletorTipoLancamento(dados = {}) {
+  /* Veio de uma aba do hub (22/09/2026): o tipo já está escolhido, então o
+     passo 1 é pulado. O aviso de sugestão passa a aparecer no passo 2. */
+  if (!dados.tipo && _abaPreEscolhida) dados = { ...dados, tipo: _abaPreEscolhida };
+  _abaPreEscolhida = null;
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
+  const dica2 = $('tipo-lancamento-dica2'); if (dica2) dica2.textContent = '';
   /* Fornecedor conhecido (chave/CNPJ/nome): até 20/09 o app escolhia a aba
      sozinho e pulava o passo 1. Reunião de 21/09/2026: a escolha é SEMPRE
      manual — a sugestão vira só um aviso embaixo do título, e a pessoa toca
@@ -4417,10 +4483,22 @@ function abrirSeletorTipoLancamento(dados = {}) {
     sugerirAba(d).then(s => {
       if (!s || _dadosLancamentoPendentes !== d) return;                // já escolheu/fechou
       d._sugestao = s;
-      d.subtipo = s.subtipo || d.subtipo;
-      if (dica) dica.textContent = `Sugestão para este fornecedor: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo}). Você decide.`;
+      /* aba já escolhida: só aproveita a categoria se a sugestão for da MESMA
+         aba — senão um "Abastecimento" (RDM) entraria numa nota de RDA */
+      if (!d.tipo || s.tipo === d.tipo) d.subtipo = s.subtipo || d.subtipo;
+      const txt = `Sugestão para este fornecedor: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo}). Você decide.`;
+      if (dica) dica.textContent = txt;
+      /* aba já escolhida e a sugestão aponta para a outra: avisa no passo 2 */
+      const dv = $('tipo-lancamento-dica2');
+      if (dv && d.tipo) dv.textContent = s.tipo === d.tipo ? '' : `⚠️ ${txt} Toque em "Trocar" se for o caso.`;
+      /* sugestão da MESMA aba: completa a pílula (a categoria chegou depois) */
+      const pill = $('tipo-lancamento-passo2-aba');
+      if (pill && d.tipo && s.tipo === d.tipo) {
+        pill.textContent = `${d.tipo} · ${s.subtipo && d.tipo === 'RDM' ? s.subtipo + ' · ' : ''}sugerido: ${s.rotulo}`;
+      }
     }).catch(() => {});
   }
+  if (d.tipo) selecionarTipoLancamento(d.tipo);   // pula o passo 1
 }
 
 function fecharSeletorTipoLancamento() {
@@ -4434,7 +4512,12 @@ function fecharSeletorTipoLancamento() {
 }
 
 function selecionarTipoLancamento(tipo) {
-  const dados = { ...(_dadosLancamentoPendentes || {}), tipo, _tipoSelecionado: true };
+  /* MESMO objeto de _dadosLancamentoPendentes (22/09/2026): a consulta de
+     sugestão do fornecedor compara por identidade para saber se ainda vale.
+     Com a aba já escolhida na tela de Despesas, a escolha acontece no mesmo
+     instante da abertura — uma cópia aqui descartaria a sugestão que ainda
+     está a caminho, e o aviso "a sugestão é a outra aba" nunca apareceria. */
+  const dados = Object.assign(_dadosLancamentoPendentes || {}, { tipo, _tipoSelecionado: true });
   /* Lançamento MANUAL: em vez de abrir o formulário vazio, pergunta já o
      comprovante (pedido em 16/09/2026). O anexo é obrigatório de qualquer
      jeito, e a câmera só abre em gesto do usuário — por isso um toque a mais
@@ -4463,6 +4546,7 @@ function selecionarTipoLancamento(tipo) {
    quando o onchange chegar. */
 let _formEsperandoLeitura = false;   // formulário montado mas escondido até o OCR acabar
 function voltarEscolhaAba() {
+  const d2 = $('tipo-lancamento-dica2'); if (d2) d2.textContent = '';
   $('tipo-lancamento-passo2').style.display = 'none';
   $('tipo-lancamento-passo1').style.display = '';
   const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=203">
+  <link rel="manifest" href="manifest.json?v=204">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1356,12 +1356,59 @@ html{-webkit-text-size-adjust:100%}
 }
 
 
+/* ─── Abas RDM e RDA no hub de Despesas (22/09/2026) ───────────────
+   Pedido: "abas grandes, bonitas", com o lançamento (QR e sem QR)
+   DENTRO de cada aba. São dois cartões que abrem como sanfona: o
+   toque no cabeçalho revela as ações daquela aba. */
+.aba-hero{position:relative;overflow:hidden;border-radius:16px;border:7px solid var(--esm-frame);
+  box-shadow:inset 3px 3px 5px rgba(255,255,255,.2),inset -3px -3px 7px rgba(0,0,0,.55),0 12px 26px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.5);
+  transition:box-shadow .16s,border-color .16s}
+.aba-hero + .aba-hero{margin-top:12px}
+.aba-hero-rda{background:radial-gradient(farthest-corner at 10% 6%,#12803d 0%,#0a5b2b 50%,#08421f 75%,#7fcc32 76.5%,#c9ea62 89%,#eaf78f 100%)}
+.aba-hero-rdm{background:radial-gradient(farthest-corner at 10% 6%,#155a70 0%,#0e4157 50%,#0a3043 75%,#3fb6cf 76.5%,#7fdcea 89%,#c3f1f8 100%)}
+.aba-hero.aberta{border-color:var(--lima);box-shadow:inset 3px 3px 5px rgba(255,255,255,.22),inset -3px -3px 7px rgba(0,0,0,.55),0 16px 32px rgba(0,0,0,.5),0 0 0 2px rgba(185,226,74,.5)}
+.aba-hero-rdm.aberta{border-color:#7fdcea;box-shadow:inset 3px 3px 5px rgba(255,255,255,.22),inset -3px -3px 7px rgba(0,0,0,.55),0 16px 32px rgba(0,0,0,.5),0 0 0 2px rgba(127,220,234,.5)}
+
+.aba-hero-cab{position:relative;z-index:1;display:flex;align-items:center;gap:14px;width:100%;
+  padding:18px 16px;min-height:118px;background:none;border:0;font:inherit;color:#eef9f0;text-align:left;cursor:pointer;
+  transition:transform .14s}
+.aba-hero-cab:active{transform:scale(.99)}
+.aba-hero-ico{font-size:42px;line-height:1;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.55))}
+.aba-hero-txt{flex:1;min-width:0}
+.aba-hero-sigla{display:block;font-size:30px;font-weight:900;letter-spacing:1.2px;line-height:1.05;text-shadow:0 2px 4px rgba(0,0,0,.6)}
+.aba-hero-nome{display:block;font-size:14.5px;font-weight:800;color:var(--lima-2);margin-top:2px;text-shadow:0 1px 2px rgba(0,0,0,.55)}
+.aba-hero-rdm .aba-hero-nome{color:#c3f1f8}
+.aba-hero-sub{display:block;font-size:12px;line-height:1.4;color:rgba(234,247,238,.82);margin-top:6px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.aba-hero-seta{flex-shrink:0;font-size:15px;font-weight:900;opacity:.9;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.aba-hero-mes{position:absolute;top:10px;right:12px;z-index:1;font-size:10.5px;font-weight:800;letter-spacing:.5px;
+  padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.4);color:#eaf78f;text-shadow:none;white-space:nowrap}
+.aba-hero-rdm .aba-hero-mes{color:#c3f1f8}
+
+/* ações de dentro da aba */
+.aba-hero-acoes{position:relative;z-index:1;display:grid;gap:10px;padding:0 14px 16px}
+.aba-acao{display:flex;align-items:center;gap:12px;width:100%;padding:14px 14px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.18);background:rgba(4,31,15,.5);color:#eef9f0;font:inherit;text-align:left;cursor:pointer;
+  box-shadow:0 6px 14px rgba(0,0,0,.35);transition:transform .14s,background .14s}
+.aba-hero-rdm .aba-acao{background:rgba(5,29,40,.52)}
+.aba-acao:active{transform:scale(.985)}
+.aba-acao-destaque{background:linear-gradient(135deg,#7fcc32,#b9e24a);color:#062d16;border-color:rgba(255,255,255,.5);box-shadow:0 8px 18px rgba(0,0,0,.4)}
+.aba-hero-rdm .aba-acao-destaque{background:linear-gradient(135deg,#3fb6cf,#7fdcea);color:#04222e}
+.aba-acao-ico{font-size:28px;line-height:1;flex-shrink:0}
+.aba-acao-txt{flex:1;min-width:0}
+.aba-acao-tit{display:block;font-size:15.5px;font-weight:800;line-height:1.2}
+.aba-acao-sub{display:block;font-size:11.5px;line-height:1.35;opacity:.85;margin-top:3px}
+@media (min-width:520px){
+  .aba-hero-acoes{grid-template-columns:1fr 1fr}
+  .aba-hero-sigla{font-size:34px}
+}
+@media (prefers-reduced-motion:reduce){.aba-hero-cab:active,.aba-acao:active{transform:none;opacity:.9}}
+
 /* Homologação (21/09/2026): faixa fixa no topo em teste.pmservicosagronomicos.com.br */
 .homolog-faixa{position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#1c1917;
   font:800 10.5px/1 system-ui,sans-serif;letter-spacing:.4px;text-align:center;padding:4px 8px calc(4px + env(safe-area-inset-top,0px));
   pointer-events:none;text-transform:uppercase}
 body.homolog{--homolog-h:19px}
-body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
+body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 </style>
 </head>
 <body>
@@ -1387,7 +1434,7 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=203" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=204" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1537,6 +1584,7 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
         <span id="tipo-lancamento-passo2-aba" class="nota-aba-pill rda">RDA</span>
         <button type="button" id="tipo-lancamento-trocar" class="btn btn-outline btn-sm" style="margin-left:6px" onclick="voltarEscolhaAba()">Trocar</button>
         &nbsp;Agora o comprovante — a nota não é salva sem ele.</p>
+      <p id="tipo-lancamento-dica2" style="margin:-6px 0 12px;font-size:12.5px;line-height:1.4;color:#b45309;font-weight:700"></p>
       <div class="tipo-lancamento-grid">
         <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="lancarManualComAnexo('foto')">
           <div class="tipo-lancamento-icon">📷</div>
@@ -1764,11 +1812,14 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
 
     <div class="ajuda-sec">
       <h4>🏠 Tela Início — por onde tudo começa</h4>
-      <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Petermann – Despesas</b> reúne tudo de despesas: a tela abre com três opções de lançamento…</p>
+      <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Petermann – Despesas</b> reúne tudo de despesas. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
       <ul>
-        <li>📷 <b>Lançar nota pelo QR Code</b> — para cupom fiscal (posto, mercado, restaurante). É o caminho mais rápido: quase tudo entra sozinho.</li>
-        <li>📝 <b>Lançar nota sem QR</b> — recibo, DANFE em papel, nota de serviço, PDF ou XML.</li>
-        <li>💸 <b>Registrar repasse</b> — dinheiro que você recebeu ou precisa pedir.</li>
+        <li>🍽️ <b>RDA — Alimentação</b>: refeição, lanche, café, água.</li>
+        <li>💼 <b>RDM — Despesas corporativas</b>: abastecimento, hospedagem e outros gastos de serviço.</li>
+      </ul>
+      <p>Cada aba mostra, no cantinho, <b>quanto você já lançou nela no mês</b>. Toque na aba e ela <b>abre</b>, revelando as duas formas de lançar <b>dentro dela</b>: <b>📷 Nota pelo QR Code</b> e <b>📝 Nota sem QR</b>. Como a aba já está escolhida, o app não pergunta RDA/RDM de novo — vai direto para o comprovante (e, se o fornecedor parecer da outra aba, avisa ali com o botão <b>Trocar</b>). Tocar na aba aberta fecha de novo.</p>
+      <ul>
+        <li>💸 <b>Repasse / Reembolso</b> — logo abaixo das abas: dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
@@ -1781,8 +1832,8 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
     <div class="ajuda-sec">
       <h4>📷 Lançar pelo QR Code (passo a passo)</h4>
       <ul>
-        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque em <b>Lançar nota pelo QR Code</b> e aponte a câmera para o QR do cupom. Leu? O app avisa.</li>
-        <li><b>2.</b> Escolha a aba: <b>RDA</b> ou <b>RDM</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026): se o fornecedor for conhecido, o app só mostra uma <i>sugestão</i> embaixo do título — posto costuma ser RDM · Abastecimento, restaurante RDA — mas não escolhe por você.</li>
+        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📷 Nota pelo QR Code</b>. Aponte a câmera para o QR do cupom; leu, o app avisa.</li>
+        <li><b>2.</b> A aba já é a que você abriu — o app pula essa pergunta. Se o fornecedor for conhecido e parecer da <i>outra</i> aba (posto costuma ser RDM · Abastecimento, restaurante RDA), aparece um aviso em laranja com o botão <b>Trocar</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026).</li>
         <li><b>3.</b> Toque em <b>Tirar foto</b> e fotografe o cupom inteiro (ou <b>Anexar arquivo</b>). O anexo é obrigatório — sem ele a nota não salva.</li>
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
         <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>
@@ -1795,7 +1846,7 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
     <div class="ajuda-sec">
       <h4>📝 Lançar sem QR (recibo, DANFE, NFS-e)</h4>
       <ul>
-        <li><b>1.</b> Toque em <b>Lançar nota sem QR</b> e escolha a aba <b>RDA</b> ou <b>RDM</b>.</li>
+        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📝 Nota sem QR</b>.</li>
         <li><b>2.</b> <b>Tirar foto</b> ou <b>Anexar arquivo</b> (imagem, PDF ou XML). Ou <b>Preencher primeiro, anexar depois</b>.</li>
         <li><b>3.</b> O app lê o que der da foto (valor, data, CNPJ, número). Com <b>XML</b> preenche tudo. Confira e <b>Salvar</b>.</li>
       </ul>
@@ -2135,25 +2186,25 @@ body.homolog #app-header,body.homolog .auth-wrap{margin-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=203"></script>
-<script defer src="js/db.js?v=203"></script>
-<script defer src="js/nfce.js?v=203"></script>
-<script defer src="js/sefaz.js?v=203"></script>
-<script defer src="js/brasilapi.js?v=203"></script>
-<script defer src="js/ocr.js?v=203"></script>
-<script defer src="js/recorte.js?v=203"></script>
-<script defer src="js/excel.js?v=203"></script>
-<script defer src="js/gestor.js?v=203"></script>
-<script defer src="js/frota.js?v=203"></script>
-<script defer src="js/ponto.js?v=203"></script>
-<script defer src="js/arquivos.js?v=203"></script>
-<script defer src="js/gdrive.js?v=203"></script>
-<script defer src="js/app.js?v=203"></script>
+<script defer src="js/api.js?v=204"></script>
+<script defer src="js/db.js?v=204"></script>
+<script defer src="js/nfce.js?v=204"></script>
+<script defer src="js/sefaz.js?v=204"></script>
+<script defer src="js/brasilapi.js?v=204"></script>
+<script defer src="js/ocr.js?v=204"></script>
+<script defer src="js/recorte.js?v=204"></script>
+<script defer src="js/excel.js?v=204"></script>
+<script defer src="js/gestor.js?v=204"></script>
+<script defer src="js/frota.js?v=204"></script>
+<script defer src="js/ponto.js?v=204"></script>
+<script defer src="js/arquivos.js?v=204"></script>
+<script defer src="js/gdrive.js?v=204"></script>
+<script defer src="js/app.js?v=204"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=203').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=204').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
