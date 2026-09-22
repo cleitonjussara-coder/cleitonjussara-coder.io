@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=209">
+  <link rel="manifest" href="manifest.json?v=210">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1434,7 +1434,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=209" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=210" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1824,9 +1824,9 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
-      <p>No <b>Início</b> ficam o <b>resumo do mês</b>, as <b>pendências</b> (toque para ver quais), os últimos lançamentos, o atalho <b>Perfil</b> e o botão <b>🚪 Sair da conta</b>.</p>
+      <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), os <b>últimos lançamentos</b> e o botão <b>🚪 Sair da conta</b>. Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
       <p>Para voltar: dentro de Painel, Notas, Saldo, Equipe ou Arquivos o botão fixo de baixo é <b>‹ Despesas</b> (volta um nível); nas outras telas é <b>🏠 Início</b>. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
-      <p class="ajuda-note">Gestor e admin veem ainda os painéis <b>Frota / KM</b> e <b>Ponto</b> ao lado — o colaborador não.</p>
+      <p class="ajuda-note">Gestor e admin veem ainda os atalhos <b>Frota / KM</b> e <b>Ponto</b> na fila <b>Ir para</b> — o colaborador não.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -1892,7 +1892,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 
     <div class="ajuda-sec ajuda-gestor">
       <h4>🚗 Frota / KM dos veículos</h4>
-      <p>Em <b>Início → Frota / KM</b>, toque em <b>Registrar KM</b>: escolha o veículo, a data e digite o <b>odômetro</b> (o número do painel). Foto do painel é opcional. Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo e nos abastecimentos.</p>
+      <p>Em <b>Início → Ir para → Frota / KM</b>, toque em <b>Registrar KM</b>: escolha o veículo, a data e digite o <b>odômetro</b> (o número do painel). Foto do painel é opcional. Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo e nos abastecimentos.</p>
       <p>O app calcula o <b>km rodado no mês</b> por veículo pelas leituras. Se digitar um número menor que a última leitura, ele avisa. O <b>gestor</b> vê todos os veículos, quem dirigiu e cadastra os veículos (placa, modelo, responsável).</p>
       <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O painel mostra os últimos dados baixados.</p>
       <p>Na tela da Frota há o <b>dashboard</b> (km no mês/ano, evolução, km por veículo e por motorista) e os botões <b>📗 Planilha de controle (Excel)</b> — abas Veículos × mês, Motoristas × mês e todas as Leituras — e <b>CSV do mês</b>.</p>
@@ -1900,7 +1900,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 
     <div class="ajuda-sec ajuda-gestor">
       <h4>⏱️ Ponto de presença</h4>
-      <p>Em <b>Início → Ponto</b>, um botão só: ele diz qual é a próxima marcação — <b>Entrada</b>, <b>Saída p/ intervalo</b>, <b>Volta</b>, <b>Saída</b>. A hora é a do servidor; sem internet a marcação fica guardada com a hora do aparelho e sobe depois (⏳).</p>
+      <p>Em <b>Início → Ir para → Ponto</b>, um botão só: ele diz qual é a próxima marcação — <b>Entrada</b>, <b>Saída p/ intervalo</b>, <b>Volta</b>, <b>Saída</b>. A hora é a do servidor; sem internet a marcação fica guardada com a hora do aparelho e sobe depois (⏳).</p>
       <p><b>Horas</b>: jornada de 8h (seg–sex) e 4h (sáb). O que passar conta como <b>extra 50%</b>; <b>domingos e feriados</b> contam inteiros como <b>extra 100%</b>. Esqueceu de bater? <b>Corrigir</b> vale para hoje e ontem; dias anteriores, o gestor corrige.</p>
       <p>O <b>gestor</b> vê horas por colaborador, o calendário do mês, cadastra os <b>feriados</b> (＋ Feriado) e gera a <b>planilha de ponto</b> (Resumo, Espelho e Dias) ou o CSV.</p>
     </div>
@@ -2186,25 +2186,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=209"></script>
-<script defer src="js/db.js?v=209"></script>
-<script defer src="js/nfce.js?v=209"></script>
-<script defer src="js/sefaz.js?v=209"></script>
-<script defer src="js/brasilapi.js?v=209"></script>
-<script defer src="js/ocr.js?v=209"></script>
-<script defer src="js/recorte.js?v=209"></script>
-<script defer src="js/excel.js?v=209"></script>
-<script defer src="js/gestor.js?v=209"></script>
-<script defer src="js/frota.js?v=209"></script>
-<script defer src="js/ponto.js?v=209"></script>
-<script defer src="js/arquivos.js?v=209"></script>
-<script defer src="js/gdrive.js?v=209"></script>
-<script defer src="js/app.js?v=209"></script>
+<script defer src="js/api.js?v=210"></script>
+<script defer src="js/db.js?v=210"></script>
+<script defer src="js/nfce.js?v=210"></script>
+<script defer src="js/sefaz.js?v=210"></script>
+<script defer src="js/brasilapi.js?v=210"></script>
+<script defer src="js/ocr.js?v=210"></script>
+<script defer src="js/recorte.js?v=210"></script>
+<script defer src="js/excel.js?v=210"></script>
+<script defer src="js/gestor.js?v=210"></script>
+<script defer src="js/frota.js?v=210"></script>
+<script defer src="js/ponto.js?v=210"></script>
+<script defer src="js/arquivos.js?v=210"></script>
+<script defer src="js/gdrive.js?v=210"></script>
+<script defer src="js/app.js?v=210"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=209').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=210').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

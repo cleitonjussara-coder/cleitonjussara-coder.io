@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 209;
+const APP_BUILD = 210;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1765,38 +1765,19 @@ function renderInicio() {
         <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota e repasse · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
       </span>
     </button>
-    <div class="pnl-linha">
-      ${MODULOS_EXTRAS && _ehGestorOuAdmin() ? `
-      <button class="pnl pnl-mini" onclick="switchView('frota')">
-        <span class="pnl-conteudo"><span class="pnl-ico">🚗</span><span class="pnl-tit">Frota / KM</span><span class="pnl-sub">Odômetro dos veículos.</span></span>
-      </button>
-      <button class="pnl pnl-mini" onclick="switchView('ponto')">
-        <span class="pnl-conteudo"><span class="pnl-ico">⏱️</span><span class="pnl-tit">Ponto</span><span class="pnl-sub">Entrada, saída, extras.</span></span>
-      </button>` : ''}
-    </div>
+    ${!_ehContabilidade() && pendTotal ? `
+    <div class="ini-dica" style="cursor:pointer" onclick="switchView('home')">⚠️ <b>${pendTotal} pendência${pendTotal === 1 ? '' : 's'}</b>: ${esc(pendTxt)} — toque para ver no Painel.</div>` : ''}
 
-    ${_ehContabilidade() ? '' : `
-    <div class="ini-titulo">${MESES[filMes-1]} ${filAno}</div>
-    <div class="ini-resumo">
-      <button class="ini-kpi" onclick="irParaNotas()">
-        <div class="ini-kpi-lbl">Notas do mês</div>
-        <div class="ini-kpi-val">${A.ns.length}</div>
-        <div class="ini-kpi-sub">${brl(A.gasto)} em despesas</div>
-      </button>
-      ${(() => {   // CV (21/09/2026): em vez de saldo, o reembolso a receber no ano
-        if (pendTotal) return `<button class="ini-kpi alerta" onclick="switchView('home')"><div class="ini-kpi-lbl">Pendências</div><div class="ini-kpi-val">${pendTotal}</div><div class="ini-kpi-sub">${esc(pendTxt)}</div></button>`;
-        if (_ehCV()) {
-          const rsA = repasses.filter(r => !r.deleted && r.ano === filAno);
-          const aRec = rsA.filter(_repasseEhPedido).reduce((a, r) => a + Number(r.valor || 0), 0) - rsA.filter(_repasseEhRecebido).reduce((a, r) => a + Number(r.valor || 0), 0);
-          return `<button class="ini-kpi ${aRec > 0 ? 'alerta' : ''}" onclick="switchView('saldo')"><div class="ini-kpi-lbl">Reembolso a receber</div><div class="ini-kpi-val">${brl(aRec)}</div><div class="ini-kpi-sub">registrado − recebido em ${filAno}</div></button>`;
-        }
-        return `<button class="ini-kpi" onclick="switchView('saldo')"><div class="ini-kpi-lbl">Saldo</div><div class="ini-kpi-val">${brl(A.recebido - A.gasto)}</div><div class="ini-kpi-sub">recebido − gasto no mês</div></button>`;
-      })()}
-    </div>`}
-
+    <!-- 22/09/2026: o Início ficou com o painel de Despesas e os atalhos.
+         Os cartões grandes de Frota/Ponto e os números do mês saíram daqui
+         (pedido do Cleiton): Frota e Ponto viraram atalhos em "Ir para" e os
+         números continuam no Painel e no Saldo, de onde nunca saíram. -->
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
       <button class="ini-ir-btn" onclick="switchView('perfil')"><span class="ini-ir-ico">👤</span><span class="ini-ir-lbl">Perfil</span><span class="ini-ir-sub">conta, backup, ajuda</span></button>
+      ${MODULOS_EXTRAS && _ehGestorOuAdmin() ? `
+      <button class="ini-ir-btn" onclick="switchView('frota')"><span class="ini-ir-ico">🚗</span><span class="ini-ir-lbl">Frota / KM</span><span class="ini-ir-sub">odômetro dos veículos</span></button>
+      <button class="ini-ir-btn" onclick="switchView('ponto')"><span class="ini-ir-ico">⏱️</span><span class="ini-ir-lbl">Ponto</span><span class="ini-ir-sub">entrada, saída, extras</span></button>` : ''}
     </div>
 
     <button class="btn btn-danger-outline btn-full" style="margin-top:6px;min-height:48px" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair da conta</button>
@@ -1804,7 +1785,7 @@ function renderInicio() {
     ${_ehContabilidade() ? '' : ultimas.length ? `
     <div class="ini-titulo">Últimos lançamentos</div>
     <div class="notas-list">${ultimas.map(n => cardNotaHTML(n, 'inithumb-')).join('')}</div>` : `
-    <div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Lançar nota pelo QR Code</b> e aponte para o QR do cupom — é o jeito mais rápido.</div>`}
+    <div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Petermann – Despesas</b>, escolha a aba <b>RDA</b> ou <b>RDM</b> e lance pelo <b>QR Code</b> — é o jeito mais rápido.</div>`}
   </div>`;
 
   if (ultimas.length) _carregarMiniaturas(ultimas, 'inithumb-').catch(() => {});
