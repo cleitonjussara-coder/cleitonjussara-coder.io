@@ -158,6 +158,7 @@ window.Gestor = (() => {
               </div>
               <span class="role-pill role-${m.role}">${m.role}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
               ${m.exclusao_pedida_por ? `<span class="role-pill" style="background:#fde2e2;color:#9b1c1c" title="Exclusão pedida por ${esc(m.exclusao_pedida_por_nome||'')} — falta a 2ª confirmação">⏳ exclusão</span>` : ''}
+              ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
               <span class="colab-seta">›</span>
             </div>
@@ -281,8 +282,18 @@ window.Gestor = (() => {
           <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${esc(colab.foto_path||'')}" data-nome="${esc(colab.nome||colab.email)}" data-sub="${esc(colab.email)} · ${esc(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
           <div class="cdet-email">${esc(colab.email)}</div>
-          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>'}${colab.nucleo ? `<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">📍 ${esc(colab.nucleo)}</span>` : ''}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}</div>
+          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>'}${colab.nucleo ? `<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">📍 ${esc(colab.nucleo)}</span>` : ''}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}${('confirmado_em' in colab) && !colab.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e">🙋 aguardando liberação</span>' : ''}</div>
         </div>
+
+        ${podeEditar && ('confirmado_em' in colab) && !colab.confirmado_em ? `
+        <div class="cdet-pendente">
+          <b>🙋 Cadastro novo aguardando liberação</b>
+          <p>${esc(colab.nome || colab.email)} criou a conta ${({ convite: 'pelo link de convite', google: 'entrando com o Google', livre: 'pelo cadastro do app' })[colab.criado_via] || 'pelo app'}${colab.created_at ? ' em ' + new Date(colab.created_at).toLocaleDateString('pt-BR') : ''} e só usa o app depois que você confirmar.</p>
+          <div class="cdet-pendente-btns">
+            <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${colab.id}', true, this)">✅ Confirmar entrada</button>
+            <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${colab.id}', false, this)">🚫 Recusar</button>
+          </div>
+        </div>` : ''}
 
         <div class="cdet-acoes">
           ${colab.regime === 'cv' ? `

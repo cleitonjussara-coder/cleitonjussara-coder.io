@@ -39,16 +39,21 @@ class AuthController extends Controller
             abort_unless($convite && $convite->valido(), 422, 'Convite inválido, usado ou vencido — peça outro ao gestor');
         }
 
+        /* 22/09/2026: TODO cadastro novo nasce pendente — inclusive o feito
+           por link de convite ("de todos", decisão do Cleiton). Gestor e admin
+           confirmam a entrada pela Equipe; até lá o token só abre a tela de
+           espera (App\Http\Middleware\ExigeConfirmacao). */
         $user = Colaborador::create([
             'id' => (string) Str::uuid(),
             'nome' => trim($d['nome'] ?? '') ?: Str::before($d['email'], '@'),
             'email' => strtolower($d['email']),
             'password' => $d['password'],
             'role' => $convite?->role ?? 'colaborador',
-        ]);
+        ] + (Colaborador::temConfirmacao() ? ['criado_via' => $convite ? 'convite' : 'livre', 'confirmado_em' => null] : []));
         if ($convite) {
             ConviteController::consumir($convite->token, $user);
         }
+        ColaboradorController::avisarEntradaPendente($user);
 
         return $this->sessao($user, 201);
     }
@@ -241,7 +246,8 @@ class AuthController extends Controller
                 'email' => $email,
                 'google_id' => $info['sub'],
                 'email_verified_at' => now(),
-            ]);
+            ] + (Colaborador::temConfirmacao() ? ['criado_via' => 'google', 'confirmado_em' => null] : []));
+            ColaboradorController::avisarEntradaPendente($user);
         } elseif (! $user->google_id) {
             $user->forceFill(['google_id' => $info['sub'], 'email_verified_at' => $user->email_verified_at ?? now()])->save();
         }

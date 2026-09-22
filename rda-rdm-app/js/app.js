@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 213;
+const APP_BUILD = 214;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -670,6 +670,15 @@ async function init() {
 }
 
 async function onLogin(authUser) {
+  /* Entrada ainda não confirmada pelo gestor (22/09/2026): não abre o app —
+     a API recusaria tudo de qualquer jeito (403 pendente). */
+  if (authUser && 'confirmado_em' in authUser && !authUser.confirmado_em) {
+    user = authUser;
+    setLoading(false);
+    showTela('auth');
+    renderAuth('espera');
+    return;
+  }
   setLoading(true);
   try {
     await DB.open();
@@ -1063,6 +1072,26 @@ function renderAuth(mode='login') {
     return;
   }
 
+  /* Cadastro novo aguardando o gestor (22/09/2026): a conta existe e o token
+     é válido, mas a API só responde /me até alguém confirmar a entrada. */
+  if (mode === 'espera') {
+    const nome = (user?.nome || sb?.auth?.user?.nome || '').split(' ')[0];
+    $('auth-body').innerHTML = `
+      <h2 class="auth-title">⏳ Aguardando liberação</h2>
+      <p class="auth-texto">
+        ${nome ? esc(nome) + ', s' : 'S'}eu cadastro foi criado e já chegou para o gestor.
+        Assim que ele confirmar a sua entrada, o app libera sozinho — normalmente no mesmo dia.
+      </p>
+      <p class="auth-texto" style="opacity:.85">
+        Se precisar, avise o gestor de que você se cadastrou como
+        <b>${esc(user?.email || sb?.auth?.user?.email || '')}</b>.
+      </p>
+      <button class="btn btn-primary btn-full" id="a-btn-espera" onclick="conferirLiberacao()">🔄 Já fui liberado, conferir</button>
+      <p class="auth-switch"><a onclick="logout()">Sair desta conta</a></p>
+      ${rodape}`;
+    return;
+  }
+
   if (mode === 'nova-senha') {
     $('auth-body').innerHTML = `
       <h2 class="auth-title">Nova senha</h2>
@@ -1104,6 +1133,21 @@ function renderAuth(mode='login') {
 }
 
 /* Modo local sem autenticação — acessa QR/OCR sem depender do Supabase */
+/* "Já fui liberado, conferir": relê o próprio perfil no servidor e entra se
+   o gestor já tiver confirmado (22/09/2026). */
+async function conferirLiberacao() {
+  if (!navigator.onLine) { toast('Sem conexão — tente de novo com internet', 'err'); return; }
+  const b = $('a-btn-espera'); if (b) { b.disabled = true; b.textContent = 'Conferindo…'; }
+  try {
+    const u = await sb.auth.me();
+    if (u?.confirmado_em) { toast('Entrada liberada! Bem-vindo 🎉'); await onLogin(u); return; }
+    toast('Ainda não foi liberado. O gestor já foi avisado.', 'err');
+  } catch (e) {
+    toast(e.status === 401 ? 'Sua conta foi desativada. Fale com o gestor.' : (e.message || 'Não consegui conferir agora'), 'err');
+  }
+  if (b) { b.disabled = false; b.textContent = '🔄 Já fui liberado, conferir'; }
+}
+
 async function usarSemConta() {
   $('demo-banner').style.display = 'flex';
   await DB.open();
@@ -1495,6 +1539,19 @@ function _notificacoes() {
         sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
       }));
   }
+  /* Cadastro novo aguardando liberação (22/09/2026). Não é dispensável: some
+     quando o gestor confirma ou recusa. */
+  if (_ehGestorOuAdmin()) {
+    const VIA = { convite: 'pelo link de convite', google: 'entrando com o Google', livre: 'pelo cadastro do app' };
+    Object.values(equipePorId)
+      .filter(c => c && c.ativo !== false && 'confirmado_em' in c && !c.confirmado_em)
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(c => out.push({
+        id: 'novo:' + c.id, tipo: 'novo', userId: c.id,
+        titulo: `${c.nome || c.email} se cadastrou e aguarda liberação`,
+        sub: `${c.email || ''} · ${VIA[c.criado_via] || 'pelo app'}${c.created_at ? ' em ' + fmtDataBR(String(c.created_at).slice(0, 10)) : ''} · papel: ${PAPEL_NOME[c.role] || c.role || 'colaborador'}`,
+      }));
+  }
   const vistos = _notifVistos();
   /* Saldo devedor acima do limite (22/09/2026): a empresa deve mais de
      R$ 1.500 a alguém. O id carrega a faixa do valor (centenas), então o
@@ -1541,11 +1598,14 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'devedor' ? `<div class="notif-acoes">
+        ${it.tipo === 'novo' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
+          <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
+        </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
           ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
           <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
         </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
@@ -1563,6 +1623,26 @@ function abrirNotificacoes() {
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
 }
+/* Gestor confirma (ou recusa) a entrada de um cadastro novo (22/09/2026).
+   Recusar desativa a conta e derruba as sessões abertas no aparelho dela. */
+async function confirmarEntrada(id, aceita, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para confirmar', 'err'); return; }
+  const quem = equipePorId[id]?.nome || 'o colaborador';
+  if (!confirm(aceita
+    ? `Liberar ${quem} para usar o app?`
+    : `Recusar a entrada de ${quem}?\n\nA conta é desativada na hora. Dá para reativar depois na Equipe.`)) return;
+  if (btn) btn.disabled = true;
+  try {
+    const c = await sb.colaboradores.confirmar(id, aceita);
+    if (c?.id) equipePorId[c.id] = c;
+    toast(aceita ? `${quem} liberado ✅` : `Entrada de ${quem} recusada`);
+    document.getElementById('notif-overlay')?.remove();
+    await atualizarNotificacoes();
+    abrirNotificacoes();
+    if (viewAtual === 'equipe') renderEquipe();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+
 async function marcarPedidoPago(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
   const r = repassesEquipe.find(x => x.id === id);

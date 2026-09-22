@@ -101,6 +101,58 @@ class ColaboradorController extends Controller
     }
 
     /**
+     * POST /colaboradores/{id}/confirmar — libera a entrada de quem acabou de
+     * se cadastrar (22/09/2026). Só gestor/admin. Idempotente: confirmar de
+     * novo não muda quem confirmou nem quando.
+     * body {aceita:false} recusa — desativa a conta e derruba as sessões.
+     */
+    public function confirmar(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin confirma a entrada de um colaborador');
+        $alvo = Colaborador::findOrFail($id);
+        $aceita = $r->boolean('aceita', true);
+
+        if (! $aceita) {
+            $alvo->forceFill(['ativo' => false, 'desativado_em' => now()])->save();
+            $alvo->tokens()->delete();
+            Log::info('entrada recusada', ['alvo' => $alvo->email, 'por' => $u->email]);
+
+            return response()->json($this->comPedido($alvo->fresh()));
+        }
+
+        if (! $alvo->confirmado()) {
+            $alvo->forceFill(['confirmado_em' => now(), 'confirmado_por' => $u->id, 'ativo' => true, 'desativado_em' => null])->save();
+            Log::info('entrada confirmada', ['alvo' => $alvo->email, 'por' => $u->email, 'via' => $alvo->criado_via]);
+        }
+
+        return response()->json($this->comPedido($alvo->fresh()));
+    }
+
+    /**
+     * Aviso de cadastro novo aguardando liberação. O sino do gestor já mostra
+     * pelos dados que o app baixa; o e-mail é para o caso de ninguém abrir o
+     * app — a pessoa fica travada até alguém confirmar. Nunca derruba o
+     * cadastro se o envio falhar.
+     */
+    public static function avisarEntradaPendente(Colaborador $novo): void
+    {
+        try {
+            $via = ['convite' => 'pelo link de convite', 'google' => 'entrando com o Google', 'livre' => 'pelo cadastro do app'][$novo->criado_via] ?? 'pelo app';
+            app(\App\Services\AlertaErro::class)->avisar(
+                'Novo cadastro aguardando liberação: '.$novo->nome,
+                "{$novo->nome} ({$novo->email}) criou uma conta {$via} em ".now(\App\Services\PontoCalculo::TZ)->format('d/m/Y H:i')."."
+                ."\n\nEle NÃO consegue usar o app até um gestor ou admin confirmar a entrada:"
+                ."\nabra o app → Equipe → o cartão da pessoa aparece como \"aguardando liberação\" → Confirmar entrada."
+                ."\n\nSe você não reconhece esse cadastro, use Recusar: a conta é desativada na hora.",
+                'entrada-pendente-'.$novo->id,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('aviso de entrada pendente falhou: '.$e->getMessage());
+        }
+    }
+
+    /**
      * POST /colaboradores/{id}/excluir
      * 1ª chamada (gestor/admin): registra o pedido → {status:'aguardando'}.
      * 2ª chamada por OUTRO gestor/admin: apaga tudo → {status:'excluido', …}.

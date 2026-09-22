@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=213">
+  <link rel="manifest" href="manifest.json?v=214">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1356,6 +1356,12 @@ html{-webkit-text-size-adjust:100%}
 }
 
 
+/* cadastro novo aguardando liberação, no detalhe da Equipe (22/09/2026) */
+.cdet-pendente{background:#fffbeb;border:1.5px solid #fbbf24;border-radius:12px;padding:12px 14px;margin:0 0 12px;color:#7c2d12}
+.cdet-pendente b{font-size:13.5px}
+.cdet-pendente p{font-size:12.5px;line-height:1.5;margin:4px 0 0;color:#7c2d12}
+.cdet-pendente-btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
 /* ─── Resumo de gastos / saldo devedor no hub (22/09/2026) ─────────
    "Para ter ideia do que tem para receber e ter um controle." */
 .res-card{width:100%;text-align:left;border-radius:14px;padding:12px 14px;cursor:pointer;
@@ -1475,7 +1481,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=213" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=214" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2005,6 +2011,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
         <li><b>Contabilidade</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início e o Petermann – Despesas dela mostram só Equipe e Arquivos.</li>
       </ul>
       <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contabilidade, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
+      <p class="ajuda-gestor"><b>🙋 Liberar cadastro novo (22/09/2026):</b> ninguém entra sozinho. Quem cria conta — pelo cadastro do app, pelo link de convite ou entrando com o Google — fica na tela <b>"Aguardando liberação"</b> e não lança nada até um gestor ou admin confirmar. Você é avisado de três formas: a notificação <b>🙋 no sino</b> (com <b>✅ Confirmar entrada</b> e <b>🚫 Recusar</b>), a etiqueta laranja <b>aguardando liberação</b> no cartão da pessoa na <b>Equipe</b>, e um <b>e-mail</b> para o caso de você não abrir o app. Confirmando, o app dela libera na hora (ela pode tocar em "Já fui liberado, conferir"); recusando, a conta é desativada na mesma hora — e dá para reativar depois pela Equipe. Fica registrado no cadastro <b>quem confirmou e quando</b>, e por qual caminho a pessoa entrou.</p>
 
       <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
       <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (quem não lançou nada no período começa desmarcado; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, recebido, saldo e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 Planilhas</b> gera as planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um) de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>
@@ -2230,25 +2237,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=213"></script>
-<script defer src="js/db.js?v=213"></script>
-<script defer src="js/nfce.js?v=213"></script>
-<script defer src="js/sefaz.js?v=213"></script>
-<script defer src="js/brasilapi.js?v=213"></script>
-<script defer src="js/ocr.js?v=213"></script>
-<script defer src="js/recorte.js?v=213"></script>
-<script defer src="js/excel.js?v=213"></script>
-<script defer src="js/gestor.js?v=213"></script>
-<script defer src="js/frota.js?v=213"></script>
-<script defer src="js/ponto.js?v=213"></script>
-<script defer src="js/arquivos.js?v=213"></script>
-<script defer src="js/gdrive.js?v=213"></script>
-<script defer src="js/app.js?v=213"></script>
+<script defer src="js/api.js?v=214"></script>
+<script defer src="js/db.js?v=214"></script>
+<script defer src="js/nfce.js?v=214"></script>
+<script defer src="js/sefaz.js?v=214"></script>
+<script defer src="js/brasilapi.js?v=214"></script>
+<script defer src="js/ocr.js?v=214"></script>
+<script defer src="js/recorte.js?v=214"></script>
+<script defer src="js/excel.js?v=214"></script>
+<script defer src="js/gestor.js?v=214"></script>
+<script defer src="js/frota.js?v=214"></script>
+<script defer src="js/ponto.js?v=214"></script>
+<script defer src="js/arquivos.js?v=214"></script>
+<script defer src="js/gdrive.js?v=214"></script>
+<script defer src="js/app.js?v=214"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=213').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=214').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

@@ -13,6 +13,7 @@ use App\Http\Controllers\NotaController;
 use App\Http\Controllers\PontoController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\RepasseController;
+use App\Http\Middleware\ExigeConfirmacao;
 use App\Services\GoogleOAuth;
 use Illuminate\Support\Facades\Route;
 
@@ -43,7 +44,7 @@ Route::prefix('auth')->group(function () {
 Route::get('/fotos/{path}', [FotoController::class, 'show'])->where('path', '.*')->name('fotos.show');
 
 /* ── com token (Sanctum) ───────────────────────────────────── */
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateMe']);
@@ -57,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/colaboradores/{id}', [ColaboradorController::class, 'update']);
     /* desativar / excluir colaborador (20/09/2026) */
     Route::patch('/colaboradores/{id}/ativo', [ColaboradorController::class, 'ativo']);
+    Route::post('/colaboradores/{id}/confirmar', [ColaboradorController::class, 'confirmar']);   // libera entrada de cadastro novo (22/09/2026)
     Route::post('/colaboradores/{id}/excluir', [ColaboradorController::class, 'excluir']);
     Route::delete('/colaboradores/{id}/excluir', [ColaboradorController::class, 'cancelarExclusao']);
 

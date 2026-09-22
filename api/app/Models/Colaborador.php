@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Notifications\RedefinirSenha;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -32,7 +33,7 @@ class Colaborador extends Authenticatable
     /* regime (21/09/2026): rdm_rda = recebe dinheiro em conta; cv = cartão corporativo */
     public const REGIMES = ['rdm_rda', 'cv'];
 
-    protected $fillable = ['id', 'nome', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em'];
+    protected $fillable = ['id', 'nome', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via'];
 
     protected $hidden = ['password', 'remember_token', 'google_id'];
 
@@ -48,7 +49,37 @@ class Colaborador extends Authenticatable
             'ativo' => 'boolean',
             'desativado_em' => 'datetime',
             'exclusao_pedida_em' => 'datetime',
+            'confirmado_em' => 'datetime',
         ];
+    }
+
+    /* A coluna existe no banco? (memorizado). Protege o período entre
+       publicar a API nova e a migração rodar: sem isto, o INSERT do cadastro
+       quebraria com "no such column". */
+    public static function temConfirmacao(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('colaboradores', 'confirmado_em');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
+    public function confirmado(): bool
+    {
+        /* Se a coluna ainda não existe no banco (API nova publicada antes da
+           migração rodar), o atributo nem aparece: ninguém pode ser tratado
+           como pendente, senão a equipe inteira ficaria trancada fora do app. */
+        if (! array_key_exists('confirmado_em', $this->getAttributes())) {
+            return true;
+        }
+
+        return $this->confirmado_em !== null;
     }
 
     public function notas(): HasMany

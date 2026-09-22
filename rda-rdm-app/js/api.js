@@ -204,6 +204,8 @@ window.API = (() => {
     ativo: (id, ativo) => req('PATCH', `/colaboradores/${id}/ativo`, { body: { ativo } }),
     excluir: id => req('POST', `/colaboradores/${id}/excluir`, { body: {}, timeout: 120_000 }),
     cancelarExclusao: id => req('DELETE', `/colaboradores/${id}/excluir`),
+    /* 22/09/2026: gestor confirma (ou recusa) a entrada de cadastro novo */
+    confirmar: (id, aceita = true) => req('POST', `/colaboradores/${id}/confirmar`, { body: { aceita } }),
   };
 
   /* params: { since, ano, mes, user_id, deleted: '0'|'1', fields: 'a,b' } */
