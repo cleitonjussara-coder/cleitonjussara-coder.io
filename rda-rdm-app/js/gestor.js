@@ -582,11 +582,11 @@ window.Gestor = (() => {
     const eu = currentUser || window.user || {};
     const ehAdmin = eu.role === 'admin';
     const souEu = colab.id === eu.id;
-    /* 22/09/2026: o gestor edita nome, papel e regime dos OUTROS, inclusive
-       promover a administrador (decisão do Cleiton). A única trava que ficou,
-       repetida no servidor: quem já é admin só é editado por outro admin. */
-    const alvoAdmin = colab.role === 'admin';
-    const podeEditar = !souEu && (ehAdmin || eu.role === 'gestor') && (ehAdmin || !alvoAdmin);
+    /* Gestor é o cargo maior da empresa; "admin" é o papel técnico de quem
+       cuida do sistema (22/09/2026). Os dois editam nome, papel e regime de
+       QUALQUER um — inclusive o gestor rebaixar um admin. Só não se mexe no
+       próprio papel. O servidor repete a mesma regra. */
+    const podeEditar = !souEu && (ehAdmin || eu.role === 'gestor');
     const podeRegime = podeEditar;
     const papeis = ROLES;
     const inativo = colab.ativo === false;
@@ -607,9 +607,8 @@ window.Gestor = (() => {
           <select class="inp" id="g-role" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
             ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
           </select>
-          ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor ou ao administrador.</p>'
-            : alvoAdmin && !ehAdmin ? '<p style="font-size:12px;color:#b45309;line-height:1.4;margin-top:4px">Perfil de <b>administrador</b>: só outro administrador edita.</p>'
-            : '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Quem vira <b>administrador</b> passa a editar qualquer perfil — inclusive o seu — e a apagar lançamento em definitivo.</p>'}
+          ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
+            : '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo e ainda apaga lançamento em definitivo.</p>'}
           <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
@@ -658,10 +657,13 @@ window.Gestor = (() => {
       const role   = ov.querySelector('#g-role').value;
       const regime = ov.querySelector('#g-regime')?.value;
       const dados  = { nome, role, regime };   // o servidor filtra o que este papel pode gravar
-      /* promover a admin é o único que não tem volta pela tela de quem promove:
-         daí em diante só outro admin edita essa pessoa. Confirma antes. */
-      if (role === 'admin' && colab.role !== 'admin' &&
-          !confirm(`Tornar ${colab.nome || colab.email} ADMINISTRADOR?\n\nEle passa a poder editar qualquer perfil (inclusive o seu), mudar papéis e apagar lançamento em definitivo.\n\nDepois disso, só outro administrador consegue alterar o cadastro dele.`)) return;
+      /* Entrar ou sair de "administrador" mexe em quem mantém o sistema:
+         confirma antes, dos dois lados. */
+      const quem = colab.nome || colab.email;
+      if (role !== colab.role) {
+        if (role === 'admin' && !confirm(`Tornar ${quem} ADMINISTRADOR?\n\nÉ o papel técnico de quem mantém o app: passa a editar qualquer perfil, mudar papéis e apagar lançamento em definitivo.`)) return;
+        if (colab.role === 'admin' && !confirm(`Tirar o ADMINISTRADOR de ${quem}?\n\nEle deixa de manter o sistema e passa a ${PAPEL_TXT[role] ? PAPEL_TXT[role].split(' — ')[0].toLowerCase() : role}. Dá para devolver o papel depois.`)) return;
+      }
       try { await sb.colaboradores.update(colab.id, dados); }
       catch (e) { alert('Erro: ' + e.message); return; }
       close(); onSaved();

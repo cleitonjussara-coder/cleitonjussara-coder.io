@@ -53,11 +53,12 @@ class ColaboradorController extends Controller
     {
         $u = $r->user();
         $alvo = Colaborador::findOrFail($id);
-        /* 22/09/2026: o gestor passou a editar também o PAPEL dos outros (antes
-           só o regime). Duas travas continuam de pé, para que quem foi promovido
-           não possa tomar o sistema de quem promoveu: gestor não mexe no perfil
-           de um admin e não promove ninguém a admin. Cada um edita o próprio
-           nome; ninguém muda o próprio papel. */
+        /* Quem manda na empresa é o GESTOR; "admin" é o papel técnico de quem
+           cuida do sistema (22/09/2026). Por isso gestor e admin editam nome,
+           papel, núcleo e regime de qualquer um — inclusive o gestor rebaixar
+           um admin, que é como o dono retoma o controle quando o sistema sair
+           da fase de teste. A única regra que sobra: ninguém muda o próprio
+           papel (nem o regime); o próprio nome, sim. */
         $gereOutro = $id !== $u->id && $u->gerencia();
         abort_unless($id === $u->id || $gereOutro, 403, 'Só gestor ou admin edita outros perfis');
 
@@ -67,12 +68,7 @@ class ColaboradorController extends Controller
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
         ]);
-        if ($gereOutro && ! $u->ehAdmin()) {
-            /* 22/09/2026, decisão do Cleiton: o gestor PROMOVE a administrador.
-               Continua sem editar o perfil de quem já é admin — para mexer num
-               administrador, é outro administrador. */
-            abort_if($alvo->ehAdmin(), 403, 'Só um administrador edita o perfil de outro administrador');
-        } elseif (! $u->ehAdmin()) {
+        if (! $gereOutro && ! $u->ehAdmin()) {
             unset($d['role'], $d['nucleo'], $d['regime']);      // ninguém se promove nem muda o próprio regime
         }
         if (isset($d['nome'])) {
