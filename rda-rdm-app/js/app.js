@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 210;
+const APP_BUILD = 211;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1496,6 +1496,20 @@ function _notificacoes() {
       }));
   }
   const vistos = _notifVistos();
+  /* Saldo devedor acima do limite (22/09/2026): a empresa deve mais de
+     R$ 1.500 a alguém. O id carrega a faixa do valor (centenas), então o
+     aviso volta se a dívida crescer depois de dispensado. */
+  if (_ehGestorOuAdmin()) {
+    _equipeDevedora().forEach(c => {
+      const id = `devedor:${c.id}:${Math.floor(c.valor / 100)}`;
+      if (vistos.has(id)) return;
+      out.push({
+        id, tipo: 'devedor', userId: c.id,
+        titulo: `${c.nome}: a empresa está devendo ${brl(c.valor)}`,
+        sub: `Acima do limite de ${brl(LIMITE_DEVEDOR)} — gastos sem repasse acumulados até ${MESES[filMes - 1]}/${filAno}.`,
+      });
+    });
+  }
   const lim = Date.now() - 30 * 86400_000;
   repasses.filter(r => _repasseEhPedido(r) && r.atendido_em && !vistos.has(r.id) && new Date(r.atendido_em).getTime() > lim)
     .forEach(r => out.push({
@@ -1527,11 +1541,14 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'pedido' ? `<div class="notif-acoes">
+        ${it.tipo === 'devedor' ? `<div class="notif-acoes">
+          ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
+        </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="marcarPedidoPago('${it.id}', this)">✅ Marcar como pago</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.rep.user_id}'), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button></div>`}
@@ -1623,6 +1640,98 @@ const ABAS_DESPESA = {
 let _abaDespesa = null;          // 'RDA' | 'RDM' | null — aba aberta no hub
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
 
+/* ─── Resumo de gastos e saldo devedor (22/09/2026) ──────────────
+   Pedido do Cleiton: dentro de Despesas, um resumo de RDA e RDM "para ter
+   ideia do que tem para receber e ter um controle"; e, quando a empresa
+   estiver devendo mais de R$ 1.500 a alguém, um alerta para o gestor.
+
+   Saldo devedor = o que a EMPRESA deve ao colaborador, acumulado até o mês:
+     • regime RDM/RDA → gastos − repasses recebidos;
+     • regime CV      → reembolsos registrados − reembolsos recebidos
+       (as notas do cartão não entram: quem pagou foi a empresa).
+   Positivo = a empresa deve; negativo = o colaborador está com dinheiro
+   da empresa para gastar. */
+const LIMITE_DEVEDOR = 1500;
+
+function _devedorDe(ns, rs, mes, ano, ehCv) {
+  const k = ano * 12 + mes;
+  const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k;
+  const recebido = _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
+  if (ehCv) return _soma(rs.filter(r => ate(r) && _repasseEhPedido(r))) - recebido;
+  return _soma(ns.filter(ate)) - recebido;
+}
+
+/* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
+   no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
+function _equipeDevedora(mes = filMes, ano = filAno) {
+  if (!_ehGestorOuAdmin()) return [];
+  const porUser = {};
+  const junta = (arr, campo) => arr.forEach(o => {
+    if (o.deleted || !o.user_id) return;
+    (porUser[o.user_id] = porUser[o.user_id] || { ns: [], rs: [] })[campo].push(o);
+  });
+  junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs');
+  if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
+  return Object.entries(porUser)
+    .map(([id, d]) => ({
+      id,
+      nome: (id === user?.id ? user?.nome : equipePorId[id]?.nome) || 'Colaborador',
+      valor: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(id === user?.id ? user : equipePorId[id])),
+    }))
+    .filter(c => c.valor > LIMITE_DEVEDOR)
+    .sort((a, b) => b.valor - a.valor);
+}
+
+/* Bloco "Resumo do mês" do hub: RDA, RDM e o que há para receber. */
+function _resumoHub() {
+  const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno);
+  const rda = doMes('RDA'), rdm = doMes('RDM');
+  const cv = _ehCV();
+  const devedor = _devedorDe(notas.filter(n => !n.deleted), repasses.filter(r => !r.deleted), filMes, filAno, cv);
+  const acima = devedor > LIMITE_DEVEDOR;
+  const equipe = _equipeDevedora();
+  const outros = equipe.filter(c => c.id !== user?.id);
+
+  const linha = (ico, sigla, arr) => `
+    <div class="res-col">
+      <span class="res-ico">${ico}</span>
+      <span class="res-sigla">${sigla}</span>
+      <span class="res-val">${brl(_soma(arr))}</span>
+      <span class="res-sub">${arr.length} nota${arr.length === 1 ? '' : 's'}</span>
+    </div>`;
+
+  const rotulo = cv ? 'Reembolso a receber' : 'A receber da empresa';
+  const saldoTxt = devedor > 0
+    ? `<b>${brl(devedor)}</b> <span class="res-saldo-lbl">${rotulo}</span>`
+    : devedor < 0
+      ? `<b>${brl(-devedor)}</b> <span class="res-saldo-lbl">adiantado com você (${cv ? 'reembolsos' : 'repasses'} acima do gasto)</span>`
+      : `<b>Em dia</b> <span class="res-saldo-lbl">nada a receber</span>`;
+
+  return `
+    <div class="ini-titulo">Resumo de ${MESES[filMes - 1]} ${filAno}</div>
+    <div class="res-card ${acima ? 'alerta' : ''}" onclick="switchView('saldo')">
+      <div class="res-linha">
+        ${linha('🍽️', 'RDA', rda)}
+        <span class="res-mais">+</span>
+        ${linha('💼', 'RDM', rdm)}
+        <span class="res-mais">=</span>
+        <div class="res-col res-total">
+          <span class="res-ico">🧾</span>
+          <span class="res-sigla">Total</span>
+          <span class="res-val">${brl(_soma(rda) + _soma(rdm))}</span>
+          <span class="res-sub">no mês</span>
+        </div>
+      </div>
+      <div class="res-saldo">${saldoTxt}</div>
+      ${acima ? `<div class="res-alerta">⚠️ Acima de ${brl(LIMITE_DEVEDOR)} acumulado${_ehGestorOuAdmin() ? '' : ' — o gestor é avisado no sino dele'}. ${cv ? 'Acompanhe pelo' : 'Peça o repasse ou veja o'} <b>RDM/RDA e Planilhas</b>.</div>` : ''}
+    </div>
+    ${outros.length ? `
+    <div class="res-card alerta res-equipe" onclick="event.stopPropagation(); abrirNotificacoes()">
+      <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com saldo devedor acima de ${brl(LIMITE_DEVEDOR)}:
+        ${outros.slice(0, 3).map(c => `${esc(c.nome)} (${brl(c.valor)})`).join(' · ')}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ''}. Toque para ver.</div>
+    </div>` : ''}`;
+}
+
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
   const aberta = _abaDespesa === tipo;
@@ -1693,6 +1802,7 @@ function renderDespesas() {
     <div class="ini-titulo">Escolha a aba e lance a nota</div>
     ${_abaCard('RDA')}
     ${_abaCard('RDM')}
+    ${_resumoHub()}
     <button class="pnl pnl-atalho" style="margin-top:12px" onclick="abrirFormRepasse()">
       <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span><span class="pnl-sub">${_ehCV() ? 'pagou do bolso · e o recebido' : 'recebido ou a pedir (PIX)'}</span></span>
     </button>`}

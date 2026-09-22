@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=210">
+  <link rel="manifest" href="manifest.json?v=211">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1356,6 +1356,32 @@ html{-webkit-text-size-adjust:100%}
 }
 
 
+/* ─── Resumo de gastos / saldo devedor no hub (22/09/2026) ─────────
+   "Para ter ideia do que tem para receber e ter um controle." */
+.res-card{width:100%;text-align:left;border-radius:14px;padding:12px 14px;cursor:pointer;
+  background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:5px solid var(--esm-frame);
+  box-shadow:inset 2px 2px 4px rgba(255,255,255,.14),inset -2px -2px 6px rgba(0,0,0,.5),0 8px 18px rgba(0,0,0,.4);
+  transition:transform .14s}
+.res-card:active{transform:scale(.99)}
+.res-card.alerta{border-color:#f59e0b;box-shadow:inset 2px 2px 4px rgba(255,255,255,.14),inset -2px -2px 6px rgba(0,0,0,.5),0 8px 18px rgba(0,0,0,.4),0 0 0 2px rgba(245,158,11,.45)}
+.res-equipe{margin-top:10px;background:linear-gradient(160deg,#7c3a05,#4a2203)}
+.res-linha{display:flex;align-items:stretch;gap:6px}
+.res-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;gap:1px;
+  padding:8px 4px;border-radius:10px;background:rgba(4,31,15,.42)}
+.res-total{background:rgba(185,226,74,.16)}
+.res-ico{font-size:19px;line-height:1.1}
+.res-sigla{font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--lima-2)}
+.res-val{font-size:15px;font-weight:800;line-height:1.2;white-space:nowrap}
+.res-sub{font-size:10px;color:rgba(234,247,238,.72)}
+.res-mais{align-self:center;font-size:14px;font-weight:800;color:rgba(234,247,238,.6)}
+.res-saldo{margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.14);font-size:16px;line-height:1.3}
+.res-saldo-lbl{font-size:12px;font-weight:600;color:rgba(234,247,238,.8)}
+.res-alerta{margin-top:8px;font-size:12px;line-height:1.45;color:#ffe9b8;font-weight:600}
+@media (max-width:359px){
+  .res-val{font-size:13.5px}
+  .res-mais{display:none}
+}
+
 /* ─── Abas RDM e RDA no hub de Despesas (22/09/2026) ───────────────
    Pedido: "abas grandes, bonitas", com o lançamento (QR e sem QR)
    DENTRO de cada aba. São dois cartões que abrem como sanfona: o
@@ -1434,7 +1460,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=210" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=211" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1821,6 +1847,8 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <ul>
         <li>💸 <b>Repasse / Reembolso</b> — logo abaixo das abas: dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
+      <p><b>📊 Resumo do mês (22/09/2026):</b> entre as abas e o Repasse ficam, lado a lado, o total de <b>RDA</b>, o de <b>RDM</b> e a soma do mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>, onde está o detalhe mês a mês.</p>
+      <p>Quando o valor a receber passa de <b>R$ 1.500,00</b>, o bloco fica <b>laranja</b> e o <b>gestor é avisado no sino</b> (🔔 no alto da tela), com o nome e o valor de cada colaborador acima do limite — é o controle para ninguém ficar muito tempo no próprio dinheiro. O gestor vê também, no seu hub, uma faixa laranja listando quem está acima; tocando nela abre as notificações, onde há <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se a dívida aumentar.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
@@ -2186,25 +2214,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=210"></script>
-<script defer src="js/db.js?v=210"></script>
-<script defer src="js/nfce.js?v=210"></script>
-<script defer src="js/sefaz.js?v=210"></script>
-<script defer src="js/brasilapi.js?v=210"></script>
-<script defer src="js/ocr.js?v=210"></script>
-<script defer src="js/recorte.js?v=210"></script>
-<script defer src="js/excel.js?v=210"></script>
-<script defer src="js/gestor.js?v=210"></script>
-<script defer src="js/frota.js?v=210"></script>
-<script defer src="js/ponto.js?v=210"></script>
-<script defer src="js/arquivos.js?v=210"></script>
-<script defer src="js/gdrive.js?v=210"></script>
-<script defer src="js/app.js?v=210"></script>
+<script defer src="js/api.js?v=211"></script>
+<script defer src="js/db.js?v=211"></script>
+<script defer src="js/nfce.js?v=211"></script>
+<script defer src="js/sefaz.js?v=211"></script>
+<script defer src="js/brasilapi.js?v=211"></script>
+<script defer src="js/ocr.js?v=211"></script>
+<script defer src="js/recorte.js?v=211"></script>
+<script defer src="js/excel.js?v=211"></script>
+<script defer src="js/gestor.js?v=211"></script>
+<script defer src="js/frota.js?v=211"></script>
+<script defer src="js/ponto.js?v=211"></script>
+<script defer src="js/arquivos.js?v=211"></script>
+<script defer src="js/gdrive.js?v=211"></script>
+<script defer src="js/app.js?v=211"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=210').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=211').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
