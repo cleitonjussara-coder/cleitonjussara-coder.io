@@ -5,6 +5,13 @@
 window.Gestor = (() => {
   const MESES  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const ROLES   = ['colaborador','gestor','admin','contabilidade'];   // contabilidade: só vê e baixa (21/09/2026)
+  /* o que cada papel faz, em uma linha — é o que aparece no seletor da Equipe */
+  const PAPEL_TXT = {
+    colaborador  : 'Colaborador — lança as próprias notas',
+    gestor       : 'Gestor — vê a equipe, edita papéis e cuida do servidor',
+    admin        : 'Administrador — tudo, inclusive promover administrador',
+    contabilidade: 'Contabilidade — só vê e baixa relatórios',
+  };
 
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
   const ini = nome => (nome||'?').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
@@ -497,7 +504,7 @@ window.Gestor = (() => {
           <select class="inp" id="cv-role">
             <option value="contabilidade" selected>Contabilidade — só vê e baixa relatórios</option>
             <option value="colaborador">Colaborador — lança as próprias notas</option>
-            ${eu.role === 'admin' ? '<option value="gestor">Gestor — vê e administra a equipe</option>' : ''}
+            <option value="gestor">Gestor — vê e administra a equipe</option>
           </select>
           <label class="lbl">Nome de quem vai entrar (opcional)</label>
           <input class="inp" id="cv-nome" type="text" placeholder="Ex.: Maria da Contabilidade" autocapitalize="words">
@@ -570,12 +577,18 @@ window.Gestor = (() => {
     finally { setLoading(false); }
   }
 
-  /* ── Modal edição de colaborador (admin only) ─────────── */
+  /* ── Modal edição de colaborador (gestor e admin) ─────── */
   function showEditModal(colab, sb, onSaved, currentUser) {
     const eu = currentUser || window.user || {};
     const ehAdmin = eu.role === 'admin';
     const souEu = colab.id === eu.id;
-    const podeRegime = !souEu && (ehAdmin || eu.role === 'gestor');   // gestor define só o regime dos outros
+    /* 22/09/2026: o gestor edita nome, papel e regime dos OUTROS. Duas travas
+       (o servidor repete as duas): não mexe no perfil de um admin e não
+       promove ninguém a admin — quem foi promovido não derruba quem promoveu. */
+    const alvoAdmin = colab.role === 'admin';
+    const podeEditar = !souEu && (ehAdmin || eu.role === 'gestor') && (ehAdmin || !alvoAdmin);
+    const podeRegime = podeEditar;
+    const papeis = ehAdmin || alvoAdmin ? ROLES : ROLES.filter(r => r !== 'admin');
     const inativo = colab.ativo === false;
     const pedido = colab.exclusao_pedida_por;
     const pediEu = pedido && pedido === eu.id;
@@ -589,11 +602,14 @@ window.Gestor = (() => {
         </div>
         <div class="modal-bd">
           <label class="lbl">Nome</label>
-          <input class="inp" id="g-nome" value="${esc(colab.nome||'')}" autocapitalize="words" ${ehAdmin ? '' : 'disabled'}>
+          <input class="inp" id="g-nome" value="${esc(colab.nome||'')}" autocapitalize="words" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
           <label class="lbl">Papel</label>
-          <select class="inp" id="g-role" ${ehAdmin ? '' : 'disabled'}>
-            ${ROLES.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${r}</option>`).join('')}
+          <select class="inp" id="g-role" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
+            ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
           </select>
+          ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor ou ao administrador.</p>'
+            : alvoAdmin && !ehAdmin ? '<p style="font-size:12px;color:#b45309;line-height:1.4;margin-top:4px">Perfil de <b>administrador</b>: só outro administrador edita.</p>'
+            : !ehAdmin ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Promover a <b>administrador</b> é só o administrador quem faz.</p>' : ''}
           <label class="lbl">Regime de despesas <span style="font-weight:400;color:var(--text2)">(reunião 21/09/2026)</span></label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
@@ -626,7 +642,7 @@ window.Gestor = (() => {
         </div>
         <div class="modal-ft">
           <button class="btn btn-outline" id="g-cancel">Fechar</button>
-          ${ehAdmin || podeRegime ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
+          ${podeEditar || (ehAdmin && souEu) ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -641,7 +657,7 @@ window.Gestor = (() => {
       const nome   = ov.querySelector('#g-nome').value.trim();
       const role   = ov.querySelector('#g-role').value;
       const regime = ov.querySelector('#g-regime')?.value;
-      const dados  = ehAdmin ? { nome, role, regime } : { regime };   // gestor: só o regime (o servidor também limita)
+      const dados  = { nome, role, regime };   // o servidor filtra o que este papel pode gravar
       try { await sb.colaboradores.update(colab.id, dados); }
       catch (e) { alert('Erro: ' + e.message); return; }
       close(); onSaved();

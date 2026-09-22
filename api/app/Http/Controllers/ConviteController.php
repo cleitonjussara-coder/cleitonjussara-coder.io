@@ -29,8 +29,9 @@ class ConviteController extends Controller
             'role' => ['required', Rule::in(self::ROLES_CONVIDAVEIS)],
             'nome' => ['nullable', 'string', 'max:120'],
         ]);
-        /* gestor não cria outro gestor — isso é papel do admin */
-        abort_if($d['role'] === 'gestor' && ! $u->ehAdmin(), 403, 'Só o admin convida gestor');
+        /* 22/09/2026: o gestor também convida gestor (e edita papéis na Equipe).
+           Admin não está em ROLES_CONVIDAVEIS — administrador só é promovido por
+           outro administrador, na tela da Equipe. */
 
         $c = Convite::create([
             'id' => (string) Str::uuid(),

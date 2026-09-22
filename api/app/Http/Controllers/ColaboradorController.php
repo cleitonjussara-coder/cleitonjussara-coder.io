@@ -53,10 +53,13 @@ class ColaboradorController extends Controller
     {
         $u = $r->user();
         $alvo = Colaborador::findOrFail($id);
-        /* admin edita tudo de todos; gestor edita só o REGIME (CV × RDM/RDA) dos
-           outros — decisão da reunião de 21/09/2026; cada um edita o próprio nome */
-        $soRegime = $id !== $u->id && ! $u->ehAdmin() && $u->gerencia();
-        abort_unless($id === $u->id || $u->ehAdmin() || $soRegime, 403, 'Só o admin edita outros perfis');
+        /* 22/09/2026: o gestor passou a editar também o PAPEL dos outros (antes
+           só o regime). Duas travas continuam de pé, para que quem foi promovido
+           não possa tomar o sistema de quem promoveu: gestor não mexe no perfil
+           de um admin e não promove ninguém a admin. Cada um edita o próprio
+           nome; ninguém muda o próprio papel. */
+        $gereOutro = $id !== $u->id && $u->gerencia();
+        abort_unless($id === $u->id || $gereOutro, 403, 'Só gestor ou admin edita outros perfis');
 
         $d = $r->validate([
             'nome' => ['sometimes', 'string', 'max:120'],
@@ -64,13 +67,17 @@ class ColaboradorController extends Controller
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
         ]);
-        if ($soRegime) {
-            $d = array_intersect_key($d, ['regime' => 1]);
+        if ($gereOutro && ! $u->ehAdmin()) {
+            abort_if($alvo->ehAdmin(), 403, 'Só um administrador edita o perfil de outro administrador');
+            abort_if(($d['role'] ?? null) === 'admin', 403, 'Só o administrador promove alguém a administrador');
         } elseif (! $u->ehAdmin()) {
-            unset($d['role'], $d['nucleo'], $d['regime']);      // colaborador não se promove nem muda o próprio regime
+            unset($d['role'], $d['nucleo'], $d['regime']);      // ninguém se promove nem muda o próprio regime
         }
         if (isset($d['nome'])) {
             $d['nome'] = trim($d['nome']);
+        }
+        if (isset($d['role']) && $d['role'] !== $alvo->role) {
+            Log::info('papel alterado', ['alvo' => $alvo->email, 'de' => $alvo->role, 'para' => $d['role'], 'por' => $u->email]);
         }
         $alvo->update($d);
 
