@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 202;
+const APP_BUILD = 203;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -558,12 +558,28 @@ function _ensureJsQR() {
   return _jsqrPromise;
 }
 
+/* Homologação (21/09/2026): em teste.pmservicosagronomicos.com.br o app fala
+   com a API de teste. Faixa laranja fixa + título + manifest próprio, para
+   ninguém confundir com a produção nem instalar o ícone errado. */
+function _marcarHomologacao() {
+  if (!window.API?.HOMOLOG) return;
+  document.body.classList.add('homolog');
+  document.title = '🧪 TESTE — ' + document.title;
+  const m = document.querySelector('link[rel="manifest"]');
+  if (m) m.href = 'manifest-teste.json?v=' + APP_BUILD;
+  const f = document.createElement('div');
+  f.className = 'homolog-faixa';
+  f.textContent = '🧪 AMBIENTE DE TESTE — nada daqui vale para a empresa';
+  document.body.appendChild(f);
+}
+
 /* ── Inicialização ───────────────────────────────────────── */
 async function init() {
   syncBadge(false);
   if (!DEMO_MODE) {
     try {
       await _ensureSb();
+      _marcarHomologacao();
       /* Lê a URL (retorno do Google, link de senha) e valida o token guardado */
       const boot = await sb.auth.init();
       if (boot.authError) {
@@ -571,6 +587,13 @@ async function init() {
             : boot.authError === 'desativada'   ? 'Conta desativada. Fale com o gestor ou o administrador.'
             : boot.authError === 'indisponivel' ? 'Login com Google ainda não está liberado'
             : 'Não foi possível entrar com o Google', 'err');
+      }
+      if (boot.driveBackup) {
+        /* voltou da autorização do Drive para o backup: avisa e abre o Perfil */
+        _abrirPerfilAoEntrar = true;
+        toast(boot.driveBackup === 'ok'        ? 'Google Drive conectado ao backup ✅'
+            : boot.driveBackup === 'cancelado' ? 'Autorização do Drive cancelada'
+            : 'Não consegui conectar o Drive — tente de novo', boot.driveBackup === 'ok' ? 'ok' : 'err');
       }
       /* Login Google com escopo do Drive devolve o token do Google junto.
          Entrega ao GDrive antes de abrir o app: é assim que gestor/admin
@@ -660,7 +683,8 @@ async function onLogin(authUser) {
     _driveAutomatico();                       // perfil em cache já diz se é gestor/admin
     await carregarDadosLocais();
     showTela('app');
-    switchView('inicio');
+    switchView(_abrirPerfilAoEntrar ? 'perfil' : 'inicio');   // voltou da autorização do Drive → direto no Perfil
+    _abrirPerfilAoEntrar = false;
     setLoading(false);
 
     // perfil oficial em background (não bloqueia a tela)
@@ -936,6 +960,7 @@ async function diagnosticoInstalacao() {
    prioridade sobre qualquer outra (init() e o listener da API respeitam). */
 let _recuperandoSenha = false;
 let _recuperacao = null;          // { token, email } lidos da URL por API.auth.init()
+let _abrirPerfilAoEntrar = false; // retorno da autorização do Drive p/ backup (21/09/2026)
 /* Convite por link (21/09/2026): token lido da URL (?convite=…) e os dados
    que o servidor devolveu (papel, nome sugerido, quem convidou). */
 let _convite = null;              // { token, role, nome, gestor }
@@ -3461,6 +3486,7 @@ function renderPerfil() {
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
       <div id="backups-auto" style="margin-top:10px;font-size:12.5px;color:var(--text2)">Carregando backups automáticos…</div>
+      <div id="backup-drive" style="margin-top:12px;font-size:12.5px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
       <button class="btn btn-outline btn-full" id="btn-migrar" style="margin-top:8px" onclick="atualizarBanco()">🛠️ Atualizar estrutura do banco</button>
       <p style="font-size:11px;color:var(--text2);margin-top:6px">
@@ -3474,6 +3500,70 @@ function renderPerfil() {
   _mostrarAvatar();
   _listarBackupsAuto();
   _mostrarArmazenamento();
+  _mostrarBackupDrive();
+}
+
+/* Cópia do backup no Google Drive (21/09/2026). O admin autoriza uma vez
+   (só "arquivos criados por este app"); depois o cron semanal sobe o zip
+   sozinho para a pasta "Backups Petermann App" e mantém lá a mesma rotação.
+   Se a Locaweb perder o disco, o backup mais novo está no Drive. */
+async function _mostrarBackupDrive() {
+  const el0 = $('backup-drive');
+  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
+  try {
+    const s = await sb.backup.drive();
+    const el = $('backup-drive');
+    if (!el) return;
+    const q = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    if (!s.conectado) {
+      el.innerHTML = `
+        <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
+          <b style="color:#9A3412">☁️ Cópia fora da Locaweb: desligada</b>
+          <p style="margin-top:4px;line-height:1.5;color:inherit">Conecte o Google Drive para o backup semanal subir sozinho para a pasta <b>${esc(s.pasta)}</b> do seu Drive. O app só ganha acesso aos arquivos que ele mesmo criar.</p>
+          <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="conectarDriveBackup()">🔗 Conectar Google Drive ao backup</button>
+        </div>`;
+      return;
+    }
+    const dias = s.ultimo_envio ? Math.floor((Date.now() - new Date(s.ultimo_envio).getTime()) / 86_400_000) : null;
+    const atraso = dias === null ? '<span style="color:#b45309;font-weight:700">ainda nenhum envio — toque em "Enviar agora" para testar</span>'
+                 : dias > 8 ? `<span style="color:#b45309;font-weight:700">há ${dias} dias — confira o Crontab</span>` : `há ${dias} dia${dias === 1 ? '' : 's'}`;
+    el.innerHTML = `
+      <div style="background:#F0FBF4;border:1.5px solid #74C69D;border-radius:10px;padding:10px 12px;color:#1B4332">
+        <b style="color:#1B4332">☁️ Cópia no Google Drive: ligada</b>
+        <div style="margin-top:4px;line-height:1.6;color:inherit">
+          Conta: <b>${esc(s.email || '')}</b> · pasta <b>${esc(s.pasta)}</b><br>
+          Último envio: ${atraso}${s.ultimo_arquivo ? ` <span style="opacity:.75">(${esc(s.ultimo_arquivo)})</span>` : ''}
+          ${s.ultimo_erro ? `<br><span style="color:#b91c1c">⚠️ Último erro: ${esc(s.ultimo_erro)}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-outline" id="btn-drive-enviar" onclick="enviarBackupDriveAgora()">⬆️ Enviar agora</button>
+          <button class="btn btn-sm btn-outline" onclick="desconectarDriveBackup()">Desconectar</button>
+        </div>
+      </div>`;
+  } catch (e) { const el = $('backup-drive'); if (el) el.textContent = 'Não consegui conferir o Drive do backup: ' + (e.message || 'erro'); }
+}
+async function conectarDriveBackup() {
+  if (!navigator.onLine) { toast('Sem conexão', 'err'); return; }
+  try {
+    const { url } = await sb.backup.driveUrl();
+    location.href = url;   // Google → callback da API → volta ao app com #drive_backup=ok
+  } catch (e) { toast(e.message || 'Não consegui abrir a autorização do Google', 'err'); }
+}
+async function enviarBackupDriveAgora() {
+  if (!navigator.onLine) { toast('Sem conexão', 'err'); return; }
+  const b = $('btn-drive-enviar'); if (b) { b.disabled = true; b.textContent = 'Enviando…'; }
+  setLoading(true, 'Enviando o backup mais novo ao Drive… (pode levar 1 min)');
+  try {
+    const r = await sb.backup.driveEnviar();
+    toast(`Enviado ao Drive: ${r.nome} ✅`);
+  } catch (e) { toast(e.message || 'Falha ao enviar ao Drive', 'err'); }
+  finally { setLoading(false); _mostrarBackupDrive(); }
+}
+async function desconectarDriveBackup() {
+  if (!confirm('Desligar a cópia do backup no Google Drive? Os arquivos já enviados continuam lá.')) return;
+  try { await sb.backup.driveDesconectar(); toast('Drive desconectado do backup'); }
+  catch (e) { toast(e.message || 'erro', 'err'); }
+  _mostrarBackupDrive();
 }
 
 /* Armazenamento do servidor (21/09/2026): quanto o app ocupa na Locaweb

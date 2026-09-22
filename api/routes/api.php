@@ -88,6 +88,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/backup/lista', [BackupController::class, 'lista']);
     Route::get('/backup/completo', [BackupController::class, 'completo']);
     Route::get('/backup/arquivo/{nome}', [BackupController::class, 'arquivo']);
+    Route::get('/backup/drive', [BackupController::class, 'driveStatus']);          // cópia no Google Drive (21/09/2026)
+    Route::get('/backup/drive/url', [BackupController::class, 'driveUrl']);
+    Route::post('/backup/drive/enviar', [BackupController::class, 'driveEnviar']);
+    Route::delete('/backup/drive', [BackupController::class, 'driveDesconectar']);
     Route::get('/admin/status', [AdminController::class, 'status']);
     Route::post('/admin/migrar', [AdminController::class, 'migrar']);
     Route::get('/admin/armazenamento', [AdminController::class, 'armazenamento']);   // monitoramento de disco (21/09/2026)

@@ -14,8 +14,13 @@ window.API = (() => {
   /* Produção: subdomínio da API. Em desenvolvimento local (http-server na
      8080 + `php artisan serve` na 8000) cai no segundo. */
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const BASE  = LOCAL ? 'http://127.0.0.1:8000/api'
-                      : 'https://api.pmservicosagronomicos.com.br/api';
+  /* Homologação (21/09/2026): teste.pmservicosagronomicos.com.br fala com a
+     API de teste (api-teste na Locaweb, banco e fotos próprios). Nada que
+     se faça lá toca a produção. */
+  const HOMOLOG = location.hostname === 'teste.pmservicosagronomicos.com.br';
+  const BASE  = LOCAL   ? 'http://127.0.0.1:8000/api'
+              : HOMOLOG ? 'https://api.pmservicosagronomicos.com.br/teste/api'
+                        : 'https://api.pmservicosagronomicos.com.br/api';
 
   const K_TOKEN = 'api_token';
   let _token = null;
@@ -115,6 +120,10 @@ window.API = (() => {
           history.replaceState(null, '', location.pathname + location.search);
         } else if (h.get('auth_error')) {
           out.authError = h.get('auth_error');
+          history.replaceState(null, '', location.pathname + location.search);
+        } else if (h.get('drive_backup')) {
+          // volta da autorização do Drive para o backup (21/09/2026): ok | cancelado | google | invalido
+          out.driveBackup = h.get('drive_backup');
           history.replaceState(null, '', location.pathname + location.search);
         }
       }
@@ -280,6 +289,11 @@ window.API = (() => {
     lista: () => req('GET', '/backup/lista'),
     completo: () => req('GET', '/backup/completo', { blob: true, timeout: 600_000 }),
     arquivo: nome => req('GET', `/backup/arquivo/${encodeURIComponent(nome)}`, { blob: true, timeout: 600_000 }),
+    /* cópia no Google Drive (21/09/2026): status, URL de autorização, envio manual, desconectar */
+    drive: () => req('GET', '/backup/drive'),
+    driveUrl: () => req('GET', '/backup/drive/url'),
+    driveEnviar: () => req('POST', '/backup/drive/enviar', { timeout: 600_000 }),
+    driveDesconectar: () => req('DELETE', '/backup/drive'),
   };
 
   /* Planilha de C.V. no modelo da empresa, preenchida pelo servidor (19/09/2026). */
@@ -316,5 +330,5 @@ window.API = (() => {
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, req, auth, colaboradores, notas, repasses, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
+  return { BASE, HOMOLOG, req, auth, colaboradores, notas, repasses, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
 })();

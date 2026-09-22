@@ -58,7 +58,27 @@ class GoogleOAuth
         return self::AUTH_URL.'?'.http_build_query($params);
     }
 
-    /** @return array{access_token:string, expires_in:int, scope:string} */
+    /**
+     * Autorização para o backup no Drive (21/09/2026): só drive.file (arquivos
+     * que o app criar), offline + consent para o Google devolver refresh_token.
+     * O state leva backup=1 e o id do admin que pediu; o callback grava.
+     */
+    public function urlParaBackup(string $redirectUri, string $adminId): string
+    {
+        $params = [
+            'client_id' => config('petermann.google.client_id'),
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'openid email '.DriveBackup::SCOPE,
+            'access_type' => 'offline',
+            'prompt' => 'consent',
+            'state' => $this->assinarState(['backup' => true, 'uid' => $adminId, 'n' => bin2hex(random_bytes(8)), 'exp' => time() + 600]),
+        ];
+
+        return self::AUTH_URL.'?'.http_build_query($params);
+    }
+
+    /** @return array{access_token:string, expires_in:int, scope:string, refresh_token?:string} */
     public function trocarCode(string $code, string $redirectUri): array
     {
         $r = Http::asForm()->timeout(15)->post(self::TOKEN_URL, [

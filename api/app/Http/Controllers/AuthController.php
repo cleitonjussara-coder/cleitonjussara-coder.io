@@ -188,8 +188,34 @@ class AuthController extends Controller
 
         if (! $state || $r->query('error') || ! $r->query('code')) {
             $motivo = $r->query('error') === 'access_denied' ? 'cancelado' : 'invalido';
+            if (! empty($state['backup'])) {
+                return redirect()->away($front.'#drive_backup='.$motivo);
+            }
 
             return redirect()->away($front.'#auth_error='.$motivo);
+        }
+
+        /* Autorização do backup no Drive (21/09/2026): não é login — só guarda
+           o refresh_token para o cron e volta ao Perfil. O uid do state é do
+           admin que clicou (a URL só sai por /backup/drive/url, autenticada). */
+        if (! empty($state['backup'])) {
+            try {
+                $adm = Colaborador::find($state['uid'] ?? '');
+                abort_unless($adm?->ehAdmin(), 403);
+                $tok = $g->trocarCode($r->query('code'), route('auth.google.callback'));
+                if (empty($tok['refresh_token'])) {
+                    throw new \RuntimeException('Google não devolveu refresh_token');
+                }
+                $info = $g->userInfo($tok['access_token']);
+                app(\App\Services\DriveBackup::class)->conectar($tok['refresh_token'], strtolower($info['email']));
+                Log::info('drive backup conectado', ['admin' => $adm->email, 'conta' => $info['email']]);
+
+                return redirect()->away($front.'#drive_backup=ok');
+            } catch (Throwable $e) {
+                Log::warning('drive backup callback: '.$e->getMessage());
+
+                return redirect()->away($front.'#drive_backup=google');
+            }
         }
 
         try {

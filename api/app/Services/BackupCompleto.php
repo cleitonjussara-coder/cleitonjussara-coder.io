@@ -120,17 +120,48 @@ class BackupCompleto
         return $out;
     }
 
-    /** Apaga os mais antigos além de $manter. Devolve quantos apagou. */
-    public function podar(int $manter): int
+    /**
+     * Rotação (21/09/2026, disco ilimitado): guarda as $manter cópias mais
+     * novas E a primeira cópia de cada mês nos últimos $meses meses. Assim
+     * "a nota que alguém apagou em março" continua recuperável. Devolve
+     * quantos apagou.
+     */
+    public function podar(int $manter, int $meses = 12): int
     {
         $n = 0;
-        foreach (array_slice($this->listar(), max(0, $manter)) as $b) {
+        foreach ($this->paraApagar($this->listar(), $manter, $meses) as $b) {
             if (@unlink($this->pasta().'/'.$b['nome'])) {
                 $n++;
             }
         }
 
         return $n;
+    }
+
+    /**
+     * Decide quem sai, dada a lista (mais novo primeiro, cada item com
+     * 'nome' petermann-AAAA-MM-DD-HHMM…). Puro: o DriveBackup usa a mesma
+     * regra para a pasta no Drive.
+     */
+    public static function paraApagar(array $lista, int $manter, int $meses = 12): array
+    {
+        usort($lista, fn ($a, $b) => strcmp($b['nome'], $a['nome']));
+        $recentes = array_slice($lista, 0, max(0, $manter));
+        $fica = array_column($recentes, 'nome', 'nome');
+
+        $limiteMes = now(self::TZ)->startOfMonth()->subMonths(max(0, $meses))->format('Y-m');
+        $porMes = [];
+        foreach (array_reverse($lista) as $b) {   // do mais antigo para o mais novo: o 1º de cada mês ganha
+            if (! preg_match('/-(\d{4}-\d{2})-\d{2}-\d{4}/', $b['nome'], $m)) {
+                continue;
+            }
+            if ($m[1] >= $limiteMes && ! isset($porMes[$m[1]])) {
+                $porMes[$m[1]] = $b['nome'];
+            }
+        }
+        $fica += array_combine($porMes, $porMes);
+
+        return array_values(array_filter($lista, fn ($b) => ! isset($fica[$b['nome']])));
     }
 
     public function caminhoDe(string $nome): ?string
