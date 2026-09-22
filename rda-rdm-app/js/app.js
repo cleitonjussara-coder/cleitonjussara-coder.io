@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 204;
+const APP_BUILD = 205;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3534,7 +3534,7 @@ function renderPerfil() {
       `}
     </div>
     ` : ''}
-    ${user?.role === 'admin' && sb && !DEMO_MODE ? `
+    ${_ehGestorOuAdmin() && sb && !DEMO_MODE ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">💾 Armazenamento do servidor</p>
       <div id="armazenamento-card" style="font-size:12.5px;color:var(--text2)">Medindo o espaço em disco…</div>
@@ -3564,13 +3564,13 @@ function renderPerfil() {
   _mostrarBackupDrive();
 }
 
-/* Cópia do backup no Google Drive (21/09/2026). O admin autoriza uma vez
+/* Cópia do backup no Google Drive (21/09/2026). Gestor ou admin autoriza uma vez
    (só "arquivos criados por este app"); depois o cron semanal sobe o zip
    sozinho para a pasta "Backups Petermann App" e mantém lá a mesma rotação.
    Se a Locaweb perder o disco, o backup mais novo está no Drive. */
 async function _mostrarBackupDrive() {
   const el0 = $('backup-drive');
-  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
+  if (!el0 || !_ehGestorOuAdmin() || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
   try {
     const s = await sb.backup.drive();
     const el = $('backup-drive');
@@ -3630,10 +3630,10 @@ async function desconectarDriveBackup() {
 /* Armazenamento do servidor (21/09/2026): quanto o app ocupa na Locaweb
    (banco, fotos, backups, logs), % do plano, tendência e último backup.
    O mesmo número que o cron `armazenamento:verificar` usa para avisar
-   por e-mail — aqui é a versão "olhar quando quiser". Só admin. */
+   por e-mail — aqui é a versão "olhar quando quiser". Gestor e admin (22/09/2026). */
 async function _mostrarArmazenamento() {
   const el0 = $('armazenamento-card');
-  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = 'Sem conexão — abra de novo quando estiver online.'; return; }
+  if (!el0 || !_ehGestorOuAdmin() || !sb || !navigator.onLine) { if (el0) el0.textContent = 'Sem conexão — abra de novo quando estiver online.'; return; }
   try {
     const m = await sb.admin.armazenamento();
     const el = $('armazenamento-card');
@@ -3706,10 +3706,10 @@ async function _mostrarArmazenamento() {
 }
 
 /* Backups automáticos (artisan backup:gerar no agendador da Locaweb):
-   lista com link para baixar cada um. Só admin. */
+   lista com link para baixar cada um. Gestor e admin (22/09/2026). */
 async function _listarBackupsAuto() {
   const el0 = $('backups-auto');
-  if (!el0 || user?.role !== 'admin' || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
+  if (!el0 || !_ehGestorOuAdmin() || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
   try {
     const { backups = [] } = await sb.backup.lista();
     const el = $('backups-auto');            // o Perfil pode ter sido redesenhado enquanto esperava

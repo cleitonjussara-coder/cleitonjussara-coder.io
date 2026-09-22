@@ -75,6 +75,16 @@ class Colaborador extends Authenticatable
         return in_array($this->role, ['gestor', 'admin'], true);
     }
 
+    /* MANUTENÇÃO do servidor (backup, espaço em disco, migrações, cópia no
+       Drive). Era só do admin; desde 22/09/2026 o gestor faz o mesmo — o
+       Perfil dos dois mostra as mesmas ferramentas (pedido do Cleiton: o
+       backup não pode depender de uma pessoa só estar disponível).
+       Contabilidade, que é papel de leitura, continua fora. */
+    public function manutencao(): bool
+    {
+        return $this->gerencia();
+    }
+
     public function ehCV(): bool
     {
         return $this->regime === 'cv';

@@ -54,6 +54,40 @@ sftp_app() {
   echo "  ⚠ imagens/ícones NOVOS não vão por aqui — só js/, index.html, sw.js e manifest."
 }
 
+# Mesmo plano B para a API: os arquivos do Laravel são PHP puro, então basta
+# gravá-los no lugar. Funciona porque em bootstrap/cache só existem
+# packages.php e services.php (não há config/route cache para limpar) —
+# confira com `sftp locaweb` → `ls <api>/bootstrap/cache` se mudar.
+# vendor/ e as migrações (precisam de artisan) NÃO vão por aqui.
+sftp_api() {
+  echo "  plano B: enviando a API por SFTP (sem shell remoto)"
+  local lote; lote=$(mktemp)
+  {
+    for d in app config routes resources lang; do echo "put -r api/$d $API_DIR"; done
+    echo "put -r api/database/migrations $API_DIR/database"
+    echo "put api/bootstrap/app.php $API_DIR/bootstrap/app.php"
+    echo "put api/bootstrap/providers.php $API_DIR/bootstrap/providers.php"
+    echo "put api/artisan $API_DIR/artisan"
+    echo "put api/public/.htaccess $WEB_API/.htaccess"
+    echo "put api/public/.user.ini $WEB_API/.user.ini"
+  } > "$lote"
+  sftp "${SSH_OPTS[@]}" -b "$lote" "$HOST" >/dev/null
+  rm -f "$lote"
+  echo "  ⚠ vendor/ e migrações do banco NÃO vão por SFTP (dependem do artisan no servidor)."
+}
+
+# A API não tem número de build: para saber se o arquivo chegou mesmo,
+# trazemos um de volta e comparamos com o do PC.
+api_igual() {   # $1 = caminho relativo dentro de api/
+  local tmp; tmp=$(mktemp)
+  printf 'get %s/%s %s\n' "$API_DIR" "$1" "$tmp" > "$tmp.b"
+  sftp "${SSH_OPTS[@]}" -b "$tmp.b" "$HOST" >/dev/null 2>&1
+  local ok=1
+  cmp -s "api/$1" "$tmp" && ok=0
+  rm -f "$tmp" "$tmp.b"
+  return $ok
+}
+
 if [[ "$ALVO" == "app" || "$ALVO" == "tudo" ]]; then
   echo "▸ app (build $BUILD) → $AMB"
   node scripts/empacotar.js app >/dev/null
@@ -73,15 +107,29 @@ if [[ "$ALVO" == "api" || "$ALVO" == "tudo" ]]; then
   PASTAS=(app bootstrap/app.php bootstrap/providers.php config database/migrations lang resources routes artisan composer.json composer.lock)
   [[ "$VENDOR" == "1" ]] && PASTAS+=(vendor) && echo "  (com vendor/)"
   tar -C api -czf - --exclude='bootstrap/cache' "${PASTAS[@]}" \
-    | ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && tar -xzf - && rm -f bootstrap/cache/*.php"
+    | ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && tar -xzf - && rm -f bootstrap/cache/*.php" || true
   # .htaccess/.user.ini do web root vêm do repositório (api/public)
-  scp "${SSH_OPTS[@]}" -q api/public/.htaccess "$HOST:$WEB_API/.htaccess"
-  scp "${SSH_OPTS[@]}" -q api/public/.user.ini "$HOST:$WEB_API/.user.ini"
-  if [[ "$AMB" == "teste" ]]; then
-    ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && /usr/bin/php84 artisan migrate --force 2>&1 | tail -3"
-  else
-    PEND=$(ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && /usr/bin/php84 artisan migrate:status 2>/dev/null | grep -c Pending || true")
-    [[ "${PEND:-0}" != "0" ]] && echo "  ⚠ $PEND migração(ões) pendente(s): Perfil → 🛠️ Atualizar estrutura do banco"
+  scp "${SSH_OPTS[@]}" -q api/public/.htaccess "$HOST:$WEB_API/.htaccess" || true
+  scp "${SSH_OPTS[@]}" -q api/public/.user.ini "$HOST:$WEB_API/.user.ini" || true
+  api_igual app/Http/Controllers/AdminController.php || sftp_api
+  if ! api_igual app/Http/Controllers/AdminController.php; then
+    echo "  ✗ o servidor NÃO recebeu os arquivos da API"; exit 1
+  fi
+  echo "  ✔ arquivos da API no servidor"
+  # Migrações dependem do artisan, que precisa de shell. Sem shell, quem
+  # aplica é o gestor/admin pelo app (Perfil → 🛠️ Atualizar estrutura do
+  # banco), que chama POST /admin/migrar dentro do próprio Laravel.
+  # `grep -c` sai com 1 quando não acha nada e o script roda com `set -e`:
+  # sem os dois `|| true` a publicação terminava aqui, calada.
+  PEND=$(ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && /usr/bin/php84 artisan migrate:status 2>/dev/null | grep -c Pending || true" 2>/dev/null || true)
+  if [[ -z "$PEND" ]]; then
+    echo "  ⚠ sem shell remoto: se esta versão trouxe migração nova, aplique no app (Perfil → 🛠️ Atualizar estrutura do banco)."
+  elif [[ "$PEND" != "0" ]]; then
+    if [[ "$AMB" == "teste" ]]; then
+      ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$API_DIR && /usr/bin/php84 artisan migrate --force 2>&1 | tail -3"
+    else
+      echo "  ⚠ $PEND migração(ões) pendente(s): Perfil → 🛠️ Atualizar estrutura do banco"
+    fi
   fi
 fi
 

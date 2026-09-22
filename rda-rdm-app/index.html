@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=204">
+  <link rel="manifest" href="manifest.json?v=205">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1434,7 +1434,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=204" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=205" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1956,8 +1956,8 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <h4>👥 Papéis da equipe</h4>
       <ul>
         <li><b>Colaborador:</b> vê só as próprias notas.</li>
-        <li><b>Gestor:</b> vê a equipe e baixa os relatórios de todos na aba <b>Equipe / Baixar relatórios</b>. Em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as dele.</li>
-        <li><b>Admin:</b> vê todos, edita papéis/núcleos e tem os botões de <b>backup</b> e <b>atualização do banco</b> no Perfil.</li>
+        <li><b>Gestor:</b> vê a equipe e baixa os relatórios de todos na aba <b>Equipe / Baixar relatórios</b>. Em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as dele. Desde 22/09/2026 tem no Perfil <b>as mesmas ferramentas de servidor do admin</b>: armazenamento, backup, cópia no Google Drive e atualização do banco.</li>
+        <li><b>Admin:</b> tudo o que o gestor faz e mais: <b>edita papéis e núcleos</b> de quem quiser, convida gestor e apaga lançamento em definitivo.</li>
         <li><b>Contabilidade</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início e o Petermann – Despesas dela mostram só Equipe e Arquivos.</li>
       </ul>
       <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contabilidade, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
@@ -1978,15 +1978,15 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
     </div>
 
     <div class="ajuda-sec ajuda-gestor">
-      <h4>🗄️ Backup e avisos (admin)</h4>
+      <h4>🗄️ Backup e avisos (gestor e admin)</h4>
       <p>Em <b>Perfil → 🗄️ Backup</b>: o servidor gera sozinho, <b>todo domingo de madrugada</b>, um ZIP com o banco e todas as fotos (fica a lista dos últimos 8). Toque num deles para baixar, ou em <b>Baixar backup completo</b> para gerar na hora. Guarde uma cópia por mês fora do servidor. Se o backup mais novo tiver mais de 8 dias, a tela avisa. A rotação guarda as <b>12 cópias semanais</b> mais novas e a <b>primeira de cada mês</b> dos últimos 12 meses.</p>
       <p><b>☁️ Cópia no Google Drive:</b> na mesma seção, toque em <b>Conectar Google Drive ao backup</b> uma vez (o Google pede permissão só para arquivos que o app criar). A partir daí o backup semanal sobe sozinho para a pasta <b>Backups Petermann App</b> do seu Drive, com a mesma rotação — se a Locaweb perder o disco, a cópia está lá. <b>Enviar agora</b> testa a conexão com o backup mais novo; se a autorização expirar, chega e-mail e basta conectar de novo.</p>
-      <p>Qualquer erro do servidor (ou backup que falhar) chega por <b>e-mail</b> ao admin; e um monitor externo avisa se o site sair do ar.</p>
+      <p>Qualquer erro do servidor (ou backup que falhar) chega por <b>e-mail</b> ao endereço configurado no servidor; e um monitor externo avisa se o site sair do ar. Só existe <b>uma</b> conta de Drive ligada ao backup: se outra pessoa conectar a dela, substitui a anterior — a tela mostra sempre qual conta está valendo.</p>
       <h4>🧪 Ambiente de teste (homologação)</h4>
       <p>Toda novidade entra primeiro em <b>teste.pmservicosagronomicos.com.br</b> — uma cópia do app com banco e fotos próprios, faixa laranja no topo e ícone "PM TESTE". Lance, apague, teste à vontade: <b>nada dali vale para a empresa</b> nem chega à produção. Entre lá com o mesmo e-mail e senha (o login pelo Google só funciona na produção). Quando o teste passa, a mesma versão vai para o app oficial.</p>
-      <h4>💾 Armazenamento do servidor (admin)</h4>
+      <h4>💾 Armazenamento do servidor (gestor e admin)</h4>
       <p>Em <b>Perfil → 💾 Armazenamento do servidor</b> você vê quanto o app ocupa na Locaweb, separado em fotos, backups, banco, miniaturas e logs; a porcentagem de um <b>teto de alerta</b> (o plano da Locaweb é ilimitado em disco; o teto, 20 GB, serve para pegar crescimento anormal); o <b>crescimento por mês</b> e uma estimativa de quando o espaço acaba; e a idade do último backup. Verde = tudo bem, laranja = atenção (acima de 80 % ou backup com mais de 8 dias), vermelho = crítico (acima de 90 %).</p>
-      <p>Você não precisa abrir para vigiar: o servidor mede sozinho <b>todo dia às 04:10</b> e manda <b>e-mail</b> ao admin quando passar dos limites, quando o backup atrasar ou quando, no ritmo atual, o espaço for acabar em menos de 60 dias. Para liberar espaço: guarde menos cópias de backup ou peça mais espaço no painel da Locaweb.</p>
+      <p>Você não precisa abrir para vigiar: o servidor mede sozinho <b>todo dia às 04:10</b> e manda <b>e-mail</b> quando passar dos limites, quando o backup atrasar ou quando, no ritmo atual, o espaço for acabar em menos de 60 dias. Para liberar espaço: guarde menos cópias de backup ou peça mais espaço no painel da Locaweb.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -2186,25 +2186,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=204"></script>
-<script defer src="js/db.js?v=204"></script>
-<script defer src="js/nfce.js?v=204"></script>
-<script defer src="js/sefaz.js?v=204"></script>
-<script defer src="js/brasilapi.js?v=204"></script>
-<script defer src="js/ocr.js?v=204"></script>
-<script defer src="js/recorte.js?v=204"></script>
-<script defer src="js/excel.js?v=204"></script>
-<script defer src="js/gestor.js?v=204"></script>
-<script defer src="js/frota.js?v=204"></script>
-<script defer src="js/ponto.js?v=204"></script>
-<script defer src="js/arquivos.js?v=204"></script>
-<script defer src="js/gdrive.js?v=204"></script>
-<script defer src="js/app.js?v=204"></script>
+<script defer src="js/api.js?v=205"></script>
+<script defer src="js/db.js?v=205"></script>
+<script defer src="js/nfce.js?v=205"></script>
+<script defer src="js/sefaz.js?v=205"></script>
+<script defer src="js/brasilapi.js?v=205"></script>
+<script defer src="js/ocr.js?v=205"></script>
+<script defer src="js/recorte.js?v=205"></script>
+<script defer src="js/excel.js?v=205"></script>
+<script defer src="js/gestor.js?v=205"></script>
+<script defer src="js/frota.js?v=205"></script>
+<script defer src="js/ponto.js?v=205"></script>
+<script defer src="js/arquivos.js?v=205"></script>
+<script defer src="js/gdrive.js?v=205"></script>
+<script defer src="js/app.js?v=205"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=204').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=205').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

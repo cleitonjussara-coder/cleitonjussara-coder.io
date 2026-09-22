@@ -9,14 +9,14 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Manutenção que na hospedagem compartilhada não dá para fazer por SSH.
- * Só admin. Tudo idempotente: chamar duas vezes não estraga nada.
+ * Gestor e admin (22/09/2026). Tudo idempotente: chamar duas vezes não estraga nada.
  */
 class AdminController extends Controller
 {
     /** GET /admin/status — versão, banco, migrações pendentes. */
     public function status(Request $r): JsonResponse
     {
-        abort_unless($r->user()?->ehAdmin(), 403);
+        abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin acessa a manutenção do servidor');
 
         Artisan::call('migrate:status');
         $pendentes = collect(explode("\n", Artisan::output()))
@@ -36,11 +36,11 @@ class AdminController extends Controller
     /**
      * GET /admin/armazenamento — quanto o app ocupa no servidor (banco, fotos,
      * backups, logs), último backup, histórico diário e tendência (21/09/2026).
-     * Alimenta o cartão "Armazenamento" no Perfil do admin.
+     * Alimenta o cartão "Armazenamento" no Perfil do gestor/admin.
      */
     public function armazenamento(Request $r, \App\Services\Armazenamento $a): JsonResponse
     {
-        abort_unless($r->user()?->ehAdmin(), 403);
+        abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin acessa a manutenção do servidor');
 
         $m = $a->medir();
         $hist = $a->historico();
@@ -63,7 +63,7 @@ class AdminController extends Controller
      */
     public function migrar(Request $r): JsonResponse
     {
-        abort_unless($r->user()?->ehAdmin(), 403);
+        abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin acessa a manutenção do servidor');
 
         $codigo = Artisan::call('migrate', ['--force' => true]);
 

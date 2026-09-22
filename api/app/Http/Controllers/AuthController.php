@@ -196,19 +196,20 @@ class AuthController extends Controller
         }
 
         /* Autorização do backup no Drive (21/09/2026): não é login — só guarda
-           o refresh_token para o cron e volta ao Perfil. O uid do state é do
-           admin que clicou (a URL só sai por /backup/drive/url, autenticada). */
+           o refresh_token para o cron e volta ao Perfil. O uid do state é de
+           quem clicou — gestor ou admin (22/09/2026) — e a URL só sai por
+           /backup/drive/url, que é autenticada. */
         if (! empty($state['backup'])) {
             try {
                 $adm = Colaborador::find($state['uid'] ?? '');
-                abort_unless($adm?->ehAdmin(), 403);
+                abort_unless($adm?->manutencao(), 403);
                 $tok = $g->trocarCode($r->query('code'), route('auth.google.callback'));
                 if (empty($tok['refresh_token'])) {
                     throw new \RuntimeException('Google não devolveu refresh_token');
                 }
                 $info = $g->userInfo($tok['access_token']);
                 app(\App\Services\DriveBackup::class)->conectar($tok['refresh_token'], strtolower($info['email']));
-                Log::info('drive backup conectado', ['admin' => $adm->email, 'conta' => $info['email']]);
+                Log::info('drive backup conectado', ['quem' => $adm->email, 'papel' => $adm->role, 'conta' => $info['email']]);
 
                 return redirect()->away($front.'#drive_backup=ok');
             } catch (Throwable $e) {
