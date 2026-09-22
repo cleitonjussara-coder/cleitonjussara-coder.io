@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=211">
+  <link rel="manifest" href="manifest.json?v=212">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1460,7 +1460,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=211" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=212" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1848,7 +1848,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
         <li>💸 <b>Repasse / Reembolso</b> — logo abaixo das abas: dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
       <p><b>📊 Resumo do mês (22/09/2026):</b> entre as abas e o Repasse ficam, lado a lado, o total de <b>RDA</b>, o de <b>RDM</b> e a soma do mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>, onde está o detalhe mês a mês.</p>
-      <p>Quando o valor a receber passa de <b>R$ 1.500,00</b>, o bloco fica <b>laranja</b> e o <b>gestor é avisado no sino</b> (🔔 no alto da tela), com o nome e o valor de cada colaborador acima do limite — é o controle para ninguém ficar muito tempo no próprio dinheiro. O gestor vê também, no seu hub, uma faixa laranja listando quem está acima; tocando nela abre as notificações, onde há <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se a dívida aumentar.</p>
+      <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto da tela) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
@@ -2214,25 +2214,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=211"></script>
-<script defer src="js/db.js?v=211"></script>
-<script defer src="js/nfce.js?v=211"></script>
-<script defer src="js/sefaz.js?v=211"></script>
-<script defer src="js/brasilapi.js?v=211"></script>
-<script defer src="js/ocr.js?v=211"></script>
-<script defer src="js/recorte.js?v=211"></script>
-<script defer src="js/excel.js?v=211"></script>
-<script defer src="js/gestor.js?v=211"></script>
-<script defer src="js/frota.js?v=211"></script>
-<script defer src="js/ponto.js?v=211"></script>
-<script defer src="js/arquivos.js?v=211"></script>
-<script defer src="js/gdrive.js?v=211"></script>
-<script defer src="js/app.js?v=211"></script>
+<script defer src="js/api.js?v=212"></script>
+<script defer src="js/db.js?v=212"></script>
+<script defer src="js/nfce.js?v=212"></script>
+<script defer src="js/sefaz.js?v=212"></script>
+<script defer src="js/brasilapi.js?v=212"></script>
+<script defer src="js/ocr.js?v=212"></script>
+<script defer src="js/recorte.js?v=212"></script>
+<script defer src="js/excel.js?v=212"></script>
+<script defer src="js/gestor.js?v=212"></script>
+<script defer src="js/frota.js?v=212"></script>
+<script defer src="js/ponto.js?v=212"></script>
+<script defer src="js/arquivos.js?v=212"></script>
+<script defer src="js/gdrive.js?v=212"></script>
+<script defer src="js/app.js?v=212"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=211').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=212').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

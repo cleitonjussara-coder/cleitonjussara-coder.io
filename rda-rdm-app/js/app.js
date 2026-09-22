@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 211;
+const APP_BUILD = 212;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1505,8 +1505,8 @@ function _notificacoes() {
       if (vistos.has(id)) return;
       out.push({
         id, tipo: 'devedor', userId: c.id,
-        titulo: `${c.nome}: a empresa está devendo ${brl(c.valor)}`,
-        sub: `Acima do limite de ${brl(LIMITE_DEVEDOR)} — gastos sem repasse acumulados até ${MESES[filMes - 1]}/${filAno}.`,
+        titulo: `${c.nome}: RDM a receber de ${brl(c.valor)}`,
+        sub: `Acima do limite de ${brl(LIMITE_DEVEDOR)} em RDM — gastos sem repasse acumulados até ${MESES[filMes - 1]}/${filAno}${Math.abs(c.total - c.valor) >= 1 ? ` (com RDA, ${brl(c.total)} no total)` : ''}.`,
       });
     });
   }
@@ -1653,9 +1653,9 @@ let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo se
    da empresa para gastar. */
 const LIMITE_DEVEDOR = 1500;
 
-function _devedorDe(ns, rs, mes, ano, ehCv) {
+function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
   const k = ano * 12 + mes;
-  const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k;
+  const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k && (!tipo || o.tipo === tipo);
   const recebido = _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
   if (ehCv) return _soma(rs.filter(r => ate(r) && _repasseEhPedido(r))) - recebido;
   return _soma(ns.filter(ate)) - recebido;
@@ -1673,11 +1673,15 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
   junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs');
   if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
   return Object.entries(porUser)
-    .map(([id, d]) => ({
-      id,
-      nome: (id === user?.id ? user?.nome : equipePorId[id]?.nome) || 'Colaborador',
-      valor: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(id === user?.id ? user : equipePorId[id])),
-    }))
+    .map(([id, d]) => {
+      const quem = id === user?.id ? user : equipePorId[id];
+      return {
+        id,
+        nome: (id === user?.id ? user?.nome : equipePorId[id]?.nome) || 'Colaborador',
+        valor: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(quem), 'RDM'),   // só RDM (22/09/2026)
+        total: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(quem)),
+      };
+    })
     .filter(c => c.valor > LIMITE_DEVEDOR)
     .sort((a, b) => b.valor - a.valor);
 }
@@ -1687,10 +1691,13 @@ function _resumoHub() {
   const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno);
   const rda = doMes('RDA'), rdm = doMes('RDM');
   const cv = _ehCV();
-  const devedor = _devedorDe(notas.filter(n => !n.deleted), repasses.filter(r => !r.deleted), filMes, filAno, cv);
-  const acima = devedor > LIMITE_DEVEDOR;
-  const equipe = _equipeDevedora();
-  const outros = equipe.filter(c => c.id !== user?.id);
+  const ns = notas.filter(n => !n.deleted), rs = repasses.filter(r => !r.deleted);
+  const devedor = _devedorDe(ns, rs, filMes, filAno, cv);
+  const devedorRdm = _devedorDe(ns, rs, filMes, filAno, cv, 'RDM');
+  /* 22/09/2026: o aviso é SÓ pelo devedor de RDM e SÓ para gestor/admin —
+     o colaborador vê os números, mas não é cobrado pelo app. */
+  const acima = _ehGestorOuAdmin() && devedorRdm > LIMITE_DEVEDOR;
+  const outros = _equipeDevedora().filter(c => c.id !== user?.id);
 
   const linha = (ico, sigla, arr) => `
     <div class="res-col">
@@ -1723,11 +1730,11 @@ function _resumoHub() {
         </div>
       </div>
       <div class="res-saldo">${saldoTxt}</div>
-      ${acima ? `<div class="res-alerta">⚠️ Acima de ${brl(LIMITE_DEVEDOR)} acumulado${_ehGestorOuAdmin() ? '' : ' — o gestor é avisado no sino dele'}. ${cv ? 'Acompanhe pelo' : 'Peça o repasse ou veja o'} <b>RDM/RDA e Planilhas</b>.</div>` : ''}
+      ${acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : ''}
     </div>
     ${outros.length ? `
     <div class="res-card alerta res-equipe" onclick="event.stopPropagation(); abrirNotificacoes()">
-      <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com saldo devedor acima de ${brl(LIMITE_DEVEDOR)}:
+      <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}:
         ${outros.slice(0, 3).map(c => `${esc(c.nome)} (${brl(c.valor)})`).join(' · ')}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ''}. Toque para ver.</div>
     </div>` : ''}`;
 }
