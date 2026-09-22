@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 212;
+const APP_BUILD = 213;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1714,6 +1714,41 @@ function _resumoHub() {
       ? `<b>${brl(-devedor)}</b> <span class="res-saldo-lbl">adiantado com você (${cv ? 'reembolsos' : 'repasses'} acima do gasto)</span>`
       : `<b>Em dia</b> <span class="res-saldo-lbl">nada a receber</span>`;
 
+  /* 22/09/2026: "especificar os gastos no resumo a receber e apontar os
+     gastos RDM/RDA e os valores por mês" — o que forma o valor a receber,
+     separado por aba e mês a mês. No regime CV, "gasto" aqui é o reembolso
+     registrado (nota do cartão não é dívida da empresa com a pessoa). */
+  const devedorRda = _devedorDe(ns, rs, filMes, filAno, cv, 'RDA');
+  const gastoDe = (t, mes) => cv
+    ? _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhPedido(r)))
+    : _soma(ns.filter(n => n.tipo === t && n.mes === mes && n.ano === filAno));
+  const recebidoDe = mes => _soma(rs.filter(r => r.mes === mes && r.ano === filAno && _repasseEhRecebido(r)));
+  const linhasMes = [];
+  for (let m = 12; m >= 1; m--) {
+    const a = gastoDe('RDA', m), d = gastoDe('RDM', m), rec = recebidoDe(m);
+    if (a || d || rec) linhasMes.push({ m, rda: a, rdm: d, rec, falta: a + d - rec });
+  }
+  const mostra = linhasMes.slice(0, 6);
+  const chip = (ico, lbl, v) => `<span class="res-chip"><span>${ico} ${lbl}</span><b>${brl(v)}</b></span>`;
+  const detalhe = `
+    <div class="res-chips">
+      ${chip('💼', 'RDM', devedorRdm)}
+      ${chip('🍽️', 'RDA', devedorRda)}
+    </div>
+    ${mostra.length ? `
+    <table class="res-tab">
+      <tr><th>Mês</th><th>🍽️ RDA</th><th>💼 RDM</th><th>${cv ? 'Reemb.' : 'Recebido'}</th><th>A receber</th></tr>
+      ${mostra.map(l => `
+      <tr>
+        <td>${MESES[l.m - 1]}</td>
+        <td>${brl(l.rda)}</td>
+        <td>${brl(l.rdm)}</td>
+        <td>${brl(l.rec)}</td>
+        <td class="${l.falta > 0 ? 'pos' : l.falta < 0 ? 'neg' : ''}">${brl(l.falta)}</td>
+      </tr>`).join('')}
+    </table>
+    ${linhasMes.length > mostra.length ? `<div class="res-tab-mais">+ ${linhasMes.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}` : ''}`;
+
   return `
     <div class="ini-titulo">Resumo de ${MESES[filMes - 1]} ${filAno}</div>
     <div class="res-card ${acima ? 'alerta' : ''}" onclick="switchView('saldo')">
@@ -1730,6 +1765,7 @@ function _resumoHub() {
         </div>
       </div>
       <div class="res-saldo">${saldoTxt}</div>
+      ${detalhe}
       ${acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : ''}
     </div>
     ${outros.length ? `
