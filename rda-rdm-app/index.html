@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=222">
+  <link rel="manifest" href="manifest.json?v=223">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -518,7 +518,7 @@ select.inp{cursor:pointer}
 .rep-desc{flex:1;font-size:16px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rep-val{font-size:17px;font-weight:700;color:var(--primary);flex-shrink:0}
 .export-btns{display:flex;gap:6px}
-.muted-p{color:var(--text2);font-size:15.5px;padding:8px 0}
+.muted-p{color:#c3e0cd;font-size:15.5px;padding:8px 0}
 
 .recent-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);
              transition:transform .1s ease}
@@ -888,7 +888,7 @@ select.inp{cursor:pointer}
 .pnl-conteudo{position:relative;z-index:1;display:flex;flex-direction:column;gap:6px;padding:16px 16px 18px}
 .pnl-ico{font-size:35.5px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))}
 .pnl-tit{font-size:19.5px;font-weight:800;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.55)}
-.pnl-sub{font-size:15px;line-height:1.35;color:rgba(234,247,238,.85);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.pnl-sub{font-size:15px;line-height:1.35;color:#e4f5e9;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .pnl-grande .pnl-conteudo{min-height:150px;justify-content:flex-end;padding:20px 20px 22px;max-width:78%}
 .pnl-grande .pnl-tit{font-size:24px}
 .pnl-linha{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
@@ -907,12 +907,13 @@ select.inp{cursor:pointer}
 @media (min-width:480px){.pnl-mini .pnl-sub{display:block}}
 /* textos e cartões das telas sobre o fundo esmeralda */
 .ini-ola h2{color:#f2fbf4;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-.ini-ola span,.ini-titulo{color:rgba(234,247,238,.75);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.ini-ola span{color:#cfe8d6;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.ini-titulo{color:var(--lima-2);text-shadow:0 1px 2px rgba(0,0,0,.55)}
 .ini-titulo{letter-spacing:.9px}
 .ini-ola-fixa{background:linear-gradient(160deg,#0f6b34,#083d1e);border-bottom:1px solid rgba(255,255,255,.10);box-shadow:0 8px 18px rgba(0,0,0,.45)}
 .ini-kpi,.ini-ir-btn,.ini-dica{background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:5px solid var(--esm-frame);
   box-shadow:inset 2px 2px 4px rgba(255,255,255,.2),inset -2px -2px 5px rgba(0,0,0,.55),0 8px 18px rgba(0,0,0,.4)}
-.ini-kpi-lbl,.ini-kpi-sub,.ini-ir-sub,.ini-dica{color:rgba(234,247,238,.78)}
+.ini-kpi-lbl,.ini-kpi-sub,.ini-ir-sub,.ini-dica{color:#cfe8d6}
 .ini-kpi-val,.ini-ir-lbl{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 .ini-kpi.alerta .ini-kpi-val{color:var(--ouro)}
 .ini-ir-btn{color:#eef9f0}
@@ -923,7 +924,7 @@ select.inp{cursor:pointer}
 .btn-mes-nav{background:rgba(255,255,255,.08);border-color:rgba(185,226,74,.35)}
 .db-card,.dash-card{border:5px solid var(--esm-frame);box-shadow:inset 2px 2px 4px rgba(255,255,255,.35),inset -2px -2px 5px rgba(0,0,0,.25),0 8px 18px rgba(0,0,0,.4)}
 .muted-p{color:rgba(234,247,238,.7)}
-.loading-state p{color:rgba(234,247,238,.8)}
+.loading-state p{color:#cfe8d6}
 .empty-state{color:#eef9f0}
 /* ── Tema esmeralda em TODAS as telas (18/09/2026) ─────────────────
    Dentro do conteúdo do app e da tela de login os tokens mudam: superfícies
@@ -933,7 +934,7 @@ select.inp{cursor:pointer}
   --surface:linear-gradient(160deg,#0f6b34 0%,#0a4d25 55%,#083d1e 100%);
   --surface2:rgba(255,255,255,.07);
   --bg:rgba(0,0,0,.28);
-  --text:#eef9f0;--text2:rgba(234,247,238,.78);
+  --text:#f1fbf3;--text2:#c3e0cd;
   --primary-d:#d9f5a0;--primary-l:#b9e24a;
   --border:rgba(185,226,74,.35);
   --shadow:0 8px 18px rgba(0,0,0,.4);
@@ -1409,9 +1410,9 @@ html{-webkit-text-size-adjust:100%}
 .res-ico{font-size:20.5px;line-height:1.1}
 .res-sigla{font-size:13px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--lima-2)}
 .res-val{font-size:17px;font-weight:800;line-height:1.2;white-space:nowrap}
-.res-sub{font-size:12.5px;color:rgba(234,247,238,.72)}
+.res-sub{font-size:12.5px;color:#c3e0cd}
 .res-rec-tit{margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.14);
-  font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:rgba(234,247,238,.7)}
+  font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--lima-2)}
 .res-recs{display:flex;gap:8px;margin-top:7px}
 .res-rec{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;
   padding:9px 6px;border-radius:11px;background:rgba(4,31,15,.45);border:1.5px solid transparent}
@@ -1421,7 +1422,7 @@ html{-webkit-text-size-adjust:100%}
 .res-rec-val{font-size:19px;font-weight:800;line-height:1.15;white-space:nowrap;font-variant-numeric:tabular-nums}
 .res-rec.receber .res-rec-val{color:#ffd88a}
 .res-rec.adiantado .res-rec-val{color:#c9ea62}
-.res-rec-sub{font-size:11px;color:rgba(234,247,238,.75);text-align:center;line-height:1.3}
+.res-rec-sub{font-size:11px;color:#cfe8d6;text-align:center;line-height:1.3}
 .res-alerta{margin-top:8px;font-size:14px;line-height:1.45;color:#ffe9b8;font-weight:600}
 @media (max-width:359px){
   .res-val{font-size:16px}
@@ -1430,13 +1431,13 @@ html{-webkit-text-size-adjust:100%}
 /* detalhe do "a receber": por aba e por mês (22/09/2026) */
 .res-tab-tit{margin-top:11px;font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--lima-2)}
 .res-tab{width:100%;margin-top:4px;border-collapse:collapse;font-size:13px;line-height:1.35}
-.res-tab th{font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:rgba(234,247,238,.62);
+.res-tab th{font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:#c2e4cf;
   font-weight:800;text-align:right;padding:2px 3px}
 .res-tab th:first-child,.res-tab td:first-child{text-align:left;font-weight:800}
 .res-tab td{text-align:right;padding:3px;border-top:1px solid rgba(255,255,255,.1);white-space:nowrap}
 .res-tab td.pos{color:#ffd88a;font-weight:800}
 .res-tab td.neg{color:#b9e24a;font-weight:800}
-.res-tab-mais{margin-top:5px;font-size:13px;color:rgba(234,247,238,.7)}
+.res-tab-mais{margin-top:5px;font-size:13px;color:#c3e0cd}
 @media (max-width:359px){.res-tab{font-size:12.5px}.res-tab td{padding:3px 1px}}
 
 /* ─── Abas RDM e RDA no hub de Despesas (22/09/2026) ───────────────
@@ -1461,7 +1462,7 @@ html{-webkit-text-size-adjust:100%}
 .aba-hero-sigla{display:block;font-size:31px;font-weight:900;letter-spacing:1.2px;line-height:1.05;text-shadow:0 2px 4px rgba(0,0,0,.6)}
 .aba-hero-nome{display:block;font-size:16px;font-weight:800;color:var(--lima-2);margin-top:2px;text-shadow:0 1px 2px rgba(0,0,0,.55)}
 .aba-hero-rdm .aba-hero-nome{color:#c3f1f8}
-.aba-hero-sub{display:block;font-size:14px;line-height:1.4;color:rgba(234,247,238,.82);margin-top:6px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.aba-hero-sub{display:block;font-size:14px;line-height:1.4;color:#e4f5e9;margin-top:6px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .aba-hero-seta{flex-shrink:0;font-size:17px;font-weight:900;opacity:.9;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .aba-hero-mes{position:absolute;top:10px;right:12px;z-index:1;font-size:13px;font-weight:800;letter-spacing:.5px;
   padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.4);color:#eaf78f;text-shadow:none;white-space:nowrap}
@@ -1511,6 +1512,15 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   .aba-hero-sigla{font-size:27px}
 }
 
+/* Resposta ao toque/mouse (23/09/2026): quem tem mouse vê o cartão acender
+   em lima ao passar; no celular fica o afundar que já existia. */
+@media (hover:hover) and (pointer:fine){
+  .pnl:hover,.ini-ir-btn:hover,.res-card:hover,.aba-hero:hover{border-color:var(--lima);transition:border-color .15s,box-shadow .15s}
+  .pnl:hover,.res-card:hover{box-shadow:inset 3px 3px 5px rgba(255,255,255,.22),inset -3px -3px 7px rgba(0,0,0,.55),0 14px 28px rgba(0,0,0,.5),0 0 0 1px rgba(185,226,74,.5)}
+  .aba-acao:hover{background:rgba(185,226,74,.18)}
+  .ini-ola-acoes .btn:hover{background:rgba(185,226,74,.18)}
+}
+
 </style>
 </head>
 <body>
@@ -1536,7 +1546,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=222" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=223" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2293,25 +2303,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=222"></script>
-<script defer src="js/db.js?v=222"></script>
-<script defer src="js/nfce.js?v=222"></script>
-<script defer src="js/sefaz.js?v=222"></script>
-<script defer src="js/brasilapi.js?v=222"></script>
-<script defer src="js/ocr.js?v=222"></script>
-<script defer src="js/recorte.js?v=222"></script>
-<script defer src="js/excel.js?v=222"></script>
-<script defer src="js/gestor.js?v=222"></script>
-<script defer src="js/frota.js?v=222"></script>
-<script defer src="js/ponto.js?v=222"></script>
-<script defer src="js/arquivos.js?v=222"></script>
-<script defer src="js/gdrive.js?v=222"></script>
-<script defer src="js/app.js?v=222"></script>
+<script defer src="js/api.js?v=223"></script>
+<script defer src="js/db.js?v=223"></script>
+<script defer src="js/nfce.js?v=223"></script>
+<script defer src="js/sefaz.js?v=223"></script>
+<script defer src="js/brasilapi.js?v=223"></script>
+<script defer src="js/ocr.js?v=223"></script>
+<script defer src="js/recorte.js?v=223"></script>
+<script defer src="js/excel.js?v=223"></script>
+<script defer src="js/gestor.js?v=223"></script>
+<script defer src="js/frota.js?v=223"></script>
+<script defer src="js/ponto.js?v=223"></script>
+<script defer src="js/arquivos.js?v=223"></script>
+<script defer src="js/gdrive.js?v=223"></script>
+<script defer src="js/app.js?v=223"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=222').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=223').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
