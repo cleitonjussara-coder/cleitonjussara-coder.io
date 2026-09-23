@@ -246,8 +246,6 @@ window.API = (() => {
     upsert: rec => req('PUT', `/repasses/${rec.id}`, { body: rec }),
     /* gestor/admin marca o pedido como pago: o servidor cria o repasse recebido (21/09/2026) */
     atendido: id => req('PATCH', `/repasses/${id}/atendido`),
-    /* 2ª etapa (23/09/2026): quem recebe confirma (ou recusa) */
-    confirmar: (id, aceita = true) => req('PATCH', `/repasses/${id}/confirmar`, { body: { aceita } }),
   };
 
   const fotos = {

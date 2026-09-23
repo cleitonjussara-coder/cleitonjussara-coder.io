@@ -1593,15 +1593,6 @@ function _notificacoes() {
         sub: `${c.email || ''} · ${VIA[c.criado_via] || 'pelo app'}${c.created_at ? ' em ' + fmtDataBR(String(c.created_at).slice(0, 10)) : ''} · papel: ${PAPEL_NOME[c.role] || c.role || 'colaborador'}`,
       }));
   }
-  /* Repasse lançado pelo gestor, esperando o "recebi" (23/09/2026). Não é
-     dispensável: some quando a pessoa confirma ou diz que não recebeu. */
-  repasses.filter(_repasseAConfirmar)
-    .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
-    .forEach(r => out.push({
-      id: 'confirmar:' + r.id, tipo: 'confirmar', rep: r,
-      titulo: `O gestor lançou ${brl(r.valor)} (${r.tipo}) para você — você recebeu?`,
-      sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''} · só entra no seu saldo depois que você confirmar.`,
-    }));
   const vistos = _notifVistos();
   /* Saldo devedor acima do limite (22/09/2026): a empresa deve mais de
      R$ 1.500 a alguém. O id carrega a faixa do valor (centenas), então o
@@ -1648,14 +1639,11 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'confirmar' ? '💰' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'confirmar' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="confirmarRecebimento('${it.rep.id}', true, this)">✅ Recebi</button>
-          <button class="btn btn-sm btn-danger-outline" onclick="confirmarRecebimento('${it.rep.id}', false, this)">🚫 Não recebi</button>
-        </div>` : it.tipo === 'novo' ? `<div class="notif-acoes">
+        ${it.tipo === 'novo' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
           <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
         </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
@@ -1696,36 +1684,15 @@ async function confirmarEntrada(id, aceita, btn) {
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
 }
 
-/* 2ª etapa do repasse (23/09/2026): o colaborador confirma que o dinheiro
-   caiu — ou avisa que não caiu, e o pedido volta para o gestor. */
-async function confirmarRecebimento(id, aceita, btn) {
-  if (!sb || !navigator.onLine) { toast('Precisa de internet para confirmar', 'err'); return; }
-  const r = repasses.find(x => x.id === id);
-  if (!confirm(aceita
-    ? `Confirmar que você recebeu ${brl(r?.valor || 0)} (${r?.tipo || ''})?\n\nO valor entra no seu saldo agora.`
-    : `Avisar que você NÃO recebeu ${brl(r?.valor || 0)}?\n\nO lançamento é descartado e o pedido volta para o gestor.`)) return;
-  if (btn) btn.disabled = true;
-  try {
-    await sb.repasses.confirmar(id, aceita);
-    toast(aceita ? 'Recebimento confirmado ✅' : 'Avisamos o gestor de que não chegou');
-    if (user) await DB.sync(sb, user.id).catch(() => {});
-    await carregarDadosLocais();
-    document.getElementById('notif-overlay')?.remove();
-    await atualizarNotificacoes();
-    abrirNotificacoes();
-    if (['saldo', 'home', 'inicio', 'despesas'].includes(viewAtual)) switchView(viewAtual);
-  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
-}
-
 async function marcarPedidoPago(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
   const r = repassesEquipe.find(x => x.id === id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
-  if (!confirm(`Confirmar que o repasse de ${brl(r?.valor || 0)} para ${quem} foi PAGO?\n\nO app registra o repasse recebido para ${quem} e o pedido sai das pendências.`)) return;
+  if (!confirm(`Confirmar que o repasse de ${brl(r?.valor || 0)} para ${quem} foi PAGO?\n\nO repasse entra no saldo de ${quem} e o pedido sai das pendências.`)) return;
   if (btn) btn.disabled = true;
   try {
     await sb.repasses.atendido(id);
-    toast(`Pago ✅ — agora ${quem} precisa confirmar que recebeu`);
+    toast(`Pago ✅ — repasse registrado no saldo de ${quem}`);
     if (sb && user) await DB.sync(sb, user.id).catch(() => {});
     await carregarDadosLocais();
     document.getElementById('notif-overlay')?.remove();
@@ -2146,17 +2113,11 @@ function _repasseEhPedido(rep) {
   return ['requested', 'request', 'pedido', 'solicitado'].includes(kind);
 }
 
-/* 23/09/2026: recebido só vale depois que o COLABORADOR confirma. O que o
-   gestor lança fica com confirmado_em vazio até isso acontecer, e não entra
-   em saldo, gráfico nem planilha. Registro antigo (sem o campo) conta. */
+/* 23/09/2026: o repasse que o gestor registra JÁ VALE — entra em saldo,
+   gráfico e planilha na hora. A confirmação do colaborador, que existiu por
+   algumas horas hoje, saiu do fluxo: quem paga é quem registra. */
 function _repasseEhRecebido(rep) {
-  return !_repasseEhPedido(rep) && !_repasseAConfirmar(rep);
-}
-
-/* Repasse que o gestor lançou e está esperando a confirmação de quem recebe. */
-function _repasseAConfirmar(rep) {
-  return !!rep && !rep.deleted && !_repasseEhPedido(rep)
-    && ('confirmado_em' in rep) && !rep.confirmado_em;
+  return !_repasseEhPedido(rep);
 }
 
 /* Rótulo curto p/ eixo: R$ 350 · R$ 1,2 mil · R$ 1,4 mi */
@@ -3331,10 +3292,8 @@ function renderSaldo() {
     const cvR = _ehCV();
     const label = pedido ? (cvR ? 'Reembolso registrado' : 'Pedido') : (cvR ? 'Reembolso recebido' : 'Recebido');
     const desc = esc(r.descricao || (pedido ? (cvR ? 'Reembolso a receber' : 'Pedido de repasse') : (cvR ? 'Reembolso recebido' : 'Repasse recebido')));
-    const aConfirmar = _repasseAConfirmar(r);
     const detail = pedido
-      ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅ — falta você confirmar o recebimento` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
-      : aConfirmar ? '⏳ Lançado pelo gestor — confirme que recebeu para entrar no saldo'
+      ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
       : (cvR ? 'Abate dos reembolsos registrados' : 'Registrado como repasse recebido');
     return `
       <div class="rep-item">
@@ -3344,7 +3303,7 @@ function renderSaldo() {
           <div style="font-size:13px;color:var(--text2);margin-top:2px">${label} · ${detail}</div>
         </div>
         <span class="rep-val">${brl(r.valor)}</span>
-        ${aConfirmar ? `<button class="btn btn-sm btn-primary" style="white-space:nowrap" onclick="confirmarRecebimento('${r.id}', true, this)">✅ Recebi</button>` : `<button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>`}
+        <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
       </div>`;
   }).join('') : '<p class="muted-p">Nenhum repasse registrado.</p>';
 
