@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 230;
+const APP_BUILD = 231;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2054,7 +2054,6 @@ function renderInicio() {
   <div class="db-container">
     </div>
 
-    <div class="ini-titulo">O que você quer fazer?</div>
     <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
          tela com os três. 21/09/2026: virou "Petermann – Despesas" e passou a
          guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos — o
