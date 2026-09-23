@@ -75,8 +75,54 @@ class FotoStorage
            trás: o caminho muda e o velho viraria órfão para sempre. */
         $this->apagarVersoesDe($userId, $notaId);
         $this->disk()->putFileAs($userId, $file, "{$notaId}.{$ext}");
+        /* 23/09/2026: rede de segurança. O app novo já manda a foto em pé,
+           mas versão antiga (e qualquer outro cliente) manda o JPEG cru, com
+           a rotação só no EXIF — e aí PDF, ZIP e planilha saem deitados. */
+        $this->endireitar("{$userId}/{$notaId}.{$ext}");
 
         return "{$userId}/{$notaId}.{$ext}";
+    }
+
+    /**
+     * Regrava o JPEG já rotacionado, sem o EXIF de orientação. Devolve true
+     * se mexeu no arquivo. Serve na gravação e no mutirão das fotos antigas
+     * (artisan fotos:endireitar).
+     */
+    public function endireitar(string $path): bool
+    {
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (! in_array($ext, ['jpg', 'jpeg'], true) || ! $this->existe($path)) {
+            return false;
+        }
+        if (! function_exists('imagecreatefromstring') || ! function_exists('exif_read_data')) {
+            return false;
+        }
+        try {
+            $bin = $this->disk()->get($path);
+            $exif = @exif_read_data('data://image/jpeg;base64,'.base64_encode($bin));
+            $o = (int) ($exif['Orientation'] ?? 1);
+            if ($o <= 1) {
+                return false;                 // já está em pé
+            }
+            $img = @imagecreatefromstring($bin);
+            if (! $img) {
+                return false;
+            }
+            $img = $this->corrigirOrientacao($img, $bin, $ext);
+            ob_start();
+            imagejpeg($img, null, 88);
+            $jpg = ob_get_clean();
+            imagedestroy($img);
+            if (! $jpg) {
+                return false;
+            }
+            $this->disk()->put($path, $jpg);
+            $this->apagar($this->caminhoMini($path));   // miniatura velha some; nasce da foto certa
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function existe(?string $path): bool

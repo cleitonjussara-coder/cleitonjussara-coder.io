@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=233">
+  <link rel="manifest" href="manifest.json?v=234">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1609,7 +1609,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=233" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=234" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2026,6 +2026,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
         <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>
       </ul>
       <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom).</p>
+      <p><b>📐 Foto sempre em pé (23/09/2026):</b> o celular costuma gravar a foto deitada e anotar a rotação num campo escondido do arquivo. A tela mostrava certo, mas o PDF, o ZIP e a planilha saíam de lado ou de cabeça para baixo. Agora o app <b>endireita a foto na hora de anexar</b> — o recorte, a leitura e o arquivo guardado já saem na posição certa. As fotos antigas foram endireitadas de uma vez no servidor.</p>
       <p class="ajuda-note">🌐 Quando aparece <b>"Valor conferido no SEFAZ"</b>, o valor veio do site oficial do estado — pode confiar. Sem essa marca, o valor veio da leitura da foto: confira.</p>
       <p>Nem todo estado permite essa conferência automática: <b>BA e GO</b> funcionam; <b>MG, SC e TO</b> exigem "não sou robô" ou não respondem, então nesses o valor vem sempre da foto. Os demais são conferidos conforme aparecem os primeiros cupons.</p>
     </div>
@@ -2375,25 +2376,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=233"></script>
-<script defer src="js/db.js?v=233"></script>
-<script defer src="js/nfce.js?v=233"></script>
-<script defer src="js/sefaz.js?v=233"></script>
-<script defer src="js/brasilapi.js?v=233"></script>
-<script defer src="js/ocr.js?v=233"></script>
-<script defer src="js/recorte.js?v=233"></script>
-<script defer src="js/excel.js?v=233"></script>
-<script defer src="js/gestor.js?v=233"></script>
-<script defer src="js/frota.js?v=233"></script>
-<script defer src="js/ponto.js?v=233"></script>
-<script defer src="js/arquivos.js?v=233"></script>
-<script defer src="js/gdrive.js?v=233"></script>
-<script defer src="js/app.js?v=233"></script>
+<script defer src="js/api.js?v=234"></script>
+<script defer src="js/db.js?v=234"></script>
+<script defer src="js/nfce.js?v=234"></script>
+<script defer src="js/sefaz.js?v=234"></script>
+<script defer src="js/brasilapi.js?v=234"></script>
+<script defer src="js/ocr.js?v=234"></script>
+<script defer src="js/recorte.js?v=234"></script>
+<script defer src="js/excel.js?v=234"></script>
+<script defer src="js/gestor.js?v=234"></script>
+<script defer src="js/frota.js?v=234"></script>
+<script defer src="js/ponto.js?v=234"></script>
+<script defer src="js/arquivos.js?v=234"></script>
+<script defer src="js/gdrive.js?v=234"></script>
+<script defer src="js/app.js?v=234"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=233').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=234').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

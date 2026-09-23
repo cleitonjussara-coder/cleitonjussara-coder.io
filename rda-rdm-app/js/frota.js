@@ -350,6 +350,7 @@ window.Frota = (() => {
     let foto = null;
     if (_fotoKm) {
       let blob = _fotoKm, ext = 'jpg';
+      /* _comprimirImagem já endireita pelo EXIF (23/09/2026) */
       try { if (typeof _comprimirImagem === 'function') ({ blob, ext } = await _comprimirImagem(_fotoKm, 'jpg')); } catch (_) {}
       foto = { blob, ext };
     }

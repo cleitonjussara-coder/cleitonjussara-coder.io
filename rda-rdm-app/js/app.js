@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 233;
+const APP_BUILD = 234;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3768,9 +3768,10 @@ async function _mostrarAvatar() {
   } catch (_) {}
 }
 async function enviarFotoPerfil(e) {
-  const file = e.target.files?.[0];
+  let file = e.target.files?.[0];
   if (!file) return;
   if (!navigator.onLine) { toast('Precisa de internet para enviar a foto', 'err'); return; }
+  try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026: rosto em pé
   /* enquadramento (19/09/2026): a mesma tela de recorte das notas, agora
      para o rosto — quem tirar a foto escolhe o pedaço que vira o avatar */
   let escolhida = file;
@@ -4615,7 +4616,61 @@ const _FOTO_LADO_MAX   = 1400;
 const _FOTO_QUALIDADE  = 0.72;
 const _FOTO_MIN_COMPRIMIR = 400 * 1024;   // abaixo disso não vale o esforço
 
+/* Orientação gravada no EXIF (1 = já está em pé). Lê só o começo do arquivo:
+   o bloco EXIF vem nos primeiros KB de um JPEG. */
+async function _exifOrientacao(blob) {
+  try {
+    if (!/^image\/jpe?g$/i.test(blob?.type || '')) return 1;
+    const buf = await blob.slice(0, 256 * 1024).arrayBuffer();
+    const v = new DataView(buf);
+    if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return 1;      // não é JPEG
+    let i = 2;
+    while (i + 4 < v.byteLength) {
+      if (v.getUint8(i) !== 0xFF) { i++; continue; }                  // resincroniza
+      const marca = v.getUint8(i + 1), tam = v.getUint16(i + 2);
+      if (marca === 0xE1) {                                          // APP1 = EXIF
+        const base = i + 10;
+        if (v.getUint32(i + 4) !== 0x45786966) { i += 2 + tam; continue; }
+        const little = v.getUint16(base) === 0x4949;
+        const ifd = base + v.getUint32(base + 4, little);
+        const n = v.getUint16(ifd, little);
+        for (let t = 0; t < n; t++) {
+          const e = ifd + 2 + t * 12;
+          if (v.getUint16(e, little) === 0x0112) return v.getUint16(e + 8, little) || 1;
+        }
+        return 1;
+      }
+      if (marca === 0xDA || marca === 0xD9) return 1;                 // começou a imagem
+      i += 2 + tam;
+    }
+  } catch (_) {}
+  return 1;
+}
+
+/* Devolve a foto JÁ EM PÉ e sem EXIF de rotação. Só reencoda quando precisa
+   — foto que já está certa passa direto, sem perder qualidade. */
+async function _normalizarOrientacao(blob) {
+  try {
+    if (await _exifOrientacao(blob) <= 1) return blob;
+    let fonte = null, bmp = null;
+    if (window.createImageBitmap) {
+      try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); fonte = bmp; } catch (_) {}
+    }
+    if (!fonte) fonte = await _blobToImg(blob);                       // <img> já vem girado nos navegadores atuais
+    const w = fonte.width || fonte.naturalWidth, h = fonte.height || fonte.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(fonte, 0, 0, w, h);
+    try { bmp?.close?.(); } catch (_) {}
+    const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    return out && out.size ? out : blob;
+  } catch (_) { return blob; }
+}
+
 async function _comprimirImagem(blob, ext) {
+  /* endireita antes de qualquer coisa: o recorte, o OCR e o arquivo salvo
+     passam a ver a foto na posição certa */
+  try { blob = await _normalizarOrientacao(blob); } catch (_) {}
   if (!blob || !_ehImagemExt(ext || 'jpg')) return { blob, ext };
   if (blob.size <= _FOTO_MIN_COMPRIMIR)    return { blob, ext };
   try {
@@ -5100,8 +5155,11 @@ async function buscarRazaoSocial(raw) {
 }
 
 async function onFotoNotaChange(e) {
-  const file = e.target.files[0];
+  let file = e.target.files[0];
   if (!file) return;
+  /* 23/09/2026: endireita ANTES de tudo — recorte, OCR, anexo e miniatura
+     passam a trabalhar com a foto na posição certa. */
+  try { file = await _normalizarOrientacao(file); } catch (_) {}
   _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
   fotoOriginal = file;
@@ -5118,8 +5176,9 @@ async function onFotoNotaChange(e) {
    - XML     → faz o parse e preenche tudo (autoritativo)
    - PDF     → só anexa (sem leitura automática) */
 async function onArquivoNotaChange(e) {
-  const file = e.target.files[0];
+  let file = e.target.files[0];
   if (!file) return;
+  try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
   fotoOriginal = file;
