@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 221;
+const APP_BUILD = 222;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2054,7 +2054,6 @@ function renderInicio() {
       <button class="ini-ir-btn" onclick="switchView('ponto')"><span class="ini-ir-ico">⏱️</span><span class="ini-ir-lbl">Ponto</span><span class="ini-ir-sub">entrada, saída, extras</span></button>` : ''}
     </div>
 
-    <button class="btn btn-danger-outline btn-full" style="margin-top:6px;min-height:48px" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair da conta</button>
 
     ${_ehContabilidade() ? '' : ultimas.length ? `
     <div class="ini-titulo">Últimos lançamentos</div>

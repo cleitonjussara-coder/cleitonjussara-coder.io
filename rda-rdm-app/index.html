@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=221">
+  <link rel="manifest" href="manifest.json?v=222">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -206,19 +206,19 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
   padding:calc(env(safe-area-inset-top,0px) + 4px) 0 4px;z-index:10;
 }
 .hdr-banner{display:block;width:100%;max-width:820px;height:auto;max-height:150px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.hdr-sync{position:absolute;right:10px;bottom:6px;font-size:13px;opacity:.85}
+.hdr-sync{position:absolute;left:10px;bottom:6px;font-size:13px;opacity:.85}
 /* sininho de notificações (21/09/2026) */
 /* 23/09/2026: o sino saiu do canto esquerdo para o DIREITO, maior e um
    pouco mais abaixo — pedido do Cleiton, para enxergar melhor. */
-#hdr-sino{position:absolute;right:12px;top:calc(env(safe-area-inset-top,0px) + 26px);width:58px;height:58px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
-  background:rgba(0,0,0,.38);color:#fff;font-size:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11;-webkit-tap-highlight-color:transparent;
+#hdr-sino{position:absolute;right:12px;bottom:4px;width:70px;height:70px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
+  background:rgba(0,0,0,.38);color:#fff;font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11;-webkit-tap-highlight-color:transparent;
   box-shadow:0 4px 12px rgba(0,0,0,.4)}
 #hdr-sino.tem{border-color:#b9e24a;animation:sino-pulsa 2.4s ease-in-out 3}
 #hdr-sino-num{position:absolute;top:-4px;right:-4px;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:#e11d48;color:#fff;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #083d1e}
 /* celular: o cabeçalho é mais baixo, então o sino encosta no "online" se
    ficar grande demais */
 @media (max-width:520px){
-  #hdr-sino{width:50px;height:50px;font-size:26px;top:calc(env(safe-area-inset-top,0px) + 14px);right:10px}
+  #hdr-sino{width:60px;height:60px;font-size:31px;bottom:2px;right:10px}
   .hdr-sync{bottom:4px}
 }
 @keyframes sino-pulsa{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
@@ -1536,7 +1536,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=221" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=222" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1930,7 +1930,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <p><b>Barra congelada (23/09/2026):</b> a saudação do Início tem, à direita, os botões <b>👤 Perfil</b> e <b>🚪 Sair</b>, e essa faixa <b>não sobe com a rolagem</b> — fica fixa no topo enquanto você desce a tela, então os dois estão sempre a um toque. Em telas estreitas os botões descem para a linha de baixo, dentro da mesma faixa.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
-      <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), os <b>últimos lançamentos</b> e o botão <b>🚪 Sair da conta</b>. Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
+      <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), e os <b>últimos lançamentos</b>. Para sair da conta, use o <b>🚪 Sair</b> da faixa congelada do topo (o botão grande do rodapé saiu em 23/09/2026, era o mesmo comando duas vezes). Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
       <p>Para voltar (23/09/2026): o botão fixo de baixo leva para a <b>tela onde você estava antes</b> e mostra o nome dela — entrou no Painel vindo da <b>Equipe</b>? ele diz <b>‹ Equipe</b>. Tocando várias vezes você refaz o caminho de volta até o Início; no Início ele some. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
       <p class="ajuda-note">Gestor e admin veem ainda os atalhos <b>Frota / KM</b> e <b>Ponto</b> na fila <b>Ir para</b> — o colaborador não.</p>
     </div>
@@ -2293,25 +2293,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=221"></script>
-<script defer src="js/db.js?v=221"></script>
-<script defer src="js/nfce.js?v=221"></script>
-<script defer src="js/sefaz.js?v=221"></script>
-<script defer src="js/brasilapi.js?v=221"></script>
-<script defer src="js/ocr.js?v=221"></script>
-<script defer src="js/recorte.js?v=221"></script>
-<script defer src="js/excel.js?v=221"></script>
-<script defer src="js/gestor.js?v=221"></script>
-<script defer src="js/frota.js?v=221"></script>
-<script defer src="js/ponto.js?v=221"></script>
-<script defer src="js/arquivos.js?v=221"></script>
-<script defer src="js/gdrive.js?v=221"></script>
-<script defer src="js/app.js?v=221"></script>
+<script defer src="js/api.js?v=222"></script>
+<script defer src="js/db.js?v=222"></script>
+<script defer src="js/nfce.js?v=222"></script>
+<script defer src="js/sefaz.js?v=222"></script>
+<script defer src="js/brasilapi.js?v=222"></script>
+<script defer src="js/ocr.js?v=222"></script>
+<script defer src="js/recorte.js?v=222"></script>
+<script defer src="js/excel.js?v=222"></script>
+<script defer src="js/gestor.js?v=222"></script>
+<script defer src="js/frota.js?v=222"></script>
+<script defer src="js/ponto.js?v=222"></script>
+<script defer src="js/arquivos.js?v=222"></script>
+<script defer src="js/gdrive.js?v=222"></script>
+<script defer src="js/app.js?v=222"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=221').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=222').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
