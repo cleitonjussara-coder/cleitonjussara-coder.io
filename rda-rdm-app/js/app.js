@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 238;
+const APP_BUILD = 239;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5974,7 +5974,14 @@ function setRepasseModo(modo) {
   _atualizarUiRepasse();
 }
 
-function abrirFormRepasse(modo = 'received', pre = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
+/* Quando o gestor lança para outra pessoa: { id, nome }. Null = para si. */
+let _repasseAlvo = null;
+
+function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
+  /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
+     e entra direto no saldo dele (não passa pela confirmação). */
+  _repasseAlvo = alvo && alvo.id ? alvo : null;
+  if (_repasseAlvo) modo = 'received';
   setRepasseModo(modo);
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
@@ -5985,9 +5992,20 @@ function abrirFormRepasse(modo = 'received', pre = null) {   // pre = { tipo, va
   $('rep-desc').value  = pre?.descricao || '';
   $('rep-mes').value   = pre?.data ? Number(pre.data.slice(5, 7)) : filMes;
   $('rep-ano').value   = pre?.data ? Number(pre.data.slice(0, 4)) : filAno;
+  {
+    const t = $('rep-title'), aviso = $('rep-alvo'), modos = $('rep-modos');
+    if (t) t.textContent = _repasseAlvo ? 'Lançar repasse para o colaborador' : (_repasseModo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido');
+    if (aviso) {
+      aviso.style.display = _repasseAlvo ? '' : 'none';
+      aviso.innerHTML = _repasseAlvo
+        ? `💰 Lançando para <b>${esc(_repasseAlvo.nome || 'colaborador')}</b> — entra no saldo dele na hora, sem precisar de confirmação.`
+        : '';
+    }
+    if (modos) modos.style.display = _repasseAlvo ? 'none' : '';   // para outro só existe "recebido"
+  }
   $('rep-overlay').style.display = 'flex';
 }
-function fecharFormRepasse() { $('rep-overlay').style.display = 'none'; }
+function fecharFormRepasse() { $('rep-overlay').style.display = 'none'; _repasseAlvo = null; }
 
 /* Mesma trava do salvarNota (v65, quando RDA duplicava): o repasse ficou de
    fora e o defeito reapareceu aqui — dois toques no Salvar gravavam dois
@@ -6030,6 +6048,27 @@ async function _salvarRepasseInterno() {
     kind,
     email_sent: false,
   };
+  /* 23/09/2026: repasse do gestor PARA OUTRO vai direto ao servidor — no
+     aparelho do gestor ele não existe, e no do colaborador aparece já
+     confirmado na próxima sincronização. */
+  if (_repasseAlvo) {
+    if (!sb || !navigator.onLine) { toast('Precisa de internet para lançar para outro colaborador', 'err'); return; }
+    const quem = _repasseAlvo.nome || 'colaborador';
+    try {
+      await sb.repasses.upsert({
+        id: crypto.randomUUID(),
+        user_id: _repasseAlvo.id,
+        ...payload,
+        descricao: payload.descricao || `Repasse lançado por ${user?.nome || 'gestor'}`,
+      });
+    } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); return; }
+    fecharFormRepasse();
+    toast(`Repasse ${tipo} de ${brl(valor)} lançado para ${quem} ✅`);
+    _repasseAlvo = null;
+    if (viewAtual === 'equipe') renderEquipe();
+    return;
+  }
+
   await DB.saveRepasse(payload, user.id);
   await syncBadge(false);
   fecharFormRepasse();

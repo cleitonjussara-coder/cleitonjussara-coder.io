@@ -76,18 +76,24 @@ class RepasseController extends Controller
         $d['deleted'] = (bool) ($d['deleted'] ?? false);
 
         abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança repasses');
+        /* 23/09/2026: lançar PARA OUTRO colaborador é coisa de gestor/admin —
+           é como o gestor registra o repasse que já pagou, entrando direto no
+           saldo da pessoa (sem a 2ª etapa, que é só para pedido atendido). */
+        abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
         $rep = Repasse::find($id);
         if ($rep) {
-            abort_unless($rep->user_id === $u->id || $u->ehAdmin(), 403, 'Sem permissão para este repasse');
+            abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             unset($d['created_at']);
             $rep->fill($d)->save();
         } else {
-            abort_unless($d['user_id'] === $u->id, 403, 'Repasse só pode ser lançado pelo próprio colaborador');
+            abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Repasse só pode ser lançado pelo próprio colaborador');
             $rep = new Repasse(['id' => $id] + $d);
             $rep->save();
         }
-        /* O que o próprio colaborador registra já nasce confirmado: a segunda
-           etapa (23/09/2026) existe para o repasse que o GESTOR lançou. */
+        /* Nasce confirmado: tanto o que o colaborador registra quanto o que o
+           gestor LANÇA direto para ele (23/09/2026). A segunda etapa existe só
+           para o pedido que o gestor marca como pago — esse vem com
+           pedido_id e confirmado_em nulo. */
         if ($rep->kind === 'received' && ! $rep->confirmado_em && ! $rep->pedido_id) {
             $rep->forceFill(['confirmado_em' => now(), 'confirmado_por' => $rep->user_id])->save();
         }
