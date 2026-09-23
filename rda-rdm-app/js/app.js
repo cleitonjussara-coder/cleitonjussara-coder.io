@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 220;
+const APP_BUILD = 221;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -670,6 +670,7 @@ async function init() {
 }
 
 async function onLogin(authUser) {
+  _histViews = [];
   /* Entrada ainda não confirmada pelo gestor (22/09/2026): não abre o app —
      a API recusaria tudo de qualquer jeito (403 pendente). */
   if (authUser && 'confirmado_em' in authUser && !authUser.confirmado_em) {
@@ -1662,7 +1663,31 @@ async function marcarPedidoPago(id, btn) {
 function dispensarNotificacao(id) { _notifMarcarVistos([id]); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); abrirNotificacoes(); }
 function dispensarTodasNotificacoes() { _notifMarcarVistos(_notificacoes().filter(i => i.tipo === 'atendido').map(i => i.id)); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); }
 
-function switchView(v) {
+/* ─── Voltar para a tela anterior (23/09/2026) ───────────────────
+   O rodapé voltava sempre um nível fixo ("‹ Despesas"), então quem
+   entrava no Painel vindo da Equipe era jogado para Despesas. Agora o
+   app guarda por onde a pessoa passou e o botão volta para a tela de
+   onde ela veio, com o nome dela. */
+const NOME_VIEW = {
+  inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
+  lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
+  perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto',
+};
+let _histViews = [];
+
+function voltarView() {
+  const anterior = _histViews.pop();
+  switchView(anterior || 'inicio', true);
+}
+
+function switchView(v, voltando = false) {
+  /* histórico: não empilha repetição nem o próprio destino (evita laço) */
+  if (!voltando && viewAtual && viewAtual !== v) {
+    _histViews = _histViews.filter(x => x !== v);
+    _histViews.push(viewAtual);
+    if (_histViews.length > 20) _histViews.shift();
+  }
+  if (v === "inicio") _histViews = [];   // Início é a raiz: zera o caminho
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
   { const b = $('hdr-inicio'); if (b) b.style.display = v === 'inicio' ? 'none' : ''; }
@@ -1670,10 +1695,11 @@ function switchView(v) {
       /* 21/09/2026: Painel, Notas, Saldo, Equipe e Arquivos vivem dentro de
          "Petermann – Despesas" — o rodapé volta um nível; o "‹ Início" do
          cabeçalho continua levando direto ao Início. */
-      const filhoDespesas = ['home', 'notas', 'lixeira', 'saldo', 'equipe', 'arquivos'].includes(v);
-      r.textContent = filhoDespesas ? '‹ Despesas' : '🏠 Início';
-      r.setAttribute('aria-label', filhoDespesas ? 'Voltar para Petermann – Despesas' : 'Voltar ao Início');
-      r.onclick = () => switchView(filhoDespesas ? 'despesas' : 'inicio');
+      const anterior = _histViews[_histViews.length - 1];
+      const rotulo = anterior ? '‹ ' + (NOME_VIEW[anterior] || 'Voltar') : '🏠 Início';
+      r.textContent = rotulo;
+      r.setAttribute('aria-label', anterior ? 'Voltar para ' + (NOME_VIEW[anterior] || 'a tela anterior') : 'Voltar ao Início');
+      r.onclick = () => (anterior ? voltarView() : switchView('inicio', true));
     }
     $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto

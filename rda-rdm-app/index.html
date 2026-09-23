@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=220">
+  <link rel="manifest" href="manifest.json?v=221">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1536,7 +1536,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=220" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=221" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1931,7 +1931,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
       <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), os <b>últimos lançamentos</b> e o botão <b>🚪 Sair da conta</b>. Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
-      <p>Para voltar: dentro de Painel, Notas, Saldo, Equipe ou Arquivos o botão fixo de baixo é <b>‹ Despesas</b> (volta um nível); nas outras telas é <b>🏠 Início</b>. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
+      <p>Para voltar (23/09/2026): o botão fixo de baixo leva para a <b>tela onde você estava antes</b> e mostra o nome dela — entrou no Painel vindo da <b>Equipe</b>? ele diz <b>‹ Equipe</b>. Tocando várias vezes você refaz o caminho de volta até o Início; no Início ele some. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
       <p class="ajuda-note">Gestor e admin veem ainda os atalhos <b>Frota / KM</b> e <b>Ponto</b> na fila <b>Ir para</b> — o colaborador não.</p>
     </div>
 
@@ -2293,25 +2293,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=220"></script>
-<script defer src="js/db.js?v=220"></script>
-<script defer src="js/nfce.js?v=220"></script>
-<script defer src="js/sefaz.js?v=220"></script>
-<script defer src="js/brasilapi.js?v=220"></script>
-<script defer src="js/ocr.js?v=220"></script>
-<script defer src="js/recorte.js?v=220"></script>
-<script defer src="js/excel.js?v=220"></script>
-<script defer src="js/gestor.js?v=220"></script>
-<script defer src="js/frota.js?v=220"></script>
-<script defer src="js/ponto.js?v=220"></script>
-<script defer src="js/arquivos.js?v=220"></script>
-<script defer src="js/gdrive.js?v=220"></script>
-<script defer src="js/app.js?v=220"></script>
+<script defer src="js/api.js?v=221"></script>
+<script defer src="js/db.js?v=221"></script>
+<script defer src="js/nfce.js?v=221"></script>
+<script defer src="js/sefaz.js?v=221"></script>
+<script defer src="js/brasilapi.js?v=221"></script>
+<script defer src="js/ocr.js?v=221"></script>
+<script defer src="js/recorte.js?v=221"></script>
+<script defer src="js/excel.js?v=221"></script>
+<script defer src="js/gestor.js?v=221"></script>
+<script defer src="js/frota.js?v=221"></script>
+<script defer src="js/ponto.js?v=221"></script>
+<script defer src="js/arquivos.js?v=221"></script>
+<script defer src="js/gdrive.js?v=221"></script>
+<script defer src="js/app.js?v=221"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=220').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=221').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
