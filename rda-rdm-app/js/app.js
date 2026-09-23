@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 240;
+const APP_BUILD = 241;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3166,6 +3166,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
+            ${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
+              ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir RDA/RDM">🔀</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
@@ -5786,6 +5788,64 @@ async function editarNota(id) {
   const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);
+}
+
+/* Correção de grupo pelo gestor (23/09/2026): o colaborador lançou em RDA o
+   que era RDM (ou o contrário) e só o gestor conserta, sem abrir o formulário
+   inteiro nem mexer no anexo. Vai direto ao servidor — a nota é de outra
+   pessoa e não pode entrar no IndexedDB de quem corrige. */
+const _GRUPOS = [
+  { tipo: 'RDA', subtipo: null, rotulo: 'RDA', nota: 'alimentação' },
+  { tipo: 'RDM', subtipo: 'Abastecimento', rotulo: 'RDM · Abastecimento', nota: 'combustível' },
+  { tipo: 'RDM', subtipo: 'Hospedagem', rotulo: 'RDM · Hospedagem', nota: 'pousada, hotel' },
+  { tipo: 'RDM', subtipo: 'Outros', rotulo: 'RDM · Outros', nota: 'demais gastos' },
+];
+
+function corrigirGrupoNota(id) {
+  const n = _notaPorId(id);
+  if (!n) { toast('Nota não encontrada', 'err'); return; }
+  const atual = g => g.tipo === n.tipo && (g.tipo === 'RDA' || String(g.subtipo || '') === String(n.subtipo || 'Outros'));
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'grupo-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-hd"><h3>🔀 Corrigir grupo</h3>
+        <button class="btn-icon-sm" onclick="document.getElementById('grupo-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 4px;opacity:.75;font-size:14.5px">${esc(n.razao_social || 'Sem empresa')} · ${brl(Number(n.valor) || 0)} · ${fmtData(n.data)}<br>
+        Lançado por <b>${esc(_rotuloProprietario(n))}</b> em <b>${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</b>.</p>
+        <div class="grupo-opcoes">
+          ${_GRUPOS.map(g => `
+            <button class="btn btn-full ${atual(g) ? 'btn-primary' : 'btn-outline'}" style="justify-content:flex-start;margin-bottom:8px"
+                    ${atual(g) ? 'disabled' : ''}
+                    onclick="_aplicarGrupoNota('${n.id}', '${g.tipo}', ${g.subtipo ? "'" + g.subtipo + "'" : 'null'}, this)">
+              ${atual(g) ? '✅ ' : ''}${g.rotulo} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${g.nota}</span>
+            </button>`).join('')}
+        </div>
+        <p style="opacity:.75;font-size:13px;margin-bottom:0">Muda só o grupo — valor, anexo e empresa ficam como estão. O anexo já enviado ao Drive só troca de pasta quando alguém usar <b>🗂️ Reorganizar pastas no padrão</b>.</p>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+}
+
+async function _aplicarGrupoNota(id, tipo, subtipo, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para corrigir', 'err'); return; }
+  const n = _notaPorId(id);
+  if (btn) btn.disabled = true;
+  try {
+    const r = await sb.notas.corrigirTipo(id, tipo, subtipo);
+    const nova = r?.nota || {};
+    if (n) { n.tipo = nova.tipo || tipo; n.subtipo = ('subtipo' in nova) ? nova.subtipo : subtipo; }
+    document.getElementById('grupo-overlay')?.remove();
+    toast(r?.mudou === false ? 'Já estava nesse grupo' : `Corrigido para ${tipo}${subtipo ? ' · ' + subtipo : ''} ✅`);
+    if (viewAtual === 'equipe' && n?.user_id && window.Gestor?.abrir) Gestor.abrir(n.user_id);
+    else if (viewAtual === 'equipe') switchView('equipe');
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+    if (btn) btn.disabled = false;
+  }
 }
 
 function confirmarExclusaoNota(id) {

@@ -68,6 +68,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
     Route::post('/notas/reparar-fotos', [NotaController::class, 'repararFotos']);
     Route::put('/notas/{id}', [NotaController::class, 'upsert']);
+    Route::patch('/notas/{id}/tipo', [NotaController::class, 'corrigirTipo']);   // gestor corrige RDA⇄RDM (23/09/2026)
     Route::delete('/notas/{id}', [NotaController::class, 'destroy']);
     Route::post('/notas/{id}/foto', [NotaController::class, 'foto']);
 

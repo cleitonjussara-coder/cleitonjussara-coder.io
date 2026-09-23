@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=240">
+  <link rel="manifest" href="manifest.json?v=241">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1632,7 +1632,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=240" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=241" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2131,6 +2131,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado e o pedido sai das pendências. <b>👤 Ver colaborador</b> abre o cartão dele.</p>
       <p><b>💰 O repasse vale na hora (23/09/2026):</b> marcar o pedido como pago <b>já joga o valor no saldo</b> da pessoa, nos gráficos e nas planilhas — ninguém precisa confirmar nada. O mesmo vale para o repasse que o gestor lança pela <b>Equipe → 💰 Lançar repasse</b> e para o que o próprio colaborador registra. Se o dinheiro não chegou, quem desfaz o lançamento é o gestor, pela lixeira do repasse em <b>RDM/RDA e Planilhas</b>.</p>
       <p class="ajuda-gestor"><b>💰 Lançar repasse direto (23/09/2026):</b> em <b>Equipe → o colaborador → 💰 Lançar repasse</b>, o gestor registra um repasse que já pagou. Esse <b>entra no saldo da pessoa na hora</b>, sem a etapa de confirmação — é para o dinheiro que já foi entregue, sem pedido no meio. O formulário avisa para quem está lançando, e a descrição sai como "Repasse lançado por (nome do gestor)".</p>
+      <p class="ajuda-gestor"><b>🔀 Corrigir RDA/RDM (23/09/2026):</b> lançou no grupo errado? Em <b>Equipe → o colaborador → 🧾 Notas</b>, o cartão da nota tem o botão <b>🔀</b> (só gestor/admin, e só em nota de outra pessoa). Ele abre os quatro grupos — <b>RDA</b>, <b>RDM · Abastecimento</b>, <b>RDM · Hospedagem</b> e <b>RDM · Outros</b> — com o atual marcado. Trocar muda <b>só o grupo</b>: valor, empresa, data e anexo continuam iguais, e a correção aparece no aparelho do colaborador no próximo sync. O anexo que já subiu para o Drive só troca de pasta quando alguém usar <b>🗂️ Reorganizar pastas no padrão</b>. A sua própria nota você corrige pelo <b>✏️</b> de sempre.</p>
       <p><b>Colaborador:</b> quando o gestor marca o seu pedido como pago, o repasse <b>já entra no seu saldo</b> — você não precisa confirmar nada. Chega o aviso "Seu pedido de R$ … foi pago ✅", que você limpa com <b>OK, vi</b>. Se o dinheiro não chegou, fale com o gestor: quem desfaz o lançamento é ele.</p>
       <h4>☁️ Envio para o servidor</h4>
       <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>. Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b> e a cada <b>60 segundos</b>. A foto sobe antes da nota.</p>
@@ -2401,25 +2402,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=240"></script>
-<script defer src="js/db.js?v=240"></script>
-<script defer src="js/nfce.js?v=240"></script>
-<script defer src="js/sefaz.js?v=240"></script>
-<script defer src="js/brasilapi.js?v=240"></script>
-<script defer src="js/ocr.js?v=240"></script>
-<script defer src="js/recorte.js?v=240"></script>
-<script defer src="js/excel.js?v=240"></script>
-<script defer src="js/gestor.js?v=240"></script>
-<script defer src="js/frota.js?v=240"></script>
-<script defer src="js/ponto.js?v=240"></script>
-<script defer src="js/arquivos.js?v=240"></script>
-<script defer src="js/gdrive.js?v=240"></script>
-<script defer src="js/app.js?v=240"></script>
+<script defer src="js/api.js?v=241"></script>
+<script defer src="js/db.js?v=241"></script>
+<script defer src="js/nfce.js?v=241"></script>
+<script defer src="js/sefaz.js?v=241"></script>
+<script defer src="js/brasilapi.js?v=241"></script>
+<script defer src="js/ocr.js?v=241"></script>
+<script defer src="js/recorte.js?v=241"></script>
+<script defer src="js/excel.js?v=241"></script>
+<script defer src="js/gestor.js?v=241"></script>
+<script defer src="js/frota.js?v=241"></script>
+<script defer src="js/ponto.js?v=241"></script>
+<script defer src="js/arquivos.js?v=241"></script>
+<script defer src="js/gdrive.js?v=241"></script>
+<script defer src="js/app.js?v=241"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=240').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=241').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

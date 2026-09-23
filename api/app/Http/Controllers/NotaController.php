@@ -7,6 +7,7 @@ use App\Models\Nota;
 use App\Services\FotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -150,6 +151,47 @@ class NotaController extends Controller
     }
 
     /** DELETE /notas/{id} — definitivo: arquivo + linha. */
+    /**
+     * PATCH /notas/{id}/tipo {tipo, subtipo} — gestor/admin corrige o
+     * lançamento que o colaborador pôs no grupo errado (23/09/2026).
+     *
+     * Mexe só em tipo/subtipo: valor, anexo, CNPJ e o resto da nota ficam
+     * como estão. RDA não tem categoria, então o subtipo é limpo ao virar
+     * RDA. O save() atualiza updated_at, que é como o aparelho do dono puxa
+     * a correção no próximo sync.
+     */
+    public function corrigirTipo(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta');
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin corrige o grupo de uma nota');
+
+        $d = $r->validate([
+            'tipo' => ['required', Rule::in(Nota::TIPOS)],
+            'subtipo' => ['nullable', Rule::in(Nota::SUBTIPOS)],
+        ]);
+
+        $nota = Nota::findOrFail($id);
+        abort_if($nota->deleted, 404, 'Nota excluída');
+
+        $antes = $nota->tipo.($nota->subtipo ? ' · '.$nota->subtipo : '');
+        $tipo = $d['tipo'];
+        $subtipo = $tipo === 'RDM' ? ($d['subtipo'] ?? null) : null;
+
+        if ($tipo === $nota->tipo && $subtipo === $nota->subtipo) {
+            return response()->json(['nota' => $nota, 'mudou' => false]);
+        }
+
+        $nota->forceFill(['tipo' => $tipo, 'subtipo' => $subtipo, 'updated_by' => $u->id])->save();
+        Log::info('nota corrigida pelo gestor', [
+            'nota' => $nota->id, 'de' => $antes,
+            'para' => $tipo.($subtipo ? ' · '.$subtipo : ''),
+            'por' => $u->email, 'dono' => $nota->user_id,
+        ]);
+
+        return response()->json(['nota' => $nota->fresh(), 'mudou' => true]);
+    }
+
     public function destroy(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
