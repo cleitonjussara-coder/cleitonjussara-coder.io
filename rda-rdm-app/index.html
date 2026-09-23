@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=223">
+  <link rel="manifest" href="manifest.json?v=226">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1521,6 +1521,37 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   .ini-ola-acoes .btn:hover{background:rgba(185,226,74,.18)}
 }
 
+/* ─── Equipe: caixas de saldo (23/09/2026) ─────────────────────────
+   .bal-box tem fundo CLARO (#F0FBF4 / #FFF0F0), mas dentro do tema
+   esmeralda o texto herdava as cores claras (--text2 e --primary-d):
+   letra clara sobre fundo claro, ilegível. Aqui o texto vira escuro —
+   e um pouco maior, que é a queixa do Cleiton sobre a listagem. */
+#app-content .bal-box{border:1px solid rgba(27,67,50,.12)}
+#app-content .bal-box .bal-type{color:#3d5c49;font-size:13.5px}
+#app-content .bal-box .bal-detail{color:#41604d;font-size:14.5px}
+#app-content .bal-box .bal-val{font-size:20.5px}
+#app-content .bal-box.pos .bal-val{color:#14532d}
+#app-content .bal-box.neg .bal-val{color:#9b1c1c}
+#app-content .bal-box.neg{background:#fdeceb}
+/* listagem de colaboradores: nome, e-mail e resumo maiores */
+#app-content .colab-nome{font-size:17.5px}
+#app-content .colab-email{font-size:15px;color:#cfe8d6}
+#app-content .colab-resumo{font-size:14.5px;color:#cfe8d6}
+#app-content .colab-resumo .alerta{color:var(--ouro);font-weight:800}
+#app-content .colab-seta{color:var(--lima-2)}
+/* nome espremido a 2 letras quando o cartão tinha várias etiquetas
+   (colaborador + CV + editar): as etiquetas passam a descer de linha */
+#app-content .colab-head{flex-wrap:wrap}
+#app-content .colab-info{flex:1 1 58%;min-width:145px}
+
+/* ─── Painel: pendências (23/09/2026) ──────────────────────────────
+   Mesmo defeito da Equipe: .db-pend-item.ok e .alerta têm fundo claro
+   (#F0FBF4 / #FFF7ED) e o texto herdava --text, que no tema esmeralda é
+   quase branco — sumia. Texto escuro nessas duas. */
+#app-content .db-pend-item.ok .db-pend-txt,#app-content .db-pend-item.ok .db-pend-txt b{color:#14532d}
+#app-content .db-pend-item.alerta .db-pend-txt{color:#7c2d12}
+#app-content .db-pend-item.alerta .db-pend-n{color:#9A3412}
+
 </style>
 </head>
 <body>
@@ -1546,7 +1577,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=223" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=226" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2303,25 +2334,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=223"></script>
-<script defer src="js/db.js?v=223"></script>
-<script defer src="js/nfce.js?v=223"></script>
-<script defer src="js/sefaz.js?v=223"></script>
-<script defer src="js/brasilapi.js?v=223"></script>
-<script defer src="js/ocr.js?v=223"></script>
-<script defer src="js/recorte.js?v=223"></script>
-<script defer src="js/excel.js?v=223"></script>
-<script defer src="js/gestor.js?v=223"></script>
-<script defer src="js/frota.js?v=223"></script>
-<script defer src="js/ponto.js?v=223"></script>
-<script defer src="js/arquivos.js?v=223"></script>
-<script defer src="js/gdrive.js?v=223"></script>
-<script defer src="js/app.js?v=223"></script>
+<script defer src="js/api.js?v=226"></script>
+<script defer src="js/db.js?v=226"></script>
+<script defer src="js/nfce.js?v=226"></script>
+<script defer src="js/sefaz.js?v=226"></script>
+<script defer src="js/brasilapi.js?v=226"></script>
+<script defer src="js/ocr.js?v=226"></script>
+<script defer src="js/recorte.js?v=226"></script>
+<script defer src="js/excel.js?v=226"></script>
+<script defer src="js/gestor.js?v=226"></script>
+<script defer src="js/frota.js?v=226"></script>
+<script defer src="js/ponto.js?v=226"></script>
+<script defer src="js/arquivos.js?v=226"></script>
+<script defer src="js/gdrive.js?v=226"></script>
+<script defer src="js/app.js?v=226"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=223').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=226').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
