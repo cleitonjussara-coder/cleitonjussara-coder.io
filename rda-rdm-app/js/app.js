@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 236;
+const APP_BUILD = 237;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -589,7 +589,7 @@ function _pintarBarraUsuario() {
     <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>
     <div class="ini-ola-txt">
       <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
-      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span> · ${esc(hojeTxt)}</span>
+      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · ${esc(hojeTxt)}</span></span>
     </div>
     <div class="ini-ola-acoes">
       <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>
