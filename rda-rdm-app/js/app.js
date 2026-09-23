@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 218;
+const APP_BUILD = 219;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1987,11 +1987,17 @@ function renderInicio() {
   const papel = user?.role || 'colaborador';
   $('app-content').innerHTML = `
   <div class="db-container">
-    <div class="ini-ola ini-ola-foto">
+    <div class="ini-ola ini-ola-foto ini-ola-fixa">
       <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome||'')}" data-sub="${esc(PAPEL[papel]||papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome||user?.email||'?')[0].toUpperCase())}</div>
       <div class="ini-ola-txt">
         <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
         <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL[papel] || papel)}</span> · ${esc(hojeTxt)}</span>
+      </div>
+      <!-- 23/09/2026: Perfil e Sair ficam aqui, congelados no topo — a barra
+           não sobe com a rolagem, então estão sempre a um toque. -->
+      <div class="ini-ola-acoes">
+        <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>
+        <button class="btn btn-sm btn-danger-outline" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair</button>
       </div>
     </div>
 

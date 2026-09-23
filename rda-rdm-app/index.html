@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=218">
+  <link rel="manifest" href="manifest.json?v=219">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -814,6 +814,13 @@ select.inp{cursor:pointer}
 .ini-ola span{font-size:14px;color:var(--text2)}
 /* Início com foto e papel (21/09/2026) */
 .ini-ola-foto{align-items:center;justify-content:flex-start;gap:12px}
+/* Barra congelada do Início (23/09/2026): saudação + Perfil + Sair sempre
+   visíveis. Fica sticky dentro do #app-content e ocupa a largura toda
+   (margens negativas cancelam o padding do .db-container). */
+.ini-ola-fixa{position:sticky;top:0;z-index:20;margin:-12px -14px 0;padding:10px 14px;
+  background:var(--surface);box-shadow:0 4px 12px rgba(0,0,0,.10)}
+.ini-ola-acoes{display:flex;gap:7px;margin-left:auto;flex-shrink:0}
+.ini-ola-acoes .btn{white-space:nowrap}
 .ini-ola-foto .avatar{flex:0 0 auto;width:52px;height:52px;font-size:20.5px}
 .ini-ola-txt{display:flex;flex-direction:column;gap:3px;min-width:0}
 .ini-ola-txt > span{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -893,6 +900,7 @@ select.inp{cursor:pointer}
 .ini-ola h2{color:#f2fbf4;text-shadow:0 1px 3px rgba(0,0,0,.6)}
 .ini-ola span,.ini-titulo{color:rgba(234,247,238,.75);text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .ini-titulo{letter-spacing:.9px}
+.ini-ola-fixa{background:linear-gradient(160deg,#0f6b34,#083d1e);border-bottom:1px solid rgba(255,255,255,.10);box-shadow:0 8px 18px rgba(0,0,0,.45)}
 .ini-kpi,.ini-ir-btn,.ini-dica{background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:5px solid var(--esm-frame);
   box-shadow:inset 2px 2px 4px rgba(255,255,255,.2),inset -2px -2px 5px rgba(0,0,0,.55),0 8px 18px rgba(0,0,0,.4)}
 .ini-kpi-lbl,.ini-kpi-sub,.ini-ir-sub,.ini-dica{color:rgba(234,247,238,.78)}
@@ -1478,6 +1486,16 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 /* Letra maior (23/09/2026) + tela estreita: a etiqueta do mês encavalava o
    RDA/RDM no canto. Em vez de encolher a fonte de novo, ela sai do canto e
    vira uma faixa no topo da aba. */
+@media (max-width:420px){
+  /* barra congelada em tela estreita: avatar e saudação seguem juntos na
+     primeira linha (o texto encolhe) e os botões descem para a segunda */
+  .ini-ola-fixa{flex-wrap:wrap;gap:8px}
+  .ini-ola-fixa .ini-ola-txt{flex:1 1 60%;min-width:0}
+  .ini-ola-fixa .ini-ola-txt h2{font-size:19px}
+  .ini-ola-fixa .avatar{width:44px;height:44px;font-size:18px}
+  .ini-ola-acoes{width:100%;margin-left:0}
+  .ini-ola-acoes .btn{flex:1}
+}
 @media (max-width:379px){
   .aba-hero-mes{position:static;display:block;margin:10px 12px 0;text-align:center}
   .aba-hero-cab{padding-top:10px}
@@ -1509,7 +1527,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=218" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=219" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1900,6 +1918,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
       <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
       <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto da tela) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
+      <p><b>Barra congelada (23/09/2026):</b> a saudação do Início tem, à direita, os botões <b>👤 Perfil</b> e <b>🚪 Sair</b>, e essa faixa <b>não sobe com a rolagem</b> — fica fixa no topo enquanto você desce a tela, então os dois estão sempre a um toque. Em telas estreitas os botões descem para a linha de baixo, dentro da mesma faixa.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
       <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), os <b>últimos lançamentos</b> e o botão <b>🚪 Sair da conta</b>. Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
@@ -2265,25 +2284,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=218"></script>
-<script defer src="js/db.js?v=218"></script>
-<script defer src="js/nfce.js?v=218"></script>
-<script defer src="js/sefaz.js?v=218"></script>
-<script defer src="js/brasilapi.js?v=218"></script>
-<script defer src="js/ocr.js?v=218"></script>
-<script defer src="js/recorte.js?v=218"></script>
-<script defer src="js/excel.js?v=218"></script>
-<script defer src="js/gestor.js?v=218"></script>
-<script defer src="js/frota.js?v=218"></script>
-<script defer src="js/ponto.js?v=218"></script>
-<script defer src="js/arquivos.js?v=218"></script>
-<script defer src="js/gdrive.js?v=218"></script>
-<script defer src="js/app.js?v=218"></script>
+<script defer src="js/api.js?v=219"></script>
+<script defer src="js/db.js?v=219"></script>
+<script defer src="js/nfce.js?v=219"></script>
+<script defer src="js/sefaz.js?v=219"></script>
+<script defer src="js/brasilapi.js?v=219"></script>
+<script defer src="js/ocr.js?v=219"></script>
+<script defer src="js/recorte.js?v=219"></script>
+<script defer src="js/excel.js?v=219"></script>
+<script defer src="js/gestor.js?v=219"></script>
+<script defer src="js/frota.js?v=219"></script>
+<script defer src="js/ponto.js?v=219"></script>
+<script defer src="js/arquivos.js?v=219"></script>
+<script defer src="js/gdrive.js?v=219"></script>
+<script defer src="js/app.js?v=219"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=218').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=219').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
