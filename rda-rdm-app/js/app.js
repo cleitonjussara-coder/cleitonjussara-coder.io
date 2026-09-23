@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 237;
+const APP_BUILD = 238;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -583,13 +583,16 @@ function _pintarBarraUsuario() {
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
   const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  /* versão curta para o celular: "23 set" cabe ao lado da etiqueta do papel
+     sem empurrar a saudação para a segunda linha (23/09/2026) */
+  const hojeCurto = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
   const papel = user?.role || 'colaborador';
   el.style.display = '';
   el.innerHTML = `
     <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>
     <div class="ini-ola-txt">
       <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
-      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · ${esc(hojeTxt)}</span></span>
+      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · <span class="data-longa">${esc(hojeTxt)}</span><span class="data-curta">${esc(hojeCurto)}</span></span></span>
     </div>
     <div class="ini-ola-acoes">
       <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>

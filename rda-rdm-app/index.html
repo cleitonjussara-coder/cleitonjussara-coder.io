@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=237">
+  <link rel="manifest" href="manifest.json?v=238">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1592,10 +1592,16 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
    data quebrando em duas linhas. Ela sai em telas estreitas (continua no
    computador), a saudação fica em UMA linha e a foto cresce — os botões
    Perfil e Sair ficam do mesmo tamanho. */
+.data-curta{display:none}
 @media (max-width:520px){
-  #barra-usuario .ini-ola-data{display:none}
-  #barra-usuario .ini-ola-txt h2{font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #barra-usuario .ini-ola-txt span{font-size:13.5px}
+  /* 23/09/2026: saudação INTEIRA (quebra linha se precisar) e a data em
+     versão curta e miúda ao lado da etiqueta do papel. */
+  #barra-usuario .ini-ola-data{font-size:11.5px;opacity:.9;letter-spacing:.2px}
+  #barra-usuario .data-longa{display:none}
+  #barra-usuario .data-curta{display:inline}
+  #barra-usuario .role-pill{font-size:12px;padding:2px 7px}
+  #barra-usuario .ini-ola-txt h2{font-size:18.5px;line-height:1.2;white-space:normal}
+  #barra-usuario .ini-ola-txt span{font-size:13px}
   #barra-usuario .avatar{width:62px;height:62px;font-size:25px}
   #barra-usuario{padding:8px 12px;gap:10px}
   #barra-usuario .ini-ola-acoes{gap:8px;margin-top:2px}
@@ -1626,7 +1632,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=237" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=238" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2393,25 +2399,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=237"></script>
-<script defer src="js/db.js?v=237"></script>
-<script defer src="js/nfce.js?v=237"></script>
-<script defer src="js/sefaz.js?v=237"></script>
-<script defer src="js/brasilapi.js?v=237"></script>
-<script defer src="js/ocr.js?v=237"></script>
-<script defer src="js/recorte.js?v=237"></script>
-<script defer src="js/excel.js?v=237"></script>
-<script defer src="js/gestor.js?v=237"></script>
-<script defer src="js/frota.js?v=237"></script>
-<script defer src="js/ponto.js?v=237"></script>
-<script defer src="js/arquivos.js?v=237"></script>
-<script defer src="js/gdrive.js?v=237"></script>
-<script defer src="js/app.js?v=237"></script>
+<script defer src="js/api.js?v=238"></script>
+<script defer src="js/db.js?v=238"></script>
+<script defer src="js/nfce.js?v=238"></script>
+<script defer src="js/sefaz.js?v=238"></script>
+<script defer src="js/brasilapi.js?v=238"></script>
+<script defer src="js/ocr.js?v=238"></script>
+<script defer src="js/recorte.js?v=238"></script>
+<script defer src="js/excel.js?v=238"></script>
+<script defer src="js/gestor.js?v=238"></script>
+<script defer src="js/frota.js?v=238"></script>
+<script defer src="js/ponto.js?v=238"></script>
+<script defer src="js/arquivos.js?v=238"></script>
+<script defer src="js/gdrive.js?v=238"></script>
+<script defer src="js/app.js?v=238"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=237').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=238').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
