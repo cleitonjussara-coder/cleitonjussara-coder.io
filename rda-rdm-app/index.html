@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=235">
+  <link rel="manifest" href="manifest.json?v=236">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -203,9 +203,9 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
   flex-shrink:0;position:relative;
   background:linear-gradient(90deg,#0a1d09 0%,#0f2a0d 30%,#0f2a0d 70%,#0a1d09 100%);color:#fff;
   display:flex;align-items:center;justify-content:center;
-  padding:calc(env(safe-area-inset-top,0px) + 4px) 0 4px;z-index:10;
+  padding:calc(env(safe-area-inset-top,0px) + 2px) 0 2px;z-index:10;   /* 23/09/2026: faixa mais fina */
 }
-.hdr-banner{display:block;width:100%;max-width:820px;height:auto;max-height:150px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hdr-banner{display:block;width:100%;max-width:820px;height:auto;max-height:112px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .hdr-sync{position:absolute;left:10px;bottom:6px;font-size:13px;opacity:.85}
 /* sininho de notificações (21/09/2026) */
 /* 23/09/2026: o sino saiu do canto esquerdo para o DIREITO, maior e um
@@ -1584,6 +1584,10 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 /* botão "voltar" grande no fim dos formulários (23/09/2026) */
 .btn-voltar-grande{min-height:58px;margin-top:22px;font-size:19px;font-weight:800;border-width:2px}
 
+/* faixa do usuário: botões Perfil e Sair maiores (23/09/2026) */
+#barra-usuario .ini-ola-acoes .btn{min-height:48px;padding:11px 18px;font-size:17px;font-weight:800;border-width:2px;border-radius:12px}
+@media (max-width:420px){ #barra-usuario .ini-ola-acoes .btn{min-height:46px;font-size:16px;padding:10px 12px} }
+
 </style>
 </head>
 <body>
@@ -1609,7 +1613,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=235" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=236" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2376,25 +2380,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=235"></script>
-<script defer src="js/db.js?v=235"></script>
-<script defer src="js/nfce.js?v=235"></script>
-<script defer src="js/sefaz.js?v=235"></script>
-<script defer src="js/brasilapi.js?v=235"></script>
-<script defer src="js/ocr.js?v=235"></script>
-<script defer src="js/recorte.js?v=235"></script>
-<script defer src="js/excel.js?v=235"></script>
-<script defer src="js/gestor.js?v=235"></script>
-<script defer src="js/frota.js?v=235"></script>
-<script defer src="js/ponto.js?v=235"></script>
-<script defer src="js/arquivos.js?v=235"></script>
-<script defer src="js/gdrive.js?v=235"></script>
-<script defer src="js/app.js?v=235"></script>
+<script defer src="js/api.js?v=236"></script>
+<script defer src="js/db.js?v=236"></script>
+<script defer src="js/nfce.js?v=236"></script>
+<script defer src="js/sefaz.js?v=236"></script>
+<script defer src="js/brasilapi.js?v=236"></script>
+<script defer src="js/ocr.js?v=236"></script>
+<script defer src="js/recorte.js?v=236"></script>
+<script defer src="js/excel.js?v=236"></script>
+<script defer src="js/gestor.js?v=236"></script>
+<script defer src="js/frota.js?v=236"></script>
+<script defer src="js/ponto.js?v=236"></script>
+<script defer src="js/arquivos.js?v=236"></script>
+<script defer src="js/gdrive.js?v=236"></script>
+<script defer src="js/app.js?v=236"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=235').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=236').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
