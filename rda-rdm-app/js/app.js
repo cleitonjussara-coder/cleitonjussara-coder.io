@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 216;
+const APP_BUILD = 217;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1788,11 +1788,6 @@ function _resumoHub() {
     </div>`;
 
   const rotulo = cv ? 'Reembolso a receber' : 'A receber da empresa';
-  const saldoTxt = devedor > 0
-    ? `<b>${brl(devedor)}</b> <span class="res-saldo-lbl">${rotulo}</span>`
-    : devedor < 0
-      ? `<b>${brl(-devedor)}</b> <span class="res-saldo-lbl">adiantado com você (${cv ? 'reembolsos' : 'repasses'} acima do gasto)</span>`
-      : `<b>Em dia</b> <span class="res-saldo-lbl">nada a receber</span>`;
 
   /* 22/09/2026: "especificar os gastos no resumo a receber e apontar os
      gastos RDM/RDA e os valores por mês" — o que forma o valor a receber,
@@ -1809,11 +1804,28 @@ function _resumoHub() {
     if (a || d || rec) linhasMes.push({ m, rda: a, rdm: d, rec, falta: a + d - rec });
   }
   const mostra = linhasMes.slice(0, 6);
-  const chip = (ico, lbl, v) => `<span class="res-chip"><span>${ico} ${lbl}</span><b>${brl(v)}</b></span>`;
+
+  /* 23/09/2026: no regime de dinheiro em conta o RDA e o RDM são contas
+     separadas — o valor a receber sai por aba, não somado. Cada caixa diz
+     também o estado: a receber, adiantado (recebeu mais do que gastou) ou
+     em dia. */
+  const caixaRec = (ico, sigla, v) => {
+    const estado = v > 0 ? 'receber' : v < 0 ? 'adiantado' : 'zerado';
+    const legenda = v > 0 ? (cv ? 'a reembolsar' : 'a receber')
+                  : v < 0 ? 'adiantado com você'
+                  : 'em dia';
+    return `
+      <div class="res-rec ${estado}">
+        <span class="res-rec-top">${ico} ${sigla}</span>
+        <span class="res-rec-val">${brl(Math.abs(v))}</span>
+        <span class="res-rec-sub">${legenda}</span>
+      </div>`;
+  };
   const detalhe = `
-    <div class="res-chips">
-      ${chip('💼', 'RDM', devedorRdm)}
-      ${chip('🍽️', 'RDA', devedorRda)}
+    <div class="res-rec-tit">${rotulo} — por aba</div>
+    <div class="res-recs">
+      ${caixaRec('🍽️', 'RDA', devedorRda)}
+      ${caixaRec('💼', 'RDM', devedorRdm)}
     </div>
     ${mostra.length ? `
     <table class="res-tab">
@@ -1836,7 +1848,6 @@ function _resumoHub() {
         ${linha('🍽️', 'RDA', rda)}
         ${linha('💼', 'RDM', rdm)}
       </div>
-      <div class="res-saldo">${saldoTxt}</div>
       ${detalhe}
       ${acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : ''}
     </div>
