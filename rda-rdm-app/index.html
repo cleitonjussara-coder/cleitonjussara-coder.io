@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=229">
+  <link rel="manifest" href="manifest.json?v=230">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1564,6 +1564,23 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 #barra-usuario .btn-danger-outline:active{background:rgba(255,180,168,.18)}
 #barra-usuario .avatar{background:var(--primary)}
 
+/* pílula "voltar" ao lado do botão flutuante do rodapé (23/09/2026) */
+#btn-voltar-rodape{
+  position:fixed;right:calc(50% + 9px);bottom:calc(var(--safe-bottom) + 14px);
+  z-index:30;min-height:52px;padding:12px 24px;border-radius:999px;
+  background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eaf78f;
+  border:3px solid rgba(185,226,74,.65);font:inherit;font-size:19px;font-weight:900;letter-spacing:.2px;
+  box-shadow:0 6px 18px rgba(0,0,0,.45),0 0 0 4px rgba(11,79,39,.5);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;white-space:nowrap}
+#btn-voltar-rodape:active{transform:scale(.96)}
+/* com os dois botões, o de baixo deixa de ficar centralizado na tela */
+body.tem-voltar-rodape #btn-inicio-rodape{left:calc(50% + 9px);transform:none}
+body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
+@media (max-width:400px){
+  #btn-voltar-rodape{padding:12px 16px;font-size:17px}
+  body.tem-voltar-rodape #btn-inicio-rodape{padding:12px 16px;font-size:17px}
+}
+
 </style>
 </head>
 <body>
@@ -1589,7 +1606,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=229" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=230" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1606,6 +1623,9 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <main id="app-content"></main>
   <!-- 20/09/2026: em alguns iPhones o "‹ Início" do topo some (barra do
        navegador/notch). Botão fixo no rodapé, sempre visível fora do Início. -->
+  <!-- 23/09/2026: "voltar" de dentro da tela (Arquivos, detalhe da Equipe)
+       vira pílula no rodapé, do mesmo tamanho do botão ao lado. -->
+  <button id="btn-voltar-rodape" style="display:none" aria-label="Voltar"></button>
   <button id="btn-inicio-rodape" onclick="switchView('inicio')" style="display:none" aria-label="Voltar ao Início">🏠 Início</button>
 
   <nav id="bottom-nav" style="display:none">
@@ -2350,25 +2370,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=229"></script>
-<script defer src="js/db.js?v=229"></script>
-<script defer src="js/nfce.js?v=229"></script>
-<script defer src="js/sefaz.js?v=229"></script>
-<script defer src="js/brasilapi.js?v=229"></script>
-<script defer src="js/ocr.js?v=229"></script>
-<script defer src="js/recorte.js?v=229"></script>
-<script defer src="js/excel.js?v=229"></script>
-<script defer src="js/gestor.js?v=229"></script>
-<script defer src="js/frota.js?v=229"></script>
-<script defer src="js/ponto.js?v=229"></script>
-<script defer src="js/arquivos.js?v=229"></script>
-<script defer src="js/gdrive.js?v=229"></script>
-<script defer src="js/app.js?v=229"></script>
+<script defer src="js/api.js?v=230"></script>
+<script defer src="js/db.js?v=230"></script>
+<script defer src="js/nfce.js?v=230"></script>
+<script defer src="js/sefaz.js?v=230"></script>
+<script defer src="js/brasilapi.js?v=230"></script>
+<script defer src="js/ocr.js?v=230"></script>
+<script defer src="js/recorte.js?v=230"></script>
+<script defer src="js/excel.js?v=230"></script>
+<script defer src="js/gestor.js?v=230"></script>
+<script defer src="js/frota.js?v=230"></script>
+<script defer src="js/ponto.js?v=230"></script>
+<script defer src="js/arquivos.js?v=230"></script>
+<script defer src="js/gdrive.js?v=230"></script>
+<script defer src="js/app.js?v=230"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=229').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=230').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

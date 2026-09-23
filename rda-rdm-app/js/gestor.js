@@ -268,8 +268,8 @@ window.Gestor = (() => {
           <span class="cdet-bal-det">Gasto <b>${brl(gasto)}</b> · Recebido <b>${brl(rec)}</b></span>
         </div>`;
 
+      if (typeof _voltarRodape === 'function') _voltarRodape('Gestor.fechar()', '‹ Equipe');
       let html = `<div class="page-hd">
-        <button class="btn-voltar" onclick="Gestor.fechar()">‹ Equipe</button>
         <div class="mes-nav">
           <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
           <span class="mes-label">${MESES[mes-1]} ${ano}</span>

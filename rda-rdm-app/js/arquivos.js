@@ -52,9 +52,11 @@ window.Arquivos = (() => {
   }
 
   function _cabecalho(titulo, sub, voltar) {
+    /* 23/09/2026: o "‹ Voltar" saiu daqui e virou pílula no rodapé, ao lado
+       do botão flutuante (pedido do Cleiton). */
+    if (typeof _voltarRodape === 'function') _voltarRodape(voltar || null);
     return `
       <div class="arq-hd">
-        ${voltar ? `<button class="btn-voltar" onclick="${voltar}">‹ Voltar</button>` : ''}
         <div class="mes-nav" style="margin-left:auto">
           <button class="btn-mes-nav" onclick="Arquivos.mudarAno(-1)">‹</button>
           <span class="mes-label">${ano}</span>

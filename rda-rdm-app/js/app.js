@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 229;
+const APP_BUILD = 230;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -596,6 +596,18 @@ function _pintarBarraUsuario() {
       <button class="btn btn-sm btn-danger-outline" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair</button>
     </div>`;
   _mostrarAvatar();
+}
+
+/* Mostra (ou esconde) a pílula "voltar" do rodapé. `acao` é o código que o
+   botão executa — o mesmo que ficava no botão de dentro da tela. */
+function _voltarRodape(acao, rotulo) {
+  const b = $('btn-voltar-rodape');
+  if (!b) return;
+  if (!acao) { b.style.display = 'none'; document.body.classList.remove('tem-voltar-rodape'); return; }
+  b.textContent = rotulo || '‹ Voltar';
+  b.onclick = () => { try { (new Function(acao))(); } catch (e) { console.warn('voltar:', e); } };
+  b.style.display = '';
+  document.body.classList.add('tem-voltar-rodape');
 }
 
 /* ── Inicialização ───────────────────────────────────────── */
@@ -1714,6 +1726,7 @@ function switchView(v, voltando = false) {
   }
   if (v === "inicio") _histViews = [];   // Início é a raiz: zera o caminho
   _pintarBarraUsuario();
+  _voltarRodape(null);   // cada tela declara o seu, se tiver
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
   { const b = $('hdr-inicio'); if (b) b.style.display = v === 'inicio' ? 'none' : ''; }
