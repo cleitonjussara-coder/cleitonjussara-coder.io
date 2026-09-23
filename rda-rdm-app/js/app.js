@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 217;
+const APP_BUILD = 218;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1797,13 +1797,7 @@ function _resumoHub() {
   const gastoDe = (t, mes) => cv
     ? _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhPedido(r)))
     : _soma(ns.filter(n => n.tipo === t && n.mes === mes && n.ano === filAno));
-  const recebidoDe = mes => _soma(rs.filter(r => r.mes === mes && r.ano === filAno && _repasseEhRecebido(r)));
-  const linhasMes = [];
-  for (let m = 12; m >= 1; m--) {
-    const a = gastoDe('RDA', m), d = gastoDe('RDM', m), rec = recebidoDe(m);
-    if (a || d || rec) linhasMes.push({ m, rda: a, rdm: d, rec, falta: a + d - rec });
-  }
-  const mostra = linhasMes.slice(0, 6);
+  const recebidoDe = (t, mes) => _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhRecebido(r)));
 
   /* 23/09/2026: no regime de dinheiro em conta o RDA e o RDM são contas
      separadas — o valor a receber sai por aba, não somado. Cada caixa diz
@@ -1821,25 +1815,37 @@ function _resumoHub() {
         <span class="res-rec-sub">${legenda}</span>
       </div>`;
   };
+  const tabelaAba = (ico, tipo) => {
+    const linhas = [];
+    for (let m = 12; m >= 1; m--) {
+      const g = gastoDe(tipo, m), rec = recebidoDe(tipo, m);
+      if (g || rec) linhas.push({ m, g, rec, falta: g - rec });
+    }
+    if (!linhas.length) return '';
+    const mostra = linhas.slice(0, 6);
+    return `
+      <div class="res-tab-tit">${ico} ${tipo} — mês a mês</div>
+      <table class="res-tab">
+        <tr><th>Mês</th><th>${cv ? 'Reembolso' : 'Gasto'}</th><th>Recebido</th><th>A receber</th></tr>
+        ${mostra.map(l => `
+        <tr>
+          <td>${MESES[l.m - 1]}</td>
+          <td>${brl(l.g)}</td>
+          <td>${brl(l.rec)}</td>
+          <td class="${l.falta > 0 ? 'pos' : l.falta < 0 ? 'neg' : ''}">${brl(l.falta)}</td>
+        </tr>`).join('')}
+      </table>
+      ${linhas.length > mostra.length ? `<div class="res-tab-mais">+ ${linhas.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}`;
+  };
+
   const detalhe = `
     <div class="res-rec-tit">${rotulo} — por aba</div>
     <div class="res-recs">
       ${caixaRec('🍽️', 'RDA', devedorRda)}
       ${caixaRec('💼', 'RDM', devedorRdm)}
     </div>
-    ${mostra.length ? `
-    <table class="res-tab">
-      <tr><th>Mês</th><th>🍽️ RDA</th><th>💼 RDM</th><th>${cv ? 'Reemb.' : 'Recebido'}</th><th>A receber</th></tr>
-      ${mostra.map(l => `
-      <tr>
-        <td>${MESES[l.m - 1]}</td>
-        <td>${brl(l.rda)}</td>
-        <td>${brl(l.rdm)}</td>
-        <td>${brl(l.rec)}</td>
-        <td class="${l.falta > 0 ? 'pos' : l.falta < 0 ? 'neg' : ''}">${brl(l.falta)}</td>
-      </tr>`).join('')}
-    </table>
-    ${linhasMes.length > mostra.length ? `<div class="res-tab-mais">+ ${linhasMes.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}` : ''}`;
+    ${tabelaAba('🍽️', 'RDA')}
+    ${tabelaAba('💼', 'RDM')}`;
 
   return `
     <div class="ini-titulo">Resumo de ${MESES[filMes - 1]} ${filAno}</div>

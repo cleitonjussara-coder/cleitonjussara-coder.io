@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=217">
+  <link rel="manifest" href="manifest.json?v=218">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1411,7 +1411,8 @@ html{-webkit-text-size-adjust:100%}
 }
 
 /* detalhe do "a receber": por aba e por mês (22/09/2026) */
-.res-tab{width:100%;margin-top:9px;border-collapse:collapse;font-size:13px;line-height:1.35}
+.res-tab-tit{margin-top:11px;font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--lima-2)}
+.res-tab{width:100%;margin-top:4px;border-collapse:collapse;font-size:13px;line-height:1.35}
 .res-tab th{font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:rgba(234,247,238,.62);
   font-weight:800;text-align:right;padding:2px 3px}
 .res-tab th:first-child,.res-tab td:first-child{text-align:left;font-weight:800}
@@ -1508,7 +1509,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=217" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=218" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1896,7 +1897,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
         <li>💸 <b>Repasse / Reembolso</b> — logo abaixo das abas: dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
       <p><b>📊 Resumo do mês (22/09/2026):</b> entre as abas e o Repasse ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
-      <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e uma tabelinha abre os <b>valores por mês</b> — gasto de RDA, gasto de RDM, o que você recebeu e o que ficou faltando naquele mês. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
+      <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
       <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto da tela) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
@@ -2264,25 +2265,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=217"></script>
-<script defer src="js/db.js?v=217"></script>
-<script defer src="js/nfce.js?v=217"></script>
-<script defer src="js/sefaz.js?v=217"></script>
-<script defer src="js/brasilapi.js?v=217"></script>
-<script defer src="js/ocr.js?v=217"></script>
-<script defer src="js/recorte.js?v=217"></script>
-<script defer src="js/excel.js?v=217"></script>
-<script defer src="js/gestor.js?v=217"></script>
-<script defer src="js/frota.js?v=217"></script>
-<script defer src="js/ponto.js?v=217"></script>
-<script defer src="js/arquivos.js?v=217"></script>
-<script defer src="js/gdrive.js?v=217"></script>
-<script defer src="js/app.js?v=217"></script>
+<script defer src="js/api.js?v=218"></script>
+<script defer src="js/db.js?v=218"></script>
+<script defer src="js/nfce.js?v=218"></script>
+<script defer src="js/sefaz.js?v=218"></script>
+<script defer src="js/brasilapi.js?v=218"></script>
+<script defer src="js/ocr.js?v=218"></script>
+<script defer src="js/recorte.js?v=218"></script>
+<script defer src="js/excel.js?v=218"></script>
+<script defer src="js/gestor.js?v=218"></script>
+<script defer src="js/frota.js?v=218"></script>
+<script defer src="js/ponto.js?v=218"></script>
+<script defer src="js/arquivos.js?v=218"></script>
+<script defer src="js/gdrive.js?v=218"></script>
+<script defer src="js/app.js?v=218"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=217').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=218').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
