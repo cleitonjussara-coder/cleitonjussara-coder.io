@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 215;
+const APP_BUILD = 216;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1834,15 +1834,7 @@ function _resumoHub() {
     <div class="res-card ${acima ? 'alerta' : ''}" onclick="switchView('saldo')">
       <div class="res-linha">
         ${linha('🍽️', 'RDA', rda)}
-        <span class="res-mais">+</span>
         ${linha('💼', 'RDM', rdm)}
-        <span class="res-mais">=</span>
-        <div class="res-col res-total">
-          <span class="res-ico">🧾</span>
-          <span class="res-sigla">Total</span>
-          <span class="res-val">${brl(_soma(rda) + _soma(rdm))}</span>
-          <span class="res-sub">no mês</span>
-        </div>
       </div>
       <div class="res-saldo">${saldoTxt}</div>
       ${detalhe}
