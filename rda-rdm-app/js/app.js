@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 226;
+const APP_BUILD = 229;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -571,6 +571,31 @@ function _marcarHomologacao() {
   f.className = 'homolog-faixa';
   f.textContent = '🧪 AMBIENTE DE TESTE — nada daqui vale para a empresa';
   document.body.appendChild(f);
+}
+
+/* Faixa do usuário na moldura do app (23/09/2026): foto, saudação, papel e
+   os botões Perfil e Sair. Vale para todas as abas; some na tela de login. */
+function _pintarBarraUsuario() {
+  const el = $('barra-usuario');
+  if (!el) return;
+  if (!user || _telaAtual !== 'app') { el.style.display = 'none'; return; }
+  const hora = new Date().getHours();
+  const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const papel = user?.role || 'colaborador';
+  el.style.display = '';
+  el.innerHTML = `
+    <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>
+    <div class="ini-ola-txt">
+      <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
+      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span> · ${esc(hojeTxt)}</span>
+    </div>
+    <div class="ini-ola-acoes">
+      <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>
+      <button class="btn btn-sm btn-danger-outline" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair</button>
+    </div>`;
+  _mostrarAvatar();
 }
 
 /* ── Inicialização ───────────────────────────────────────── */
@@ -1688,6 +1713,7 @@ function switchView(v, voltando = false) {
     if (_histViews.length > 20) _histViews.shift();
   }
   if (v === "inicio") _histViews = [];   // Início é a raiz: zera o caminho
+  _pintarBarraUsuario();
   viewAtual = v;
   /* página unificada: fora do Início, o cabeçalho mostra "‹ Início" */
   { const b = $('hdr-inicio'); if (b) b.style.display = v === 'inicio' ? 'none' : ''; }
@@ -2013,18 +2039,6 @@ function renderInicio() {
   const papel = user?.role || 'colaborador';
   $('app-content').innerHTML = `
   <div class="db-container">
-    <div class="ini-ola ini-ola-foto ini-ola-fixa">
-      <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome||'')}" data-sub="${esc(PAPEL[papel]||papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome||user?.email||'?')[0].toUpperCase())}</div>
-      <div class="ini-ola-txt">
-        <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
-        <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL[papel] || papel)}</span> · ${esc(hojeTxt)}</span>
-      </div>
-      <!-- 23/09/2026: Perfil e Sair ficam aqui, congelados no topo — a barra
-           não sobe com a rolagem, então estão sempre a um toque. -->
-      <div class="ini-ola-acoes">
-        <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>
-        <button class="btn btn-sm btn-danger-outline" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair</button>
-      </div>
     </div>
 
     <div class="ini-titulo">O que você quer fazer?</div>

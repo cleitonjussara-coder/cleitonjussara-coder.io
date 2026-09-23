@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=226">
+  <link rel="manifest" href="manifest.json?v=229">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -826,7 +826,10 @@ select.inp{cursor:pointer}
 /* Barra congelada do Início (23/09/2026): saudação + Perfil + Sair sempre
    visíveis. Fica sticky dentro do #app-content e ocupa a largura toda
    (margens negativas cancelam o padding do .db-container). */
-.ini-ola-fixa{position:sticky;top:0;z-index:20;margin:-12px -14px 0;padding:10px 14px;
+/* Agora é um elemento da moldura (entre o cabeçalho e o conteúdo):
+   largura inteira da tela, sem margens negativas e sem sticky — ele nem
+   entra na área que rola. */
+.ini-ola-fixa{flex:0 0 auto;z-index:20;padding:10px 16px;
   background:var(--surface);box-shadow:0 4px 12px rgba(0,0,0,.10)}
 .ini-ola-acoes{display:flex;gap:7px;margin-left:auto;flex-shrink:0}
 .ini-ola-acoes .btn{white-space:nowrap}
@@ -962,7 +965,7 @@ select.inp{cursor:pointer}
 #app-content .btn-primary,#auth-screen .btn-primary{background:linear-gradient(135deg,#c9ea62,#8fcf2e);color:#0a3a1c;border-color:transparent;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,.35)}
 #app-content .btn-outline,#auth-screen .btn-outline{color:#d9f5a0;border-color:rgba(185,226,74,.6);background:rgba(255,255,255,.04)}
 #app-content .btn-outline:active,#auth-screen .btn-outline:active{background:rgba(185,226,74,.18)}
-#app-content .btn-danger-outline{color:#ffb4a8;border-color:#ffb4a8}
+#app-content .btn-danger-outline{color:#ffd0c8;border-color:#ffb4a8}
 #app-content .inp,#auth-screen .inp{background:#fff;color:#1C2B20;border-color:rgba(185,226,74,.45)}
 #app-content .lbl,#auth-screen .lbl{color:rgba(234,247,238,.85)}
 #app-content .btn-icon-sm{color:#eef9f0}
@@ -1552,6 +1555,15 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 #app-content .db-pend-item.alerta .db-pend-txt{color:#7c2d12}
 #app-content .db-pend-item.alerta .db-pend-n{color:#9A3412}
 
+/* A faixa do usuário mora FORA do #app-content (é moldura), então não pega
+   os tokens do tema esmeralda: os botões voltavam ao verde/vermelho escuros
+   do tema claro e sumiam no fundo. Cores explícitas aqui (23/09/2026). */
+#barra-usuario .btn-outline{color:#d9f5a0;border-color:rgba(185,226,74,.6);background:rgba(255,255,255,.06)}
+#barra-usuario .btn-outline:active{background:rgba(185,226,74,.2)}
+#barra-usuario .btn-danger-outline{color:#ffd0c8;border-color:rgba(255,190,180,.8);background:rgba(255,255,255,.04)}
+#barra-usuario .btn-danger-outline:active{background:rgba(255,180,168,.18)}
+#barra-usuario .avatar{background:var(--primary)}
+
 </style>
 </head>
 <body>
@@ -1577,7 +1589,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=226" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=229" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1586,6 +1598,10 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
     <!-- notificações no app (21/09/2026): pedidos de repasse pendentes (gestor) / pagos (colaborador) -->
     <button id="hdr-sino" style="display:none" onclick="abrirNotificacoes()" aria-label="Notificações" title="Notificações">🔔<span id="hdr-sino-num" style="display:none">0</span></button>
   </header>
+
+  <!-- 23/09/2026: faixa do usuário fora do conteúdo — vale para todas as
+       abas e não sobe com a rolagem. Preenchida por _pintarBarraUsuario(). -->
+  <div id="barra-usuario" class="ini-ola ini-ola-foto ini-ola-fixa" style="display:none"></div>
 
   <main id="app-content"></main>
   <!-- 20/09/2026: em alguns iPhones o "‹ Início" do topo some (barra do
@@ -2334,25 +2350,25 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=226"></script>
-<script defer src="js/db.js?v=226"></script>
-<script defer src="js/nfce.js?v=226"></script>
-<script defer src="js/sefaz.js?v=226"></script>
-<script defer src="js/brasilapi.js?v=226"></script>
-<script defer src="js/ocr.js?v=226"></script>
-<script defer src="js/recorte.js?v=226"></script>
-<script defer src="js/excel.js?v=226"></script>
-<script defer src="js/gestor.js?v=226"></script>
-<script defer src="js/frota.js?v=226"></script>
-<script defer src="js/ponto.js?v=226"></script>
-<script defer src="js/arquivos.js?v=226"></script>
-<script defer src="js/gdrive.js?v=226"></script>
-<script defer src="js/app.js?v=226"></script>
+<script defer src="js/api.js?v=229"></script>
+<script defer src="js/db.js?v=229"></script>
+<script defer src="js/nfce.js?v=229"></script>
+<script defer src="js/sefaz.js?v=229"></script>
+<script defer src="js/brasilapi.js?v=229"></script>
+<script defer src="js/ocr.js?v=229"></script>
+<script defer src="js/recorte.js?v=229"></script>
+<script defer src="js/excel.js?v=229"></script>
+<script defer src="js/gestor.js?v=229"></script>
+<script defer src="js/frota.js?v=229"></script>
+<script defer src="js/ponto.js?v=229"></script>
+<script defer src="js/arquivos.js?v=229"></script>
+<script defer src="js/gdrive.js?v=229"></script>
+<script defer src="js/app.js?v=229"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=226').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=229').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
