@@ -31,7 +31,7 @@ class RelatorioCvPdf
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->orderBy('data')->orderBy('created_at')->get();
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->orderBy('data')->get();
+            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
 
         /* agrupa: mês → categoria → notas */
         $grade = [];

@@ -82,7 +82,7 @@ class RelatorioCv
         /* ── BANCO DE DADOS: extrato de valor recebido ─────── */
         $bd = $ss->getSheetByName('BANCO DE DADOS');
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->orderBy('data')->get();
+            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
         /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
            "EXTRATO DE VALOR RECEBIDO" (B/C), que alimenta o saldo de C.V., e
            "REEMBOLSO DE / TOTAL PAGO" (I/J).
@@ -244,7 +244,7 @@ class RelatorioCv
                 $gMes[$n->user_id][$m] += $v;
                 $mCat[$m][$c] += $v;
             });
-        Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)->where('kind', 'received')
+        Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)->where('kind', 'received')->whereNotNull('confirmado_em')
             ->select('user_id', 'valor', 'mes')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes) {
                 $m = (int) $r->mes;
                 $rec[$r->user_id] += (float) $r->valor;

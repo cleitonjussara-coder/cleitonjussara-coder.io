@@ -86,6 +86,11 @@ class RepasseController extends Controller
             $rep = new Repasse(['id' => $id] + $d);
             $rep->save();
         }
+        /* O que o próprio colaborador registra já nasce confirmado: a segunda
+           etapa (23/09/2026) existe para o repasse que o GESTOR lançou. */
+        if ($rep->kind === 'received' && ! $rep->confirmado_em && ! $rep->pedido_id) {
+            $rep->forceFill(['confirmado_em' => now(), 'confirmado_por' => $rep->user_id])->save();
+        }
 
         /* Depois de gravado — falha de e-mail nunca impede o registro. */
         $this->email->enviarSePreciso($rep);
@@ -121,9 +126,47 @@ class RepasseController extends Controller
             'kind' => 'received',
             'deleted' => false,
         ]);
-        $recebido->forceFill(['pedido_id' => $pedido->id])->save();
+        /* 23/09/2026: nasce PENDENTE — só entra no saldo quando o colaborador
+           confirmar que o dinheiro caiu (PATCH /repasses/{id}/confirmar). */
+        $recebido->forceFill(['pedido_id' => $pedido->id, 'confirmado_em' => null])->save();
         $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
 
         return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
+    }
+
+    /**
+     * PATCH /repasses/{id}/confirmar {aceita:true|false} — 2ª etapa
+     * (23/09/2026): o COLABORADOR confirma que o dinheiro caiu. Só então o
+     * repasse entra no saldo.
+     *   aceita=false → "não recebi": o lançamento é descartado e o pedido
+     *   volta para a lista do gestor como pendente.
+     */
+    public function confirmar(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        $rec = Repasse::findOrFail($id);
+        abort_unless($rec->user_id === $u->id, 403, 'Só quem recebe confirma o repasse');
+        abort_if($rec->deleted, 404, 'Repasse excluído');
+        abort_unless(! $rec->kind || $rec->kind === 'received', 422, 'Este registro não é um repasse recebido');
+        $aceita = $r->boolean('aceita', true);
+
+        if ($aceita) {
+            if (! $rec->confirmado_em) {
+                $rec->forceFill(['confirmado_em' => now(), 'confirmado_por' => $u->id])->save();
+                Log::info('repasse confirmado pelo colaborador', ['repasse' => $rec->id, 'user' => $u->email]);
+            }
+
+            return response()->json(['repasse' => $rec->fresh()]);
+        }
+
+        /* não recebi: descarta o lançamento e devolve o pedido ao gestor */
+        $rec->forceFill(['deleted' => true])->save();
+        $pedido = $rec->pedido_id ? Repasse::find($rec->pedido_id) : null;
+        if ($pedido) {
+            $pedido->forceFill(['atendido_em' => null, 'atendido_por' => null])->save();
+        }
+        Log::info('repasse recusado pelo colaborador', ['repasse' => $rec->id, 'user' => $u->email]);
+
+        return response()->json(['repasse' => $rec->fresh(), 'pedido' => $pedido?->fresh()]);
     }
 }

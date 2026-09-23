@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=232">
+  <link rel="manifest" href="manifest.json?v=233">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1609,7 +1609,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=232" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=233" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2102,9 +2102,10 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>reembolsos</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = reembolsos recebidos. O Início mostra "Reembolso a receber" em vez de saldo.</p>
       <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV; <b>Planilha RDM/RDA</b> (Excel e PDF) e <b>Excel resumo</b> para os demais. <b>📗 Planilhas</b> (topo da Equipe) gera as planilhas de quem você marcar, <b>cada um no modelo do seu regime</b> — Excel único (aba RESUMO + abas de cada pessoa, ex.: <i>Cleiton_R.D.M.</i>, <i>Maria_RDM_RDA</i>) ou ZIP. A RDM/RDA leva uns 20 s por pessoa.</p>
       <h4>🔔 Notificações e pedido de repasse pago</h4>
-      <p>O <b>🔔 sininho</b> no canto superior esquerdo mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
-      <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado: o app grava o <b>repasse recebido</b> para o colaborador na mesma hora e o pedido sai das pendências (e do quadro do PDF). <b>👤 Ver colaborador</b> abre o cartão dele.</p>
-      <p><b>Colaborador:</b> quando o gestor marca o seu pedido como pago, você recebe o aviso "Seu pedido de R$ … foi pago ✅" — o repasse recebido já aparece em RDM/RDA e Planilhas, sem precisar registrar de novo. Toque em <b>OK, vi</b> para limpar.</p>
+      <p>O <b>🔔 sininho</b> no canto superior direito mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
+      <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado e o pedido sai das pendências. <b>👤 Ver colaborador</b> abre o cartão dele.</p>
+      <p><b>💰 Duas etapas (23/09/2026):</b> marcar como pago <b>não</b> joga o valor direto no saldo da pessoa. O lançamento fica esperando a <b>confirmação de quem recebeu</b>: no sino dela aparece "O gestor lançou R$ … para você — você recebeu?", com <b>✅ Recebi</b> e <b>🚫 Não recebi</b>, e em <b>RDM/RDA e Planilhas</b> o registro aparece com o aviso "⏳ Lançado pelo gestor — confirme que recebeu" e o botão <b>✅ Recebi</b>. Só depois do "Recebi" o valor entra em saldo, gráficos e planilhas. Se ela disser que <b>não recebeu</b>, o lançamento é descartado e o <b>pedido volta</b> para a lista do gestor. Repasse que o próprio colaborador registra (dinheiro que caiu direto, sem pedido) continua valendo na hora.</p>
+      <p><b>Colaborador:</b> quando o gestor marca o seu pedido como pago, chega o aviso para você <b>confirmar o recebimento</b> — é o que faz o valor entrar no seu saldo. O aviso "Seu pedido de R$ … foi pago ✅" você limpa com <b>OK, vi</b>.</p>
       <h4>☁️ Envio para o servidor</h4>
       <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>. Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b> e a cada <b>60 segundos</b>. A foto sobe antes da nota.</p>
       <p>Indicador no topo:</p>
@@ -2374,25 +2375,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=232"></script>
-<script defer src="js/db.js?v=232"></script>
-<script defer src="js/nfce.js?v=232"></script>
-<script defer src="js/sefaz.js?v=232"></script>
-<script defer src="js/brasilapi.js?v=232"></script>
-<script defer src="js/ocr.js?v=232"></script>
-<script defer src="js/recorte.js?v=232"></script>
-<script defer src="js/excel.js?v=232"></script>
-<script defer src="js/gestor.js?v=232"></script>
-<script defer src="js/frota.js?v=232"></script>
-<script defer src="js/ponto.js?v=232"></script>
-<script defer src="js/arquivos.js?v=232"></script>
-<script defer src="js/gdrive.js?v=232"></script>
-<script defer src="js/app.js?v=232"></script>
+<script defer src="js/api.js?v=233"></script>
+<script defer src="js/db.js?v=233"></script>
+<script defer src="js/nfce.js?v=233"></script>
+<script defer src="js/sefaz.js?v=233"></script>
+<script defer src="js/brasilapi.js?v=233"></script>
+<script defer src="js/ocr.js?v=233"></script>
+<script defer src="js/recorte.js?v=233"></script>
+<script defer src="js/excel.js?v=233"></script>
+<script defer src="js/gestor.js?v=233"></script>
+<script defer src="js/frota.js?v=233"></script>
+<script defer src="js/ponto.js?v=233"></script>
+<script defer src="js/arquivos.js?v=233"></script>
+<script defer src="js/gdrive.js?v=233"></script>
+<script defer src="js/app.js?v=233"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=232').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=233').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

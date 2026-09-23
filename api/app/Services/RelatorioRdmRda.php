@@ -117,7 +117,7 @@ class RelatorioRdmRda
         $this->limpar($bd, 6, 15, 6, 26);     // RDA: F15 (data, mesclada F:G)
         $this->limpar($bd, 8, 15, 8, 26);     //      H15 (R$)
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->orderBy('data')->get();
+            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
         $r1 = 15;
         $r2 = 15;
         foreach ($reps as $r) {

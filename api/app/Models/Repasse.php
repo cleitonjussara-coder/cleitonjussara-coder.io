@@ -24,6 +24,9 @@ class Repasse extends Model
         'id', 'user_id', 'tipo', 'valor', 'data', 'mes', 'ano', 'descricao',
         'kind', 'deleted', 'created_at',
     ];
+    /* confirmado_em/confirmado_por ficam fora do fillable de propósito: quem
+       confirma o recebimento é o colaborador, pelo endpoint próprio — um
+       upsert vindo do aparelho não pode marcar isso sozinho (23/09/2026). */
 
     protected function casts(): array
     {
@@ -35,6 +38,7 @@ class Repasse extends Model
             'email_sent' => 'boolean',
             'deleted' => 'boolean',
             'atendido_em' => 'datetime',
+            'confirmado_em' => 'datetime',
         ];
     }
 

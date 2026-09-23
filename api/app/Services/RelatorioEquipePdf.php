@@ -32,7 +32,8 @@ class RelatorioEquipePdf
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
         $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
-        $recebido = fn ($r) => ! $r->kind || $r->kind === 'received';
+        /* 23/09/2026: só entra no relatório o repasse que o colaborador confirmou */
+        $recebido = fn ($r) => (! $r->kind || $r->kind === 'received') && $r->confirmado_em;
         $periodo = self::MESES[$mes].' / '.$ano;
         $geradoEm = now(PontoCalculo::TZ)->format('d/m/Y H:i');
 
