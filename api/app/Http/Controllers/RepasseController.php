@@ -90,10 +90,9 @@ class RepasseController extends Controller
             $rep = new Repasse(['id' => $id] + $d);
             $rep->save();
         }
-        /* Nasce confirmado: tanto o que o colaborador registra quanto o que o
-           gestor LANÇA direto para ele (23/09/2026). A segunda etapa existe só
-           para o pedido que o gestor marca como pago — esse vem com
-           pedido_id e confirmado_em nulo. */
+        /* Nasce confirmado, venha de onde vier (23/09/2026): o que o
+           colaborador registra, o que o gestor lança direto para ele e o que
+           sai de um pedido marcado como pago. Não há mais 2ª etapa. */
         if ($rep->kind === 'received' && ! $rep->confirmado_em && ! $rep->pedido_id) {
             $rep->forceFill(['confirmado_em' => now(), 'confirmado_por' => $rep->user_id])->save();
         }
