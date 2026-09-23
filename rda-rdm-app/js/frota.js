@@ -126,7 +126,7 @@ window.Frota = (() => {
       await carregarDoCache();
       if (!veiculos.length && !registros.length && !anual) {
         el.innerHTML = `<div class="db-container"><div class="db-card" style="text-align:center;padding:24px">
-          <div style="font-size:30px">🚗</div><p style="margin-top:8px;color:var(--text2)">Sem conexão e sem dados guardados ainda. Abra a Frota uma vez com internet.</p>
+          <div style="font-size:31px">🚗</div><p style="margin-top:8px;color:var(--text2)">Sem conexão e sem dados guardados ainda. Abra a Frota uma vez com internet.</p>
           <button class="btn btn-outline" style="margin-top:12px" onclick="Frota.render()">Tentar de novo</button></div></div>`;
         return;
       }
@@ -184,7 +184,7 @@ window.Frota = (() => {
             ${r._erro ? `<div class="nota-obs" style="color:#a12626">${esc(r._erro)}</div>` : ''}
           </div>
           <div class="nota-foot">
-            <span class="nota-valor" style="font-size:12px;color:var(--text2)">${r.foto_path || r._foto ? '📷 com foto' : ''}</span>
+            <span class="nota-valor" style="font-size:14px;color:var(--text2)">${r.foto_path || r._foto ? '📷 com foto' : ''}</span>
             <div class="nota-actions">
               ${r.foto_path ? `<button class="btn-icon-sm" onclick="Frota.verFoto('${r.id}')" title="Ver foto do odômetro">📎</button>` : ''}
               ${(r.user_id === user?.id || user?.role === 'admin') ? `
@@ -254,18 +254,18 @@ window.Frota = (() => {
       </div>
 
       <div class="db-card">
-        <div class="db-card-title"><span>Evolução ${anual.ano}</span><span style="font-size:11px;color:var(--text2)">km por mês</span></div>
+        <div class="db-card-title"><span>Evolução ${anual.ano}</span><span style="font-size:13px;color:var(--text2)">km por mês</span></div>
         <div class="evo">${(anual.meses_total || []).map((v, k) => `<div class="evo-col ${k === i ? 'cur' : ''}" title="${MESES[k]}: ${kmFmt(v)} km"><div class="evo-bar" style="height:${Math.max(2, Math.round(v / maxMes * 100))}%"></div></div>`).join('')}</div>
         <div class="evo-labels">${MESES.map((m, k) => `<span class="${k === i ? 'cur' : ''}">${m.slice(0, 3)}</span>`).join('')}</div>
       </div>
 
       <div class="db-card">
-        <div class="db-card-title"><span>Km por veículo</span><span style="font-size:11px;color:var(--text2)">${periodo}</span></div>
+        <div class="db-card-title"><span>Km por veículo</span><span style="font-size:13px;color:var(--text2)">${periodo}</span></div>
         <div class="db-rank">${rank(porVeiculo, maxV, f => `Frota.filtrarVeiculo('${f.id}')`)}</div>
       </div>
       ${gestor ? `
       <div class="db-card">
-        <div class="db-card-title"><span>Km por motorista</span><span style="font-size:11px;color:var(--text2)">${periodo}</span></div>
+        <div class="db-card-title"><span>Km por motorista</span><span style="font-size:13px;color:var(--text2)">${periodo}</span></div>
         <div class="db-rank">${rank(porMotorista, maxM)}</div>
       </div>` : ''}
 

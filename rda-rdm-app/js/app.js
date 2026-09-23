@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 214;
+const APP_BUILD = 215;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2219,7 +2219,7 @@ function gerarGraficoEvolucao(dados) {
              ${f === 0 ? '' : `stroke-dasharray="2 3" opacity="${rotulado ? .7 : .35}"`}/>`;
     if (rotulado)
       svg += `<text x="${pl-6}" y="${(yy+2.6).toFixed(1)}" text-anchor="end"
-               style="font-size:7.5px;fill:var(--text2);font-weight:600">${brlCurto(topo*f)}</text>`;
+               style="font-size:9.5px;fill:var(--text2);font-weight:600">${brlCurto(topo*f)}</text>`;
   });
 
   /* barras agrupadas */
@@ -2246,7 +2246,7 @@ function gerarGraficoEvolucao(dados) {
     if (dashSerie.RDA) svg += barra(d.rda, 'var(--primary)');
 
     svg += `<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle"
-             style="font-size:8.5px;font-weight:${sel?800:500};
+             style="font-size:10.5px;font-weight:${sel?800:500};
              fill:${sel?'var(--primary)':'var(--text2)'}">${d.label}</text>`;
   });
 
@@ -2279,7 +2279,7 @@ function gerarDonut(cats, total) {
     return `<svg viewBox="0 0 132 132" class="db-chart" style="height:132px">
       <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--bg)" stroke-width="16"/>
       <text x="${CX}" y="${CY+4}" text-anchor="middle"
-        style="font-size:11px;fill:var(--text2);font-weight:700">sem gastos</text></svg>`;
+        style="font-size:13px;fill:var(--text2);font-weight:700">sem gastos</text></svg>`;
   }
 
   let acc = 0, segs = '';
@@ -2298,14 +2298,14 @@ function gerarDonut(cats, total) {
   const foco = cats.find(c => c.key === dashFatiaSel);
   const centro = foco
     ? `<text x="${CX}" y="${CY-3}" text-anchor="middle"
-         style="font-size:14px;font-weight:800;fill:var(--primary-d)">${
+         style="font-size:15.5px;font-weight:800;fill:var(--primary-d)">${
            Math.round(foco.val/total*100)}%</text>
        <text x="${CX}" y="${CY+11}" text-anchor="middle"
-         style="font-size:8px;font-weight:700;fill:var(--text2)">${esc(foco.curto)}</text>`
+         style="font-size:10px;font-weight:700;fill:var(--text2)">${esc(foco.curto)}</text>`
     : `<text x="${CX}" y="${CY-2}" text-anchor="middle"
-         style="font-size:12.5px;font-weight:800;fill:var(--primary-d)">${brlCurto(total)}</text>
+         style="font-size:15px;font-weight:800;fill:var(--primary-d)">${brlCurto(total)}</text>
        <text x="${CX}" y="${CY+11}" text-anchor="middle"
-         style="font-size:8px;font-weight:700;fill:var(--text2)">TOTAL</text>`;
+         style="font-size:10px;font-weight:700;fill:var(--text2)">TOTAL</text>`;
 
   return `<svg viewBox="0 0 132 132" class="db-chart" style="height:132px">${segs}${centro}</svg>`;
 }
@@ -2323,9 +2323,9 @@ function renderHome() {
     $('app-content').innerHTML = `
     <div class="db-container">
       <div class="db-card" style="align-items:center;text-align:center;gap:12px;padding:28px 20px">
-        <div style="font-size:44px">📊</div>
-        <div style="font-size:17px;font-weight:800;color:var(--primary-d)">Seu painel começa aqui</div>
-        <p style="font-size:13.5px;color:var(--text2);line-height:1.5">
+        <div style="font-size:46px">📊</div>
+        <div style="font-size:19px;font-weight:800;color:var(--primary-d)">Seu painel começa aqui</div>
+        <p style="font-size:16px;color:var(--text2);line-height:1.5">
           Lance a primeira nota e o dashboard passa a mostrar saldo, evolução,
           composição dos gastos e pendências automaticamente.</p>
         <button class="btn btn-primary btn-full" onclick="abrirCaptura()">+ Lançar primeira nota</button>
@@ -2451,7 +2451,7 @@ function renderHome() {
       <div style="flex:1;min-width:0">
         <div class="db-pend-txt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
-        <div style="font-size:10.5px;color:var(--text2);margin-top:1px">
+        <div style="font-size:13px;color:var(--text2);margin-top:1px">
           ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
       </div>
       <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
@@ -2461,7 +2461,7 @@ function renderHome() {
   const pendHtml = pendentes.length
     ? linhaSuspeita + resumoPend.map(linhaResumo).join('')
       + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+           <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
              Notas pendentes</div>
            <div class="db-pend">${itensPend}</div>
            ${pendentes.length > 10
@@ -2493,7 +2493,7 @@ function renderHome() {
     <div class="db-card">
       <div class="db-card-title">
         <span>Ritmo de gasto</span>
-        <span style="font-size:10px;color:var(--text2);font-weight:600">
+        <span style="font-size:12.5px;color:var(--text2);font-weight:600">
           ${ehAtual ? `dia ${corridos} de ${diasMes}` : `${diasMes} dias`}</span>
       </div>
       <div class="db-ritmo">
@@ -2579,7 +2579,7 @@ function renderHome() {
     <div class="db-card">
       <div class="db-card-title">
         <span>Resumo trimestral · ${filAno}</span>
-        <span style="font-size:10px;color:var(--text2);font-weight:600">gastos em R$</span>
+        <span style="font-size:12.5px;color:var(--text2);font-weight:600">gastos em R$</span>
       </div>
       <div class="db-trim-wrap">
         <table class="db-trim">
@@ -2744,7 +2744,7 @@ function renderHome() {
     <div class="db-card">
       <div class="db-card-title">
         <span>Onde mais se gasta</span>
-        <span style="font-size:10px;color:var(--text2);font-weight:600">top ${forn.length}</span>
+        <span style="font-size:12.5px;color:var(--text2);font-weight:600">top ${forn.length}</span>
       </div>
       <div class="db-rank">
         ${forn.length ? forn.map((f, i) => `
@@ -2757,7 +2757,7 @@ function renderHome() {
             <div class="db-rank-track">
               <div class="db-rank-fill" style="width:${Math.max(4, Math.round(f.val/maxForn*100))}%"></div>
             </div>
-            <div style="font-size:10px;color:var(--text2)">${f.qtd} nota${f.qtd === 1 ? '' : 's'}
+            <div style="font-size:12.5px;color:var(--text2)">${f.qtd} nota${f.qtd === 1 ? '' : 's'}
               · ${brl(f.val/f.qtd)} em média</div>
           </div>`).join('')
         : '<p class="muted-p">Sem fornecedores identificados no período.</p>'}
@@ -3047,7 +3047,7 @@ function renderNotas() {
     html += `<div class="empty-state">
       <div class="empty-icon">📋</div>
       <p>${filtroNotasFlag ? 'Nenhuma nota com esse filtro em' : 'Nenhuma nota em'} ${periodo}</p>
-      ${!filtroNotasFlag && !filtroNotasAno ? '<p style="font-size:12px;color:var(--text2);margin-top:6px">Se ficou offline, as notas novas ficam salvas no aparelho e sincronizam depois.</p>' : ''}
+      ${!filtroNotasFlag && !filtroNotasAno ? '<p style="font-size:14px;color:var(--text2);margin-top:6px">Se ficou offline, as notas novas ficam salvas no aparelho e sincronizam depois.</p>' : ''}
       <button class="btn btn-primary" onclick="${filtroNotasFlag || filtroNotasAno
         ? 'limparFiltroNotas()' : 'abrirCaptura()'}">${filtroNotasFlag || filtroNotasAno
         ? 'Limpar filtro' : '+ Lançar'}</button>
@@ -3228,7 +3228,7 @@ function renderSaldo() {
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
         <div style="flex:1;min-width:0">
           <div class="rep-desc">${desc}</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px">${label} · ${detail}</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:2px">${label} · ${detail}</div>
         </div>
         <span class="rep-val">${brl(r.valor)}</span>
         <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
@@ -3309,17 +3309,17 @@ function renderSaldo() {
   <div class="db-card" style="gap:8px;padding:12px 14px">
     <div class="dash-card-title" style="margin:0">⬇️ Baixar relatório</div>
     ${cv ? `<div class="export-btns">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa) · ${filAno}:</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text2);align-self:center">Planilha de C.V. (modelo da empresa) · ${filAno}:</span>
       <button class="btn btn-sm btn-primary" onclick="baixarRelatorioCv('xlsx')">📗 Excel</button>
       <button class="btn btn-sm btn-outline" onclick="baixarRelatorioCv('pdf')">📕 PDF</button>
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
     </div>` : `<div class="export-btns">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Planilha de RDM e RDA (modelo da empresa) · ${filAno}:</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text2);align-self:center">Planilha de RDM e RDA (modelo da empresa) · ${filAno}:</span>
       <button class="btn btn-sm btn-primary" onclick="baixarRelatorioRdmRda()">📗 Excel</button>
       <button class="btn btn-sm btn-outline" onclick="baixarRelatorioRdmRda(null, null, 'pdf')">📕 PDF</button>
     </div>
     <div class="export-btns">
-      <span style="font-size:12.5px;font-weight:700;color:var(--text2);align-self:center">Resumo do app:</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text2);align-self:center">Resumo do app:</span>
       <button class="btn btn-sm btn-outline" onclick="exportExcel()">Excel anual</button>
       <button class="btn btn-sm btn-outline" onclick="exportCSV()">CSV ${MESES[filMes-1]}</button>
     </div>`}
@@ -3700,7 +3700,7 @@ function renderPerfil() {
       <button class="btn btn-sm btn-outline" onclick="$('p-foto-galeria').click()">🖼️ Da galeria</button>
       ${user?.foto_path ? `<button class="btn btn-sm btn-outline" onclick="removerFotoPerfil()">Remover</button>` : ''}
     </div>
-    <p style="font-size:12.5px;color:var(--text2);text-align:center;margin:-4px 0 8px">Depois da foto, enquadre o rosto e toque em <b>Usar recorte</b>.</p>
+    <p style="font-size:15px;color:var(--text2);text-align:center;margin:-4px 0 8px">Depois da foto, enquadre o rosto e toque em <b>Usar recorte</b>.</p>
     <div class="perfil-nome">${esc(user?.nome||user?.email||'')}</div>
     <div class="perfil-email">${esc(user?.email||'')}</div>
     <div class="perfil-meta">
@@ -3724,26 +3724,26 @@ function renderPerfil() {
         <div style="background:#F0FBF4;border:1.5px solid #74C69D;border-radius:10px;padding:12px 14px;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span style="width:9px;height:9px;border-radius:50%;background:#40916C;flex-shrink:0;display:inline-block"></span>
-            <span style="font-size:13px;font-weight:700;color:#1B4332">Conectado</span>
-            <span style="margin-left:auto;font-size:11px;color:#5A6E60">Expira em ${GDrive.minutosRestantes()} min</span>
+            <span style="font-size:15.5px;font-weight:700;color:#1B4332">Conectado</span>
+            <span style="margin-left:auto;font-size:13px;color:#5A6E60">Expira em ${GDrive.minutosRestantes()} min</span>
           </div>
-          <p style="font-size:12px;color:#5A6E60">Notas e fotos sincronizando automaticamente</p>
+          <p style="font-size:14px;color:#5A6E60">Notas e fotos sincronizando automaticamente</p>
         </div>
         <button class="btn btn-outline btn-full" style="margin-bottom:8px" onclick="testarDrive()">🔍 Testar acesso à pasta</button>
         <button class="btn btn-outline btn-full" onclick="migrarPastasDrive()">🗂️ Reorganizar pastas no padrão</button>
       ` : `
         <div style="background:#F8FAF9;border:1.5px dashed var(--border);border-radius:10px;padding:14px;text-align:center">
-          <div style="font-size:28px;margin-bottom:8px">☁️</div>
-          <p style="font-size:13px;color:var(--text2);line-height:1.6">
+          <div style="font-size:29px;margin-bottom:8px">☁️</div>
+          <p style="font-size:15.5px;color:var(--text2);line-height:1.6">
             O Drive conecta sozinho quando você abre o app.<br>
             Se não conectou, use o botão abaixo.
           </p>
         </div>
         <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="conectarDriveAgora()">🔗 Conectar Drive agora</button>
         <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="reconectarDrivePeloGoogle()">🔁 Entrar de novo pelo Google (com Drive)</button>
-        <details style="margin-top:10px;font-size:11.5px;color:var(--text2)">
+        <details style="margin-top:10px;font-size:13.5px;color:var(--text2)">
           <summary style="cursor:pointer">🩺 Diagnóstico do Drive</summary>
-          <pre style="white-space:pre-wrap;font-size:11px;line-height:1.5;margin-top:6px">${esc(_driveDiagTexto())}</pre>
+          <pre style="white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:6px">${esc(_driveDiagTexto())}</pre>
         </details>
       `}
     </div>
@@ -3751,20 +3751,20 @@ function renderPerfil() {
     ${_ehGestorOuAdmin() && sb && !DEMO_MODE ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">💾 Armazenamento do servidor</p>
-      <div id="armazenamento-card" style="font-size:12.5px;color:var(--text2)">Medindo o espaço em disco…</div>
+      <div id="armazenamento-card" style="font-size:15px;color:var(--text2)">Medindo o espaço em disco…</div>
     </div>
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">🗄️ Backup</p>
-      <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px">
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:10px">
         Banco + todas as fotos num ZIP. O servidor gera um sozinho toda semana (lista abaixo);
         baixe uma cópia de vez em quando e guarde fora da Locaweb.
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
-      <div id="backups-auto" style="margin-top:10px;font-size:12.5px;color:var(--text2)">Carregando backups automáticos…</div>
-      <div id="backup-drive" style="margin-top:12px;font-size:12.5px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
+      <div id="backups-auto" style="margin-top:10px;font-size:15px;color:var(--text2)">Carregando backups automáticos…</div>
+      <div id="backup-drive" style="margin-top:12px;font-size:15px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
       <button class="btn btn-outline btn-full" id="btn-migrar" style="margin-top:8px" onclick="atualizarBanco()">🛠️ Atualizar estrutura do banco</button>
-      <p style="font-size:11px;color:var(--text2);margin-top:6px">
+      <p style="font-size:13px;color:var(--text2);margin-top:6px">
         Use "Atualizar" só quando uma nova versão da API pedir (ele aplica as migrações pendentes no servidor).
       </p>
     </div>
@@ -3899,12 +3899,12 @@ async function _mostrarArmazenamento() {
       ? `🗄️ Último backup automático: <b>há ${ub.dias} dia${ub.dias === 1 ? '' : 's'}</b> (${MB(ub.bytes)})${ub.dias > 8 ? ' <span style="color:#b45309;font-weight:700">— atrasado, confira o Crontab</span>' : ''}`
       : '<span style="color:#b45309;font-weight:700">🗄️ Nenhum backup automático ainda.</span>';
 
-    const vol = m.volume ? `<p style="margin-top:8px;opacity:.7;font-size:11.5px">Disco da Locaweb (compartilhado com outros clientes): ${m.volume.pct_usado.toLocaleString('pt-BR')} % usado, ${(m.volume.livre / 1073741824).toFixed(0)} GB livres.</p>` : '';
+    const vol = m.volume ? `<p style="margin-top:8px;opacity:.7;font-size:13.5px">Disco da Locaweb (compartilhado com outros clientes): ${m.volume.pct_usado.toLocaleString('pt-BR')} % usado, ${(m.volume.livre / 1073741824).toFixed(0)} GB livres.</p>` : '';
 
     el.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span>Total usado pelo app</span>
-        <b style="font-size:16px;color:${cor}">${MB(m.total)}</b>
+        <b style="font-size:18px;color:${cor}">${MB(m.total)}</b>
       </div>
       <div style="color:${cor};font-weight:700;margin-top:2px">${rotulo}</div>
       ${plano}
@@ -3912,7 +3912,7 @@ async function _mostrarArmazenamento() {
       <p style="margin-top:10px">${tend}</p>
       <p style="margin-top:4px">${backup}</p>
       ${vol}
-      <p style="margin-top:6px;opacity:.7;font-size:11.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR')}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
+      <p style="margin-top:6px;opacity:.7;font-size:13.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR')}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
   } catch (e) {
     const el = $('armazenamento-card');
     if (el) el.textContent = 'Não consegui medir o armazenamento: ' + (e.message || 'erro');
@@ -4092,7 +4092,7 @@ async function iniciarQR() {
     diag = document.createElement('div');
     diag.id = 'qr-diag';
     diag.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:5;'
-      + 'background:rgba(0,0,0,.78);color:#7CFC00;font-size:13px;font-weight:700;'
+      + 'background:rgba(0,0,0,.78);color:#7CFC00;font-size:15.5px;font-weight:700;'
       + 'padding:10px 12px;text-align:center;font-family:monospace;line-height:1.45;'
       + 'padding-top:calc(10px + env(safe-area-inset-top,0px));';
     $('qr-overlay').appendChild(diag);
@@ -5290,7 +5290,7 @@ function atualizarPreviewFoto(url) {
   } else if (kind === 'pdf' && fotoRenderURL) {
     // imagem da 1ª página puxada do PDF
     prev.innerHTML = `<img src="${fotoRenderURL}" alt="PDF (1ª página)" class="foto-thumb">
-      <span class="muted-p" style="display:block;font-size:11px">📄 PDF — imagem da 1ª página</span>`;
+      <span class="muted-p" style="display:block;font-size:13px">📄 PDF — imagem da 1ª página</span>`;
   } else {
     const icon = kind === 'pdf' ? '📄' : '🧾';
     prev.innerHTML = `<span class="muted-p">${icon} ${kind.toUpperCase()} anexado — use “Ver anexo” na lista</span>`;

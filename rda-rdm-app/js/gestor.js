@@ -409,19 +409,19 @@ window.Gestor = (() => {
           <button class="btn-close-modal">✕</button>
         </div>
         <div class="modal-bd">
-          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">${dica}</p>
-          <div style="display:flex;gap:10px;font-size:12px;margin-bottom:8px">
+          <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">${dica}</p>
+          <div style="display:flex;gap:10px;font-size:14px;margin-bottom:8px">
             <a href="#" id="sel-todos">marcar todos</a> · <a href="#" id="sel-nenhum">desmarcar todos</a>
           </div>
           <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">
             ${collabs.map(c => `
-              <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer">
+              <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:15.5px;cursor:pointer">
                 <input type="checkbox" class="sel-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
-                <span style="flex:1">${esc(c.nome || c.email)} <span style="font-size:10.5px;color:var(--text2)">${c.regime === 'cv' ? '💳 CV' : '💰 RDM/RDA'}</span></span>
-                ${comLanc.has(c.id) ? '' : `<span style="font-size:11px;color:var(--text2)">${esc(etiqueta)}</span>`}
+                <span style="flex:1">${esc(c.nome || c.email)} <span style="font-size:13px;color:var(--text2)">${c.regime === 'cv' ? '💳 CV' : '💰 RDM/RDA'}</span></span>
+                ${comLanc.has(c.id) ? '' : `<span style="font-size:13px;color:var(--text2)">${esc(etiqueta)}</span>`}
               </label>`).join('')}
           </div>
-          <p id="sel-qtd" style="font-size:12px;color:var(--text2);margin-top:8px"></p>
+          <p id="sel-qtd" style="font-size:14px;color:var(--text2);margin-top:8px"></p>
         </div>
         <div class="modal-ft" style="flex-wrap:wrap">
           ${botoes.map(b => `<button class="btn ${b.primario ? 'btn-primary' : 'btn-outline'}" data-modo="${b.modo}" title="${esc(b.title || '')}">${b.label}</button>`).join('')}
@@ -508,7 +508,7 @@ window.Gestor = (() => {
           <button class="btn-close-modal">✕</button>
         </div>
         <div class="modal-bd">
-          <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:10px">
+          <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:10px">
             Gere um link e mande pelo WhatsApp. Quem abrir cria a conta <b>já com o papel escolhido</b>. O link serve para <b>uma</b> pessoa e vale <b>7 dias</b>.
           </p>
           <label class="lbl">Papel</label>
@@ -521,14 +521,14 @@ window.Gestor = (() => {
           <input class="inp" id="cv-nome" type="text" placeholder="Ex.: Maria da Contabilidade" autocapitalize="words">
           <button class="btn btn-primary btn-full" id="cv-gerar" style="margin-top:10px">🔗 Gerar link</button>
           <div id="cv-resultado" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:10px">
-            <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Link gerado (vale 7 dias):</div>
-            <input class="inp" id="cv-url" readonly style="font-size:12px" onclick="this.select()">
+            <div style="font-size:14px;color:var(--text2);margin-bottom:6px">Link gerado (vale 7 dias):</div>
+            <input class="inp" id="cv-url" readonly style="font-size:14px" onclick="this.select()">
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-outline" id="cv-copiar" style="flex:1">📋 Copiar</button>
               <a class="btn btn-primary" id="cv-whats" style="flex:1;text-align:center;text-decoration:none" target="_blank" rel="noopener">💬 WhatsApp</a>
             </div>
           </div>
-          <details style="margin-top:12px;font-size:12.5px">
+          <details style="margin-top:12px;font-size:15px">
             <summary style="cursor:pointer;color:var(--text2)">Convites recentes</summary>
             <div id="cv-lista" style="margin-top:8px;color:var(--text2)">Carregando…</div>
           </details>
@@ -548,7 +548,7 @@ window.Gestor = (() => {
         if (!itens.length) { box.textContent = 'Nenhum convite ainda.'; return; }
         box.innerHTML = itens.map(c => {
           const st = c.usado_em ? `✅ usado por ${esc(c.usado_por || '—')} em ${fmtData(c.usado_em)}` : c.valido ? `⏳ aguardando · vence ${fmtData(c.expira_em)}` : '⌛ vencido';
-          return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><b>${esc(PAPEL_NOME[c.role] || c.role)}</b>${c.nome ? ' · ' + esc(c.nome) : ''}<br><span style="font-size:11.5px">${st} · por ${esc(c.criado_por || '')}</span></div>`;
+          return `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><b>${esc(PAPEL_NOME[c.role] || c.role)}</b>${c.nome ? ' · ' + esc(c.nome) : ''}<br><span style="font-size:13.5px">${st} · por ${esc(c.criado_por || '')}</span></div>`;
         }).join('');
       } catch (e) { box.textContent = 'Não carregou: ' + e.message; }
     };
@@ -618,18 +618,18 @@ window.Gestor = (() => {
           <select class="inp" id="g-role" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
             ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
           </select>
-          ${souEu ? '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
-            : '<p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo e ainda apaga lançamento em definitivo.</p>'}
+          ${souEu ? '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
+            : '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo e ainda apaga lançamento em definitivo.</p>'}
           <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
             <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; reembolso do que sai do bolso; gera Planilha CV</option>
           </select>
-          <p style="font-size:12px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
+          <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
           ${souEu ? '' : `
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl">Situação</label>
-            <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+            <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               ${inativo
                 ? `🚫 <b>Desativado</b>${colab.desativado_em ? ' em ' + new Date(colab.desativado_em).toLocaleDateString('pt-BR') : ''}. Não entra no app e não aparece na equipe; o histórico continua.`
                 : '✅ <b>Ativo.</b> Desativar tira a pessoa do app e das listas, sem apagar nada — dá para reativar depois.'}
@@ -638,12 +638,12 @@ window.Gestor = (() => {
           </div>
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl" style="color:var(--danger)">Excluir de vez (limpeza do banco)</label>
-            <p style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+            <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               Apaga o colaborador e <b>tudo</b> dele: notas, anexos, repasses, KM e ponto. Não tem volta.
               Precisa de <b>duas pessoas</b>: um gestor/admin pede e <b>outro</b> gestor/admin confirma. Não pede e-mail nem senha.
             </p>
             ${pedido
-              ? `<p style="font-size:12.5px;color:#9b1c1c;font-weight:700;margin-bottom:8px">⏳ Exclusão pedida por ${esc(colab.exclusao_pedida_por_nome||'')}${colab.exclusao_pedida_em ? ' em ' + new Date(colab.exclusao_pedida_em).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}.
+              ? `<p style="font-size:15px;color:#9b1c1c;font-weight:700;margin-bottom:8px">⏳ Exclusão pedida por ${esc(colab.exclusao_pedida_por_nome||'')}${colab.exclusao_pedida_em ? ' em ' + new Date(colab.exclusao_pedida_em).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}.
                  ${pediEu ? 'Falta outro gestor ou admin confirmar.' : 'Você pode dar a 2ª confirmação.'}</p>
                  ${pediEu ? '' : `<button class="btn btn-danger-outline btn-full" id="g-excluir" style="margin-bottom:8px">🗑️ Confirmar exclusão (2ª pessoa)</button>`}
                  <button class="btn btn-outline btn-full" id="g-cancelar-exclusao">Cancelar o pedido</button>`
@@ -744,7 +744,7 @@ window.Gestor = (() => {
     if (!url) { try { url = (await sb.fotos.urls([path]))[path]; _avatarCache[path] = url; } catch (_) {} }
     if (!url) { toast('Foto não encontrada', 'err'); return; }
     $('foto-viewer-img').src = url;
-    $('foto-viewer-info').innerHTML = `<b style="font-size:18px;color:#fff">${esc(el.dataset.nome||'')}</b><br>${esc(el.dataset.sub||'')}`;
+    $('foto-viewer-info').innerHTML = `<b style="font-size:19.5px;color:#fff">${esc(el.dataset.nome||'')}</b><br>${esc(el.dataset.sub||'')}`;
     $('foto-viewer-overlay').style.display = 'flex';
   }
 

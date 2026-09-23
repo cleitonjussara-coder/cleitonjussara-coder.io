@@ -35,7 +35,7 @@ window.Arquivos = (() => {
     const el = $('app-content');
     if (!navigator.onLine) {
       el.innerHTML = `<div class="db-container"><div class="db-card" style="text-align:center;padding:24px">
-        <div style="font-size:30px">📁</div><p style="margin-top:8px;color:var(--text2)">Os arquivos ficam no servidor: precisa de internet para abrir esta tela.</p>
+        <div style="font-size:31px">📁</div><p style="margin-top:8px;color:var(--text2)">Os arquivos ficam no servidor: precisa de internet para abrir esta tela.</p>
         <button class="btn btn-outline" style="margin-top:12px" onclick="Arquivos.render()">Tentar de novo</button></div></div>`;
       return;
     }
@@ -86,7 +86,7 @@ window.Arquivos = (() => {
         <button class="arq-colab ${vazio ? 'arq-vazio' : ''}" onclick="Arquivos.abrirColab('${c.user_id}')">
           <div class="avatar" data-foto="${esc(c.foto_path || '')}">${esc(ini(c.nome || c.email))}</div>
           <div class="arq-colab-txt">
-            <div class="arq-colab-nome">${esc(c.nome || c.email)}${c.ativo === false ? ' <span style="font-size:12px;opacity:.75">🚫 desativado</span>' : ''}</div>
+            <div class="arq-colab-nome">${esc(c.nome || c.email)}${c.ativo === false ? ' <span style="font-size:14px;opacity:.75">🚫 desativado</span>' : ''}</div>
             <div class="arq-colab-sub">${vazio ? 'sem notas em ' + ano : `${c.qtd} nota${c.qtd === 1 ? '' : 's'} · ${brl(c.total)}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`}</div>
           </div>
           <span class="arq-seta">›</span>
@@ -194,7 +194,7 @@ window.Arquivos = (() => {
       if (!url) { toast('Anexo não encontrado', 'err'); return; }
       if (n.ext === 'pdf' || n.ext === 'xml') { window.open(url, '_blank'); return; }
       $('foto-viewer-img').src = url;
-      $('foto-viewer-info').innerHTML = `<b style="font-size:16px;color:#fff">${esc(n.razao_social || 'Sem fornecedor')}</b><br>${esc(n.grupo)} · ${fmtData(n.data)} · ${brl(n.valor)}<br><small style="opacity:.7">${esc(n.pasta)}/${esc(n.arquivo || '')}</small>`;
+      $('foto-viewer-info').innerHTML = `<b style="font-size:18px;color:#fff">${esc(n.razao_social || 'Sem fornecedor')}</b><br>${esc(n.grupo)} · ${fmtData(n.data)} · ${brl(n.valor)}<br><small style="opacity:.7">${esc(n.pasta)}/${esc(n.arquivo || '')}</small>`;
       $('foto-viewer-overlay').style.display = 'flex';
     } catch (e) { toast('Não abriu: ' + (e.message || 'erro'), 'err'); }
     finally { setLoading(false); }

@@ -155,7 +155,7 @@ window.Ponto = (() => {
             ${d.aberto ? '<span class="sync-pill pending">⏳ em aberto</span>' : ''}
           </div>
           <div class="nota-body">
-            <div class="nota-empresa" style="font-size:14px">${[d.entrada, d.saida_intervalo, d.volta_intervalo, d.saida].map(x => x || '—').join(' · ')}</div>
+            <div class="nota-empresa" style="font-size:15.5px">${[d.entrada, d.saida_intervalo, d.volta_intervalo, d.saida].map(x => x || '—').join(' · ')}</div>
             <div class="nota-cnpj">${d.minutos ? `${hm(d.minutos)} trabalhadas` : (d.tipo_dia === 'trabalho' ? 'sem horas' : '')}${d.extra50 ? ` · <b>+${hm(d.extra50)} (50%)</b>` : ''}${d.extra100 ? ` · <b>+${hm(d.extra100)} (100%)</b>` : ''}</div>
             ${d.observacao ? `<div class="nota-obs">${esc(d.observacao)}</div>` : ''}
           </div>
@@ -206,7 +206,7 @@ window.Ponto = (() => {
       const max = Math.max(1, ...pessoas.map(p => p.minutos));
       html += `
       <div class="db-card">
-        <div class="db-card-title"><span>Horas por colaborador</span><span style="font-size:11px;color:var(--text2)">toque para filtrar</span></div>
+        <div class="db-card-title"><span>Horas por colaborador</span><span style="font-size:13px;color:var(--text2)">toque para filtrar</span></div>
         <div class="db-rank">
           ${pessoas.slice().sort((a, b) => b.minutos - a.minutos).map((p, i) => `
           <div class="db-rank-item" style="cursor:pointer" onclick="Ponto.filtrarPessoa('${p.user_id}')">
@@ -224,7 +224,7 @@ window.Ponto = (() => {
       const fer = new Set(feriados.map(f => f.data));
       html += `
       <div class="db-card">
-        <div class="db-card-title"><span>Calendário · ${esc(alvo.nome)}</span><span style="font-size:11px;color:var(--text2)">horas por dia</span></div>
+        <div class="db-card-title"><span>Calendário · ${esc(alvo.nome)}</span><span style="font-size:13px;color:var(--text2)">horas por dia</span></div>
         <div class="ponto-cal">
           ${DIAS.map(d => `<span class="ponto-cal-h">${d}</span>`).join('')}
           ${Array(new Date(filAno, filMes - 1, 1).getDay()).fill('<span></span>').join('')}
