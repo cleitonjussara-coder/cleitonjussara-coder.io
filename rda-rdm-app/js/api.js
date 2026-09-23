@@ -78,7 +78,13 @@ window.API = (() => {
     }
     if (blob) {
       if (!r.ok) throw new Error(await _msg(r));
-      return r.blob();
+      /* 23/09/2026: o servidor respondeu 200, mas guardar o arquivo no
+         aparelho pode falhar — o caso real foi disco cheio, e a mensagem
+         crua ("Failed to fetch") parecia problema do servidor. */
+      try { return await r.blob(); }
+      catch (e) {
+        throw new Error("O servidor enviou o arquivo, mas o aparelho não conseguiu guardá-lo — verifique o espaço livre e tente de novo.", { cause: e });
+      }
     }
     if (r.status === 204) return null;
     const txt = await r.text();
