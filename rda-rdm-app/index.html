@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=243">
+  <link rel="manifest" href="manifest.json?v=244">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1628,14 +1628,21 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 .rep-aba-RDM[aria-pressed="true"]{background:linear-gradient(160deg,#e07f1c,#9a5009);border-color:#7d4107;box-shadow:0 8px 18px rgba(194,102,13,.45)}
 .rep-aba[aria-pressed="true"]::after{content:"✓";position:absolute;top:8px;right:12px;font-size:20px;font-weight:900}
 .rep-aba:active{transform:scale(.98)}
-.rep-escolha-aviso{padding:14px 12px;border-radius:12px;text-align:center;font-size:15.5px;
-  background:rgba(194,102,13,.10);border:1px dashed rgba(194,102,13,.45);color:var(--text)}
+.rep-aba-receber{border-color:#1b7a43;background:linear-gradient(160deg,#eafaf0,#cfeedd);color:#0d5c30}
+.rep-aba-pedir{border-color:#1d5fa8;background:linear-gradient(160deg,#eaf2fc,#cfe0f5);color:#12447a}
+.rep-aba-receber[aria-pressed="true"]{background:linear-gradient(160deg,#21a05a,#0d5c30);border-color:#0b4a27;color:#fff;box-shadow:0 8px 18px rgba(27,122,67,.45)}
+.rep-aba-pedir[aria-pressed="true"]{background:linear-gradient(160deg,#2a7fd4,#12447a);border-color:#0f3a66;color:#fff;box-shadow:0 8px 18px rgba(29,95,168,.45)}
+.rep-resumo-escolha{font-weight:700;opacity:.85;text-transform:none;letter-spacing:0}
 @media (max-width:420px){
   .rep-abas{gap:10px}
   .rep-aba{min-height:118px;padding:16px 6px;border-radius:16px}
   .rep-aba-ico{font-size:36px}
   .rep-aba-tit{font-size:24px}
 }
+/* 24/09/2026: .field{display:flex} vencia o atributo hidden do HTML, e os
+   três passos do repasse apareciam empilhados na mesma tela. Normalização
+   que faltava — vale para qualquer elemento com hidden. */
+[hidden]{display:none !important}
 </style>
 </head>
 <body>
@@ -1661,7 +1668,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=243" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=244" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2000,32 +2007,38 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   </div>
   <div class="form-body">
     <div id="rep-alvo" class="nota-gestor-banner" style="display:none"></div>
-    <div class="field" id="rep-modos">
-      <label class="lbl">O que você quer fazer? *</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-sm btn-primary" id="rep-mode-received" onclick="setRepasseModo('received')">Registrar recebido</button>
-        <button type="button" class="btn btn-sm btn-outline" id="rep-mode-request" onclick="setRepasseModo('requested')">Solicitar repasse</button>
+    <!-- 24/09/2026: o formulário virou três páginas (pedido do Cleiton).
+         1) o que fazer · 2) RDA ou RDM · 3) os campos. -->
+    <div class="field" id="rep-passo-1">
+      <label class="lbl">Passo 1 de 3 — o que você quer fazer? *</label>
+      <div class="rep-abas">
+        <button type="button" class="rep-aba rep-aba-receber" id="rep-mode-received" onclick="escolherModoRepasse('received')">
+          <span class="rep-aba-ico">💰</span><span class="rep-aba-tit" id="rep-mode-received-tit">Registrar recebido</span><span class="rep-aba-sub" id="rep-mode-received-sub">o dinheiro já caiu</span>
+        </button>
+        <button type="button" class="rep-aba rep-aba-pedir" id="rep-mode-request" onclick="escolherModoRepasse('requested')">
+          <span class="rep-aba-ico">🙋</span><span class="rep-aba-tit" id="rep-mode-request-tit">Solicitar repasse</span><span class="rep-aba-sub" id="rep-mode-request-sub">pedir ao gestor</span>
+        </button>
       </div>
     </div>
     <!-- 23/09/2026: era um <select> que guardava a escolha anterior e deixava
          RDM entrar como RDA em silêncio. Agora são duas sub-abas visíveis e
          NENHUMA vem marcada: quem lança precisa escolher. -->
-    <div class="field">
-      <label class="lbl">É de qual aba? *</label>
+    <div class="field" id="rep-passo-2">
+      <label class="lbl">Passo 2 de 3 — é de qual aba? *</label>
       <input type="hidden" id="rep-tipo" value="">
       <div class="rep-abas">
-        <button type="button" class="rep-aba rep-aba-RDA" id="rep-tipo-RDA" onclick="setRepasseTipo('RDA')">
+        <button type="button" class="rep-aba rep-aba-RDA" id="rep-tipo-RDA" onclick="escolherTipoRepasse('RDA')">
           <span class="rep-aba-ico">🍽️</span><span class="rep-aba-tit">RDA</span><span class="rep-aba-sub">alimentação</span>
         </button>
-        <button type="button" class="rep-aba rep-aba-RDM" id="rep-tipo-RDM" onclick="setRepasseTipo('RDM')">
+        <button type="button" class="rep-aba rep-aba-RDM" id="rep-tipo-RDM" onclick="escolherTipoRepasse('RDM')">
           <span class="rep-aba-ico">💼</span><span class="rep-aba-tit">RDM</span><span class="rep-aba-sub">corporativas</span>
         </button>
       </div>
     </div>
     <!-- 24/09/2026: data, valor e descrição só aparecem depois de escolhida a
          sub-aba (RDA ou RDM). Antes disso fica só o convite abaixo. -->
-    <div id="rep-escolha-aviso" class="rep-escolha-aviso">👆 Escolha <b>RDA</b> ou <b>RDM</b> para continuar</div>
     <div id="rep-dados" hidden>
+      <div class="lbl" style="margin-bottom:8px">Passo 3 de 3 — preencha os dados <span id="rep-resumo-escolha" class="rep-resumo-escolha"></span></div>
       <div class="field-row">
         <div class="field">
           <label class="lbl">Data *</label>
@@ -2047,7 +2060,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <input type="hidden" id="rep-mes">
     <input type="hidden" id="rep-ano">
     <!-- 23/09/2026: o "voltar" saiu do topo e virou botão grande aqui embaixo -->
-    <button type="button" class="btn btn-outline btn-full btn-voltar-grande" onclick="fecharFormRepasse()">‹ Voltar</button>
+    <button type="button" class="btn btn-outline btn-full btn-voltar-grande" id="rep-btn-voltar" onclick="voltarPassoRepasse()">‹ Voltar</button>
   </div>
 </div>
 
@@ -2070,7 +2083,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <ul>
         <li>💸 <b>Repasse / Reembolso</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> abrindo o painel, primeiro você diz <b>o que quer fazer</b> — <b>Registrar recebido</b> (o dinheiro já caiu) ou <b>Solicitar repasse</b> (pedir ao gestor). Depois escolhe a <b>sub-aba</b>: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Nenhuma vem marcada</b> e os campos de data, valor e descrição <b>só aparecem depois da escolha</b> — era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. Se tentar salvar sem escolher, o app avisa.</p>
+      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>💰 Registrar recebido</b> (o dinheiro já caiu) ou <b>🙋 Solicitar repasse</b> (pedir ao gestor). <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o reembolso criado a partir de uma nota entra direto no passo 3.</p>
       <ul>
       </ul>
       <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
@@ -2447,25 +2460,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=243"></script>
-<script defer src="js/db.js?v=243"></script>
-<script defer src="js/nfce.js?v=243"></script>
-<script defer src="js/sefaz.js?v=243"></script>
-<script defer src="js/brasilapi.js?v=243"></script>
-<script defer src="js/ocr.js?v=243"></script>
-<script defer src="js/recorte.js?v=243"></script>
-<script defer src="js/excel.js?v=243"></script>
-<script defer src="js/gestor.js?v=243"></script>
-<script defer src="js/frota.js?v=243"></script>
-<script defer src="js/ponto.js?v=243"></script>
-<script defer src="js/arquivos.js?v=243"></script>
-<script defer src="js/gdrive.js?v=243"></script>
-<script defer src="js/app.js?v=243"></script>
+<script defer src="js/api.js?v=244"></script>
+<script defer src="js/db.js?v=244"></script>
+<script defer src="js/nfce.js?v=244"></script>
+<script defer src="js/sefaz.js?v=244"></script>
+<script defer src="js/brasilapi.js?v=244"></script>
+<script defer src="js/ocr.js?v=244"></script>
+<script defer src="js/recorte.js?v=244"></script>
+<script defer src="js/excel.js?v=244"></script>
+<script defer src="js/gestor.js?v=244"></script>
+<script defer src="js/frota.js?v=244"></script>
+<script defer src="js/ponto.js?v=244"></script>
+<script defer src="js/arquivos.js?v=244"></script>
+<script defer src="js/gdrive.js?v=244"></script>
+<script defer src="js/app.js?v=244"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=243').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=244').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

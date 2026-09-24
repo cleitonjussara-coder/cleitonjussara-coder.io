@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 243;
+const APP_BUILD = 244;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5982,17 +5982,70 @@ function _atualizarUiRepasse() {
 
   if (title) title.textContent = _repasseTitulo(_repasseModo);
   if (btnSalvar) btnSalvar.textContent = _repasseModo === 'requested' ? 'Salvar e enviar' : 'Salvar';
-  if (btnReceived) {
-    btnReceived.className = `btn btn-sm ${_repasseModo === 'received' ? 'btn-primary' : 'btn-outline'}`;
-    btnReceived.textContent = _ehCV() ? 'Reembolso recebido' : 'Registrar recebido';
-  }
-  if (btnRequest) {
-    btnRequest.className = `btn btn-sm ${_repasseModo === 'requested' ? 'btn-primary' : 'btn-outline'}`;
-    btnRequest.textContent = _ehCV() ? 'Registrar reembolso' : 'Solicitar repasse';
-  }
+  /* 24/09/2026: os botões do passo 1 têm ícone e legenda em <span>; escrever
+     no textContent do botão apagaria os dois. */
+  /* o ✓ do passo 1 só aparece depois do toque: _repasseModo tem um valor
+     desde a abertura (o título e os textos dependem dele), mas marcar uma
+     opção que ninguém escolheu é o mesmo engano que tiramos das sub-abas. */
+  if (btnReceived) btnReceived.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'received'));
+  if (btnRequest) btnRequest.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'requested'));
+  const txt = (id, valor) => { const e = $(id); if (e) e.textContent = valor; };
+  txt('rep-mode-received-tit', _ehCV() ? 'Reembolso recebido' : 'Registrar recebido');
+  txt('rep-mode-received-sub', _ehCV() ? 'você já foi reembolsado' : 'o dinheiro já caiu');
+  txt('rep-mode-request-tit', _ehCV() ? 'Registrar reembolso' : 'Solicitar repasse');
+  txt('rep-mode-request-sub', _ehCV() ? 'pagou do próprio bolso' : 'pedir ao gestor');
   if (labelDesc) labelDesc.textContent = _repasseModo === 'requested' ? 'Custo / justificativa *' : 'Descrição';
   if (descInput) descInput.placeholder = _repassePlaceholder(_repasseModo);
   if (helpText) helpText.textContent = _repasseHelpText(_repasseModo);
+}
+
+/* ── Os três passos do repasse (24/09/2026) ──────────────────
+   1) o que fazer · 2) RDA ou RDM · 3) os campos. Cada passo é uma página:
+   o Voltar anda para trás e, no primeiro passo mostrado, fecha o form. */
+let _repassePasso = 1;
+let _repassePassoMin = 1;
+let _modoEscolhido = false;
+
+function irParaPassoRepasse(n) {
+  _repassePasso = n;
+  const p1 = $('rep-passo-1'), p2 = $('rep-passo-2'), p3 = $('rep-dados');
+  if (p1) p1.hidden = n !== 1;
+  if (p2) p2.hidden = n !== 2;
+  if (p3) p3.hidden = n !== 3;
+  const salvar = $('rep-btn-salvar');
+  if (salvar) salvar.style.display = n === 3 ? '' : 'none';
+  const voltar = $('rep-btn-voltar');
+  if (voltar) voltar.textContent = n > _repassePassoMin ? '‹ Voltar um passo' : '‹ Voltar';
+  /* no passo 3, lembrar o que foi escolhido nos dois primeiros */
+  const resumo = $('rep-resumo-escolha');
+  if (resumo) {
+    const tipo = $('rep-tipo')?.value || '';
+    resumo.textContent = n === 3 && tipo
+      ? '· ' + (_repasseModo === 'requested' ? (_ehCV() ? 'reembolso' : 'pedido') : 'recebido') + ' · ' + tipo
+      : '';
+  }
+}
+
+function escolherModoRepasse(modo) {
+  _modoEscolhido = true;
+  setRepasseModo(modo);
+  irParaPassoRepasse(2);
+}
+
+function escolherTipoRepasse(tipo) {
+  setRepasseTipo(tipo);
+  irParaPassoRepasse(3);
+}
+
+function voltarPassoRepasse() {
+  if (_repassePasso > _repassePassoMin) {
+    /* voltando do 3 para o 2, a sub-aba é desmarcada: quem volta está
+       trocando de aba, e deixar a antiga marcada convida ao engano. */
+    if (_repassePasso === 3) setRepasseTipo('');
+    irParaPassoRepasse(_repassePasso - 1);
+    return;
+  }
+  fecharFormRepasse();
 }
 
 function setRepasseModo(modo) {
@@ -6014,31 +6067,32 @@ function setRepasseTipo(tipo) {
     const b = $('rep-tipo-' + t);
     if (b) b.setAttribute('aria-pressed', String(t === tipo));
   });
-  /* 24/09/2026: sem sub-aba escolhida não há o que preencher — os campos
-     ficam escondidos e no lugar deles fica o convite para escolher. */
-  const dados = $('rep-dados'), aviso = $('rep-escolha-aviso'), salvar = $('rep-btn-salvar');
-  if (dados) dados.hidden = !tipo;
-  if (aviso) aviso.style.display = tipo ? 'none' : '';
-  if (salvar) salvar.style.display = tipo ? '' : 'none';
 }
 
-function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
+function abrirFormRepasse(modo = null, pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
   /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
      e entra direto no saldo dele (não passa pela confirmação). */
   _repasseAlvo = alvo && alvo.id ? alvo : null;
   if (_repasseAlvo) modo = 'received';
-  setRepasseModo(modo);
+  setRepasseModo(modo || 'received');
+  /* Começa no passo 1 quando nada foi decidido ainda (painel do Início). Quem
+     já chega com o modo (botões do saldo, lançamento do gestor) entra no 2, e
+     o reembolso vindo de uma nota, que já traz modo e aba, entra no 3. */
+  _repassePassoMin = pre?.tipo ? 3 : (modo || _repasseAlvo) ? 2 : 1;
+  _modoEscolhido = _repassePassoMin > 1;
+  _atualizarUiRepasse();
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
   setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
+  irParaPassoRepasse(_repassePassoMin);
   $('rep-data').value  = pre?.data || hoje();
   $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';
   $('rep-desc').value  = pre?.descricao || '';
   $('rep-mes').value   = pre?.data ? Number(pre.data.slice(5, 7)) : filMes;
   $('rep-ano').value   = pre?.data ? Number(pre.data.slice(0, 4)) : filAno;
   {
-    const t = $('rep-title'), aviso = $('rep-alvo'), modos = $('rep-modos');
+    const t = $('rep-title'), aviso = $('rep-alvo');
     if (t) t.textContent = _repasseAlvo ? 'Lançar repasse para o colaborador' : (_repasseModo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido');
     if (aviso) {
       aviso.style.display = _repasseAlvo ? '' : 'none';
@@ -6046,7 +6100,8 @@ function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre
         ? `💰 Lançando para <b>${esc(_repasseAlvo.nome || 'colaborador')}</b> — entra no saldo dele na hora, sem precisar de confirmação.`
         : '';
     }
-    if (modos) modos.style.display = _repasseAlvo ? 'none' : '';   // para outro só existe "recebido"
+    /* para outro só existe "recebido": o passo 1 nem entra no caminho
+       (o form abre direto no passo 2 — ver _repassePassoMin). */
   }
   $('rep-overlay').style.display = 'flex';
 }
