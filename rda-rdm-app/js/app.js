@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 242;
+const APP_BUILD = 243;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6014,6 +6014,12 @@ function setRepasseTipo(tipo) {
     const b = $('rep-tipo-' + t);
     if (b) b.setAttribute('aria-pressed', String(t === tipo));
   });
+  /* 24/09/2026: sem sub-aba escolhida não há o que preencher — os campos
+     ficam escondidos e no lugar deles fica o convite para escolher. */
+  const dados = $('rep-dados'), aviso = $('rep-escolha-aviso'), salvar = $('rep-btn-salvar');
+  if (dados) dados.hidden = !tipo;
+  if (aviso) aviso.style.display = tipo ? 'none' : '';
+  if (salvar) salvar.style.display = tipo ? '' : 'none';
 }
 
 function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
