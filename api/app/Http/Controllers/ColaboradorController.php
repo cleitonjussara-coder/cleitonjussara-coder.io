@@ -150,6 +150,20 @@ class ColaboradorController extends Controller
         } catch (\Throwable $e) {
             Log::warning('aviso de entrada pendente falhou: '.$e->getMessage());
         }
+
+        /* 24/09/2026: o mesmo aviso no celular de quem gerencia. Separado do
+           bloco acima de propósito — se o e-mail falhar, a notificação ainda
+           sai, e vice-versa. */
+        try {
+            app(\App\Services\PushService::class)->avisarGestores(
+                'Cadastro novo aguardando liberação',
+                ($novo->nome ?: $novo->email).' criou uma conta e não usa o app até você liberar.',
+                '/',
+                'entrada-'.$novo->id,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('push de entrada pendente falhou: '.$e->getMessage());
+        }
     }
 
     /**

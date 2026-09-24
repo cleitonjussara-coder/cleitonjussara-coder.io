@@ -250,6 +250,14 @@ window.API = (() => {
     atendido: id => req('PATCH', `/repasses/${id}/atendido`),
   };
 
+  /* Notificação no celular (24/09/2026) */
+  const push = {
+    chave: () => req('GET', '/push/chave'),
+    inscrever: dados => req('POST', '/push/inscrever', { body: dados }),
+    desinscrever: endpoint => req('DELETE', '/push/inscrever', { body: { endpoint } }),
+    testar: () => req('POST', '/push/testar'),
+  };
+
   const fotos = {
     /* [paths] → { path: urlAssinada | null } (vale FOTO_URL_TTL, 5 min) */
     async urls(paths) {
@@ -340,5 +348,5 @@ window.API = (() => {
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, auth, colaboradores, notas, repasses, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
+  return { BASE, HOMOLOG, req, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
 })();

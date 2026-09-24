@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Repasse;
+use App\Services\PushService;
 use App\Services\RepasseEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ use Illuminate\Validation\Rule;
  */
 class RepasseController extends Controller
 {
-    public function __construct(private RepasseEmailService $email) {}
+    public function __construct(private RepasseEmailService $email, private PushService $push) {}
 
     public function index(Request $r): JsonResponse
     {
@@ -83,6 +84,7 @@ class RepasseController extends Controller
            saldo da pessoa (sem a 2ª etapa, que é só para pedido atendido). */
         abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
         $rep = Repasse::find($id);
+        $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             unset($d['created_at']);
@@ -101,6 +103,21 @@ class RepasseController extends Controller
 
         /* Depois de gravado — falha de e-mail nunca impede o registro. */
         $this->email->enviarSePreciso($rep);
+
+        /* 24/09/2026: o pedido também toca no celular de quem gerencia. O
+           push é aviso, nunca caminho principal: qualquer erro fica no log e
+           o registro segue valendo. */
+        if ($novo && $rep->kind === 'requested') {
+            $dono = $rep->dono?->nome ?: 'Um colaborador';
+            $oque = $rep->destino === 'recarga' ? 'recarga do cartão'
+                : ($rep->destino === 'reembolso' ? 'reembolso' : 'repasse');
+            $this->push->avisarGestores(
+                'Pedido de ' . $oque,
+                $dono . ' pediu ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
+                '/',
+                'pedido-' . $rep->id
+            );
+        }
 
         return response()->json($rep->fresh());
     }
@@ -146,7 +163,22 @@ class RepasseController extends Controller
         ])->save();
         $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
 
+        $oque = $pedido->destino === 'recarga' ? 'Recarga do cartão registrada'
+            : ($pedido->destino === 'reembolso' ? 'Reembolso pago' : 'Repasse pago');
+        $this->push->enviar(
+            $pedido->user_id,
+            $oque . ' ✅',
+            $this->emReais($pedido->valor) . ' — já está no seu saldo.',
+            '/',
+            'pago-' . $pedido->id
+        );
+
         return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
+    }
+
+    private function emReais($v): string
+    {
+        return 'R$ ' . number_format((float) $v, 2, ',', '.');
     }
 
     /**

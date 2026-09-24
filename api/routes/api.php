@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\PushController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\AuthController;
@@ -71,6 +72,12 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::patch('/notas/{id}/tipo', [NotaController::class, 'corrigirTipo']);   // gestor corrige RDA⇄RDM (23/09/2026)
     Route::delete('/notas/{id}', [NotaController::class, 'destroy']);
     Route::post('/notas/{id}/foto', [NotaController::class, 'foto']);
+
+    /* Notificação no celular (24/09/2026) */
+    Route::get('/push/chave', [PushController::class, 'chave']);
+    Route::post('/push/inscrever', [PushController::class, 'inscrever']);
+    Route::delete('/push/inscrever', [PushController::class, 'desinscrever']);
+    Route::post('/push/testar', [PushController::class, 'testar']);
 
     Route::get('/repasses', [RepasseController::class, 'index']);
     Route::put('/repasses/{id}', [RepasseController::class, 'upsert']);

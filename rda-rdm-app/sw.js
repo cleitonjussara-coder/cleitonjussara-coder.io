@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v255';
+const CACHE   = 'petermann-v256';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -67,6 +67,47 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// ── Notificação vinda do servidor (Web Push, 24/09/2026) ──────
+/* É isto que faz o número aparecer no ícone do app: o Android conta as
+   notificações não lidas e desenha o contador sozinho. A carga vem do
+   PushService como JSON { titulo, corpo, url, tag }. */
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; }
+  catch (_) { d = { corpo: e.data ? e.data.text() : '' }; }
+
+  const titulo = d.titulo || 'Petermann – Despesas';
+  const opcoes = {
+    body: d.corpo || '',
+    icon: './icon-192.png?v=160',
+    badge: './icon-192.png?v=160',
+    lang: 'pt-BR',
+    data: { url: d.url || './' },
+    /* mesma tag = o aviso novo substitui o antigo, em vez de empilhar dois
+       sobre o mesmo assunto (ex.: o mesmo cartão avisado de novo) */
+    tag: d.tag || undefined,
+    renotify: !!d.tag,
+  };
+  e.waitUntil(self.registration.showNotification(titulo, opcoes));
+});
+
+/* Tocar no aviso: traz a janela que já existe para a frente; se não houver
+   nenhuma, abre o app. */
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const destino = new URL(e.notification.data && e.notification.data.url || './', self.location.href).href;
+  e.waitUntil((async () => {
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const j of janelas) {
+      if (j.url.indexOf(self.registration.scope) === 0) {
+        await j.focus();
+        return;
+      }
+    }
+    await self.clients.openWindow(destino);
+  })());
 });
 
 // ── Fetch ────────────────────────────────────────────────────

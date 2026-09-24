@@ -3,6 +3,16 @@
 /* Ajustes do Petermann App que não são do framework. Tudo vem do .env. */
 return [
 
+    /* Notificação no celular (Web Push, 24/09/2026). As chaves VAPID ficam
+       no .env de cada ambiente — nunca no repositório. Sem elas o app
+       simplesmente não oferece notificação. */
+    'push' => [
+        'public' => env('WEBPUSH_PUBLIC_KEY'),
+        'private' => env('WEBPUSH_PRIVATE_KEY'),
+        'subject' => env('WEBPUSH_SUBJECT', 'mailto:contato@pmservicosagronomicos.com.br'),
+    ],
+
+
     /* Endereço do app (a PWA). É para onde o login Google e o link de
        redefinição de senha mandam a pessoa de volta. Sem barra no fim. */
     'front_url' => rtrim(env('FRONT_URL', 'https://app.pmservicosagronomicos.com.br/rda-rdm-app'), '/'),

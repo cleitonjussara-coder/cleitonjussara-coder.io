@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 255;
+const APP_BUILD = 256;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3979,6 +3979,39 @@ async function removerFotoPerfil() {
 }
 
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
+/* Cartão "Notificações neste aparelho" (24/09/2026). O estado é do APARELHO,
+   não da conta: cada celular autoriza o seu. */
+async function _pintarCartaoPush() {
+  const el = $('perfil-push');
+  if (!el) return;
+  if (!_pushDisponivel()) {
+    el.innerHTML = '<p style="font-size:14px;color:var(--text2)">Este navegador não trabalha com notificação.</p>';
+    return;
+  }
+  const inscrito = !!(await _inscricaoAtual());
+  const bloqueado = Notification.permission === 'denied';
+  if (inscrito) {
+    el.innerHTML = `
+      <div style="background:rgba(185,226,74,.14);border:1px solid rgba(185,226,74,.45);border-radius:10px;padding:10px 12px">
+        <b>🔔 Notificações ligadas neste aparelho</b>
+        <p style="margin-top:4px;line-height:1.5;font-size:14.5px">Pedido de repasse, repasse pago, cadastro novo e cartão acabando chegam aqui — e o número aparece no ícone do app.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-sm btn-outline" onclick="sb?.push.testar().then(()=>toast('Aviso de teste enviado')).catch(()=>toast('Não deu','err'))">Enviar um teste</button>
+          <button class="btn btn-sm btn-danger-outline" onclick="desligarNotificacoes(this)">Desligar aqui</button>
+        </div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
+      <b style="color:#9A3412">🔕 Notificações desligadas neste aparelho</b>
+      <p style="margin-top:4px;line-height:1.5;color:inherit;font-size:14.5px">${bloqueado
+        ? 'Você bloqueou as notificações para este site. Libere nas configurações do navegador e volte aqui.'
+        : 'Ligue para receber no celular o pedido de repasse, o repasse pago, o cadastro novo e o aviso de cartão acabando. É o que faz o número aparecer no ícone do app.'}</p>
+      ${bloqueado ? '' : '<button class="btn btn-primary btn-full" style="margin-top:8px" onclick="ativarNotificacoes(this)">🔔 Ligar notificações neste aparelho</button>'}
+    </div>`;
+}
+
 function renderPerfil() {
   $('app-content').innerHTML = `
   <div class="page-hd"><h2>Perfil</h2></div>
@@ -4052,6 +4085,7 @@ function renderPerfil() {
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
       <div id="backups-auto" style="margin-top:10px;font-size:15px;color:var(--text2)">Carregando backups automáticos…</div>
+      <div id="perfil-push" style="margin-top:12px"></div>
       <div id="backup-drive" style="margin-top:12px;font-size:15px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
       <button class="btn btn-outline btn-full" id="btn-migrar" style="margin-top:8px" onclick="atualizarBanco()">🛠️ Atualizar estrutura do banco</button>
@@ -4077,6 +4111,7 @@ async function _mostrarBackupDrive() {
   if (!el0 || !_ehGestorOuAdmin() || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
   try {
     const s = await sb.backup.drive();
+    _pintarCartaoPush().catch(() => {});
     const el = $('backup-drive');
     if (!el) return;
     const q = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -6644,6 +6679,107 @@ async function exportSheets() {
 }
 
 /* ── Boot ────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICAÇÃO NO CELULAR (Web Push, 24/09/2026)
+   Pedido do Cleiton: o número no ícone do app, como o do PicPay. No Android
+   o app não desenha esse número — o sistema o põe sozinho quando há
+   notificação não lida. Então o que ligamos aqui é a notificação de verdade,
+   e o contador vem junto. Precisa da autorização da pessoa, uma vez por
+   aparelho, e só funciona em https (ou no localhost).
+═══════════════════════════════════════════════════════════ */
+function _pushDisponivel() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+function _b64ParaBytes(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const limpo = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(limpo);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function _nomeDoAparelho() {
+  const ua = navigator.userAgent || '';
+  const s = /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iPod/i.test(ua) ? 'iPhone/iPad'
+    : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'Mac' : 'Aparelho';
+  const nav = /Edg/i.test(ua) ? 'Edge' : /Chrome/i.test(ua) ? 'Chrome' : /Firefox/i.test(ua) ? 'Firefox'
+    : /Safari/i.test(ua) ? 'Safari' : 'navegador';
+  return s + ' · ' + nav;
+}
+
+/* Já está inscrito NESTE aparelho? */
+async function _inscricaoAtual() {
+  if (!_pushDisponivel()) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  } catch (_) { return null; }
+}
+
+async function ativarNotificacoes(btn) {
+  if (!_pushDisponivel()) {
+    toast('Este navegador não trabalha com notificação', 'err');
+    return;
+  }
+  if (!sb || !user) { toast('Entre na sua conta primeiro', 'err'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const { chave, ativo } = await sb.push.chave();
+    if (!ativo || !chave) {
+      toast('O servidor ainda não está configurado para notificações', 'err');
+      return;
+    }
+    const permissao = await Notification.requestPermission();
+    if (permissao !== 'granted') {
+      toast(permissao === 'denied'
+        ? 'Você bloqueou as notificações — libere nas configurações do navegador'
+        : 'Autorização não concedida', 'err');
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let inscricao = await reg.pushManager.getSubscription();
+    if (!inscricao) {
+      inscricao = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _b64ParaBytes(chave),
+      });
+    }
+    const j = inscricao.toJSON();
+    await sb.push.inscrever({
+      endpoint: inscricao.endpoint,
+      p256dh: j.keys?.p256dh,
+      auth: j.keys?.auth,
+      aparelho: _nomeDoAparelho(),
+    });
+    toast('Notificações ligadas neste aparelho ✅');
+    await sb.push.testar().catch(() => {});
+    if (viewAtual === 'perfil') switchView('perfil');
+  } catch (e) {
+    toast('Não deu para ligar: ' + (e.message || 'erro'), 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function desligarNotificacoes(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const inscricao = await _inscricaoAtual();
+    if (inscricao) {
+      await sb?.push.desinscrever(inscricao.endpoint).catch(() => {});
+      await inscricao.unsubscribe().catch(() => {});
+    }
+    toast('Notificações desligadas neste aparelho');
+    if (viewAtual === 'perfil') switchView('perfil');
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    VIGIA DE VERSÃO (24/09/2026)
    Até aqui a atualização dependia de a pessoa puxar a tela para baixo. Se

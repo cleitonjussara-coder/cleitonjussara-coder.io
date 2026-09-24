@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=255">
+  <link rel="manifest" href="manifest.json?v=256">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1699,7 +1699,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=255" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=256" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2146,6 +2146,19 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     </div>
 
     <div class="ajuda-sec">
+      <h4>🔔 Notificação no celular (24/09/2026)</h4>
+      <p>Dá para receber os avisos no celular mesmo com o app fechado — e é isso que faz aparecer <b>o número no ícone do app</b>, como nos outros aplicativos. Quem liga é você, uma vez em cada aparelho: <b>Perfil → 🔔 Ligar notificações neste aparelho</b>. O celular vai pedir autorização; sem ela nada chega.</p>
+      <p>O que toca o aviso:</p>
+      <ul>
+        <li>💸 <b>Pedido de repasse, reembolso ou recarga</b> — para quem gerencia, assim que a pessoa pede.</li>
+        <li>✅ <b>Repasse ou reembolso pago</b> — para quem recebe, quando o gestor marca como pago.</li>
+        <li>🙋 <b>Cadastro novo aguardando liberação</b> — para quem gerencia.</li>
+        <li>💳 <b>Cartão abaixo de R$ 300</b> — para quem gerencia, uma vez por dia.</li>
+      </ul>
+      <p>No Perfil dá para <b>enviar um teste</b> e para <b>desligar</b> só naquele aparelho. Tocando no aviso, o app abre.</p>
+    </div>
+
+    <div class="ajuda-sec">
       <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>
       <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente e de 20 em 20 minutos, se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e a troca só acontece quando você tocar. O número da versão fica no <b>Perfil</b>.</p>
     </div>
@@ -2538,25 +2551,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=255"></script>
-<script defer src="js/db.js?v=255"></script>
-<script defer src="js/nfce.js?v=255"></script>
-<script defer src="js/sefaz.js?v=255"></script>
-<script defer src="js/brasilapi.js?v=255"></script>
-<script defer src="js/ocr.js?v=255"></script>
-<script defer src="js/recorte.js?v=255"></script>
-<script defer src="js/excel.js?v=255"></script>
-<script defer src="js/gestor.js?v=255"></script>
-<script defer src="js/frota.js?v=255"></script>
-<script defer src="js/ponto.js?v=255"></script>
-<script defer src="js/arquivos.js?v=255"></script>
-<script defer src="js/gdrive.js?v=255"></script>
-<script defer src="js/app.js?v=255"></script>
+<script defer src="js/api.js?v=256"></script>
+<script defer src="js/db.js?v=256"></script>
+<script defer src="js/nfce.js?v=256"></script>
+<script defer src="js/sefaz.js?v=256"></script>
+<script defer src="js/brasilapi.js?v=256"></script>
+<script defer src="js/ocr.js?v=256"></script>
+<script defer src="js/recorte.js?v=256"></script>
+<script defer src="js/excel.js?v=256"></script>
+<script defer src="js/gestor.js?v=256"></script>
+<script defer src="js/frota.js?v=256"></script>
+<script defer src="js/ponto.js?v=256"></script>
+<script defer src="js/arquivos.js?v=256"></script>
+<script defer src="js/gdrive.js?v=256"></script>
+<script defer src="js/app.js?v=256"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=255').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=256').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
