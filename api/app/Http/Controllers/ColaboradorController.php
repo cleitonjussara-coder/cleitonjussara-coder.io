@@ -64,6 +64,7 @@ class ColaboradorController extends Controller
 
         $d = $r->validate([
             'nome' => ['sometimes', 'string', 'max:120'],
+            'cpf' => ['sometimes', 'nullable', 'string', 'max:14'],   // exceção da regra de consumidor (24/09/2026)
             'role' => ['sometimes', Rule::in(Colaborador::ROLES)],
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
@@ -73,6 +74,10 @@ class ColaboradorController extends Controller
         }
         if (isset($d['nome'])) {
             $d['nome'] = trim($d['nome']);
+        }
+        if (array_key_exists('cpf', $d)) {
+            $so = preg_replace('/[^0-9]/', '', (string) $d['cpf']);
+            $d['cpf'] = strlen($so) === 11 ? $so : null;
         }
         if (isset($d['role']) && $d['role'] !== $alvo->role) {
             Log::info('papel alterado', ['alvo' => $alvo->email, 'de' => $alvo->role, 'para' => $d['role'], 'por' => $u->email]);

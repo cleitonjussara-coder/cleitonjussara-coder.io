@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 261;
+const APP_BUILD = 262;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4108,6 +4108,22 @@ async function removerFotoPerfil() {
 /* ── VIEW: PERFIL ────────────────────────────────────────── */
 /* Cartão "Notificações neste aparelho" (24/09/2026). O estado é do APARELHO,
    não da conta: cada celular autoriza o seu. */
+/* CPF do perfil (24/09/2026). Grava ao sair do campo; vazio limpa. */
+async function salvarCpfDoPerfil(campo) {
+  const digitos = _soDigitos(campo.value);
+  if (digitos && digitos.length !== 11) { toast('CPF precisa ter 11 dígitos', 'err'); return; }
+  if (digitos === _soDigitos(user?.cpf)) return;             // não mudou
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para salvar o CPF', 'err'); return; }
+  try {
+    const atualizado = await sb.colaboradores.update(user.id, { cpf: digitos || null });
+    user.cpf = atualizado?.cpf ?? (digitos || null);
+    campo.value = _formatarDoc(user.cpf || '');
+    toast(user.cpf ? 'CPF salvo ✅' : 'CPF removido');
+  } catch (e) {
+    toast('Não deu para salvar: ' + (e.message || 'erro'), 'err');
+  }
+}
+
 async function _pintarCartaoPush() {
   const el = $('perfil-push');
   if (!el) return;
@@ -4212,6 +4228,13 @@ function renderPerfil() {
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
       <div id="backups-auto" style="margin-top:10px;font-size:15px;color:var(--text2)">Carregando backups automáticos…</div>
+      <div class="field" style="margin-top:12px">
+        <label class="lbl">Seu CPF <span style="font-weight:400;color:var(--text2)">— opcional</span></label>
+        <input class="inp" id="p-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${esc(_formatarDoc(user?.cpf || ''))}"
+               onblur="salvarCpfDoPerfil(this)">
+        <p style="font-size:13.5px;color:var(--text2);line-height:1.45;margin-top:4px">
+          Serve para uma exceção: nota que sai no <b>seu</b> CPF — recarga de celular na sua linha, por exemplo — deixa de ser barrada. Sem ele, só passa nota sem consumidor ou no CNPJ da empresa.</p>
+      </div>
       <div id="perfil-push" style="margin-top:12px"></div>
       <div id="backup-drive" style="margin-top:12px;font-size:15px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
@@ -6066,16 +6089,21 @@ async function _salvarNotaInterno() {
     return;
   }
 
-  const proibido = _consumidorProibido($('nf-consumidor').value);
+  const donoDaNota = { user_id: $('nf-owner-id')?.value || _notaAtual?.user_id || user?.id };
+  const proibido = _consumidorProibido($('nf-consumidor').value, donoDaNota);
   if (proibido) {
     setLoading(false);
     const nl = String.fromCharCode(10);
+    const ehCpf = _soDigitos(proibido).length === 11;
+    const semCpfNoPerfil = ehCpf && !_cpfDoDono(donoDaNota);
     alert([
       'Esta nota está no CPF/CNPJ ' + _formatarDoc(proibido) + ', que não é o da empresa.',
       '',
       'A nota precisa sair SEM consumidor identificado ou no CNPJ ' + _formatarDoc(CNPJ_EMPRESA) + '.',
       '',
-      'Peça outra no caixa: esta não serve para a prestação de contas.',
+      semCpfNoPerfil
+        ? 'Se este CPF é o SEU — recarga de celular na sua linha, por exemplo —, cadastre-o no Perfil e o app deixa de barrar.'
+        : 'Peça outra no caixa: esta não serve para a prestação de contas.',
     ].join(nl));
     toast('Nota no CPF/CNPJ de outra pessoa — não dá para lançar', 'err');
     return;
@@ -6582,10 +6610,28 @@ const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
    CNPJ) de terceiro não presta contas — o lançamento é barrado. */
 const CNPJ_EMPRESA = '17117768000142';
 
-function _consumidorProibido(doc) {
-  const d = String(doc || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
+function _soDigitos(v) {
+  return String(v || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
+}
+
+/* Dono da nota: quem gastou, não quem está com o app aberto (o gestor pode
+   estar corrigindo a nota de outra pessoa). */
+function _cpfDoDono(n) {
+  const id = n?.user_id || user?.id;
+  const dono = id === user?.id ? user : equipePorId[id];
+
+  return _soDigitos(dono?.cpf);
+}
+
+/* 24/09/2026 — exceção pedida pelo Cleiton: "recarga de celular, às vezes a
+   linha está atrelada ao CPF do colaborador, não bloquear". A nota que sai
+   no CPF de QUEM GASTOU passa; no de terceiro, continua barrada. */
+function _consumidorProibido(doc, nota) {
+  const d = _soDigitos(doc);
   if (!d) return null;                       // sem consumidor: permitido
   if (d === CNPJ_EMPRESA) return null;       // no CNPJ da empresa: permitido
+  const cpfDono = _cpfDoDono(nota);
+  if (cpfDono && d === cpfDono) return null; // no CPF de quem gastou: permitido
   return d;                                  // de terceiro: devolve para o aviso
 }
 

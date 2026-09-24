@@ -33,7 +33,7 @@ class Colaborador extends Authenticatable
     /* regime (21/09/2026): rdm_rda = recebe dinheiro em conta; cv = cartão corporativo */
     public const REGIMES = ['rdm_rda', 'cv'];
 
-    protected $fillable = ['id', 'nome', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via'];
+    protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via'];
 
     protected $hidden = ['password', 'remember_token', 'google_id'];
 
