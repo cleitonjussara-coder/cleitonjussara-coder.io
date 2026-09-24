@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 250;
+const APP_BUILD = 251;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1802,8 +1802,38 @@ const ABAS_DESPESA = {
   RDM: { ico: '💼', nome: 'Despesas corporativas',
          sub: 'Abastecimento, hospedagem e outros gastos de serviço.' },
 };
-let _abaDespesa = null;          // 'RDA' | 'RDM' | null — aba aberta no hub
+let _abaDespesa = null;          // 'RDA' | 'RDM' | chave de categoria (CV) | null
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
+let _subtipoPreEscolhido = null; // categoria já escolhida junto (regime CV)
+
+/* 24/09/2026 — regime de cartão corporativo: não existe RDA x RDM. O gasto
+   é dividido nas MESMAS quatro categorias da planilha (as quatro colunas de
+   CV ALELO), todas juntas. O banco continua guardando tipo/subtipo, que é o
+   que o relatório lê; para quem é CV o app só deixa de PERGUNTAR a aba. */
+const CATEGORIAS_CV = [
+  { chave: 'alimentacao',   ico: '🍽️', nome: 'Alimentação',   tipo: 'RDA', subtipo: null,
+    sub: 'Refeição, lanche, café e água.' },
+  { chave: 'abastecimento', ico: '⛽', nome: 'Abastecimento', tipo: 'RDM', subtipo: 'Abastecimento',
+    sub: 'Combustível e o que sai no posto.' },
+  { chave: 'hospedagem',    ico: '🏨', nome: 'Hospedagem',    tipo: 'RDM', subtipo: 'Hospedagem',
+    sub: 'Pousada, hotel e diárias.' },
+  { chave: 'outros',        ico: '📦', nome: 'Outros',        tipo: 'RDM', subtipo: 'Outros',
+    sub: 'Borracharia, oficina, EPIs e demais gastos.' },
+];
+
+function _categoriaCV(chave) {
+  return CATEGORIAS_CV.find(c => c.chave === chave) || null;
+}
+
+/* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
+function _chaveCategoriaDaNota(n) {
+  if (!n) return 'outros';
+  if (n.tipo === 'RDA') return 'alimentacao';
+  const s = String(n.subtipo || '').toLowerCase();
+  if (s.startsWith('abast')) return 'abastecimento';
+  if (s.startsWith('hosp')) return 'hospedagem';
+  return 'outros';
+}
 
 /* ─── Resumo de gastos e saldo devedor (22/09/2026) ──────────────
    Pedido do Cleiton: dentro de Despesas, um resumo de RDA e RDM "para ter
@@ -1962,6 +1992,59 @@ function _resumoHub() {
     </div>` : ''}`;
 }
 
+/* Cartão de categoria no hub (CV) — mesma cara do cartão de aba, mas
+   contando só as notas daquela categoria. */
+function _catCardCV(chave) {
+  const c = _categoriaCV(chave);
+  if (!c) return '';
+  const aberta = _abaDespesa === chave;
+  const doMes = notas.filter(n => !n.deleted && n.mes === filMes && n.ano === filAno
+    && _chaveCategoriaDaNota(n) === chave);
+  const total = doMes.reduce((s, n) => s + _n(n.valor), 0);
+  const mesTxt = doMes.length
+    ? `${MESES[filMes - 1]}: ${brlCurto(total)} · ${doMes.length} nota${doMes.length === 1 ? '' : 's'}`
+    : `${MESES[filMes - 1]}: nenhuma nota`;
+  return `
+    <div class="aba-hero aba-hero-${c.tipo.toLowerCase()} ${aberta ? 'aberta' : ''}" id="aba-${chave}">
+      <span class="aba-hero-mes">${esc(mesTxt)}</span>
+      <button class="aba-hero-cab" aria-expanded="${aberta}" onclick="abrirAbaDespesa('${chave}')">
+        <span class="aba-hero-ico">${c.ico}</span>
+        <span class="aba-hero-txt">
+          <span class="aba-hero-sigla">${esc(c.nome)}</span>
+          <span class="aba-hero-nome">${esc(c.sub)}</span>
+          <span class="aba-hero-sub">${aberta ? 'Escolha como quer lançar 👇' : ''}</span>
+        </span>
+        <span class="aba-hero-seta">${aberta ? '▲' : '▼'}</span>
+      </button>
+      ${aberta ? `
+      <div class="aba-hero-acoes">
+        <button class="aba-acao aba-acao-destaque" onclick="lancarNaCategoriaCV('${chave}','qr')">
+          <span class="aba-acao-ico">📷</span>
+          <span class="aba-acao-txt">
+            <span class="aba-acao-tit">Nota pelo QR Code</span>
+            <span class="aba-acao-sub">Aponte a câmera: empresa, valor e data entram sozinhos.</span>
+          </span>
+        </button>
+        <button class="aba-acao" onclick="lancarNaCategoriaCV('${chave}','manual')">
+          <span class="aba-acao-ico">📝</span>
+          <span class="aba-acao-txt">
+            <span class="aba-acao-tit">Nota sem QR</span>
+            <span class="aba-acao-sub">Recibo, DANFE ou NFS-e: foto ou arquivo.</span>
+          </span>
+        </button>
+      </div>` : ''}
+    </div>`;
+}
+
+function lancarNaCategoriaCV(chave, modo) {
+  const c = _categoriaCV(chave);
+  if (!c) return;
+  _abaPreEscolhida = c.tipo;
+  _subtipoPreEscolhido = c.subtipo;
+  if (modo === 'qr') iniciarQR();
+  else abrirSeletorTipoLancamento({ _manual: true, tipo: c.tipo, subtipo: c.subtipo });
+}
+
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
   const aberta = _abaDespesa === tipo;
@@ -2024,14 +2107,13 @@ function renderDespesas() {
   <div class="db-container">
     <div class="ini-ola">
       <h2>🧾 Petermann – Despesas</h2>
-      <span>Notas RDA / RDM, painel e saldo</span>
+      <span>${_ehCV() ? 'Notas do cartão, painel e saldo' : 'Notas RDA / RDM, painel e saldo'}</span>
     </div>
 
     ${_ehContabilidade() ? `
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
-    <div class="ini-titulo">Escolha a aba e lance a nota</div>
-    ${_abaCard('RDA')}
-    ${_abaCard('RDM')}
+    <div class="ini-titulo">${_ehCV() ? 'Escolha a categoria e lance a nota' : 'Escolha a aba e lance a nota'}</div>
+    ${_ehCV() ? CATEGORIAS_CV.map(c => _catCardCV(c.chave)).join('') : _abaCard('RDA') + _abaCard('RDM')}
     ${_resumoHub()}`}
 
     <div class="ini-titulo">Ir para</div>
@@ -4910,6 +4992,7 @@ function abrirSeletorTipoLancamento(dados = {}) {
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
+  _montarGradeDoSeletor();
   const dica2 = $('tipo-lancamento-dica2'); if (dica2) dica2.textContent = '';
   /* Fornecedor conhecido (chave/CNPJ/nome): até 20/09 o app escolhia a aba
      sozinho e pulava o passo 1. Reunião de 21/09/2026: a escolha é SEMPRE
@@ -4949,13 +5032,39 @@ function fecharSeletorTipoLancamento() {
   _dadosLancamentoPendentes = null;
 }
 
-function selecionarTipoLancamento(tipo) {
+/* Grade do passo 1: quatro categorias no regime de cartão, as duas abas nos
+   demais (24/09/2026). */
+function _montarGradeDoSeletor() {
+  const cv = $('tipo-lancamento-grid-cv'), abas = $('tipo-lancamento-grid-abas');
+  if (!cv || !abas) return;
+  const ehCv = _ehCV();
+  cv.style.display = ehCv ? '' : 'none';
+  abas.style.display = ehCv ? 'none' : '';
+  const titulo = $('tipo-lancamento-passo1')?.querySelector('p');
+  if (titulo) {
+    titulo.textContent = ehCv
+      ? 'Escolha a categoria da despesa. É por ela que a nota entra na planilha.'
+      : 'Escolha com atenção a aba correta antes de preencher a nota. Isso evita lançar a despesa na aba errada.';
+  }
+  if (!ehCv || cv.dataset.pronto === '1') return;
+  cv.innerHTML = CATEGORIAS_CV.map(c => `
+    <button class="tipo-lancamento-card tipo-lancamento-card-${c.tipo.toLowerCase()}"
+            onclick="selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})">
+      <div class="tipo-lancamento-icon">${c.ico}</div>
+      <div class="tipo-lancamento-title">${esc(c.nome)}</div>
+      <div class="tipo-lancamento-subtitle">${esc(c.sub)}</div>
+    </button>`).join('');
+  cv.dataset.pronto = '1';
+}
+
+function selecionarTipoLancamento(tipo, subtipo = null) {
   /* MESMO objeto de _dadosLancamentoPendentes (22/09/2026): a consulta de
      sugestão do fornecedor compara por identidade para saber se ainda vale.
      Com a aba já escolhida na tela de Despesas, a escolha acontece no mesmo
      instante da abertura — uma cópia aqui descartaria a sugestão que ainda
      está a caminho, e o aviso "a sugestão é a outra aba" nunca apareceria. */
   const dados = Object.assign(_dadosLancamentoPendentes || {}, { tipo, _tipoSelecionado: true });
+  if (subtipo) dados.subtipo = subtipo;   // regime CV: a categoria vem junto (24/09/2026)
   /* Lançamento MANUAL: em vez de abrir o formulário vazio, pergunta já o
      comprovante (pedido em 16/09/2026). O anexo é obrigatório de qualquer
      jeito, e a câmera só abre em gesto do usuário — por isso um toque a mais
@@ -5042,6 +5151,7 @@ async function abrirFormNota(dados = {}) {
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
   { const donoId = dados.user_id || user?.id; const donoCV = donoId === user?.id ? _ehCV() : _ehCV(equipePorId[donoId]);
     const g = $('nf-pagamento-group'); if (g) g.style.display = donoCV ? '' : 'none';
+  _ajustarCamposDeCategoria();
     const p = $('nf-pagamento'); if (p) p.value = dados.pagamento || 'cv'; }
   _valorEditadoManual = false; _sugestaoPendente = null;
   { const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none'; }
@@ -5186,6 +5296,29 @@ function alternarTipoLancamentoFormulario() {
   const tipo = $('nf-tipo').value === 'RDA' ? 'RDM' : 'RDA';
   $('nf-tipo').value = tipo;
   toggleSubtipo();
+}
+
+/* Regime CV (24/09/2026): a pessoa escolhe UMA categoria; o app traduz para
+   o par tipo/subtipo que o banco e a planilha usam. */
+function aplicarCategoriaCV() {
+  const c = _categoriaCV($('nf-cat-cv').value);
+  if (!c) return;
+  $('nf-tipo').value = c.tipo;
+  $('nf-subtipo').value = c.subtipo || 'Abastecimento';
+  atualizarBannerTipoLancamento(c.tipo);
+}
+
+/* Mostra a escolha certa para o regime e deixa a categoria no valor da nota. */
+function _ajustarCamposDeCategoria() {
+  const grupo = $('nf-cat-cv-group'), linha = $('nf-aba-row');
+  if (!grupo || !linha) return;
+  const ehCv = _ehCV();
+  grupo.style.display = ehCv ? '' : 'none';
+  linha.style.display = ehCv ? 'none' : '';
+  if (!ehCv) return;
+  const sel = $('nf-cat-cv');
+  sel.value = _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: $('nf-subtipo').value });
+  aplicarCategoriaCV();
 }
 
 function toggleSubtipo() {
@@ -6167,7 +6300,9 @@ function irParaPassoRepasse(n) {
 function escolherModoRepasse(modo) {
   _modoEscolhido = true;
   setRepasseModo(modo);
-  irParaPassoRepasse(2);
+  /* no regime de cartão não há passo de aba: do "o que fazer" vai direto
+     para os campos (24/09/2026) */
+  irParaPassoRepasse(_repasseSemCategoria() ? 3 : 2);
 }
 
 function escolherTipoRepasse(tipo) {
@@ -6179,8 +6314,13 @@ function voltarPassoRepasse() {
   if (_repassePasso > _repassePassoMin) {
     /* voltando do 3 para o 2, a sub-aba é desmarcada: quem volta está
        trocando de aba, e deixar a antiga marcada convida ao engano. */
-    if (_repassePasso === 3) setRepasseTipo('');
-    irParaPassoRepasse(_repassePasso - 1);
+    if (_repassePasso === 3 && !_repasseSemCategoria()) {
+      setRepasseTipo('');
+      irParaPassoRepasse(2);
+      return;
+    }
+    /* sem passo de aba (CV), o 3 volta direto para o "o que fazer" */
+    irParaPassoRepasse(_repassePasso === 3 && _repasseSemCategoria() ? 1 : _repassePasso - 1);
     return;
   }
   fecharFormRepasse();
@@ -6209,10 +6349,13 @@ function _repasseEhReembolso(r) {
   return r && r.destino !== 'recarga' && r.destino !== 'ajuda';
 }
 
-/* Recarga e ajuda de custos não têm categoria na planilha: as colunas do
-   BANCO DE DADOS trazem só DATA e R$. Só o reembolso é por aba (24/09/2026). */
+/* Nenhum dinheiro do regime de cartão é lançado por aba (24/09/2026): as
+   três colunas do BANCO DE DADOS — recarga, ajuda de custos e reembolso —
+   trazem só DATA e R$. E no CV não existe RDA x RDM: o gasto é dividido nas
+   quatro categorias, todas juntas. _repasseDestino só é preenchido para quem
+   é CV, então ele próprio responde a pergunta. */
 function _repasseSemCategoria() {
-  return _repasseDestino === 'recarga' || _repasseDestino === 'ajuda';
+  return _repasseDestino !== null;
 }
 const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
 
@@ -6318,7 +6461,9 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
   /* A recarga do cartão não tem categoria na planilha (a coluna do extrato
      tem só DATA e R$), então o passo das abas não faz sentido para ela. */
   if (_repasseSemCategoria()) setRepasseTipo('RDM');
-  _repassePassoMin = (pre?.tipo || _repasseSemCategoria()) ? 3 : (modo || _repasseAlvo) ? 2 : 1;
+  _repassePassoMin = pre?.tipo ? 3
+    : (modo || _repasseAlvo) ? (_repasseSemCategoria() ? 3 : 2)
+    : 1;
   _modoEscolhido = _repassePassoMin > 1;
   _atualizarUiRepasse();
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=250">
+  <link rel="manifest" href="manifest.json?v=251">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1686,7 +1686,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=250" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=251" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1823,7 +1823,10 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <div class="modal-bd" id="tipo-lancamento-passo1">
       <p style="margin:0 0 14px;font-size:15.5px;line-height:1.5;color:var(--text2)">Escolha com atenção a aba correta antes de preencher a nota. Isso evita lançar a despesa na aba errada.</p>
       <p id="tipo-lancamento-dica" style="margin:-8px 0 12px;font-size:15px;line-height:1.4;color:var(--primary-d);font-weight:700"></p>
-      <div class="tipo-lancamento-grid">
+      <!-- 24/09/2026: no regime de cartão não se escolhe RDA ou RDM, e sim
+           uma das quatro categorias. O grid do CV é montado pelo app. -->
+      <div class="tipo-lancamento-grid" id="tipo-lancamento-grid-cv" style="display:none"></div>
+      <div class="tipo-lancamento-grid" id="tipo-lancamento-grid-abas">
         <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="selecionarTipoLancamento('RDA')">
           <div class="tipo-lancamento-icon">🍽️</div>
           <div class="tipo-lancamento-title">RDA</div>
@@ -1890,7 +1893,18 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <button type="button" class="btn btn-sm btn-outline" onclick="aplicarSugestaoAba()">Aplicar</button>
     </div>
   
-    <div class="field-row">
+    <!-- 24/09/2026: quem é do cartão corporativo escolhe direto a categoria;
+         o RDA/RDM continua no banco, montado a partir dela. -->
+    <div class="field" id="nf-cat-cv-group" style="display:none">
+      <label class="lbl">Categoria *</label>
+      <select class="inp" id="nf-cat-cv" onchange="aplicarCategoriaCV()">
+        <option value="alimentacao">🍽️ Alimentação</option>
+        <option value="abastecimento">⛽ Abastecimento</option>
+        <option value="hospedagem">🏨 Hospedagem</option>
+        <option value="outros">📦 Outros</option>
+      </select>
+    </div>
+    <div class="field-row" id="nf-aba-row">
       <div class="field">
         <label class="lbl">Tipo *</label>
         <select class="inp" id="nf-tipo" onchange="toggleSubtipo()">
@@ -2108,6 +2122,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec ajuda-cv">
       <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
+      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Reembolso, recarga e ajuda de custos também não perguntam aba nenhuma.</p>
       <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
       <ul>
         <li><b>👛 Reembolso</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
@@ -2511,25 +2526,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=250"></script>
-<script defer src="js/db.js?v=250"></script>
-<script defer src="js/nfce.js?v=250"></script>
-<script defer src="js/sefaz.js?v=250"></script>
-<script defer src="js/brasilapi.js?v=250"></script>
-<script defer src="js/ocr.js?v=250"></script>
-<script defer src="js/recorte.js?v=250"></script>
-<script defer src="js/excel.js?v=250"></script>
-<script defer src="js/gestor.js?v=250"></script>
-<script defer src="js/frota.js?v=250"></script>
-<script defer src="js/ponto.js?v=250"></script>
-<script defer src="js/arquivos.js?v=250"></script>
-<script defer src="js/gdrive.js?v=250"></script>
-<script defer src="js/app.js?v=250"></script>
+<script defer src="js/api.js?v=251"></script>
+<script defer src="js/db.js?v=251"></script>
+<script defer src="js/nfce.js?v=251"></script>
+<script defer src="js/sefaz.js?v=251"></script>
+<script defer src="js/brasilapi.js?v=251"></script>
+<script defer src="js/ocr.js?v=251"></script>
+<script defer src="js/recorte.js?v=251"></script>
+<script defer src="js/excel.js?v=251"></script>
+<script defer src="js/gestor.js?v=251"></script>
+<script defer src="js/frota.js?v=251"></script>
+<script defer src="js/ponto.js?v=251"></script>
+<script defer src="js/arquivos.js?v=251"></script>
+<script defer src="js/gdrive.js?v=251"></script>
+<script defer src="js/app.js?v=251"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=250').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=251').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
