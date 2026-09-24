@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 252;
+const APP_BUILD = 253;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1812,11 +1812,14 @@ let _pagamentoCV = null;         // 'cv' | 'reembolso' | 'ajuda' — escolhido n
    formulário, fácil de passar batido; virou a primeira tela do lançamento,
    e é ela que decide para qual aba da planilha a nota vai. */
 const PAGAMENTOS_CV = [
-  { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
+  { chave: 'cv', ico: '💳', nome: 'Nota no cartão', naPagina: true,
     sub: 'Pagou com o cartão corporativo. Vai para a aba CV ALELO.' },
-  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
+  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso', naPagina: true,
     sub: 'Pagou do próprio bolso. Vai para a aba CV REEMBOLSO e a empresa devolve.' },
-  { chave: 'ajuda', ico: '🧾', nome: 'Pago com ajuda de custos',
+  /* 24/09/2026: o Cleiton pediu só as duas acima na página de escolha. A
+     ajuda de custos continua existindo — no campo Pagamento do formulário e
+     na aba própria da planilha —, só não é mais uma das portas de entrada. */
+  { chave: 'ajuda', ico: '🧾', nome: 'Pago com ajuda de custos', naPagina: false,
     sub: 'Saiu do dinheiro de ajuda de custos. Vai para a aba própria.' },
 ];
 
@@ -2150,7 +2153,7 @@ function renderDespesas() {
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
-    ${PAGAMENTOS_CV.map(p => `
+    ${PAGAMENTOS_CV.filter(p => p.naPagina).map(p => `
       <button class="pnl pnl-atalho pag-cv-card" style="margin-bottom:10px" onclick="escolherPagamentoCV('${p.chave}')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">${p.ico}</span>
