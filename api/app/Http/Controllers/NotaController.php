@@ -77,7 +77,7 @@ class NotaController extends Controller
     {
         $u = $r->user();
         /* O app pode mandar CNPJ e chave formatados; o banco guarda só dígitos. */
-        foreach (['cnpj', 'chave_nfce'] as $campo) {
+        foreach (['cnpj', 'chave_nfce', 'consumidor'] as $campo) {
             if ($r->filled($campo)) {
                 $r->merge([$campo => preg_replace('/\D/', '', (string) $r->input($campo)) ?: null]);
             }
@@ -88,6 +88,7 @@ class NotaController extends Controller
             'subtipo' => ['nullable', Rule::in(Nota::SUBTIPOS)],
             'pagamento' => ['nullable', Rule::in(Nota::PAGAMENTOS)],   // colaborador CV: cartão ou do bolso (21/09/2026)
             'cnpj' => ['nullable', 'string', 'max:14'],
+            'consumidor' => ['nullable', 'string', 'max:14'],   // CPF/CNPJ no cupom (24/09/2026)
             'razao_social' => ['nullable', 'string', 'max:255'],
             'valor' => ['required', 'numeric', 'min:0'],
             'data' => ['required', 'date_format:Y-m-d'],

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 247;
+const APP_BUILD = 249;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1821,9 +1821,22 @@ const LIMITE_DEVEDOR = 1500;
 function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
   const k = ano * 12 + mes;
   const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k && (!tipo || o.tipo === tipo);
-  const recebido = _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
-  if (ehCv) return _soma(rs.filter(r => ate(r) && _repasseEhPedido(r))) - recebido;
-  return _soma(ns.filter(ate)) - recebido;
+  if (ehCv) {
+    /* 24/09/2026: no cartão corporativo a dívida NÃO vem de pedidos — vem
+       das notas que a pessoa pagou do próprio bolso, que é o que a aba CV
+       REEMBOLSO soma na planilha. Dela se abate o que a empresa já
+       transferiu (coluna "REEMBOLSO DE:"). A recarga do cartão fica fora:
+       aquele dinheiro foi para o cartão, não para a conta da pessoa.
+       O filtro por categoria também não vale aqui: o reembolso é um valor
+       só, sem separar RDA de RDM. */
+    const ateData = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k;
+    const doBolso = _soma(ns.filter(n => ateData(n) && n.pagamento === 'reembolso'));
+    const reembolsado = _soma(rs.filter(r => ateData(r) && _repasseEhRecebido(r) && r.destino !== 'recarga'));
+
+    return doBolso - reembolsado;
+  }
+
+  return _soma(ns.filter(ate)) - _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
 }
 
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
@@ -3404,10 +3417,12 @@ function renderSaldo() {
        de reembolsos dizia que a pessoa já tinha recebido o que na verdade
        foi para o cartão. */
     const soReemb = r => r.destino !== 'recarga';
-    const regAno = soma(rsAno.filter(r => _repasseEhPedido(r) && soReemb(r)));
     const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soReemb(r)));
+    /* O que a empresa deve é o que saiu do bolso menos o que ela já pagou —
+       a mesma conta da planilha (CV REEMBOLSO menos "REEMBOLSO DE:"). */
+    const bolsoAno = soma(nsAno.filter(n => n.pagamento === 'reembolso'));
     const saldoCartao = _saldoCartao();
-    const aReceber = regAno - recAno;
+    const aReceber = bolsoAno - recAno;
     const cat = f => soma(ns.filter(n => semReemb(n) && f(n)));
     cardsCV = `
   <div class="saldo-grid">
@@ -3431,8 +3446,8 @@ function renderSaldo() {
     <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
       <div class="saldo-label">👛 Reembolsos · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
       <div class="saldo-val">${brl(aReceber)}</div>
-      <div class="saldo-detail"><span>Registrados <b>${brl(regAno)}</b></span><span>Recebidos <b>${brl(recAno)}</b></span></div>
-      <div class="sub-breakdown"><div class="sub-row"><span>Notas pagas do bolso no ano</span><span>${brl(soma(nsAno.filter(n => n.pagamento === 'reembolso')))}</span></div></div>
+      <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já reembolsado <b>${brl(recAno)}</b></span></div>
+      <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soReemb(r))))}</span></div></div>
     </div>
   </div>`;
   }
@@ -5000,6 +5015,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
   $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
   $('nf-qr-url').value   = dados.qr_url   || '';
+  $('nf-consumidor').value = (dados.consumidor || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
   _docEscolhidoManual = false;
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento : '';
   $('nf-numero').value   = dados.numero   || '';
@@ -5266,6 +5282,11 @@ async function extrairDadosDoXML(file) {
 
     // número e série (<ide><nNF>, <ide><serie>)
     if (T('ide nNF')) { _preencherNumeroSerie(T('ide nNF').replace(/^0+/, ''), T('ide serie').replace(/^0+/, '') || '0', true); preencheu.push('número'); }
+
+    /* consumidor da nota (24/09/2026): no XML ele vem em <dest>, e é o que
+       a regra da empresa olha — sem consumidor ou no CNPJ dela. */
+    const dest = _digitos(T('dest CNPJ')) || _digitos(T('dest CPF'));
+    if (dest.length === 11 || dest.length === 14) $('nf-consumidor').value = dest;
 
     // CNPJ + razão social do emitente
     const cnpj = _digitos(T('emit CNPJ'));
@@ -5676,6 +5697,22 @@ async function _salvarNotaInterno() {
   // sem valor ainda grava como "pendente" (0), mas sem anexo não grava
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
 
+  const proibido = _consumidorProibido($('nf-consumidor').value);
+  if (proibido) {
+    setLoading(false);
+    const nl = String.fromCharCode(10);
+    alert([
+      'Esta nota está no CPF/CNPJ ' + _formatarDoc(proibido) + ', que não é o da empresa.',
+      '',
+      'A nota precisa sair SEM consumidor identificado ou no CNPJ ' + _formatarDoc(CNPJ_EMPRESA) + '.',
+      '',
+      'Peça outra no caixa: esta não serve para a prestação de contas.',
+    ].join(nl));
+    toast('Nota no CPF/CNPJ de outra pessoa — não dá para lançar', 'err');
+    return;
+  }
+
+
   /* ANEXO OBRIGATÓRIO — nota de prestação de contas sem comprovante não vale.
      Ao EDITAR, o anexo que a nota já tem no servidor conta: depois que a foto
      sobe, o blob local é apagado e `fotoBlob` fica null. Sem essa ressalva,
@@ -5748,6 +5785,9 @@ async function _salvarNotaInterno() {
 
   const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
   const createdBy = _notaAtual?.created_by || _notaAtual?.user_id || user?.id || null;
+  /* 24/09/2026 — regra da empresa: a nota pode sair sem consumidor ou no
+     CNPJ da Petermann & Morais. No CPF/CNPJ de terceiro ela não presta
+     contas, e o lançamento para aqui. */
   const payload = {
     id             : $('nf-id').value || undefined,
     tipo, valor, data, mes, ano,
@@ -5761,6 +5801,7 @@ async function _salvarNotaInterno() {
     numero         : ($('nf-numero').value || '').trim() || null,
     serie          : ($('nf-serie').value  || '').trim() || null,
     qr_url         : $('nf-qr-url').value       || null,
+    consumidor     : $('nf-consumidor').value   || null,
     uf             : $('nf-uf').value           || null,
     metodo_captura : $('nf-metodo').value       || 'manual',
     user_id        : ownerId,
@@ -6140,6 +6181,25 @@ let _repasseAlvo = null;
 let _repasseDestino = null;
 const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
 
+/* Regra da empresa para o consumidor da nota (24/09/2026): pode sair SEM
+   consumidor identificado, ou no CNPJ da Petermann & Morais. No CPF (ou
+   CNPJ) de terceiro não presta contas — o lançamento é barrado. */
+const CNPJ_EMPRESA = '17117768000142';
+
+function _consumidorProibido(doc) {
+  const d = String(doc || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
+  if (!d) return null;                       // sem consumidor: permitido
+  if (d === CNPJ_EMPRESA) return null;       // no CNPJ da empresa: permitido
+  return d;                                  // de terceiro: devolve para o aviso
+}
+
+function _formatarDoc(d) {
+  const s = String(d || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
+  if (s.length === 11) return s.slice(0, 3) + '.' + s.slice(3, 6) + '.' + s.slice(6, 9) + '-' + s.slice(9);
+  if (s.length === 14) return s.slice(0, 2) + '.' + s.slice(2, 5) + '.' + s.slice(5, 8) + '/' + s.slice(8, 12) + '-' + s.slice(12);
+  return s;
+}
+
 /* Saldo do cartão pré-pago: recargas confirmadas menos as notas pagas nele.
    Vale só para quem é CV; para os demais devolve null (24/09/2026). */
 function _saldoCartaoDe(ns, rs, ehCv) {
@@ -6209,6 +6269,12 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
   if (_repasseDestino !== 'recarga') setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
+  /* CV pedindo reembolso: o valor não é chute — é o que a empresa deve pelas
+     notas pagas do bolso, menos o que já transferiu (24/09/2026). */
+  if (!pre && !_repasseAlvo && _repasseDestino === 'reembolso') {
+    const deve = _devedorDe(notas, repasses, filMes, filAno, true);
+    if (deve > 0) $('rep-valor').value = deve.toFixed(2);
+  }
   irParaPassoRepasse(_repassePassoMin);
   $('rep-data').value  = pre?.data || hoje();
   $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';

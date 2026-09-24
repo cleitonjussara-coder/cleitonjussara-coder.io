@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=247">
+  <link rel="manifest" href="manifest.json?v=249">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1686,7 +1686,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=247" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=249" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2010,6 +2010,9 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <input type="hidden" id="nf-metodo" value="manual">
     <input type="hidden" id="nf-chave">
     <input type="hidden" id="nf-qr-url">
+    <!-- 24/09/2026: CPF/CNPJ do consumidor lido do QR. Vazio = nota sem
+         consumidor identificado, que é o caso comum e permitido. -->
+    <input type="hidden" id="nf-consumidor">
     <input type="hidden" id="nf-uf">
     <input type="hidden" id="nf-mes">
     <input type="hidden" id="nf-ano">
@@ -2089,6 +2092,18 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <h3>Como usar o app</h3>
   </div>
   <div class="form-body">
+
+    <div class="ajuda-sec">
+      <h4>🧾 Em nome de quem a nota tem que sair</h4>
+      <p>Na hora de pedir o cupom, o caixa pergunta se quer CPF na nota. A regra da empresa (24/09/2026):</p>
+      <ul>
+        <li>✅ <b>Sem consumidor identificado</b> — é o caso mais comum e está certo.</li>
+        <li>✅ <b>No CNPJ da empresa</b>: 17.117.768/0001-42.</li>
+        <li>🚫 <b>No seu CPF ou no de outra pessoa</b> — o app <b>não deixa lançar</b>. Peça outra nota no caixa.</li>
+      </ul>
+      <p>O app confere isso sozinho: quando a venda identifica o consumidor, o <b>QR Code da nota carrega esse CPF/CNPJ</b>, e é ele que o app lê. A checagem acontece <b>antes</b> de pedir a foto, para você não fotografar uma nota que não serve.</p>
+      <p><b>Recibo:</b> quando não há como emitir nota — situação a evitar ao máximo —, o recibo vale, de preferência <b>no nome da empresa, com carimbo e o CNPJ do estabelecimento</b>.</p>
+    </div>
 
     <div class="ajuda-sec ajuda-cv">
       <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
@@ -2494,25 +2509,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=247"></script>
-<script defer src="js/db.js?v=247"></script>
-<script defer src="js/nfce.js?v=247"></script>
-<script defer src="js/sefaz.js?v=247"></script>
-<script defer src="js/brasilapi.js?v=247"></script>
-<script defer src="js/ocr.js?v=247"></script>
-<script defer src="js/recorte.js?v=247"></script>
-<script defer src="js/excel.js?v=247"></script>
-<script defer src="js/gestor.js?v=247"></script>
-<script defer src="js/frota.js?v=247"></script>
-<script defer src="js/ponto.js?v=247"></script>
-<script defer src="js/arquivos.js?v=247"></script>
-<script defer src="js/gdrive.js?v=247"></script>
-<script defer src="js/app.js?v=247"></script>
+<script defer src="js/api.js?v=249"></script>
+<script defer src="js/db.js?v=249"></script>
+<script defer src="js/nfce.js?v=249"></script>
+<script defer src="js/sefaz.js?v=249"></script>
+<script defer src="js/brasilapi.js?v=249"></script>
+<script defer src="js/ocr.js?v=249"></script>
+<script defer src="js/recorte.js?v=249"></script>
+<script defer src="js/excel.js?v=249"></script>
+<script defer src="js/gestor.js?v=249"></script>
+<script defer src="js/frota.js?v=249"></script>
+<script defer src="js/ponto.js?v=249"></script>
+<script defer src="js/arquivos.js?v=249"></script>
+<script defer src="js/gdrive.js?v=249"></script>
+<script defer src="js/app.js?v=249"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=247').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=249').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

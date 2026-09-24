@@ -43,7 +43,7 @@ window.NFCE = (() => {
    *  (GO) ?chave=44digits&p=...
    */
   function parseQRUrl(url) {
-    let chave = null, valor = null, cnpj = null, data = null;
+    let chave = null, valor = null, cnpj = null, data = null, consumidor = null;
     try {
       const safe = url.startsWith('http') ? url : 'https://' + url.replace(/^\/\//, '');
       const u = new URL(safe);
@@ -55,6 +55,17 @@ window.NFCE = (() => {
            || u.searchParams.get('chamada')
            || null;
       if (chave) { const cc = digits(chave); chave = cc.length >= 44 ? cc.slice(0,44) : null; }
+
+      /* Consumidor da nota (24/09/2026): quando a venda identifica quem
+         comprou, o QR carrega o cDest — CPF (11) ou CNPJ (14). Não havendo,
+         o campo simplesmente não existe, que é o caso comum e permitido.
+         Alguns estados passam como parâmetro; no formato de pipe ele é o
+         4º campo, logo depois da chave, versão e ambiente. */
+      const cDestParam = u.searchParams.get('cDest') || u.searchParams.get('cpf') || u.searchParams.get('CPF');
+      if (cDestParam) {
+        const d = digits(cDestParam);
+        if (d.length === 11 || d.length === 14) consumidor = d;
+      }
 
       const p = u.searchParams.get('p');
       if (p) {
@@ -81,6 +92,14 @@ window.NFCE = (() => {
           if (!chave) {
             const raw = digits(parts.slice(0, 9).join(''));
             if (raw.length >= 44) chave = raw.slice(0, 44);
+          }
+
+          /* cDest no formato de pipe: 4º campo, quando a chave abre a lista.
+             Exige 11 ou 14 dígitos exatos — o cIdToken que costuma ocupar
+             posição parecida tem 6, e o "mod" do outro formato tem 2. */
+          if (!consumidor && digits(parts[0]).length === 44 && parts.length >= 4) {
+            const d = digits(parts[3] || '');
+            if (d.length === 11 || d.length === 14) consumidor = d;
           }
 
           /* QR versão 2/3 (chave|versão|tpAmb|cIdToken|vNF|…): o valor vem
@@ -128,6 +147,7 @@ window.NFCE = (() => {
     // enriquece com fallbacks do pipe (CNPJ e data que nao vieram da chave)
     if (cnpj && !result.cnpj) result.cnpj = cnpj;
     if (data && !result.data) result.data = data;
+    if (consumidor) result.consumidor = consumidor;
 
     return result;
   }
