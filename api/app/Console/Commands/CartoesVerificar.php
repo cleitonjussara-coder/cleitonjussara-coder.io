@@ -40,6 +40,15 @@ class CartoesVerificar extends Command
                 })->sum('valor');
             $saldo = $recarga - $gasto;
 
+            /* Sem nenhuma recarga registrada não se sabe o saldo do cartão —
+               a conta daria zero e o gestor receberia um alarme falso por
+               colaborador. Enquanto ninguém registrar a primeira recarga,
+               este fica de fora (24/09/2026). */
+            if ($recarga <= 0) {
+                $this->line(sprintf('  %-28s sem recarga registrada — ignorado', mb_substr($c->nome ?: $c->email, 0, 28)));
+                continue;
+            }
+
             $this->line(sprintf('  %-28s recarga %10.2f  gasto %10.2f  saldo %10.2f%s',
                 mb_substr($c->nome ?: $c->email, 0, 28), $recarga, $gasto, $saldo,
                 $saldo < $minimo ? '  <= AVISAR' : ''));
