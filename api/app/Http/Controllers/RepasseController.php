@@ -107,7 +107,7 @@ class RepasseController extends Controller
             $mesCerto = (int) $dt->format('n');
             $anoCerto = (int) $dt->format('Y');
             if ((int) ($d['mes'] ?? 0) !== $mesCerto || (int) ($d['ano'] ?? 0) !== $anoCerto) {
-                Log::info('mes/ano corrigidos pela data', [
+                Log::warning('mes/ano corrigidos pela data', [
                     'id' => $id,
                     'veio' => ($d['mes'] ?? '?') . '/' . ($d['ano'] ?? '?'),
                     'data' => $dt->format('Y-m-d'),

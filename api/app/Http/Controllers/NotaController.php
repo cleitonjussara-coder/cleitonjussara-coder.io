@@ -132,7 +132,7 @@ class NotaController extends Controller
             $mesCerto = (int) $dt->format('n');
             $anoCerto = (int) $dt->format('Y');
             if ((int) ($d['mes'] ?? 0) !== $mesCerto || (int) ($d['ano'] ?? 0) !== $anoCerto) {
-                Log::info('mes/ano corrigidos pela data', [
+                Log::warning('mes/ano corrigidos pela data', [
                     'id' => $id,
                     'veio' => ($d['mes'] ?? '?') . '/' . ($d['ano'] ?? '?'),
                     'data' => $dt->format('Y-m-d'),
@@ -217,7 +217,7 @@ class NotaController extends Controller
         }
 
         $nota->forceFill(['tipo' => $tipo, 'subtipo' => $subtipo, 'updated_by' => $u->id])->save();
-        Log::info('nota corrigida pelo gestor', [
+        Log::warning('nota corrigida pelo gestor', [
             'nota' => $nota->id, 'de' => $antes,
             'para' => $tipo.($subtipo ? ' · '.$subtipo : ''),
             'por' => $u->email, 'dono' => $nota->user_id,
