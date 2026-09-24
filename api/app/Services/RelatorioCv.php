@@ -86,22 +86,30 @@ class RelatorioCv
         /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
            "EXTRATO DE VALOR RECEBIDO" (B/C), que alimenta o saldo de C.V., e
            "REEMBOLSO DE / TOTAL PAGO" (I/J).
-           CV (21/09/2026): o colaborador não recebe dinheiro para despesas (o
-           cartão paga); o que ele recebe é REEMBOLSO do que saiu do bolso →
-           só TOTAL PAGO (I/J). O extrato B/C fica vazio. */
-        $row = 15;
+           CV (24/09/2026): são dois caminhos distintos, e cada um tem a sua
+           coluna — RECARGA do cartão pré-pago em B/C (é dela que sai o saldo
+           do cartão) e REEMBOLSO ao colaborador em I/J. Lançamento antigo,
+           sem destino gravado, conta como reembolso: era assim que o
+           relatório o tratava antes desta separação. */
+        $linhaExtrato = 15;      // B/C — recarga
+        $linhaReembolso = 15;    // I/J — reembolso
         foreach ($reps as $r) {
-            if ($row > 94) {
-                break;
-            }
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
-            if (! $c->ehCV()) {
-                $bd->setCellValue([2, $row], $dt);
-                $bd->setCellValue([3, $row], (float) $r->valor);
+            $ehRecarga = $c->ehCV() && $r->destino === 'recarga';
+            if (! $c->ehCV() || $ehRecarga) {
+                if ($linhaExtrato <= 94) {
+                    $bd->setCellValue([2, $linhaExtrato], $dt);
+                    $bd->setCellValue([3, $linhaExtrato], (float) $r->valor);
+                    $linhaExtrato++;
+                }
             }
-            $bd->setCellValue([9, $row], $dt);
-            $bd->setCellValue([10, $row], (float) $r->valor);
-            $row++;
+            if (! $ehRecarga) {
+                if ($linhaReembolso <= 94) {
+                    $bd->setCellValue([9, $linhaReembolso], $dt);
+                    $bd->setCellValue([10, $linhaReembolso], (float) $r->valor);
+                    $linhaReembolso++;
+                }
+            }
         }
 
         $ss->setActiveSheetIndex(0);

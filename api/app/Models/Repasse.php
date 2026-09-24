@@ -11,6 +11,11 @@ class Repasse extends Model
 {
     public const KINDS = ['received', 'requested'];
 
+    /** Só para o regime CV: para onde o dinheiro foi (24/09/2026).
+     *  recarga   → cartão pré-pago Alelo (BANCO DE DADOS, colunas B/C)
+     *  reembolso → conta do colaborador, pelo que ele pagou do bolso (I/J) */
+    public const DESTINOS = ['recarga', 'reembolso'];
+
     protected $table = 'repasses';
 
     protected $keyType = 'string';
@@ -22,7 +27,7 @@ class Repasse extends Model
        cópia local pode estar com false mesmo depois de o e-mail ter saído. */
     protected $fillable = [
         'id', 'user_id', 'tipo', 'valor', 'data', 'mes', 'ano', 'descricao',
-        'kind', 'deleted', 'created_at',
+        'kind', 'destino', 'deleted', 'created_at',
     ];
     /* confirmado_em/confirmado_por ficam fora do fillable de propósito: são
        o carimbo de quem registrou o repasse e quando, posto pelo SERVIDOR —

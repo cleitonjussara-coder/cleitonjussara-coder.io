@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=246">
+  <link rel="manifest" href="manifest.json?v=247">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1633,6 +1633,18 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 .rep-aba-receber[aria-pressed="true"]{background:linear-gradient(160deg,#21a05a,#0d5c30);border-color:#0b4a27;color:#fff;box-shadow:0 8px 18px rgba(27,122,67,.45)}
 .rep-aba-pedir[aria-pressed="true"]{background:linear-gradient(160deg,#2a7fd4,#12447a);border-color:#0f3a66;color:#fff;box-shadow:0 8px 18px rgba(29,95,168,.45)}
 .rep-resumo-escolha{font-weight:700;opacity:.85;text-transform:none;letter-spacing:0}
+/* 23/09/2026 (pedido do Cleiton): letras maiores no painel do repasse — o
+   título do alto e o rótulo do passo ficavam pequenos ao lado dos botões. */
+#rep-overlay .form-hdr h3{font-size:24px;line-height:1.2}
+#rep-overlay .lbl{font-size:17px;letter-spacing:.4px}
+#rep-overlay .rep-aba-sub{font-size:16px;opacity:.85}
+#rep-overlay #rep-btn-voltar{font-size:21px}
+#rep-overlay .inp{font-size:18px}
+#rep-overlay #rep-help{font-size:16px !important;line-height:1.45}
+@media (min-width:640px){
+  #rep-overlay .form-hdr h3{font-size:27px}
+  #rep-overlay .lbl{font-size:18.5px}
+}
 @media (max-width:420px){
   .rep-abas{gap:10px}
   .rep-aba{min-height:118px;padding:16px 6px;border-radius:16px}
@@ -1674,7 +1686,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=246" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=247" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2007,7 +2019,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- ═══════════ REPASSE FORM ═══════════ -->
 <div id="rep-overlay" class="full-overlay">
   <div class="form-hdr">
-    <h3 id="rep-title">Registrar repasse recebido</h3>
+    <h3 id="rep-title">Registrar ou solicitar repasse</h3>
     <button class="btn btn-sm" id="rep-btn-salvar" style="background:#fff;color:var(--primary);border-color:#fff"
             onclick="salvarRepasse()">Salvar</button>
   </div>
@@ -2078,6 +2090,17 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   </div>
   <div class="form-body">
 
+    <div class="ajuda-sec ajuda-cv">
+      <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
+      <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
+      <ul>
+        <li><b>👛 Reembolso</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
+        <li><b>💳 Recarga do cartão</b> — pedir ao gestor a transferência para o cartão pré-pago. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>
+      </ul>
+      <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>
+      <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
+    </div>
+
     <div class="ajuda-sec">
       <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>
       <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente e de 20 em 20 minutos, se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e a troca só acontece quando você tocar. O número da versão fica no <b>Perfil</b>.</p>
@@ -2094,7 +2117,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <ul>
         <li>💸 <b>Repasse / Reembolso</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>💰 Registrar recebido</b> (o dinheiro já caiu) ou <b>🙋 Solicitar repasse</b> (pedir ao gestor). <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o reembolso criado a partir de uma nota entra direto no passo 3.</p>
+      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>💰 Registrar recebido</b> (o dinheiro já caiu) ou <b>🙋 Solicitar repasse</b> (pedir ao gestor); o título do alto acompanha a escolha. <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o reembolso criado a partir de uma nota entra direto no passo 3.</p>
       <ul>
       </ul>
       <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
@@ -2471,25 +2494,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=246"></script>
-<script defer src="js/db.js?v=246"></script>
-<script defer src="js/nfce.js?v=246"></script>
-<script defer src="js/sefaz.js?v=246"></script>
-<script defer src="js/brasilapi.js?v=246"></script>
-<script defer src="js/ocr.js?v=246"></script>
-<script defer src="js/recorte.js?v=246"></script>
-<script defer src="js/excel.js?v=246"></script>
-<script defer src="js/gestor.js?v=246"></script>
-<script defer src="js/frota.js?v=246"></script>
-<script defer src="js/ponto.js?v=246"></script>
-<script defer src="js/arquivos.js?v=246"></script>
-<script defer src="js/gdrive.js?v=246"></script>
-<script defer src="js/app.js?v=246"></script>
+<script defer src="js/api.js?v=247"></script>
+<script defer src="js/db.js?v=247"></script>
+<script defer src="js/nfce.js?v=247"></script>
+<script defer src="js/sefaz.js?v=247"></script>
+<script defer src="js/brasilapi.js?v=247"></script>
+<script defer src="js/ocr.js?v=247"></script>
+<script defer src="js/recorte.js?v=247"></script>
+<script defer src="js/excel.js?v=247"></script>
+<script defer src="js/gestor.js?v=247"></script>
+<script defer src="js/frota.js?v=247"></script>
+<script defer src="js/ponto.js?v=247"></script>
+<script defer src="js/arquivos.js?v=247"></script>
+<script defer src="js/gdrive.js?v=247"></script>
+<script defer src="js/app.js?v=247"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=246').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=247').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

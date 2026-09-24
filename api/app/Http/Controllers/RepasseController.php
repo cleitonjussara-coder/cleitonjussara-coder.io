@@ -70,6 +70,7 @@ class RepasseController extends Controller
             'ano' => ['required', 'integer', 'min:2020'],
             'descricao' => ['nullable', 'string'],
             'kind' => ['nullable', Rule::in(Repasse::KINDS)],
+            'destino' => ['nullable', Rule::in(Repasse::DESTINOS)],   // CV: recarga do cartão ou reembolso (24/09/2026)
             'deleted' => ['nullable', 'boolean'],
             'created_at' => ['nullable', 'date'],
         ]);
@@ -139,6 +140,9 @@ class RepasseController extends Controller
             'pedido_id' => $pedido->id,
             'confirmado_em' => now(),
             'confirmado_por' => $u->id,
+            /* 24/09/2026: pedido de recarga do cartão vira recarga recebida —
+               sem isto o valor cairia na coluna de reembolso da planilha. */
+            'destino' => $pedido->destino,
         ])->save();
         $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
 

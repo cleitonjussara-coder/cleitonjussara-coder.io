@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 246;
+const APP_BUILD = 247;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1594,6 +1594,19 @@ function _notificacoes() {
         sub: `${c.email || ''} · ${VIA[c.criado_via] || 'pelo app'}${c.created_at ? ' em ' + fmtDataBR(String(c.created_at).slice(0, 10)) : ''} · papel: ${PAPEL_NOME[c.role] || c.role || 'colaborador'}`,
       }));
   }
+  /* Cartão corporativo acabando (24/09/2026): quem recarrega é o gestor, e
+     sem saldo o colaborador passa a pagar do bolso. O id carrega a faixa de
+     centenas, então o aviso volta se o saldo cair mais. */
+  if (_ehGestorOuAdmin()) {
+    _equipeCartaoBaixo().forEach(c => {
+      const id = `cartao:${c.id}:${Math.floor(c.saldo / 100)}`;
+      out.push({
+        id, tipo: 'cartao', userId: c.id,
+        titulo: `💳 Cartão de ${c.nome} com ${brl(c.saldo)}`,
+        sub: `Abaixo de ${brl(CARTAO_SALDO_MINIMO)} — faça a recarga antes que ele passe a pagar do bolso.`,
+      });
+    });
+  }
   const vistos = _notifVistos();
   /* Saldo devedor acima do limite (22/09/2026): a empresa deve mais de
      R$ 1.500 a alguém. O id carrega a faixa do valor (centenas), então o
@@ -1640,11 +1653,14 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'novo' ? `<div class="notif-acoes">
+        ${it.tipo === 'cartao' ? `<div class="notif-acoes">
+          ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
+        </div>` : it.tipo === 'novo' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
           <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
         </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
@@ -2072,12 +2088,26 @@ function renderInicio() {
           <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
         </span>
       </button>
-      ${_ehContabilidade() ? '' : `
+      ${_ehContabilidade() ? '' : _ehCV() ? `
+      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'reembolso')">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">👛</span>
+          <span class="pnl-tit">Reembolso</span>
+          <span class="pnl-sub">o que você pagou do bolso · e o que já recebeu</span>
+        </span>
+      </button>
+      <button class="pnl pnl-grande" onclick="abrirFormRepasse('requested', null, null, 'recarga')">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">💳</span>
+          <span class="pnl-tit">Recarga do cartão</span>
+          <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'pedir recarga ao gestor'}</span>
+        </span>
+      </button>` : `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse()">
         <span class="pnl-conteudo">
           <span class="pnl-ico">💸</span>
-          <span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span>
-          <span class="pnl-sub">${_ehCV() ? 'pagou do bolso · e o recebido' : 'recebido ou a pedir (PIX)'}</span>
+          <span class="pnl-tit">Repasse</span>
+          <span class="pnl-sub">recebido ou a pedir (PIX)</span>
         </span>
       </button>`}
     </div>
@@ -3370,14 +3400,25 @@ function renderSaldo() {
     const bolsoMes = soma(ns.filter(n => n.pagamento === 'reembolso'));
     const cartaoAno = soma(nsAno.filter(semReemb));
     const rsAno = repasses.filter(r => !r.deleted && r.ano === filAno);
-    const regAno = soma(rsAno.filter(_repasseEhPedido));
-    const recAno = soma(rsAno.filter(_repasseEhRecebido));
+    /* 24/09/2026: recarga do cartão não é reembolso — sem separar, o quadro
+       de reembolsos dizia que a pessoa já tinha recebido o que na verdade
+       foi para o cartão. */
+    const soReemb = r => r.destino !== 'recarga';
+    const regAno = soma(rsAno.filter(r => _repasseEhPedido(r) && soReemb(r)));
+    const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soReemb(r)));
+    const saldoCartao = _saldoCartao();
     const aReceber = regAno - recAno;
     const cat = f => soma(ns.filter(n => semReemb(n) && f(n)));
     cardsCV = `
   <div class="saldo-grid">
+    <div class="saldo-card ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? 'neg' : ''}">
+      <div class="saldo-label">💳 Saldo do cartão ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? '<span class="dl dl-ruim" style="margin-left:6px">Acabando</span>' : ''}</div>
+      <div class="saldo-val">${brl(saldoCartao || 0)}</div>
+      <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
+      ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Peça a recarga pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
+    </div>
     <div class="saldo-card">
-      <div class="saldo-label">💳 Cartão corporativo · ${MESES[filMes-1]}</div>
+      <div class="saldo-label">💳 Gasto no cartão · ${MESES[filMes-1]}</div>
       <div class="saldo-val">${brl(cartaoMes)}</div>
       <div class="saldo-detail"><span>No ano <b>${brl(cartaoAno)}</b></span><span>Do bolso no mês <b>${brl(bolsoMes)}</b></span></div>
       <div class="sub-breakdown">
@@ -5967,12 +6008,26 @@ function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 let _repasseModo = 'received';
 
 function _repasseTitulo(modo) {
+  /* 24/09/2026: no CV há dois caminhos — a recarga do cartão pré-pago e o
+     reembolso do que saiu do bolso. Chamar tudo de reembolso fazia o pedido
+     de recarga abrir com o título errado. */
+  if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Pedir recarga do cartão' : 'Registrar recarga do cartão';
   /* colaborador CV (21/09/2026): o dinheiro que circula é REEMBOLSO do que saiu do bolso */
   if (_ehCV()) return modo === 'requested' ? 'Registrar reembolso (a receber)' : 'Registrar reembolso recebido';
   return modo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido';
 }
 
+/* Título do cabeçalho conforme o passo (23/09/2026): no passo 1 a pessoa
+   ainda vai ESCOLHER entre registrar e solicitar — dizer só "Registrar
+   repasse recebido" ali escondia metade da tela. */
+function _repasseTituloCabecalho() {
+  if (_repasseAlvo) return 'Lançar repasse para o colaborador';
+  if (_repassePasso === 1) return _ehCV() ? 'Registrar ou solicitar reembolso' : 'Registrar ou solicitar repasse';
+  return _repasseTitulo(_repasseModo);
+}
+
 function _repassePlaceholder(modo) {
+  if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Ex: cartão sem saldo para abastecer amanhã' : 'Ex: recarga feita pelo gestor';
   if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: reembolso recebido do gestor';
   return modo === 'requested'
     ? 'Ex: combustível, hospedagem ou custo do mês'
@@ -5980,6 +6035,9 @@ function _repassePlaceholder(modo) {
 }
 
 function _repasseHelpText(modo) {
+  if (_repasseDestino === 'recarga') return modo === 'requested'
+    ? 'O gestor recebe o pedido e faz a transferência para o cartão. O valor entra no saldo do cartão quando ele marcar como pago.'
+    : 'Registra uma recarga que já entrou no cartão; soma ao saldo do cartão.';
   if (_ehCV()) return modo === 'requested'
     ? 'O gestor recebe a notificação (e o e-mail). Quando marcar como pago, o reembolso recebido é registrado para você e abate deste valor.'
     : 'Registra um reembolso que já caiu na sua conta; abate dos reembolsos registrados.';
@@ -6025,9 +6083,10 @@ let _modoEscolhido = false;
 
 function irParaPassoRepasse(n) {
   _repassePasso = n;
+  { const t = $('rep-title'); if (t) t.textContent = _repasseTituloCabecalho(); }
   const p1 = $('rep-passo-1'), p2 = $('rep-passo-2'), p3 = $('rep-dados');
   if (p1) p1.hidden = n !== 1;
-  if (p2) p2.hidden = n !== 2;
+  if (p2) p2.hidden = n !== 2 || _repasseDestino === 'recarga';
   if (p3) p3.hidden = n !== 3;
   const salvar = $('rep-btn-salvar');
   if (salvar) salvar.style.display = n === 3 ? '' : 'none';
@@ -6073,6 +6132,50 @@ function setRepasseModo(modo) {
 /* Quando o gestor lança para outra pessoa: { id, nome }. Null = para si. */
 let _repasseAlvo = null;
 
+/* Regime CV (24/09/2026): o dinheiro anda por dois caminhos e a planilha da
+   empresa os guarda em colunas diferentes —
+     recarga   → cartão pré-pago Alelo, de onde saem os gastos do cartão;
+     reembolso → conta do colaborador, pelo que ele pagou do bolso.
+   Para quem é RDM/RDA fica null: lá a distinção não existe. */
+let _repasseDestino = null;
+const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
+
+/* Saldo do cartão pré-pago: recargas confirmadas menos as notas pagas nele.
+   Vale só para quem é CV; para os demais devolve null (24/09/2026). */
+function _saldoCartaoDe(ns, rs, ehCv) {
+  if (!ehCv) return null;
+  const soma = arr => arr.reduce((a, x) => a + (Number(x.valor) || 0), 0);
+  const recargas = rs.filter(r => !r.deleted && r.destino === 'recarga' && _repasseEhRecebido(r));
+  const noCartao = ns.filter(n => !n.deleted && n.pagamento !== 'reembolso');
+  return soma(recargas) - soma(noCartao);
+}
+
+function _saldoCartao() {
+  if (!_ehCV()) return null;
+  return _saldoCartaoDe(notas, repasses, true);
+}
+
+/* Colaboradores CV com o cartão acabando — é o gestor quem faz a recarga. */
+function _equipeCartaoBaixo() {
+  if (!_ehGestorOuAdmin()) return [];
+  const porUser = {};
+  const junta = (arr, campo) => arr.forEach(o => {
+    if (!o || o.deleted || !o.user_id) return;
+    (porUser[o.user_id] = porUser[o.user_id] || { ns: [], rs: [] })[campo].push(o);
+  });
+  junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs');
+  if (user?.id) porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) };
+  return Object.entries(porUser)
+    .map(([id, d]) => {
+      const quem = id === user?.id ? user : equipePorId[id];
+      if (!quem || !_ehCV(quem)) return null;
+      const saldo = _saldoCartaoDe(d.ns, d.rs, true);
+      return { id, nome: (quem?.nome || quem?.email || 'Colaborador'), saldo };
+    })
+    .filter(c => c && c.saldo < CARTAO_SALDO_MINIMO)
+    .sort((a, b) => a.saldo - b.saldo);
+}
+
 /* Sub-abas RDA/RDM do repasse (23/09/2026, pedido do Cleiton: "para não
    esquecer de selecionar a aba correta"). O valor mora no input escondido
    #rep-tipo, que é o que salvarRepasse lê — vazio significa "ainda não
@@ -6086,22 +6189,26 @@ function setRepasseTipo(tipo) {
   });
 }
 
-function abrirFormRepasse(modo = null, pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
+function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
   /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
      e entra direto no saldo dele (não passa pela confirmação). */
   _repasseAlvo = alvo && alvo.id ? alvo : null;
+  _repasseDestino = _ehCV(_repasseAlvo ? equipePorId[_repasseAlvo.id] : undefined) ? (destino || 'reembolso') : null;
   if (_repasseAlvo) modo = 'received';
   setRepasseModo(modo || 'received');
   /* Começa no passo 1 quando nada foi decidido ainda (painel do Início). Quem
      já chega com o modo (botões do saldo, lançamento do gestor) entra no 2, e
      o reembolso vindo de uma nota, que já traz modo e aba, entra no 3. */
-  _repassePassoMin = pre?.tipo ? 3 : (modo || _repasseAlvo) ? 2 : 1;
+  /* A recarga do cartão não tem categoria na planilha (a coluna do extrato
+     tem só DATA e R$), então o passo das abas não faz sentido para ela. */
+  if (_repasseDestino === 'recarga') setRepasseTipo('RDM');
+  _repassePassoMin = (pre?.tipo || _repasseDestino === 'recarga') ? 3 : (modo || _repasseAlvo) ? 2 : 1;
   _modoEscolhido = _repassePassoMin > 1;
   _atualizarUiRepasse();
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
-  setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
+  if (_repasseDestino !== 'recarga') setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
   irParaPassoRepasse(_repassePassoMin);
   $('rep-data').value  = pre?.data || hoje();
   $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';
@@ -6110,7 +6217,7 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null) {   // pre = { t
   $('rep-ano').value   = pre?.data ? Number(pre.data.slice(0, 4)) : filAno;
   {
     const t = $('rep-title'), aviso = $('rep-alvo');
-    if (t) t.textContent = _repasseAlvo ? 'Lançar repasse para o colaborador' : (_repasseModo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido');
+    if (t) t.textContent = _repasseTituloCabecalho();
     if (aviso) {
       aviso.style.display = _repasseAlvo ? '' : 'none';
       aviso.innerHTML = _repasseAlvo
@@ -6164,6 +6271,7 @@ async function _salvarRepasseInterno() {
     ano,
     descricao: $('rep-desc').value.trim() || null,
     kind,
+    destino: _repasseDestino,
     email_sent: false,
   };
   /* 23/09/2026: repasse do gestor PARA OUTRO vai direto ao servidor — no
