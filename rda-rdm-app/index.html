@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=241">
+  <link rel="manifest" href="manifest.json?v=242">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1607,6 +1607,22 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   #barra-usuario .ini-ola-acoes{gap:8px;margin-top:2px}
 }
 
+/* Início: painel de Despesas e painel de Repasse (23/09/2026, pedido do
+   Cleiton: o repasse saiu de dentro de Despesas e virou entrada própria). */
+.ini-paineis{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:900px){ .ini-paineis{grid-template-columns:1fr 1fr} }
+/* Sub-abas RDA/RDM do repasse (23/09/2026) */
+.rep-abas{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rep-aba{display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 8px;min-height:84px;
+  justify-content:center;border-radius:12px;cursor:pointer;font:inherit;
+  border:2px solid var(--borda,#cfe0d5);background:var(--surface);color:var(--text)}
+.rep-aba-ico{font-size:26px;line-height:1}
+.rep-aba-tit{font-size:18px;font-weight:800;letter-spacing:.3px}
+.rep-aba-sub{font-size:12.5px;opacity:.75}
+.rep-aba[aria-pressed="true"]{color:#fff;border-color:transparent;box-shadow:0 4px 10px rgba(0,0,0,.25)}
+.rep-aba-RDA[aria-pressed="true"]{background:#0e7c86}
+.rep-aba-RDM[aria-pressed="true"]{background:#c2660d}
+.rep-aba:active{transform:scale(.98)}
 </style>
 </head>
 <body>
@@ -1632,7 +1648,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=241" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=242" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1972,18 +1988,26 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <div class="form-body">
     <div id="rep-alvo" class="nota-gestor-banner" style="display:none"></div>
     <div class="field" id="rep-modos">
-      <label class="lbl">Modo</label>
+      <label class="lbl">O que você quer fazer? *</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn btn-sm btn-primary" id="rep-mode-received" onclick="setRepasseModo('received')">Registrar recebido</button>
         <button type="button" class="btn btn-sm btn-outline" id="rep-mode-request" onclick="setRepasseModo('requested')">Solicitar repasse</button>
       </div>
     </div>
+    <!-- 23/09/2026: era um <select> que guardava a escolha anterior e deixava
+         RDM entrar como RDA em silêncio. Agora são duas sub-abas visíveis e
+         NENHUMA vem marcada: quem lança precisa escolher. -->
     <div class="field">
-      <label class="lbl">Tipo *</label>
-      <select class="inp" id="rep-tipo">
-        <option value="RDA">RDA</option>
-        <option value="RDM">RDM</option>
-      </select>
+      <label class="lbl">É de qual aba? *</label>
+      <input type="hidden" id="rep-tipo" value="">
+      <div class="rep-abas">
+        <button type="button" class="rep-aba rep-aba-RDA" id="rep-tipo-RDA" onclick="setRepasseTipo('RDA')">
+          <span class="rep-aba-ico">🍽️</span><span class="rep-aba-tit">RDA</span><span class="rep-aba-sub">alimentação</span>
+        </button>
+        <button type="button" class="rep-aba rep-aba-RDM" id="rep-tipo-RDM" onclick="setRepasseTipo('RDM')">
+          <span class="rep-aba-ico">💼</span><span class="rep-aba-tit">RDM</span><span class="rep-aba-sub">corporativas</span>
+        </button>
+      </div>
     </div>
     <div class="field-row">
       <div class="field">
@@ -2026,9 +2050,9 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       </ul>
       <p>Cada aba mostra, no cantinho, <b>quanto você já lançou nela no mês</b>. Toque na aba e ela <b>abre</b>, revelando as duas formas de lançar <b>dentro dela</b>: <b>📷 Nota pelo QR Code</b> e <b>📝 Nota sem QR</b>. Como a aba já está escolhida, o app não pergunta RDA/RDM de novo — vai direto para o comprovante (e, se o fornecedor parecer da outra aba, avisa ali com o botão <b>Trocar</b>). Tocar na aba aberta fecha de novo.</p>
       <ul>
-        <li>💸 <b>Repasse / Reembolso</b> — logo abaixo das abas: dinheiro que você recebeu ou precisa pedir.</li>
+        <li>💸 <b>Repasse / Reembolso</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p><b>📊 Resumo do mês (22/09/2026):</b> entre as abas e o Repasse ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
+      <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
       <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
       <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto, à direita) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
@@ -2402,25 +2426,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=241"></script>
-<script defer src="js/db.js?v=241"></script>
-<script defer src="js/nfce.js?v=241"></script>
-<script defer src="js/sefaz.js?v=241"></script>
-<script defer src="js/brasilapi.js?v=241"></script>
-<script defer src="js/ocr.js?v=241"></script>
-<script defer src="js/recorte.js?v=241"></script>
-<script defer src="js/excel.js?v=241"></script>
-<script defer src="js/gestor.js?v=241"></script>
-<script defer src="js/frota.js?v=241"></script>
-<script defer src="js/ponto.js?v=241"></script>
-<script defer src="js/arquivos.js?v=241"></script>
-<script defer src="js/gdrive.js?v=241"></script>
-<script defer src="js/app.js?v=241"></script>
+<script defer src="js/api.js?v=242"></script>
+<script defer src="js/db.js?v=242"></script>
+<script defer src="js/nfce.js?v=242"></script>
+<script defer src="js/sefaz.js?v=242"></script>
+<script defer src="js/brasilapi.js?v=242"></script>
+<script defer src="js/ocr.js?v=242"></script>
+<script defer src="js/recorte.js?v=242"></script>
+<script defer src="js/excel.js?v=242"></script>
+<script defer src="js/gestor.js?v=242"></script>
+<script defer src="js/frota.js?v=242"></script>
+<script defer src="js/ponto.js?v=242"></script>
+<script defer src="js/arquivos.js?v=242"></script>
+<script defer src="js/gdrive.js?v=242"></script>
+<script defer src="js/app.js?v=242"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=241').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=242').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

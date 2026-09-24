@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 241;
+const APP_BUILD = 242;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1994,7 +1994,7 @@ function renderDespesas() {
   <div class="db-container">
     <div class="ini-ola">
       <h2>🧾 Petermann – Despesas</h2>
-      <span>Notas RDA / RDM, repasses, painel e saldo</span>
+      <span>Notas RDA / RDM, painel e saldo</span>
     </div>
 
     ${_ehContabilidade() ? `
@@ -2002,10 +2002,7 @@ function renderDespesas() {
     <div class="ini-titulo">Escolha a aba e lance a nota</div>
     ${_abaCard('RDA')}
     ${_abaCard('RDM')}
-    ${_resumoHub()}
-    <button class="pnl pnl-atalho" style="margin-top:12px" onclick="abrirFormRepasse()">
-      <span class="pnl-conteudo"><span class="pnl-ico">💸</span><span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span><span class="pnl-sub">${_ehCV() ? 'pagou do bolso · e o recebido' : 'recebido ou a pedir (PIX)'}</span></span>
-    </button>`}
+    ${_resumoHub()}`}
 
     <div class="ini-titulo">Ir para</div>
     <div class="ini-ir">
@@ -2061,13 +2058,23 @@ function renderInicio() {
          tela com os três. 21/09/2026: virou "Petermann – Despesas" e passou a
          guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos — o
          Início ficou só com os módulos (Despesas, Frota, Ponto) e o Perfil. -->
-    <button class="pnl pnl-grande" onclick="switchView('despesas')">
-      <span class="pnl-conteudo">
-        <span class="pnl-ico">🧾</span>
-        <span class="pnl-tit">Petermann – Despesas</span>
-        <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota e repasse · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
-      </span>
-    </button>
+    <div class="ini-paineis">
+      <button class="pnl pnl-grande" onclick="switchView('despesas')">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">🧾</span>
+          <span class="pnl-tit">Petermann – Despesas</span>
+          <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
+        </span>
+      </button>
+      ${_ehContabilidade() ? '' : `
+      <button class="pnl pnl-grande" onclick="abrirFormRepasse()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">💸</span>
+          <span class="pnl-tit">${_ehCV() ? 'Reembolso' : 'Repasse'}</span>
+          <span class="pnl-sub">${_ehCV() ? 'pagou do bolso · e o recebido' : 'recebido ou a pedir (PIX)'}</span>
+        </span>
+      </button>`}
+    </div>
     ${!_ehContabilidade() && pendTotal ? `
     <div class="ini-dica" style="cursor:pointer" onclick="switchView('home')">⚠️ <b>${pendTotal} pendência${pendTotal === 1 ? '' : 's'}</b>: ${esc(pendTxt)} — toque para ver no Painel.</div>` : ''}
 
@@ -5996,6 +6003,19 @@ function setRepasseModo(modo) {
 /* Quando o gestor lança para outra pessoa: { id, nome }. Null = para si. */
 let _repasseAlvo = null;
 
+/* Sub-abas RDA/RDM do repasse (23/09/2026, pedido do Cleiton: "para não
+   esquecer de selecionar a aba correta"). O valor mora no input escondido
+   #rep-tipo, que é o que salvarRepasse lê — vazio significa "ainda não
+   escolheu", e o Salvar avisa. */
+function setRepasseTipo(tipo) {
+  const campo = $('rep-tipo');
+  if (campo) campo.value = tipo || '';
+  ['RDA', 'RDM'].forEach(t => {
+    const b = $('rep-tipo-' + t);
+    if (b) b.setAttribute('aria-pressed', String(t === tipo));
+  });
+}
+
 function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
   /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
      e entra direto no saldo dele (não passa pela confirmação). */
@@ -6005,7 +6025,7 @@ function abrirFormRepasse(modo = 'received', pre = null, alvo = null) {   // pre
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
-  $('rep-tipo').value  = pre?.tipo || 'RDA';
+  setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
   $('rep-data').value  = pre?.data || hoje();
   $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';
   $('rep-desc').value  = pre?.descricao || '';
@@ -6049,7 +6069,8 @@ async function _salvarRepasseInterno() {
   const tipo  = $('rep-tipo').value;
   const valor = parseFloat($('rep-valor').value);
   const data  = $('rep-data').value;
-  if (!tipo||!valor||!data) { toast('Preencha os campos','err'); return; }
+  if (!tipo) { toast('Escolha a aba: RDA ou RDM', 'err'); return; }
+  if (!valor||!data) { toast('Preencha os campos','err'); return; }
   const mes = parseInt($('rep-mes').value,10) || filMes;
   const ano = parseInt($('rep-ano').value,10) || filAno;
   const kind = _repasseModo === 'requested' ? 'requested' : 'received';
@@ -6093,6 +6114,7 @@ async function _salvarRepasseInterno() {
   fecharFormRepasse();
   await carregarDadosLocais();
   if (viewAtual === 'home') renderHome();
+  if (viewAtual === 'inicio') renderInicio();
   else renderSaldo();
   if (kind === 'requested') {
     toast(_ehCV() ? `Reembolso ${tipo} de ${brl(valor)} registrado — o gestor foi notificado.` : `Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
