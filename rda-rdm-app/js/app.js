@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 262;
+const APP_BUILD = 263;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2328,7 +2328,10 @@ function renderInicio() {
   const noFuturo = notas.filter(n => !n.deleted && _dataNoFuturo(n.data))
     .concat(repasses.filter(r => !r.deleted && _dataNoFuturo(r.data)));
   const dups = A.ns.filter(n => _dupMapa.has(n.id));
-  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length + semDoc.length + noFuturo.length;
+  /* 24/09/2026: a chamada conta NOTAS, não problemas — uma nota pode ter
+     dois. É a mesma lista que o toque abre, então os números batem. */
+  const _pendNotas = _notasComPendencia();
+  const pendTotal = _pendNotas.length;
   const pendTxt = [
     pend.length ? `${pend.length} aguardando envio` : null,
     semAnexo.length ? `${semAnexo.length} sem anexo` : null,
@@ -2388,7 +2391,9 @@ function renderInicio() {
       </button>`}
     </div>
     ${!_ehContabilidade() && pendTotal ? `
-    <div class="ini-dica" style="cursor:pointer" onclick="switchView('home')">⚠️ <b>${pendTotal} pendência${pendTotal === 1 ? '' : 's'}</b>: ${esc(pendTxt)} — toque para ver no Painel.</div>` : ''}
+    <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
+      ? `⚠️ <b>1 nota para corrigir</b>: ${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
+      : `⚠️ <b>${_pendNotas.length} notas para corrigir</b>: ${esc(pendTxt)} — <b>toque para ver e corrigir</b>.`}</div>` : ''}
 
     <!-- 22/09/2026: o Início ficou com o painel de Despesas e os atalhos.
          Os cartões grandes de Frota/Ponto e os números do mês saíram daqui
@@ -3459,6 +3464,61 @@ function renderNotas() {
 /* Falta algo que a planilha da empresa pede? Ela tem, em cada categoria,
    DATA · CNPJ DA NOTA · Nº DA NOTA · R$. Sem CNPJ o servidor escreve a razão
    social no lugar, e sem número a célula fica vazia (24/09/2026). */
+/* ═══════════════════════════════════════════════════════════
+   PENDÊNCIAS — o que falta em cada lançamento (24/09/2026)
+   Antes o Início dizia só "1 sem CNPJ ou nº da nota" e mandava para o
+   Painel. Pedido do Cleiton: dizer QUAL nota e o que falta NELA, e abrir a
+   nota para corrigir ali mesmo.
+═══════════════════════════════════════════════════════════ */
+function _motivosDaNota(n) {
+  const motivos = [];
+  if (n.sync_status === 'failed' || n.synced === false) motivos.push('aguardando envio');
+  if (!n.foto_path && !n.foto_local) motivos.push('sem anexo');
+  if (!(Number(n.valor) > 0)) motivos.push('sem valor');
+  const digitos = _soDigitos(n.cnpj);
+  if (digitos.length !== 14) motivos.push('sem CNPJ');
+  if (!String(n.numero || '').trim()) motivos.push('sem nº da nota');
+  if (_dataNoFuturo(n.data)) motivos.push('data no futuro');
+  if (_dupMapa.has(n.id)) motivos.push('possível duplicata');
+
+  return motivos;
+}
+
+/* Notas com alguma pendência, da mais recente para a mais antiga. */
+function _notasComPendencia() {
+  return notas
+    .filter(n => !n.deleted)
+    .map(n => ({ nota: n, motivos: _motivosDaNota(n) }))
+    .filter(x => x.motivos.length)
+    .sort((a, b) => String(b.nota.data || '').localeCompare(String(a.nota.data || '')));
+}
+
+function abrirPendencias() {
+  const lista = _notasComPendencia();
+  if (!lista.length) { toast('Nenhuma pendência 🎉'); return; }
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'pend-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:520px">
+      <div class="modal-hd"><h3>⚠️ O que falta corrigir</h3>
+        <button class="btn-icon-sm" onclick="document.getElementById('pend-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        ${lista.map(({ nota: n, motivos }) => `
+          <div class="pend-item">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
+              <div style="font-size:13.5px;opacity:.8">${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}</div>
+              <div class="pend-motivos">${motivos.map(m => `<span class="pend-tag">${esc(m)}</span>`).join('')}</div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+}
+
 function _notaIncompletaParaPlanilha(n) {
   if (!n || n.deleted) return false;
   const digitos = String(n.cnpj || '').replace(new RegExp("\\D", 'g'), '');
