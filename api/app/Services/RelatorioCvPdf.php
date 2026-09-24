@@ -38,7 +38,13 @@ class RelatorioCvPdf
            Lançamento antigo, sem destino, conta como reembolso. */
         $ehCv = $c->ehCV();
         $recargas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'recarga') : $reps;
-        $reembolsos = $ehCv ? $reps->reject(fn ($r) => $r->destino === 'recarga') : $reps;
+        $ajudas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'ajuda') : collect();
+        $reembolsos = $ehCv
+            ? $reps->reject(fn ($r) => in_array($r->destino, ['recarga', 'ajuda'], true))
+            : $reps;
+        /* gasto pago com a ajuda de custos tem aba própria na planilha */
+        $notasAjuda = $ehCv ? $notas->filter(fn ($n) => $n->pagamento === 'ajuda') : collect();
+        $gastoAjuda = (float) $notasAjuda->sum('valor');
 
         /* agrupa: mês → categoria → notas */
         $grade = [];
@@ -47,6 +53,7 @@ class RelatorioCvPdf
         }
         ksort($grade);
         $gastoTotal = (float) $notas->sum('valor');
+        $gastoCartao = $ehCv ? $gastoTotal - $gastoAjuda : $gastoTotal;
         $recebido = (float) $reps->sum('valor');
         $nome = mb_strtoupper($c->nome ?: $c->email);
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -72,22 +79,25 @@ class RelatorioCvPdf
         };
         $extratoRecarga = $linhas($recargas);
         $extratoReembolso = $linhas($reembolsos);
+        $extratoAjuda = $linhas($ajudas);
         $totalRecarga = (float) $recargas->sum('valor');
         $totalReembolso = (float) $reembolsos->sum('valor');
+        $totalAjuda = (float) $ajudas->sum('valor');
         $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'
             .'<table class="resumo"><tr>'
             .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span></td>'
-            .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl(0).'</span></td>'
+            .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>'
             .'<td><b>REEMBOLSO DE:</b><br><span class="big">'.$brl($gastoTotal - $recebido).'</span></td></tr><tr>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE C.V.</b><br><span class="big">'.$brl($gastoTotal).'</span></td>'
-            .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl(0).'</span></td>'
+            .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>'
             .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span></td></tr><tr>'
             .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.(($ehCv ? $totalRecarga : $recebido) - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl(($ehCv ? $totalRecarga : $recebido) - $gastoTotal).'</span></td>'
-            .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big">'.$brl(0).'</span></td><td></td></tr></table>'
+            .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
             .'<table class="tres"><tr><td class="col">'
             .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/RECARGA ALELO' : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
-            .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr><tr><td colspan="2" class="vazio">—</td></tr><tr class="tot"><td>TOTAL</td><td class="num">'.$brl(0).'</td></tr></table></td>'
+            .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
             .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
 

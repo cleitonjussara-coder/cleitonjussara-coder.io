@@ -25,7 +25,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  * BANCO DE DADOS: repasses recebidos no "EXTRATO DE VALOR RECEBIDO" (B15:C94).
  * CABEÇALHO: B5 funcionário, B6 safra, I6 ano.
  * CV REEMBOLSO recebe os mesmos lançamentos da aba do cartão (RDA+RDM unificados).
- * AJUDA DE CUSTOS fica como está (sem fonte de dados no app).
+ * AJUDA DE CUSTOS (24/09/2026): grade única B:E, 12 blocos de 31 linhas,
+ * alimentada pelas notas com pagamento=ajuda; o recebido vai para F/G do
+ * BANCO DE DADOS (12 linhas, 15 a 26).
  */
 class RelatorioCv
 {
@@ -37,6 +39,14 @@ class RelatorioCv
 
     /** coluna inicial de cada categoria (A=1) */
     private const COL = ['abastecimento' => 1, 'hospedagem' => 5, 'alimentacao' => 9, 'outros' => 13];
+
+    /** AJUDA DE CUSTOS (24/09/2026): grade única, com o rótulo do mês
+     *  mesclado na coluna A ao lado das próprias linhas de lançamento.
+     *  [primeira linha de dados, linha do TOTAL DE GASTOS] */
+    private const BLOCOS_AJUDA = [
+        1 => [5, 36], 2 => [39, 70], 3 => [73, 104], 4 => [107, 138], 5 => [141, 172], 6 => [175, 206],
+        7 => [209, 240], 8 => [243, 274], 9 => [277, 308], 10 => [311, 342], 11 => [345, 376], 12 => [379, 410],
+    ];
 
     public function modelo(): string
     {
@@ -64,7 +74,13 @@ class RelatorioCv
              grades recebem os MESMOS lançamentos. */
         if ($c->ehCV()) {
             $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
-            $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
+            $daAjuda = $notas->filter(fn (Nota $n) => $n->pagamento === 'ajuda');
+            /* o que não é bolso nem ajuda saiu do cartão — inclusive a nota
+               antiga, gravada antes de existir a coluna pagamento */
+            $noCartao = $notas->reject(fn (Nota $n) => in_array($n->pagamento, ['reembolso', 'ajuda'], true));
+            if ($ws = $ss->getSheetByName('AJUDA DE CUSTOS')) {
+                $this->preencherAjuda($ws, $daAjuda);
+            }
             if ($ws = $this->abaDoCartao($ss)) {
                 $this->preencherGrade($ws, $noCartao);
             }
@@ -93,9 +109,19 @@ class RelatorioCv
            relatório o tratava antes desta separação. */
         $linhaExtrato = 15;      // B/C — recarga
         $linhaReembolso = 15;    // I/J — reembolso
+        $linhaAjuda = 15;        // F/G — ajuda de custos (só 12 linhas: G27 soma G15:G26)
         foreach ($reps as $r) {
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
             $ehRecarga = $c->ehCV() && $r->destino === 'recarga';
+            $ehAjuda = $c->ehCV() && $r->destino === 'ajuda';
+            if ($ehAjuda) {
+                if ($linhaAjuda <= 26) {
+                    $bd->setCellValue([6, $linhaAjuda], $dt);
+                    $bd->setCellValue([7, $linhaAjuda], (float) $r->valor);
+                    $linhaAjuda++;
+                }
+                continue;        // não é recarga nem reembolso
+            }
             if (! $c->ehCV() || $ehRecarga) {
                 if ($linhaExtrato <= 94) {
                     $bd->setCellValue([2, $linhaExtrato], $dt);
@@ -167,6 +193,43 @@ class RelatorioCv
         }
 
         return null;
+    }
+
+    /**
+     * AJUDA DE CUSTOS: uma grade por mês, com DATA, CNPJ, Nº e R$ nas
+     * colunas B a E. A planilha traz só o bloco de ABASTECIMENTO — é nele
+     * que entra tudo o que foi pago com a ajuda de custos (24/09/2026).
+     */
+    private function preencherAjuda(PhpOfficePhpSpreadsheetWorksheetWorksheet $ws, $notas): void
+    {
+        $prox = [];
+        $fora = 0;
+        foreach ($notas as $n) {
+            $mes = (int) $n->mes;
+            if (! isset(self::BLOCOS_AJUDA[$mes])) {
+                continue;
+            }
+            [$ini, $tot] = self::BLOCOS_AJUDA[$mes];
+            $row = $prox[$mes] ?? $ini;
+            if ($row >= $tot) {              // bloco cheio: não invade o TOTAL
+                $fora++;
+                continue;
+            }
+            $ws->setCellValue([2, $row], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
+            if ($n->cnpj && ctype_digit((string) $n->cnpj) && strlen((string) $n->cnpj) === 14) {
+                $ws->setCellValue([3, $row], (int) $n->cnpj);
+            } elseif ($n->razao_social) {
+                $ws->setCellValue([3, $row], $n->razao_social);
+            }
+            if ($n->numero) {
+                $ws->setCellValue([4, $row], is_numeric($n->numero) ? (int) $n->numero : $n->numero);
+            }
+            $ws->setCellValue([5, $row], (float) $n->valor);
+            $prox[$mes] = $row + 1;
+        }
+        if ($fora) {
+            $ws->setCellValue('B412', "ATENÇÃO: {$fora} nota(s) de ajuda de custos não couberam no bloco do mês.");
+        }
     }
 
     private function categoria(Nota $n): string

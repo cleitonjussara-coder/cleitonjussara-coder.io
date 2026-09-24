@@ -13,7 +13,11 @@ class Nota extends Model
     public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Outros'];
 
     /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; reembolso = do próprio bolso */
-    public const PAGAMENTOS = ['cv', 'reembolso'];
+    /** Com que dinheiro a despesa foi paga, no regime de cartão (CV):
+     *  cv        → cartão corporativo Alelo (aba CV ALELO)
+     *  reembolso → bolso do colaborador, a devolver (aba CV REEMBOLSO)
+     *  ajuda     → ajuda de custos recebida (aba AJUDA DE CUSTOS, 24/09/2026) */
+    public const PAGAMENTOS = ['cv', 'reembolso', 'ajuda'];
 
     /** Único consumidor aceito na nota, além de nenhum (24/09/2026):
      *  o CNPJ da Petermann & Morais. Nota no CPF de terceiro não presta
