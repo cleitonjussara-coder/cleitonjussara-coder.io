@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 244;
+const APP_BUILD = 245;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1536,6 +1536,7 @@ function _instalarPuxarParaAtualizar() {
       if (sb && user && navigator.onLine) { await DB.sync(sb, user.id); }
       await carregarDadosLocais();
       navigator.serviceWorker?.getRegistration?.().then(r => r?.update()).catch(() => {});
+      verificarVersao().catch(() => {});
       switchView(viewAtual);
       toast(navigator.onLine ? 'Atualizado ✅' : 'Sem internet — mostrando o que está no aparelho', navigator.onLine ? 'ok' : 'err');
     } catch (e) { toast('Não atualizou: ' + (e.message || 'erro'), 'err'); }
@@ -6227,8 +6228,76 @@ async function exportSheets() {
 }
 
 /* ── Boot ────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════
+   VIGIA DE VERSÃO (24/09/2026)
+   Até aqui a atualização dependia de a pessoa puxar a tela para baixo. Se
+   ela deixasse o app aberto, podia passar o dia numa versão antiga — e no
+   dia 23/09 foram dez builds. Agora o app pergunta ao servidor, de tempos
+   em tempos, qual é o build publicado; achando um mais novo, limpa o cache
+   e recarrega sozinho. Se houver formulário aberto, não interrompe: mostra
+   um aviso com o botão Atualizar e espera.
+═══════════════════════════════════════════════════════════ */
+const VERSAO_INTERVALO_MS = 20 * 60 * 1000;
+
+/* O build publicado vem do próprio sw.js (petermann-vNNN), que muda a cada
+   versão — assim não há um quarto marcador de build para esquecer. */
+async function _buildPublicado() {
+  const r = await fetch('sw.js?nc=' + Date.now(), { cache: 'no-store' });
+  if (!r.ok) return null;
+  const m = (await r.text()).match(new RegExp("petermann-v(" + "\\d" + "+)"));
+  return m ? Number(m[1]) : null;
+}
+
+/* Recarregar no meio de um lançamento apagaria o que a pessoa digitou. */
+function _momentoBomParaRecarregar() {
+  if (_salvandoRepasse || window._salvandoNota) return false;
+  const abertos = [...document.querySelectorAll('.full-overlay, .modal-overlay')]
+    .filter(e => getComputedStyle(e).display !== 'none' && !e.classList.contains('fechado'));
+  return abertos.length === 0;
+}
+
+async function _aplicarAtualizacao() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    if (reg) await reg.update();
+    if (window.caches) {
+      const chaves = await caches.keys();
+      await Promise.all(chaves.map(k => caches.delete(k)));
+    }
+  } catch (_) {}
+  location.reload();
+}
+
+function _avisarVersaoNova(build) {
+  if ($('aviso-versao')) return;
+  const d = document.createElement('div');
+  d.id = 'aviso-versao';
+  d.className = 'aviso-versao';
+  d.innerHTML = `<span>✨ Versão nova do app (${build}) disponível.</span>
+    <button class="btn btn-sm btn-primary" onclick="_aplicarAtualizacao()">Atualizar agora</button>`;
+  document.body.appendChild(d);
+}
+
+async function verificarVersao() {
+  if (!navigator.onLine) return;
+  let publicado = null;
+  try { publicado = await _buildPublicado(); } catch (_) { return; }
+  if (!publicado || publicado <= APP_BUILD) return;
+  /* Uma tentativa automática por versão: se depois de recarregar o build
+     continuar velho (cache travado, arquivo pela metade), não entra em
+     laço — passa a pedir o toque da pessoa. */
+  let tentado = 0;
+  try { tentado = Number(sessionStorage.getItem('build-tentado') || 0); } catch (_) {}
+  if (tentado === publicado || !_momentoBomParaRecarregar()) { _avisarVersaoNova(publicado); return; }
+  try { sessionStorage.setItem('build-tentado', String(publicado)); } catch (_) {}
+  await _aplicarAtualizacao();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   init();
+  setTimeout(verificarVersao, 4000);
+  setInterval(verificarVersao, VERSAO_INTERVALO_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
   renderAuth('login');
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') fecharFotoViewer();

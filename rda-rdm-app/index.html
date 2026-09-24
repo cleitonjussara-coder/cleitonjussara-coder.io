@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=244">
+  <link rel="manifest" href="manifest.json?v=245">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1643,6 +1643,12 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
    três passos do repasse apareciam empilhados na mesma tela. Normalização
    que faltava — vale para qualquer elemento com hidden. */
 [hidden]{display:none !important}
+/* Aviso de versão nova, quando não dá para recarregar na hora (24/09/2026) */
+.aviso-versao{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:12px 14px;border-radius:12px;background:#0f6b34;color:#eef9f0;font-size:15.5px;
+  box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.aviso-versao .btn{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -1668,7 +1674,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=244" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=245" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2073,6 +2079,11 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <div class="form-body">
 
     <div class="ajuda-sec">
+      <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>
+      <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente e de 20 em 20 minutos, se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e a troca só acontece quando você tocar. O número da versão fica no <b>Perfil</b>.</p>
+    </div>
+
+    <div class="ajuda-sec">
       <h4>🏠 Tela Início — por onde tudo começa</h4>
       <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Petermann – Despesas</b> reúne tudo de despesas. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
       <ul>
@@ -2460,25 +2471,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=244"></script>
-<script defer src="js/db.js?v=244"></script>
-<script defer src="js/nfce.js?v=244"></script>
-<script defer src="js/sefaz.js?v=244"></script>
-<script defer src="js/brasilapi.js?v=244"></script>
-<script defer src="js/ocr.js?v=244"></script>
-<script defer src="js/recorte.js?v=244"></script>
-<script defer src="js/excel.js?v=244"></script>
-<script defer src="js/gestor.js?v=244"></script>
-<script defer src="js/frota.js?v=244"></script>
-<script defer src="js/ponto.js?v=244"></script>
-<script defer src="js/arquivos.js?v=244"></script>
-<script defer src="js/gdrive.js?v=244"></script>
-<script defer src="js/app.js?v=244"></script>
+<script defer src="js/api.js?v=245"></script>
+<script defer src="js/db.js?v=245"></script>
+<script defer src="js/nfce.js?v=245"></script>
+<script defer src="js/sefaz.js?v=245"></script>
+<script defer src="js/brasilapi.js?v=245"></script>
+<script defer src="js/ocr.js?v=245"></script>
+<script defer src="js/recorte.js?v=245"></script>
+<script defer src="js/excel.js?v=245"></script>
+<script defer src="js/gestor.js?v=245"></script>
+<script defer src="js/frota.js?v=245"></script>
+<script defer src="js/ponto.js?v=245"></script>
+<script defer src="js/arquivos.js?v=245"></script>
+<script defer src="js/gdrive.js?v=245"></script>
+<script defer src="js/app.js?v=245"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=244').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=245').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
