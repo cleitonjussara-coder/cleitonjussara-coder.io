@@ -237,6 +237,9 @@ window.Gestor = (() => {
       ]);
       if (!colab) { fechar(); return; }
       const notas = ns || [], reps = rs || [];
+      /* 24/09/2026: o app precisa achar o repasse pelo id para corrigir ou
+         apagar — a ficha é quem tem a lista mais fresca. */
+      window._repassesDaFicha = reps;
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
       const recebido = r => !r.kind || r.kind === 'received';
       const g = t => soma(notas.filter(n => n.tipo === t));
@@ -358,6 +361,11 @@ window.Gestor = (() => {
               <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : x.atendido_em ? 'pedido pago ✅' : 'pedido pendente'}</div>
             </div>
             <span class="rep-val cdet-rep-val">${brl(x.valor)}</span>
+            ${podeEditar ? `
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon-sm" title="Corrigir este repasse" onclick="editarRepasseDeOutro('${x.id}')">✏️</button>
+              <button class="btn-icon-sm danger" title="Excluir este repasse" onclick="excluirRepasseDeOutro('${x.id}')">🗑</button>
+            </div>` : ''}
           </div>`).join('')}</div>`;
       }
 

@@ -164,8 +164,7 @@ class NotaController extends Controller
     public function corrigirTipo(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta');
-        abort_unless($u->gerencia(), 403, 'Só gestor ou admin corrige o grupo de uma nota');
+        abort_unless($u->gerencia() || $u->soLeitura(), 403, 'Só gestor, admin ou contabilidade corrige o grupo de uma nota');
 
         $d = $r->validate([
             'tipo' => ['required', Rule::in(Nota::TIPOS)],
@@ -197,7 +196,9 @@ class NotaController extends Controller
     {
         $u = $r->user();
         $nota = Nota::findOrFail($id);
-        abort_unless($nota->user_id === $u->id || $u->ehAdmin(), 403, 'Só o dono ou o admin apagam em definitivo');
+        /* 24/09/2026: contabilidade entra aqui junto do admin, a pedido do
+           Cleiton — quem fecha o mês precisa poder tirar o lançamento errado. */
+        abort_unless($nota->user_id === $u->id || $u->ehAdmin() || $u->soLeitura(), 403, 'Só o dono, o admin ou a contabilidade apagam em definitivo');
 
         $this->fotos->apagarTodasVersoes($nota);
         $nota->delete();
@@ -319,7 +320,10 @@ class NotaController extends Controller
 
     private function podeGravar(Colaborador $u, string $donoId): void
     {
-        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança notas');
-        abort_unless($donoId === $u->id || $u->gerencia(), 403, 'Sem permissão para esta nota');
+        /* 24/09/2026: a contabilidade passa a poder CORRIGIR e APAGAR nota de
+           qualquer colaborador — é ela que fecha o mês e acha o erro. Continua
+           sem poder LANÇAR nota nova em nome de outra pessoa: para isso o
+           registro tem de nascer com quem gastou. */
+        abort_unless($donoId === $u->id || $u->gerencia() || $u->soLeitura(), 403, 'Sem permissão para esta nota');
     }
 }

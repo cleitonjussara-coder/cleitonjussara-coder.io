@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=256">
+  <link rel="manifest" href="manifest.json?v=257">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1699,7 +1699,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=256" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=257" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2145,6 +2145,15 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
     </div>
 
+    <div class="ajuda-sec ajuda-gestor">
+      <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
+      <ul>
+        <li><b>Nota</b> — gestor, admin e, desde 24/09/2026, a <b>contabilidade</b>: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. Lançar nota nova continua sendo de quem gastou.</li>
+        <li><b>Repasse e reembolso</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora.</li>
+      </ul>
+      <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>
+    </div>
+
     <div class="ajuda-sec">
       <h4>🔔 Notificação no celular (24/09/2026)</h4>
       <p>Dá para receber os avisos no celular mesmo com o app fechado — e é isso que faz aparecer <b>o número no ícone do app</b>, como nos outros aplicativos. Quem liga é você, uma vez em cada aparelho: <b>Perfil → 🔔 Ligar notificações neste aparelho</b>. O celular vai pedir autorização; sem ela nada chega.</p>
@@ -2551,25 +2560,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=256"></script>
-<script defer src="js/db.js?v=256"></script>
-<script defer src="js/nfce.js?v=256"></script>
-<script defer src="js/sefaz.js?v=256"></script>
-<script defer src="js/brasilapi.js?v=256"></script>
-<script defer src="js/ocr.js?v=256"></script>
-<script defer src="js/recorte.js?v=256"></script>
-<script defer src="js/excel.js?v=256"></script>
-<script defer src="js/gestor.js?v=256"></script>
-<script defer src="js/frota.js?v=256"></script>
-<script defer src="js/ponto.js?v=256"></script>
-<script defer src="js/arquivos.js?v=256"></script>
-<script defer src="js/gdrive.js?v=256"></script>
-<script defer src="js/app.js?v=256"></script>
+<script defer src="js/api.js?v=257"></script>
+<script defer src="js/db.js?v=257"></script>
+<script defer src="js/nfce.js?v=257"></script>
+<script defer src="js/sefaz.js?v=257"></script>
+<script defer src="js/brasilapi.js?v=257"></script>
+<script defer src="js/ocr.js?v=257"></script>
+<script defer src="js/recorte.js?v=257"></script>
+<script defer src="js/excel.js?v=257"></script>
+<script defer src="js/gestor.js?v=257"></script>
+<script defer src="js/frota.js?v=257"></script>
+<script defer src="js/ponto.js?v=257"></script>
+<script defer src="js/arquivos.js?v=257"></script>
+<script defer src="js/gdrive.js?v=257"></script>
+<script defer src="js/app.js?v=257"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=256').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=257').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

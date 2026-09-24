@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 256;
+const APP_BUILD = 257;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -781,6 +781,9 @@ function _ehContabilidade() { return user?.role === 'contabilidade'; }
 function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
+/* Corrigir e apagar nota de QUALQUER colaborador: gestor, admin e, desde
+   24/09/2026, a contabilidade — é ela que fecha o mês e acha o erro. */
+function _corrigeNotaDeOutro() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 
 function _ehNotaDeOutroUsuario(n) {
   return !!n?.user_id && !!user?.id && n.user_id !== user.id;
@@ -1701,6 +1704,95 @@ async function confirmarEntrada(id, aceita, btn) {
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   REPASSE DE OUTRO COLABORADOR (24/09/2026)
+   Pedido do Cleiton: o gestor precisa corrigir e apagar repasse e reembolso
+   da equipe. O registro é de outra pessoa, então NÃO passa pelo IndexedDB
+   daqui — vai direto ao servidor, como o lançamento do gestor (34ba623) e a
+   correção de categoria da nota.
+═══════════════════════════════════════════════════════════ */
+function _repasseDaEquipe(id) {
+  const fontes = [window._repassesDaFicha, repassesEquipe, window._equipeCache?.repasses, repasses];
+  for (const lista of fontes) {
+    const achou = (lista || []).find(r => r && r.id === id);
+    if (achou) return achou;
+  }
+
+  return null;
+}
+
+async function editarRepasseDeOutro(id) {
+  if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin corrige o repasse de outra pessoa', 'err'); return; }
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para corrigir', 'err'); return; }
+  const r = _repasseDaEquipe(id);
+  if (!r) { toast('Repasse não encontrado', 'err'); return; }
+  const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
+
+  const valor = prompt(`Valor do repasse de ${quem} (R$):`, String(Number(r.valor) || 0));
+  if (valor === null) return;
+  const v = parseFloat(String(valor).replace(',', '.'));
+  if (!(v > 0)) { toast('Valor inválido', 'err'); return; }
+
+  const data = prompt('Data (dd/mm/aaaa):', fmtDataBR(r.data));
+  if (data === null) return;
+  const m = String(data).match(new RegExp('(\\d{2})\\/(\\d{2})\\/(\\d{4})'));
+  if (!m) { toast('Data inválida — use dd/mm/aaaa', 'err'); return; }
+  const iso = m[3] + '-' + m[2] + '-' + m[1];
+
+  const desc = prompt('Descrição:', r.descricao || '');
+  if (desc === null) return;
+
+  setLoading(true);
+  try {
+    await sb.repasses.upsert({
+      ...r,
+      valor: v,
+      data: iso,
+      mes: Number(m[2]),
+      ano: Number(m[3]),
+      descricao: String(desc).trim() || null,
+    });
+    toast('Repasse corrigido ✅');
+    await _recarregarEquipe();
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+  } finally { setLoading(false); }
+}
+
+async function excluirRepasseDeOutro(id) {
+  if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin exclui o repasse de outra pessoa', 'err'); return; }
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para excluir', 'err'); return; }
+  const r = _repasseDaEquipe(id);
+  if (!r) { toast('Repasse não encontrado', 'err'); return; }
+  const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
+  const nl = String.fromCharCode(10);
+  if (!confirm([
+    'Excluir este repasse de ' + quem + '?',
+    '',
+    brl(r.valor) + ' · ' + fmtDataBR(r.data) + (r.descricao ? ' · ' + r.descricao : ''),
+    '',
+    'O valor sai do saldo dele e some das planilhas.',
+  ].join(nl))) return;
+
+  setLoading(true);
+  try {
+    await sb.repasses.upsert({ ...r, deleted: true });
+    toast('Repasse excluído');
+    await _recarregarEquipe();
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+  } finally { setLoading(false); }
+}
+
+/* redesenha a ficha do colaborador com os dados novos do servidor */
+async function _recarregarEquipe() {
+  try {
+    if (user) await DB.sync(sb, user.id).catch(() => {});
+    await carregarDadosLocais();
+  } catch (_) {}
+  if (viewAtual === 'equipe') renderEquipe();
+}
+
 async function marcarPedidoPago(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
   const r = repassesEquipe.find(x => x.id === id);
@@ -2145,7 +2237,7 @@ function renderDespesas() {
     </div>
 
     ${_ehContabilidade() ? `
-    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
+    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta, relatórios e <b>correção</b>. Você pode <b>corrigir e apagar</b> a nota de qualquer colaborador pela <b>Equipe</b> (24/09/2026); quem lança a nota nova continua sendo quem gastou.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
     ${PAGAMENTOS_CV.map(p => `
@@ -3369,8 +3461,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
-            ${_ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
-              ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir RDA/RDM">🔀</button>` : ''}
+            ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
+              ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
             <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
           </div>
