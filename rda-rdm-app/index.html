@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=253">
+  <link rel="manifest" href="manifest.json?v=254">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1692,7 +1692,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=253" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=254" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1933,7 +1933,6 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <select class="inp" id="nf-pagamento">
         <option value="cv">💳 Cartão corporativo (C.V.)</option>
         <option value="reembolso">👛 Do meu bolso — pedir reembolso</option>
-        <option value="ajuda">🧾 Ajuda de custos</option>
       </select>
     </div>
 
@@ -2135,7 +2134,6 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
         <li><b>👛 Reembolso</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
         <li><b>💳 Recarga do cartão</b> — pedir ao gestor a transferência para o cartão pré-pago. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>
       </ul>
-      <p><b>🧾 Ajuda de custos (24/09/2026):</b> é um terceiro dinheiro, à parte do cartão e do reembolso, com aba própria na planilha. No Início há o painel <b>🧾 Ajuda de custos</b> para registrar o valor que você recebeu; na hora de lançar a nota, escolha <b>🧾 Ajuda de custos</b> no campo <b>Pagamento</b>. O saldo (recebido menos gasto) aparece em <b>RDM/RDA e Planilhas</b> e as notas vão para a aba <b>AJUDA DE CUSTOS</b> — elas <b>não</b> entram na conta do cartão nem na do reembolso.</p>
       <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
     </div>
@@ -2533,25 +2531,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=253"></script>
-<script defer src="js/db.js?v=253"></script>
-<script defer src="js/nfce.js?v=253"></script>
-<script defer src="js/sefaz.js?v=253"></script>
-<script defer src="js/brasilapi.js?v=253"></script>
-<script defer src="js/ocr.js?v=253"></script>
-<script defer src="js/recorte.js?v=253"></script>
-<script defer src="js/excel.js?v=253"></script>
-<script defer src="js/gestor.js?v=253"></script>
-<script defer src="js/frota.js?v=253"></script>
-<script defer src="js/ponto.js?v=253"></script>
-<script defer src="js/arquivos.js?v=253"></script>
-<script defer src="js/gdrive.js?v=253"></script>
-<script defer src="js/app.js?v=253"></script>
+<script defer src="js/api.js?v=254"></script>
+<script defer src="js/db.js?v=254"></script>
+<script defer src="js/nfce.js?v=254"></script>
+<script defer src="js/sefaz.js?v=254"></script>
+<script defer src="js/brasilapi.js?v=254"></script>
+<script defer src="js/ocr.js?v=254"></script>
+<script defer src="js/recorte.js?v=254"></script>
+<script defer src="js/excel.js?v=254"></script>
+<script defer src="js/gestor.js?v=254"></script>
+<script defer src="js/frota.js?v=254"></script>
+<script defer src="js/ponto.js?v=254"></script>
+<script defer src="js/arquivos.js?v=254"></script>
+<script defer src="js/gdrive.js?v=254"></script>
+<script defer src="js/app.js?v=254"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=253').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=254').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

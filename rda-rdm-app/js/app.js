@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 253;
+const APP_BUILD = 254;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1805,22 +1805,17 @@ const ABAS_DESPESA = {
 let _abaDespesa = null;          // 'RDA' | 'RDM' | chave de categoria (CV) | null
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
 let _subtipoPreEscolhido = null; // categoria já escolhida junto (regime CV)
-let _pagamentoCV = null;         // 'cv' | 'reembolso' | 'ajuda' — escolhido na página nova
+let _pagamentoCV = null;         // 'cv' | 'reembolso' — escolhido na página nova
 
 /* 24/09/2026 — pedido do Cleiton: no regime de cartão, antes de escolher a
    categoria a pessoa diz COM QUE DINHEIRO pagou. Era um campo no meio do
    formulário, fácil de passar batido; virou a primeira tela do lançamento,
    e é ela que decide para qual aba da planilha a nota vai. */
 const PAGAMENTOS_CV = [
-  { chave: 'cv', ico: '💳', nome: 'Nota no cartão', naPagina: true,
+  { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
     sub: 'Pagou com o cartão corporativo. Vai para a aba CV ALELO.' },
-  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso', naPagina: true,
+  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
     sub: 'Pagou do próprio bolso. Vai para a aba CV REEMBOLSO e a empresa devolve.' },
-  /* 24/09/2026: o Cleiton pediu só as duas acima na página de escolha. A
-     ajuda de custos continua existindo — no campo Pagamento do formulário e
-     na aba própria da planilha —, só não é mais uma das portas de entrada. */
-  { chave: 'ajuda', ico: '🧾', nome: 'Pago com ajuda de custos', naPagina: false,
-    sub: 'Saiu do dinheiro de ajuda de custos. Vai para a aba própria.' },
 ];
 
 function _pagamentoCVInfo(chave) {
@@ -2153,7 +2148,7 @@ function renderDespesas() {
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
-    ${PAGAMENTOS_CV.filter(p => p.naPagina).map(p => `
+    ${PAGAMENTOS_CV.map(p => `
       <button class="pnl pnl-atalho pag-cv-card" style="margin-bottom:10px" onclick="escolherPagamentoCV('${p.chave}')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">${p.ico}</span>
@@ -2253,13 +2248,6 @@ function renderInicio() {
           <span class="pnl-ico">💳</span>
           <span class="pnl-tit">Recarga do cartão</span>
           <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'pedir recarga ao gestor'}</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'ajuda')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🧾</span>
-          <span class="pnl-tit">Ajuda de custos</span>
-          <span class="pnl-sub">${_saldoAjuda() ? 'saldo hoje: ' + brl(_saldoAjuda()) : 'registrar o que você recebeu'}</span>
         </span>
       </button>` : `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse()">
@@ -3568,9 +3556,6 @@ function renderSaldo() {
        a mesma conta da planilha (CV REEMBOLSO menos "REEMBOLSO DE:"). */
     const bolsoAno = soma(nsAno.filter(n => n.pagamento === 'reembolso'));
     const saldoCartao = _saldoCartao();
-    const saldoAjuda = _saldoAjuda();
-    const ajudaRecebida = soma(rsAno.filter(r => r.destino === 'ajuda' && _repasseEhRecebido(r)));
-    const ajudaGasta = soma(nsAno.filter(n => n.pagamento === 'ajuda'));
     const aReceber = bolsoAno - recAno;
     const cat = f => soma(ns.filter(n => semReemb(n) && f(n)));
     cardsCV = `
@@ -3581,12 +3566,6 @@ function renderSaldo() {
       <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
       ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Peça a recarga pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
-    ${ajudaRecebida || ajudaGasta ? `
-    <div class="saldo-card ${saldoAjuda < 0 ? 'neg' : ''}">
-      <div class="saldo-label">🧾 Ajuda de custos · ${filAno}</div>
-      <div class="saldo-val">${brl(saldoAjuda || 0)}</div>
-      <div class="saldo-detail"><span>Recebida <b>${brl(ajudaRecebida)}</b></span><span>Gasta <b>${brl(ajudaGasta)}</b></span></div>
-    </div>` : ''}
     <div class="saldo-card">
       <div class="saldo-label">💳 Gasto no cartão · ${MESES[filMes-1]}</div>
       <div class="saldo-val">${brl(cartaoMes)}</div>
@@ -6264,7 +6243,6 @@ function _repasseTitulo(modo) {
   /* 24/09/2026: no CV há dois caminhos — a recarga do cartão pré-pago e o
      reembolso do que saiu do bolso. Chamar tudo de reembolso fazia o pedido
      de recarga abrir com o título errado. */
-  if (_repasseDestino === 'ajuda') return modo === 'requested' ? 'Pedir ajuda de custos' : 'Registrar ajuda de custos recebida';
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Pedir recarga do cartão' : 'Registrar recarga do cartão';
   /* colaborador CV (21/09/2026): o dinheiro que circula é REEMBOLSO do que saiu do bolso */
   if (_ehCV()) return modo === 'requested' ? 'Registrar reembolso (a receber)' : 'Registrar reembolso recebido';
@@ -6281,7 +6259,6 @@ function _repasseTituloCabecalho() {
 }
 
 function _repassePlaceholder(modo) {
-  if (_repasseDestino === 'ajuda') return modo === 'requested' ? 'Ex: ajuda de custos da viagem da semana' : 'Ex: ajuda de custos recebida do gestor';
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Ex: cartão sem saldo para abastecer amanhã' : 'Ex: recarga feita pelo gestor';
   if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: reembolso recebido do gestor';
   return modo === 'requested'
@@ -6290,9 +6267,6 @@ function _repassePlaceholder(modo) {
 }
 
 function _repasseHelpText(modo) {
-  if (_repasseDestino === 'ajuda') return modo === 'requested'
-    ? 'O gestor recebe o pedido. Quando marcar como pago, o valor entra como ajuda de custos recebida.'
-    : 'Registra a ajuda de custos que você recebeu; as notas pagas com ela abatem deste saldo.';
   if (_repasseDestino === 'recarga') return modo === 'requested'
     ? 'O gestor recebe o pedido e faz a transferência para o cartão. O valor entra no saldo do cartão quando ele marcar como pago.'
     : 'Registra uma recarga que já entrou no cartão; soma ao saldo do cartão.';
@@ -6405,18 +6379,18 @@ let _repasseAlvo = null;
 let _repasseDestino = null;
 
 /* Repasse que a empresa transferiu para a CONTA da pessoa como reembolso —
-   nem recarga do cartão, nem ajuda de custos (24/09/2026). Lançamento antigo
-   de CV, sem destino gravado, conta como reembolso: era assim que o
-   relatório o tratava antes da separação. */
+   não é recarga do cartão (24/09/2026). Lançamento antigo de CV, sem destino
+   gravado, conta como reembolso: era assim que o relatório o tratava antes
+   da separação. */
 function _repasseEhReembolso(r) {
-  return r && r.destino !== 'recarga' && r.destino !== 'ajuda';
+  return r && r.destino !== 'recarga';
 }
 
 /* Nenhum dinheiro do regime de cartão é lançado por aba (24/09/2026): as
-   três colunas do BANCO DE DADOS — recarga, ajuda de custos e reembolso —
-   trazem só DATA e R$. E no CV não existe RDA x RDM: o gasto é dividido nas
-   quatro categorias, todas juntas. _repasseDestino só é preenchido para quem
-   é CV, então ele próprio responde a pergunta. */
+   colunas do BANCO DE DADOS — recarga e reembolso — trazem só DATA e R$. E
+   no CV não existe RDA x RDM: o gasto é dividido nas quatro categorias,
+   todas juntas. _repasseDestino só é preenchido para quem é CV, então ele
+   próprio responde a pergunta. */
 function _repasseSemCategoria() {
   return _repasseDestino !== null;
 }
@@ -6443,10 +6417,10 @@ function _formatarDoc(d) {
 
 /* Saldo do cartão pré-pago: recargas confirmadas menos as notas pagas nele.
    Vale só para quem é CV; para os demais devolve null (24/09/2026). */
-/* Nota paga no cartão: o que não saiu do bolso nem da ajuda de custos. A
-   nota antiga, gravada antes de existir a coluna, conta como cartão. */
+/* Nota paga no cartão: tudo que não saiu do bolso. A nota antiga, gravada
+   antes de existir a coluna pagamento, conta como cartão. */
 function _notaDoCartao(n) {
-  return n.pagamento !== 'reembolso' && n.pagamento !== 'ajuda';
+  return n.pagamento !== 'reembolso';
 }
 
 function _saldoCartaoDe(ns, rs, ehCv) {
@@ -6457,20 +6431,6 @@ function _saldoCartaoDe(ns, rs, ehCv) {
   return soma(recargas) - soma(noCartao);
 }
 
-/* Ajuda de custos (24/09/2026): dinheiro entregue à parte, com aba própria
-   na planilha. Saldo = recebido menos o que já foi gasto com ele. */
-function _saldoAjudaDe(ns, rs, ehCv) {
-  if (!ehCv) return null;
-  const soma = arr => arr.reduce((a, x) => a + (Number(x.valor) || 0), 0);
-  const recebido = rs.filter(r => !r.deleted && r.destino === 'ajuda' && _repasseEhRecebido(r));
-  const gasto = ns.filter(n => !n.deleted && n.pagamento === 'ajuda');
-  return soma(recebido) - soma(gasto);
-}
-
-function _saldoAjuda() {
-  if (!_ehCV()) return null;
-  return _saldoAjudaDe(notas, repasses, true);
-}
 
 function _saldoCartao() {
   if (!_ehCV()) return null;
