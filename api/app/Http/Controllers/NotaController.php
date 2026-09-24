@@ -108,6 +108,26 @@ class NotaController extends Controller
             'created_at' => ['nullable', 'date'],
         ]);
 
+
+        /* 24/09/2026: mês e ano SEGUEM A DATA, sempre. Chegavam do aparelho
+           e podiam vir do filtro da tela ou de uma chave de NFS-e mal
+           formada — foi assim que uma nota de 22/09/2026 foi gravada em
+           2045 e sumiu de toda lista filtrada por período. Corrigir aqui
+           protege também o aparelho que ainda não atualizou o app. */
+        if (! empty($d['data'])) {
+            $dt = \Illuminate\Support\Carbon::parse($d['data']);
+            $mesCerto = (int) $dt->format('n');
+            $anoCerto = (int) $dt->format('Y');
+            if ((int) ($d['mes'] ?? 0) !== $mesCerto || (int) ($d['ano'] ?? 0) !== $anoCerto) {
+                Log::info('mes/ano corrigidos pela data', [
+                    'id' => $id,
+                    'veio' => ($d['mes'] ?? '?') . '/' . ($d['ano'] ?? '?'),
+                    'data' => $dt->format('Y-m-d'),
+                ]);
+            }
+            $d['mes'] = $mesCerto;
+            $d['ano'] = $anoCerto;
+        }
         $this->podeGravar($u, $d['user_id']);
 
         $nota = Nota::find($id);

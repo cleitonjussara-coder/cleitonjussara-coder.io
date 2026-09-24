@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 258;
+const APP_BUILD = 259;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1712,6 +1712,16 @@ async function confirmarEntrada(id, aceita, btn) {
    daqui — vai direto ao servidor, como o lançamento do gestor (34ba623) e a
    correção de categoria da nota.
 ═══════════════════════════════════════════════════════════ */
+/* Mês e ano a partir da data digitada (24/09/2026). Antes cada tela tinha o
+   seu jeito — o filtro do mês, a chave da nota — e bastava um deles estar
+   desencontrado para o lançamento ficar guardado num período onde ninguém o
+   procurava. */
+function _mesAnoDaData(data) {
+  const d = new Date(String(data) + 'T00:00:00');
+  if (isNaN(d.getTime())) return [filMes, filAno];
+  return [d.getMonth() + 1, d.getFullYear()];
+}
+
 function _repasseDaEquipe(id) {
   const fontes = [window._repassesDaFicha, repassesEquipe, window._equipeCache?.repasses, repasses];
   for (const lista of fontes) {
@@ -6068,8 +6078,10 @@ async function _salvarNotaInterno() {
   if (semValor) valor = 0;
 
   const cnpjRaw = BrasilAPI.limpar($('nf-cnpj').value);
-  const mes  = parseInt($('nf-mes').value, 10) || new Date(data+'T00:00:00').getMonth()+1;
-  const ano  = parseInt($('nf-ano').value, 10) || new Date(data+'T00:00:00').getFullYear();
+  /* 24/09/2026: mês e ano SAEM DA DATA, sempre. Vinham dos campos escondidos
+     nf-mes/nf-ano, que o filtro da tela ou a chave lida preenchiam — foi
+     assim que uma nota de 22/09/2026 foi parar em 2045 e sumiu das listas. */
+  const [mes, ano] = _mesAnoDaData(data);
 
   /* Só para nota sem chave: com chave, as travas acima já resolveram.
      Repetida encontrada: grava a nova e manda a anterior para a lixeira,
@@ -6118,6 +6130,7 @@ async function _salvarNotaInterno() {
     razao_social   : $('nf-razao').value.trim() || null,
     observacao     : $('nf-obs').value.trim()   || null,
     chave_nfce     : $('nf-chave').value        || null,
+    /* mes/ano vêm da data, sempre — ver _mesAnoDaData (24/09/2026) */
     documento      : $('nf-documento').value    || null,
     numero         : ($('nf-numero').value || '').trim() || null,
     serie          : ($('nf-serie').value  || '').trim() || null,
@@ -6676,8 +6689,8 @@ async function _salvarRepasseInterno() {
   const data  = $('rep-data').value;
   if (!tipo) { toast('Escolha a aba: RDA ou RDM', 'err'); return; }
   if (!valor||!data) { toast('Preencha os campos','err'); return; }
-  const mes = parseInt($('rep-mes').value,10) || filMes;
-  const ano = parseInt($('rep-ano').value,10) || filAno;
+  /* mesma regra da nota: a data manda, não o mês que estava na tela */
+  const [mes, ano] = _mesAnoDaData(data);
   const kind = _repasseModo === 'requested' ? 'requested' : 'received';
   /* email_sent sempre false daqui: quem envia é o SERVIDOR (gatilho
      trg_repasses_email no Supabase, via Resend) quando a solicitação chega

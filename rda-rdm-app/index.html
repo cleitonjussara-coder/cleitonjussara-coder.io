@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=258">
+  <link rel="manifest" href="manifest.json?v=259">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1699,7 +1699,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=258" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=259" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2560,25 +2560,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=258"></script>
-<script defer src="js/db.js?v=258"></script>
-<script defer src="js/nfce.js?v=258"></script>
-<script defer src="js/sefaz.js?v=258"></script>
-<script defer src="js/brasilapi.js?v=258"></script>
-<script defer src="js/ocr.js?v=258"></script>
-<script defer src="js/recorte.js?v=258"></script>
-<script defer src="js/excel.js?v=258"></script>
-<script defer src="js/gestor.js?v=258"></script>
-<script defer src="js/frota.js?v=258"></script>
-<script defer src="js/ponto.js?v=258"></script>
-<script defer src="js/arquivos.js?v=258"></script>
-<script defer src="js/gdrive.js?v=258"></script>
-<script defer src="js/app.js?v=258"></script>
+<script defer src="js/api.js?v=259"></script>
+<script defer src="js/db.js?v=259"></script>
+<script defer src="js/nfce.js?v=259"></script>
+<script defer src="js/sefaz.js?v=259"></script>
+<script defer src="js/brasilapi.js?v=259"></script>
+<script defer src="js/ocr.js?v=259"></script>
+<script defer src="js/recorte.js?v=259"></script>
+<script defer src="js/excel.js?v=259"></script>
+<script defer src="js/gestor.js?v=259"></script>
+<script defer src="js/frota.js?v=259"></script>
+<script defer src="js/ponto.js?v=259"></script>
+<script defer src="js/arquivos.js?v=259"></script>
+<script defer src="js/gdrive.js?v=259"></script>
+<script defer src="js/app.js?v=259"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=258').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=259').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

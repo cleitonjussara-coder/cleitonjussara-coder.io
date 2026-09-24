@@ -18,12 +18,22 @@ window.NFCE = (() => {
   function parseChave44(raw) {
     const c = digits(raw);
     if (c.length !== 44) return null;
+    /* 24/09/2026: uma NFS-e de MG (numeração municipal) entrou aqui como se
+       fosse chave de NF-e: os dígitos 3 a 6 eram "4500", e o app gravou a
+       nota em 00/2045 — ela sumiu de toda lista filtrada por mês. Agora, se
+       o ano/mês da chave não fizerem sentido, ele devolve null nos dois
+       campos e a data digitada é que vale. */
+    const anoChave = 2000 + parseInt(c.slice(2, 4), 10);
+    const mesChave = parseInt(c.slice(4, 6), 10);
+    const agora = new Date();
+    const dataPlausivel = mesChave >= 1 && mesChave <= 12
+      && anoChave >= 2006 && anoChave <= agora.getFullYear() + 1;
     return {
       chave  : c,
       cUF    : c.slice(0, 2),
       uf     : UF_MAP[c.slice(0, 2)] || c.slice(0, 2),
-      ano    : 2000 + parseInt(c.slice(2, 4), 10),
-      mes    : parseInt(c.slice(4, 6), 10),
+      ano    : dataPlausivel ? anoChave : null,
+      mes    : dataPlausivel ? mesChave : null,
       cnpj   : c.slice(6, 20),
       modelo : c.slice(20, 22),   // 65 = NFCe  |  55 = NF-e
       serie  : c.slice(22, 25),

@@ -83,6 +83,26 @@ class RepasseController extends Controller
            é como o gestor registra o repasse que já pagou, entrando direto no
            saldo da pessoa (sem a 2ª etapa, que é só para pedido atendido). */
         abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
+
+        /* 24/09/2026: mês e ano SEGUEM A DATA, sempre. Chegavam do aparelho
+           e podiam vir do filtro da tela ou de uma chave de NFS-e mal
+           formada — foi assim que uma nota de 22/09/2026 foi gravada em
+           2045 e sumiu de toda lista filtrada por período. Corrigir aqui
+           protege também o aparelho que ainda não atualizou o app. */
+        if (! empty($d['data'])) {
+            $dt = \Illuminate\Support\Carbon::parse($d['data']);
+            $mesCerto = (int) $dt->format('n');
+            $anoCerto = (int) $dt->format('Y');
+            if ((int) ($d['mes'] ?? 0) !== $mesCerto || (int) ($d['ano'] ?? 0) !== $anoCerto) {
+                Log::info('mes/ano corrigidos pela data', [
+                    'id' => $id,
+                    'veio' => ($d['mes'] ?? '?') . '/' . ($d['ano'] ?? '?'),
+                    'data' => $dt->format('Y-m-d'),
+                ]);
+            }
+            $d['mes'] = $mesCerto;
+            $d['ano'] = $anoCerto;
+        }
         $rep = Repasse::find($id);
         $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
         if ($rep) {
