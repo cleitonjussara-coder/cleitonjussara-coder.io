@@ -85,16 +85,27 @@ class RepasseController extends Controller
         abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
 
 
-        /* 24/09/2026: lançamento com data no futuro não existe — a nota é de
-           um gasto que já aconteceu. O app barra qualquer data depois de
-           HOJE; aqui a folga é de dois dias, de propósito: relógio de celular
-           adiantado não pode deixar o registro preso para sempre, sem
-           conseguir sincronizar. O que este guarda pega é o absurdo — a nota
-           que veio com 2045 por causa de uma chave mal lida. */
+        /* 24/09/2026: HOJE é o presente — nada é gravado com data adiante
+           dele. O app já barra na hora de salvar; aqui o servidor garante,
+           inclusive para aparelho com app antigo.
+           Até dois dias à frente o registro NÃO é recusado, e sim trazido
+           para hoje: nesse intervalo a causa quase sempre é relógio de
+           celular adiantado, e recusar deixaria o lançamento preso no
+           aparelho para sempre, sem conseguir subir. Mais que isso é
+           absurdo (a nota que veio com 2045) e aí sim é recusado. */
         if (! empty($d['data'])) {
-            $limite = \Illuminate\Support\Carbon::now('America/Sao_Paulo')->endOfDay()->addDays(2);
-            if (\Illuminate\Support\Carbon::parse($d['data'])->greaterThan($limite)) {
-                abort(422, 'A data está no futuro (' . $d['data'] . '). O lançamento registra algo que já aconteceu — corrija a data.');
+            $hoje = \Illuminate\Support\Carbon::now('America/Sao_Paulo')->startOfDay();
+            $dataInformada = \Illuminate\Support\Carbon::parse($d['data'])->startOfDay();
+            if ($dataInformada->greaterThan($hoje)) {
+                if ($dataInformada->diffInDays($hoje) > 2) {
+                    abort(422, 'A data está no futuro (' . $d['data'] . '). O lançamento registra algo que já aconteceu — corrija a data.');
+                }
+                Log::warning('data no futuro trazida para hoje', [
+                    'id' => $id,
+                    'veio' => $d['data'],
+                    'gravado' => $hoje->format('Y-m-d'),
+                ]);
+                $d['data'] = $hoje->format('Y-m-d');
             }
         }
         /* 24/09/2026: mês e ano SEGUEM A DATA, sempre. Chegavam do aparelho
