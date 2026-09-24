@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 259;
+const APP_BUILD = 260;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1716,6 +1716,21 @@ async function confirmarEntrada(id, aceita, btn) {
    seu jeito — o filtro do mês, a chave da nota — e bastava um deles estar
    desencontrado para o lançamento ficar guardado num período onde ninguém o
    procurava. */
+/* Data no futuro não existe em prestação de contas: a nota é de um gasto que
+   JÁ aconteceu (pedido do Cleiton em 24/09/2026, depois da nota que foi
+   gravada em 2045). Devolve null quando está tudo bem, ou o texto do aviso. */
+function _dataNoFuturo(data) {
+  const d = new Date(String(data) + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const hoje = new Date();
+  hoje.setHours(23, 59, 59, 999);
+  if (d <= hoje) return null;
+  const dias = Math.round((d - hoje) / 86400000);
+  return dias > 400
+    ? 'A data está em ' + d.getFullYear() + ', muito à frente de hoje.'
+    : 'A data é de ' + fmtDataBR(data) + ', ainda no futuro.';
+}
+
 function _mesAnoDaData(data) {
   const d = new Date(String(data) + 'T00:00:00');
   if (isNaN(d.getTime())) return [filMes, filAno];
@@ -2304,13 +2319,19 @@ function renderInicio() {
      "Nº DA NOTA" em cada categoria. Nota sem esses dois campos vira célula
      vazia lá, e alguém preenche à mão depois — é onde nascem os erros. */
   const semDoc = A.ns.filter(_notaIncompletaParaPlanilha);
+  /* 24/09/2026: lançamento com data no futuro é sempre erro — e é assim que
+     a nota gravada em 2045 aparece, em vez de sumir das listas. Olha o ano
+     inteiro, não só o mês filtrado. */
+  const noFuturo = notas.filter(n => !n.deleted && _dataNoFuturo(n.data))
+    .concat(repasses.filter(r => !r.deleted && _dataNoFuturo(r.data)));
   const dups = A.ns.filter(n => _dupMapa.has(n.id));
-  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length + semDoc.length;
+  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length + semDoc.length + noFuturo.length;
   const pendTxt = [
     pend.length ? `${pend.length} aguardando envio` : null,
     semAnexo.length ? `${semAnexo.length} sem anexo` : null,
     semValor.length ? `${semValor.length} sem valor` : null,
     semDoc.length ? `${semDoc.length} sem CNPJ ou nº da nota` : null,
+    noFuturo.length ? `${noFuturo.length} com data no futuro` : null,
     dups.length ? `${dups.length} possível duplicata` : null,
   ].filter(Boolean).join(' · ');
 
@@ -6028,6 +6049,20 @@ async function _salvarNotaInterno() {
   // sem valor ainda grava como "pendente" (0), mas sem anexo não grava
   if (!tipo || !data) { toast('Tipo e data são obrigatórios','err'); return; }
 
+  const futuro = _dataNoFuturo(data);
+  if (futuro) {
+    const nl = String.fromCharCode(10);
+    alert([
+      futuro,
+      '',
+      'A nota registra um gasto que já aconteceu — não dá para lançar com data adiante de hoje.',
+      '',
+      'Confira a data no comprovante e corrija.',
+    ].join(nl));
+    toast('Data no futuro — corrija antes de salvar', 'err');
+    return;
+  }
+
   const proibido = _consumidorProibido($('nf-consumidor').value);
   if (proibido) {
     setLoading(false);
@@ -6687,6 +6722,8 @@ async function _salvarRepasseInterno() {
   const tipo  = $('rep-tipo').value;
   const valor = parseFloat($('rep-valor').value);
   const data  = $('rep-data').value;
+  const _futuroRep = _dataNoFuturo(data);
+  if (_futuroRep) { toast(_futuroRep + ' Corrija antes de salvar.', 'err'); return; }
   if (!tipo) { toast('Escolha a aba: RDA ou RDM', 'err'); return; }
   if (!valor||!data) { toast('Preencha os campos','err'); return; }
   /* mesma regra da nota: a data manda, não o mês que estava na tela */

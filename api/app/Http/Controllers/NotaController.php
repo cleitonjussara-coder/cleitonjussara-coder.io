@@ -109,6 +109,19 @@ class NotaController extends Controller
         ]);
 
 
+
+        /* 24/09/2026: lançamento com data no futuro não existe — a nota é de
+           um gasto que já aconteceu. O app barra qualquer data depois de
+           HOJE; aqui a folga é de dois dias, de propósito: relógio de celular
+           adiantado não pode deixar o registro preso para sempre, sem
+           conseguir sincronizar. O que este guarda pega é o absurdo — a nota
+           que veio com 2045 por causa de uma chave mal lida. */
+        if (! empty($d['data'])) {
+            $limite = \Illuminate\Support\Carbon::now('America/Sao_Paulo')->endOfDay()->addDays(2);
+            if (\Illuminate\Support\Carbon::parse($d['data'])->greaterThan($limite)) {
+                abort(422, 'A data está no futuro (' . $d['data'] . '). O lançamento registra algo que já aconteceu — corrija a data.');
+            }
+        }
         /* 24/09/2026: mês e ano SEGUEM A DATA, sempre. Chegavam do aparelho
            e podiam vir do filtro da tela ou de uma chave de NFS-e mal
            formada — foi assim que uma nota de 22/09/2026 foi gravada em
