@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 254;
+const APP_BUILD = 255;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2232,7 +2232,9 @@ function renderInicio() {
         <span class="pnl-conteudo">
           <span class="pnl-ico">🧾</span>
           <span class="pnl-tit">Petermann – Despesas</span>
-          <span class="pnl-sub">${_ehContabilidade() ? "Equipe / Baixar relatórios · Arquivos." : `Lançar nota · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
+          <span class="pnl-sub">${_ehContabilidade()
+            ? "Equipe / Baixar relatórios · Arquivos."
+            : `Lançar nota · Painel · Minhas notas · ${_ehCV() ? 'C.V e notas de reembolso' : 'RDM/RDA e Planilhas'}${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
         </span>
       </button>
       ${_ehContabilidade() ? '' : _ehCV() ? `
