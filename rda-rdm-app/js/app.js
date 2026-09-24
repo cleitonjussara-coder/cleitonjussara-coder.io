@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 264;
+const APP_BUILD = 265;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -408,6 +408,18 @@ function _atualizarNumeroSerieAuto() {
 
 /* Preenche o select pelo que já se sabe (chave/anexo/QR), sem passar por
    cima de escolha manual. */
+/* Recibo não tem número nem série: os rótulos dizem isso, em vez de a pessoa
+   ficar procurando o que preencher (24/09/2026). */
+function _ajustarRotulosDoDocumento() {
+  const ehRecibo = String($('nf-documento')?.value || '') === 'outro';
+  const num = $('nf-numero-lbl'), ser = $('nf-serie-lbl'), campoNum = $('nf-numero');
+  if (num) num.innerHTML = ehRecibo
+    ? 'Número <span style="font-weight:400;color:var(--text2)">— o recibo costuma não ter</span>'
+    : 'Número da nota';
+  if (ser) ser.textContent = 'Série';
+  if (campoNum) campoNum.placeholder = ehRecibo ? 'deixe em branco se não houver' : 'Automático pela chave';
+}
+
 function _atualizarDocumentoAuto() {
   const sel = $('nf-documento');
   if (!sel || _docEscolhidoManual) return;
@@ -3472,6 +3484,13 @@ function renderNotas() {
    Painel. Pedido do Cleiton: dizer QUAL nota e o que falta NELA, e abrir a
    nota para corrigir ali mesmo.
 ═══════════════════════════════════════════════════════════ */
+/* Recibo/comprovante (documento "outro") não tem número nem série — cobrar
+   isso dele é ruído. Pedido do Cleiton em 24/09/2026. O CNPJ continua sendo
+   pedido: no recibo ele é o do estabelecimento, e a empresa quer. */
+function _ehRecibo(n) {
+  return String(n?.documento || '') === 'outro';
+}
+
 function _motivosDaNota(n) {
   const motivos = [];
   if (n.sync_status === 'failed' || n.synced === false) motivos.push('aguardando envio');
@@ -3479,7 +3498,7 @@ function _motivosDaNota(n) {
   if (!(Number(n.valor) > 0)) motivos.push('sem valor');
   const digitos = _soDigitos(n.cnpj);
   if (digitos.length !== 14) motivos.push('sem CNPJ');
-  if (!String(n.numero || '').trim()) motivos.push('sem nº da nota');
+  if (!_ehRecibo(n) && !String(n.numero || '').trim()) motivos.push('sem nº da nota');
   if (_dataNoFuturo(n.data)) motivos.push('data no futuro');
   if (_dupMapa.has(n.id)) motivos.push('possível duplicata');
 
@@ -3523,6 +3542,10 @@ function abrirPendencias() {
 
 function _notaIncompletaParaPlanilha(n) {
   if (!n || n.deleted) return false;
+  /* recibo não tem número: só o CNPJ é cobrado dele (24/09/2026) */
+  if (_ehRecibo(n)) {
+    return String(n.cnpj || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '').length !== 14;
+  }
   const digitos = String(n.cnpj || '').replace(new RegExp("\\D", 'g'), '');
   const temCnpj = digitos.length === 14;
   const temNumero = String(n.numero || '').trim() !== '';
@@ -5432,6 +5455,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
   $('nf-qr-url').value   = dados.qr_url   || '';
   $('nf-consumidor').value = (dados.consumidor || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
+  _ajustarRotulosDoDocumento();
   _docEscolhidoManual = false;
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento : '';
   $('nf-numero').value   = dados.numero   || '';

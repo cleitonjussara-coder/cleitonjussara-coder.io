@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=264">
+  <link rel="manifest" href="manifest.json?v=265">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1705,7 +1705,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=264" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=265" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1951,7 +1951,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="field">
       <label class="lbl">Documento</label>
-      <select class="inp" id="nf-documento" onchange="_docEscolhidoManual = true">
+      <select class="inp" id="nf-documento" onchange="_docEscolhidoManual = true; _ajustarRotulosDoDocumento()">
         <option value="">Escolher…</option>
         <option value="nfce">🧾 NFC-e — cupom fiscal (QR Code)</option>
         <option value="nfe">📄 NF-e — arquivo XML/PDF</option>
@@ -1962,13 +1962,13 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <div id="nf-documento-dica" style="font-size:13px;color:var(--text2);margin-top:4px;display:none"></div>
     </div>
 
-    <div class="field-row">
+    <div class="field-row" id="nf-numero-linha">
       <div class="field">
-        <label class="lbl">Número da nota</label>
+        <label class="lbl" id="nf-numero-lbl">Número da nota</label>
         <input class="inp" id="nf-numero" type="text" inputmode="numeric" maxlength="20" placeholder="Automático pela chave">
       </div>
       <div class="field" style="max-width:120px">
-        <label class="lbl">Série</label>
+        <label class="lbl" id="nf-serie-lbl">Série</label>
         <input class="inp" id="nf-serie" type="text" inputmode="numeric" maxlength="5" placeholder="—">
       </div>
     </div>
@@ -2131,6 +2131,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p>Quando falta alguma coisa em um lançamento, o Início mostra a faixa amarela dizendo <b>qual nota</b> e <b>o que falta nela</b> — por exemplo: "1 nota para corrigir: POSTO SYAGRI · 22/09/2026 — sem CNPJ · sem nº da nota".</p>
       <p><b>Toque na faixa</b> e abre a lista, uma linha por nota, com as etiquetas do que falta e o botão <b>Corrigir</b>, que abre a nota já no formulário. Antes o toque só levava para o Painel e você tinha de procurar.</p>
       <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>
+      <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -2581,25 +2582,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=264"></script>
-<script defer src="js/db.js?v=264"></script>
-<script defer src="js/nfce.js?v=264"></script>
-<script defer src="js/sefaz.js?v=264"></script>
-<script defer src="js/brasilapi.js?v=264"></script>
-<script defer src="js/ocr.js?v=264"></script>
-<script defer src="js/recorte.js?v=264"></script>
-<script defer src="js/excel.js?v=264"></script>
-<script defer src="js/gestor.js?v=264"></script>
-<script defer src="js/frota.js?v=264"></script>
-<script defer src="js/ponto.js?v=264"></script>
-<script defer src="js/arquivos.js?v=264"></script>
-<script defer src="js/gdrive.js?v=264"></script>
-<script defer src="js/app.js?v=264"></script>
+<script defer src="js/api.js?v=265"></script>
+<script defer src="js/db.js?v=265"></script>
+<script defer src="js/nfce.js?v=265"></script>
+<script defer src="js/sefaz.js?v=265"></script>
+<script defer src="js/brasilapi.js?v=265"></script>
+<script defer src="js/ocr.js?v=265"></script>
+<script defer src="js/recorte.js?v=265"></script>
+<script defer src="js/excel.js?v=265"></script>
+<script defer src="js/gestor.js?v=265"></script>
+<script defer src="js/frota.js?v=265"></script>
+<script defer src="js/ponto.js?v=265"></script>
+<script defer src="js/arquivos.js?v=265"></script>
+<script defer src="js/gdrive.js?v=265"></script>
+<script defer src="js/app.js?v=265"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=264').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=265').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
