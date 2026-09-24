@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=265">
+  <link rel="manifest" href="manifest.json?v=266">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1705,7 +1705,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=265" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=266" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2129,7 +2129,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <div class="ajuda-sec">
       <h4>⚠️ "Nota para corrigir" no Início (24/09/2026)</h4>
       <p>Quando falta alguma coisa em um lançamento, o Início mostra a faixa amarela dizendo <b>qual nota</b> e <b>o que falta nela</b> — por exemplo: "1 nota para corrigir: POSTO SYAGRI · 22/09/2026 — sem CNPJ · sem nº da nota".</p>
-      <p><b>Toque na faixa</b> e abre a lista, uma linha por nota, com as etiquetas do que falta e o botão <b>Corrigir</b>, que abre a nota já no formulário. Antes o toque só levava para o Painel e você tinha de procurar.</p>
+      <p><b>Toque na faixa</b> e abre a lista, uma linha por nota, com as etiquetas do que falta, o botão <b>📎 Ver</b> — que mostra o anexo, para você conferir antes de mexer — e o <b>Corrigir</b>, que abre a nota no formulário.</p>
+      <p class="ajuda-gestor"><b>Gestor e admin (24/09/2026):</b> a lista traz também as notas <b>da equipe</b>, cada uma com o nome de quem lançou (👤). É por ela que dá para ver o anexo e corrigir sem precisar abrir a Equipe e procurar a pessoa.</p>
       <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>
       <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>
     </div>
@@ -2582,25 +2583,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=265"></script>
-<script defer src="js/db.js?v=265"></script>
-<script defer src="js/nfce.js?v=265"></script>
-<script defer src="js/sefaz.js?v=265"></script>
-<script defer src="js/brasilapi.js?v=265"></script>
-<script defer src="js/ocr.js?v=265"></script>
-<script defer src="js/recorte.js?v=265"></script>
-<script defer src="js/excel.js?v=265"></script>
-<script defer src="js/gestor.js?v=265"></script>
-<script defer src="js/frota.js?v=265"></script>
-<script defer src="js/ponto.js?v=265"></script>
-<script defer src="js/arquivos.js?v=265"></script>
-<script defer src="js/gdrive.js?v=265"></script>
-<script defer src="js/app.js?v=265"></script>
+<script defer src="js/api.js?v=266"></script>
+<script defer src="js/db.js?v=266"></script>
+<script defer src="js/nfce.js?v=266"></script>
+<script defer src="js/sefaz.js?v=266"></script>
+<script defer src="js/brasilapi.js?v=266"></script>
+<script defer src="js/ocr.js?v=266"></script>
+<script defer src="js/recorte.js?v=266"></script>
+<script defer src="js/excel.js?v=266"></script>
+<script defer src="js/gestor.js?v=266"></script>
+<script defer src="js/frota.js?v=266"></script>
+<script defer src="js/ponto.js?v=266"></script>
+<script defer src="js/arquivos.js?v=266"></script>
+<script defer src="js/gdrive.js?v=266"></script>
+<script defer src="js/app.js?v=266"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=265').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=266').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

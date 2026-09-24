@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 265;
+const APP_BUILD = 266;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2327,31 +2327,15 @@ function renderInicio() {
   const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
 
   _recalcularDuplicatas(notas);
-  const pend = notas.filter(n => !n.deleted && (n.sync_status === 'failed' || n.synced === false));
-  const semAnexo = A.ns.filter(n => !n.foto_path && !n.foto_local);
-  const semValor = A.ns.filter(n => !(Number(n.valor) > 0));
-  /* 24/09/2026: a planilha da empresa tem uma coluna de CNPJ e outra de
-     "Nº DA NOTA" em cada categoria. Nota sem esses dois campos vira célula
-     vazia lá, e alguém preenche à mão depois — é onde nascem os erros. */
-  const semDoc = A.ns.filter(_notaIncompletaParaPlanilha);
-  /* 24/09/2026: lançamento com data no futuro é sempre erro — e é assim que
-     a nota gravada em 2045 aparece, em vez de sumir das listas. Olha o ano
-     inteiro, não só o mês filtrado. */
-  const noFuturo = notas.filter(n => !n.deleted && _dataNoFuturo(n.data))
-    .concat(repasses.filter(r => !r.deleted && _dataNoFuturo(r.data)));
-  const dups = A.ns.filter(n => _dupMapa.has(n.id));
-  /* 24/09/2026: a chamada conta NOTAS, não problemas — uma nota pode ter
-     dois. É a mesma lista que o toque abre, então os números batem. */
+  /* 24/09/2026: os contadores separados (sem anexo, sem valor, sem CNPJ…)
+     saíram daqui. Tudo vem de _notasComPendencia(), que é a MESMA lista que
+     o toque abre — assim o número da faixa, o resumo e a lista nunca
+     divergem, como divergiram quando as notas da equipe entraram. */
   const _pendNotas = _notasComPendencia();
   const pendTotal = _pendNotas.length;
-  const pendTxt = [
-    pend.length ? `${pend.length} aguardando envio` : null,
-    semAnexo.length ? `${semAnexo.length} sem anexo` : null,
-    semValor.length ? `${semValor.length} sem valor` : null,
-    semDoc.length ? `${semDoc.length} sem CNPJ ou nº da nota` : null,
-    noFuturo.length ? `${noFuturo.length} com data no futuro` : null,
-    dups.length ? `${dups.length} possível duplicata` : null,
-  ].filter(Boolean).join(' · ');
+  const _contagem = {};
+  _pendNotas.forEach(({ motivos }) => motivos.forEach(m => { _contagem[m] = (_contagem[m] || 0) + 1; }));
+  const pendTxt = Object.entries(_contagem).map(([m, q]) => q + ' ' + m).join(' · ');
 
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
@@ -2406,7 +2390,7 @@ function renderInicio() {
     </div>
     ${!_ehContabilidade() && pendTotal ? `
     <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
-      ? `⚠️ <b>1 nota para corrigir</b>: ${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
+      ? `⚠️ <b>1 nota para corrigir</b>: ${_ehNotaDeOutroUsuario(_pendNotas[0].nota) ? esc(_pendNotas[0].nota.user_nome || _rotuloProprietario(_pendNotas[0].nota)) + ' · ' : ''}${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
       : `⚠️ <b>${_pendNotas.length} notas para corrigir</b>: ${esc(pendTxt)} — <b>toque para ver e corrigir</b>.`}</div>` : ''}
 
     <!-- 22/09/2026: o Início ficou com o painel de Despesas e os atalhos.
@@ -3505,9 +3489,15 @@ function _motivosDaNota(n) {
   return motivos;
 }
 
-/* Notas com alguma pendência, da mais recente para a mais antiga. */
+/* Notas com alguma pendência, da mais recente para a mais antiga.
+   24/09/2026: gestor e admin veem também as da equipe — é deles a tarefa de
+   corrigir, e notasEquipe já está carregada aqui, sem pedir nada ao
+   servidor. Cada linha diz de quem é. */
 function _notasComPendencia() {
-  return notas
+  const minhas = notas;
+  const daEquipe = _ehGestorOuAdmin() ? (notasEquipe || []) : [];
+
+  return minhas.concat(daEquipe)
     .filter(n => !n.deleted)
     .map(n => ({ nota: n, motivos: _motivosDaNota(n) }))
     .filter(x => x.motivos.length)
@@ -3529,10 +3519,15 @@ function abrirPendencias() {
           <div class="pend-item">
             <div style="flex:1;min-width:0">
               <div style="font-weight:800">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
-              <div style="font-size:13.5px;opacity:.8">${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}</div>
+              <div style="font-size:13.5px;opacity:.8">${_ehNotaDeOutroUsuario(n) ? '👤 ' + esc(n.user_nome || _rotuloProprietario(n)) + ' · ' : ''}${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}</div>
               <div class="pend-motivos">${motivos.map(m => `<span class="pend-tag">${esc(m)}</span>`).join('')}</div>
             </div>
-            <button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${n.foto_path || n.foto_local
+                ? `<button class="btn btn-sm btn-outline" onclick="verFoto('${n.id}')" title="Ver o anexo">📎 Ver</button>`
+                : '<span class="pend-tag" style="text-align:center">sem anexo</span>'}
+              <button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button>
+            </div>
           </div>`).join('')}
       </div>
     </div>`;
