@@ -17,13 +17,14 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  * colaborador no ano. Nada do formato é recriado — abas, fórmulas, molduras
  * e fontes são as do arquivo; só entram valores nas linhas de dados.
  *
- * Mapa (aba RDM_RDA, 12 blocos mensais de 4 categorias):
+ * Mapa (aba CV ALELO — "RDM_RDA" nos modelos antigos —, 12 blocos mensais
+ * de 4 categorias):
  *   RDM · Abastecimento → colunas A–D     RDM · Hospedagem → E–H
  *   RDA (alimentação)   → colunas I–L     RDM · Outros     → M–P
  *   colunas: DATA | CNPJ DA NOTA | Nº DA NOTA | R$
  * BANCO DE DADOS: repasses recebidos no "EXTRATO DE VALOR RECEBIDO" (B15:C94).
  * CABEÇALHO: B5 funcionário, B6 safra, I6 ano.
- * CV REEMBOLSO recebe os mesmos lançamentos de RDM_RDA (RDA+RDM unificados).
+ * CV REEMBOLSO recebe os mesmos lançamentos da aba do cartão (RDA+RDM unificados).
  * AJUDA DE CUSTOS fica como está (sem fonte de dados no app).
  */
 class RelatorioCv
@@ -64,15 +65,14 @@ class RelatorioCv
         if ($c->ehCV()) {
             $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
             $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
-            if ($ws = $ss->getSheetByName('RDM_RDA')) {
+            if ($ws = $this->abaDoCartao($ss)) {
                 $this->preencherGrade($ws, $noCartao);
             }
             if ($ws = $ss->getSheetByName('CV REEMBOLSO')) {
                 $this->preencherGrade($ws, $doBolso);
             }
         } else {
-            foreach (['RDM_RDA', 'CV REEMBOLSO'] as $aba) {
-                $ws = $ss->getSheetByName($aba);
+            foreach ([$this->abaDoCartao($ss), $ss->getSheetByName('CV REEMBOLSO')] as $ws) {
                 if ($ws) {
                     $this->preencherGrade($ws, $notas);
                 }
@@ -142,6 +142,23 @@ class RelatorioCv
         if ($fora) {
             $ws->setCellValue('A712', "ATENÇÃO: {$fora} nota(s) não couberam no bloco do mês (limite do modelo).");
         }
+    }
+
+    /**
+     * A aba dos gastos no cartão: na planilha oficial de 2026 ela se chama
+     * "CV ALELO"; nos modelos anteriores era "RDM_RDA". Aceitar os dois
+     * evita que uma planilha antiga volte com a grade vazia e sem aviso
+     * (24/09/2026).
+     */
+    private function abaDoCartao(PhpOfficePhpSpreadsheetSpreadsheet $ss): ?PhpOfficePhpSpreadsheetWorksheetWorksheet
+    {
+        foreach (['CV ALELO', 'RDM_RDA'] as $nome) {
+            if ($ws = $ss->getSheetByName($nome)) {
+                return $ws;
+            }
+        }
+
+        return null;
     }
 
     private function categoria(Nota $n): string

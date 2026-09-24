@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 245;
+const APP_BUILD = 246;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2034,12 +2034,17 @@ function renderInicio() {
   const pend = notas.filter(n => !n.deleted && (n.sync_status === 'failed' || n.synced === false));
   const semAnexo = A.ns.filter(n => !n.foto_path && !n.foto_local);
   const semValor = A.ns.filter(n => !(Number(n.valor) > 0));
+  /* 24/09/2026: a planilha da empresa tem uma coluna de CNPJ e outra de
+     "Nº DA NOTA" em cada categoria. Nota sem esses dois campos vira célula
+     vazia lá, e alguém preenche à mão depois — é onde nascem os erros. */
+  const semDoc = A.ns.filter(_notaIncompletaParaPlanilha);
   const dups = A.ns.filter(n => _dupMapa.has(n.id));
-  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length;
+  const pendTotal = pend.length + semAnexo.length + semValor.length + dups.length + semDoc.length;
   const pendTxt = [
     pend.length ? `${pend.length} aguardando envio` : null,
     semAnexo.length ? `${semAnexo.length} sem anexo` : null,
     semValor.length ? `${semValor.length} sem valor` : null,
+    semDoc.length ? `${semDoc.length} sem CNPJ ou nº da nota` : null,
     dups.length ? `${dups.length} possível duplicata` : null,
   ].filter(Boolean).join(' · ');
 
@@ -3145,6 +3150,17 @@ function renderNotas() {
    colaborador da aba Equipe (gestor.js chama daqui). Os botões procuram a
    nota pelo id na lista global `notas`; para gestor/admin ela já inclui as
    notas da equipe, e o detalhe garante isso antes de desenhar. */
+/* Falta algo que a planilha da empresa pede? Ela tem, em cada categoria,
+   DATA · CNPJ DA NOTA · Nº DA NOTA · R$. Sem CNPJ o servidor escreve a razão
+   social no lugar, e sem número a célula fica vazia (24/09/2026). */
+function _notaIncompletaParaPlanilha(n) {
+  if (!n || n.deleted) return false;
+  const digitos = String(n.cnpj || '').replace(new RegExp("\\D", 'g'), '');
+  const temCnpj = digitos.length === 14;
+  const temNumero = String(n.numero || '').trim() !== '';
+  return !temCnpj || !temNumero;
+}
+
 function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
