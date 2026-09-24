@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 257;
+const APP_BUILD = 258;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -781,9 +781,10 @@ function _ehContabilidade() { return user?.role === 'contabilidade'; }
 function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
-/* Corrigir e apagar nota de QUALQUER colaborador: gestor, admin e, desde
-   24/09/2026, a contabilidade — é ela que fecha o mês e acha o erro. */
-function _corrigeNotaDeOutro() { return _ehGestorOuAdmin() || _ehContabilidade(); }
+/* Corrigir a nota de QUALQUER colaborador: só gestor e admin. A
+   contabilidade consulta e baixa relatório — decisão do Cleiton, mantida em
+   24/09/2026 depois de experimentarmos o contrário. */
+function _corrigeNotaDeOutro() { return _ehGestorOuAdmin(); }
 
 function _ehNotaDeOutroUsuario(n) {
   return !!n?.user_id && !!user?.id && n.user_id !== user.id;
@@ -2237,7 +2238,7 @@ function renderDespesas() {
     </div>
 
     ${_ehContabilidade() ? `
-    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta, relatórios e <b>correção</b>. Você pode <b>corrigir e apagar</b> a nota de qualquer colaborador pela <b>Equipe</b> (24/09/2026); quem lança a nota nova continua sendo quem gastou.</div>` : `
+    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
     ${PAGAMENTOS_CV.map(p => `
