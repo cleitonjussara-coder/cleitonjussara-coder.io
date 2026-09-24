@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 260;
+const APP_BUILD = 261;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1722,7 +1722,10 @@ async function confirmarEntrada(id, aceita, btn) {
 function _dataNoFuturo(data) {
   const d = new Date(String(data) + 'T00:00:00');
   if (isNaN(d.getTime())) return null;
-  const hoje = new Date();
+  /* 24/09/2026: "hoje" vem do SERVIDOR quando ele já respondeu alguma coisa.
+     Com o relógio do aparelho adiantado, o app achava que amanhã era hoje e
+     deixava passar — e o lançamento nascia no futuro. */
+  const hoje = new Date((sb?.hojeDoServidor?.() || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
   hoje.setHours(23, 59, 59, 999);
   if (d <= hoje) return null;
   const dias = Math.round((d - hoje) / 86400000);

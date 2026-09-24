@@ -49,6 +49,21 @@ window.API = (() => {
   }
 
   /* ── requisição base ─────────────────────────────────────── */
+  /* Última data que o servidor informou, com o instante em que chegou —
+     assim dá para acompanhar a passagem do tempo sem pedir de novo. */
+  let _horaServidor = null;
+
+  /* "Hoje" segundo o servidor (ou segundo o aparelho, enquanto ninguém
+     falou com o servidor ainda). Devolve no formato aaaa-mm-dd. */
+  function hojeDoServidor() {
+    const agora = _horaServidor
+      ? new Date(_horaServidor.hora + (Date.now() - _horaServidor.lidoEm))
+      : new Date();
+    const p = n => String(n).padStart(2, '0');
+
+    return agora.getFullYear() + '-' + p(agora.getMonth() + 1) + '-' + p(agora.getDate());
+  }
+
   async function req(method, path, { body, query, form, blob, timeout = 30_000 } = {}) {
     let url = BASE + path;
     if (query) {
@@ -71,6 +86,17 @@ window.API = (() => {
     } catch (e) {
       throw new Error(e.name === 'AbortError' ? 'Servidor demorou para responder' : 'Sem conexão com o servidor', { cause: e });
     } finally { clearTimeout(tid); }
+
+    /* 24/09/2026: toda resposta traz o cabeçalho Date. É a data do SERVIDOR,
+       e é ela que vale para saber o que é "hoje" — o relógio do celular pode
+       estar adiantado, e aí a pessoa lançaria no futuro sem perceber. */
+    try {
+      const cab = r.headers.get('Date');
+      if (cab) {
+        const d = new Date(cab);
+        if (!isNaN(d.getTime())) _horaServidor = { hora: d.getTime(), lidoEm: Date.now() };
+      }
+    } catch (_) {}
 
     if (r.status === 401 && _token) {
       /* token revogado/expirado: derruba a sessão local e avisa o app */
@@ -348,5 +374,5 @@ window.API = (() => {
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
+  return { BASE, HOMOLOG, req, hojeDoServidor, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
 })();
