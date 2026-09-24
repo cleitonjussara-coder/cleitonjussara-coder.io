@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=251">
+  <link rel="manifest" href="manifest.json?v=252">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1661,6 +1661,12 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   padding:12px 14px;border-radius:12px;background:#0f6b34;color:#eef9f0;font-size:15.5px;
   box-shadow:0 8px 20px rgba(0,0,0,.35)}
 .aviso-versao .btn{white-space:nowrap}
+/* Página "como esta nota foi paga?" do regime CV (24/09/2026) */
+.pag-cv-card .pnl-conteudo{min-height:0;padding:16px 16px 18px;max-width:100%}
+.pag-cv-escolhido{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:10px 14px;border-radius:12px;margin-bottom:4px;
+  background:rgba(185,226,74,.14);border:1px solid rgba(185,226,74,.4);color:var(--text)}
+.pag-cv-escolhido b{font-weight:800}
 </style>
 </head>
 <body>
@@ -1686,7 +1692,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=251" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=252" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2122,6 +2128,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec ajuda-cv">
       <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
+      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b>, <b>👛 Nota de reembolso</b> ou <b>🧾 Pago com ajuda de custos</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
       <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Reembolso, recarga e ajuda de custos também não perguntam aba nenhuma.</p>
       <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
       <ul>
@@ -2526,25 +2533,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=251"></script>
-<script defer src="js/db.js?v=251"></script>
-<script defer src="js/nfce.js?v=251"></script>
-<script defer src="js/sefaz.js?v=251"></script>
-<script defer src="js/brasilapi.js?v=251"></script>
-<script defer src="js/ocr.js?v=251"></script>
-<script defer src="js/recorte.js?v=251"></script>
-<script defer src="js/excel.js?v=251"></script>
-<script defer src="js/gestor.js?v=251"></script>
-<script defer src="js/frota.js?v=251"></script>
-<script defer src="js/ponto.js?v=251"></script>
-<script defer src="js/arquivos.js?v=251"></script>
-<script defer src="js/gdrive.js?v=251"></script>
-<script defer src="js/app.js?v=251"></script>
+<script defer src="js/api.js?v=252"></script>
+<script defer src="js/db.js?v=252"></script>
+<script defer src="js/nfce.js?v=252"></script>
+<script defer src="js/sefaz.js?v=252"></script>
+<script defer src="js/brasilapi.js?v=252"></script>
+<script defer src="js/ocr.js?v=252"></script>
+<script defer src="js/recorte.js?v=252"></script>
+<script defer src="js/excel.js?v=252"></script>
+<script defer src="js/gestor.js?v=252"></script>
+<script defer src="js/frota.js?v=252"></script>
+<script defer src="js/ponto.js?v=252"></script>
+<script defer src="js/arquivos.js?v=252"></script>
+<script defer src="js/gdrive.js?v=252"></script>
+<script defer src="js/app.js?v=252"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=251').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=252').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

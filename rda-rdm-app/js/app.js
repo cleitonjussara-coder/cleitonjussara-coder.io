@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 251;
+const APP_BUILD = 252;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1775,7 +1775,7 @@ function switchView(v, voltando = false) {
   el.scrollTop = 0;
   if (v==='home')    renderHome();
   else if (v==='inicio') renderInicio();
-  else if (v==='despesas') renderDespesas();
+  else if (v==='despesas') { _pagamentoCV = null; _abaDespesa = null; renderDespesas(); }
   else if (v==='frota')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Frota?.render(); else switchView('inicio'); }
   else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
   else if (v==='arquivos') window.Arquivos?.render();
@@ -1805,6 +1805,36 @@ const ABAS_DESPESA = {
 let _abaDespesa = null;          // 'RDA' | 'RDM' | chave de categoria (CV) | null
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
 let _subtipoPreEscolhido = null; // categoria já escolhida junto (regime CV)
+let _pagamentoCV = null;         // 'cv' | 'reembolso' | 'ajuda' — escolhido na página nova
+
+/* 24/09/2026 — pedido do Cleiton: no regime de cartão, antes de escolher a
+   categoria a pessoa diz COM QUE DINHEIRO pagou. Era um campo no meio do
+   formulário, fácil de passar batido; virou a primeira tela do lançamento,
+   e é ela que decide para qual aba da planilha a nota vai. */
+const PAGAMENTOS_CV = [
+  { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
+    sub: 'Pagou com o cartão corporativo. Vai para a aba CV ALELO.' },
+  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
+    sub: 'Pagou do próprio bolso. Vai para a aba CV REEMBOLSO e a empresa devolve.' },
+  { chave: 'ajuda', ico: '🧾', nome: 'Pago com ajuda de custos',
+    sub: 'Saiu do dinheiro de ajuda de custos. Vai para a aba própria.' },
+];
+
+function _pagamentoCVInfo(chave) {
+  return PAGAMENTOS_CV.find(p => p.chave === chave) || null;
+}
+
+function escolherPagamentoCV(chave) {
+  _pagamentoCV = chave;
+  _abaDespesa = null;
+  renderDespesas();
+}
+
+function trocarPagamentoCV() {
+  _pagamentoCV = null;
+  _abaDespesa = null;
+  renderDespesas();
+}
 
 /* 24/09/2026 — regime de cartão corporativo: não existe RDA x RDM. O gasto
    é dividido nas MESMAS quatro categorias da planilha (as quatro colunas de
@@ -2041,9 +2071,15 @@ function lancarNaCategoriaCV(chave, modo) {
   if (!c) return;
   _abaPreEscolhida = c.tipo;
   _subtipoPreEscolhido = c.subtipo;
+  const pag = _pagamentoCV || 'cv';
+  _pagamentoPreEscolhido = pag;
   if (modo === 'qr') iniciarQR();
-  else abrirSeletorTipoLancamento({ _manual: true, tipo: c.tipo, subtipo: c.subtipo });
+  else abrirSeletorTipoLancamento({ _manual: true, tipo: c.tipo, subtipo: c.subtipo, pagamento: pag });
 }
+
+/* O QR abre a câmera e só depois monta os dados: a escolha fica guardada
+   aqui até o formulário nascer. */
+let _pagamentoPreEscolhido = null;
 
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
@@ -2112,8 +2148,26 @@ function renderDespesas() {
 
     ${_ehContabilidade() ? `
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
-    <div class="ini-titulo">${_ehCV() ? 'Escolha a categoria e lance a nota' : 'Escolha a aba e lance a nota'}</div>
-    ${_ehCV() ? CATEGORIAS_CV.map(c => _catCardCV(c.chave)).join('') : _abaCard('RDA') + _abaCard('RDM')}
+    ${_ehCV() && !_pagamentoCV ? `
+    <div class="ini-titulo">Como esta nota foi paga?</div>
+    ${PAGAMENTOS_CV.map(p => `
+      <button class="pnl pnl-atalho pag-cv-card" style="margin-bottom:10px" onclick="escolherPagamentoCV('${p.chave}')">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">${p.ico}</span>
+          <span class="pnl-tit">${esc(p.nome)}</span>
+          <span class="pnl-sub">${esc(p.sub)}</span>
+        </span>
+      </button>`).join('')}
+    ` : _ehCV() ? `
+    <div class="pag-cv-escolhido">
+      <span>${_pagamentoCVInfo(_pagamentoCV)?.ico || ''} <b>${esc(_pagamentoCVInfo(_pagamentoCV)?.nome || '')}</b></span>
+      <button class="btn btn-sm btn-outline" onclick="trocarPagamentoCV()">Trocar</button>
+    </div>
+    <div class="ini-titulo">Escolha a categoria e lance a nota</div>
+    ${CATEGORIAS_CV.map(c => _catCardCV(c.chave)).join('')}
+    ` : `
+    <div class="ini-titulo">Escolha a aba e lance a nota</div>
+    ${_abaCard('RDA') + _abaCard('RDM')}`}
     ${_resumoHub()}`}
 
     <div class="ini-titulo">Ir para</div>
@@ -4988,7 +5042,13 @@ function abrirSeletorTipoLancamento(dados = {}) {
   /* Veio de uma aba do hub (22/09/2026): o tipo já está escolhido, então o
      passo 1 é pulado. O aviso de sugestão passa a aparecer no passo 2. */
   if (!dados.tipo && _abaPreEscolhida) dados = { ...dados, tipo: _abaPreEscolhida };
+  /* 24/09/2026: no CV a categoria e a forma de pagamento já foram escolhidas
+     nas telas anteriores — pelo caminho do QR elas chegam por aqui. */
+  if (!dados.subtipo && _subtipoPreEscolhido) dados = { ...dados, subtipo: _subtipoPreEscolhido };
+  if (!dados.pagamento && _pagamentoPreEscolhido) dados = { ...dados, pagamento: _pagamentoPreEscolhido };
   _abaPreEscolhida = null;
+  _subtipoPreEscolhido = null;
+  _pagamentoPreEscolhido = null;
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
