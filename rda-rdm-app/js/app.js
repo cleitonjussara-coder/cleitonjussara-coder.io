@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 267;
+const APP_BUILD = 268;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2425,14 +2425,20 @@ function renderInicio() {
       <button class="pnl pnl-grande" onclick="switchView('despesas')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">🧾</span>
-          <span class="pnl-tit">Petermann – Despesas</span>
-          <span class="pnl-sub">${_ehContabilidade()
-            ? "Equipe / Baixar relatórios · Arquivos."
+          ${/* 25/09/2026: o nome "Petermann – Despesas" saiu; quem vira título
+                grande é a ação do cartão, que era o subtítulo miúdo. */''}
+          <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
+            ? "Equipe e relatórios"
             : _ehCvRda()
-              ? "Postar nota de C.V., RDA e reembolso."
+              ? "Postar nota de C.V., RDA e reembolso"
               : _ehCV()
-                ? "Postar nota de C.V. e reembolso."
-                : `Lançar nota · Painel · Minhas notas · RDM/RDA e Planilhas${_veEquipe() ? " · Equipe · Arquivos" : ""}.`}</span>
+                ? "Postar nota de C.V. e reembolso"
+                : "Lançar nota de RDM e RDA"}</span>
+          <span class="pnl-sub">${_ehContabilidade()
+            ? "baixar planilhas · arquivos"
+            : _usaCartao()
+              ? "painel · minhas notas · planilhas"
+              : `painel · minhas notas · planilhas${_veEquipe() ? " · equipe" : ""}`}</span>
         </span>
       </button>
       ${_ehContabilidade() ? '' : _usaCartao() ? `
@@ -2487,7 +2493,7 @@ function renderInicio() {
     ${_ehContabilidade() ? '' : ultimas.length ? `
     <div class="ini-titulo">Últimos lançamentos</div>
     <div class="notas-list">${ultimas.map(n => cardNotaHTML(n, 'inithumb-')).join('')}</div>` : `
-    <div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Petermann – Despesas</b>, escolha a aba <b>RDA</b> ou <b>RDM</b> e lance pelo <b>QR Code</b> — é o jeito mais rápido.</div>`}
+    <div class="ini-dica">👆 Ainda não há lançamentos. Toque no <b>painel 🧾 lá em cima</b>, escolha ${_usaCartao() ? "a <b>categoria</b>" : "a aba <b>RDA</b> ou <b>RDM</b>"} e lance pelo <b>QR Code</b> — é o jeito mais rápido.</div>`}
   </div>`;
 
   if (ultimas.length) _carregarMiniaturas(ultimas, 'inithumb-').catch(() => {});

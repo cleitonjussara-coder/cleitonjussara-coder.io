@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=267">
+  <link rel="manifest" href="manifest.json?v=268">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -901,6 +901,10 @@ select.inp{cursor:pointer}
 .pnl-sub{font-size:15px;line-height:1.35;color:#e4f5e9;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .pnl-grande .pnl-conteudo{min-height:150px;justify-content:flex-end;padding:20px 20px 22px;max-width:78%}
 .pnl-grande .pnl-tit{font-size:24px}
+/* 25/09/2026: o título do painel virou frase ("Postar nota de C.V. e
+   reembolso"). Em duas linhas precisa respirar e quebrar equilibrado. */
+.pnl-tit-frase{line-height:1.18;text-wrap:balance;max-width:16ch}
+.pnl-grande .pnl-conteudo:has(.pnl-tit-frase){gap:4px}
 .pnl-linha{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .pnl-linha:has(> :nth-child(2):last-child){grid-template-columns:1fr 1fr}
 @media (min-width:640px){.pnl-linha{grid-template-columns:repeat(4,1fr)}}
@@ -1705,7 +1709,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=267" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=268" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2211,7 +2215,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec">
       <h4>🏠 Tela Início — por onde tudo começa</h4>
-      <p>Ao entrar, o app abre no <b>Início</b>. O botão grande <b>🧾 Petermann – Despesas</b> reúne tudo de despesas. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
+      <p>Ao entrar, o app abre no <b>Início</b>. O <b>botão grande 🧾 do topo</b> — que desde 25/09/2026 mostra direto o que ele faz (<b>“Postar nota de C.V. e reembolso”</b>, <b>“Lançar nota de RDM e RDA”</b>…, conforme o seu regime) — reúne tudo de despesas. Dentro dele a tela continua se chamando <b>Petermann – Despesas</b>. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
       <ul>
         <li>🍽️ <b>RDA — Alimentação</b>: refeição, lanche, café, água.</li>
         <li>💼 <b>RDM — Despesas corporativas</b>: abastecimento, hospedagem e outros gastos de serviço.</li>
@@ -2597,25 +2601,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=267"></script>
-<script defer src="js/db.js?v=267"></script>
-<script defer src="js/nfce.js?v=267"></script>
-<script defer src="js/sefaz.js?v=267"></script>
-<script defer src="js/brasilapi.js?v=267"></script>
-<script defer src="js/ocr.js?v=267"></script>
-<script defer src="js/recorte.js?v=267"></script>
-<script defer src="js/excel.js?v=267"></script>
-<script defer src="js/gestor.js?v=267"></script>
-<script defer src="js/frota.js?v=267"></script>
-<script defer src="js/ponto.js?v=267"></script>
-<script defer src="js/arquivos.js?v=267"></script>
-<script defer src="js/gdrive.js?v=267"></script>
-<script defer src="js/app.js?v=267"></script>
+<script defer src="js/api.js?v=268"></script>
+<script defer src="js/db.js?v=268"></script>
+<script defer src="js/nfce.js?v=268"></script>
+<script defer src="js/sefaz.js?v=268"></script>
+<script defer src="js/brasilapi.js?v=268"></script>
+<script defer src="js/ocr.js?v=268"></script>
+<script defer src="js/recorte.js?v=268"></script>
+<script defer src="js/excel.js?v=268"></script>
+<script defer src="js/gestor.js?v=268"></script>
+<script defer src="js/frota.js?v=268"></script>
+<script defer src="js/ponto.js?v=268"></script>
+<script defer src="js/arquivos.js?v=268"></script>
+<script defer src="js/gdrive.js?v=268"></script>
+<script defer src="js/app.js?v=268"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=267').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=268').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
