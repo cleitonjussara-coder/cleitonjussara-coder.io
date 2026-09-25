@@ -31,7 +31,14 @@ class Colaborador extends Authenticatable
     public $incrementing = false;
 
     /* regime (21/09/2026): rdm_rda = recebe dinheiro em conta; cv = cartão corporativo */
-    public const REGIMES = ['rdm_rda', 'cv'];
+    /**
+     * Regimes de despesa (24/09/2026 ganhou o terceiro):
+     *   rdm_rda → recebe dinheiro em conta para tudo;
+     *   cv      → cartão corporativo paga tudo;
+     *   cv_rda  → cartão no lugar do RDM (abastecimento, hospedagem, outros)
+     *             e RDA em dinheiro na conta, como no rdm_rda.
+     */
+    public const REGIMES = ['rdm_rda', 'cv', 'cv_rda'];
 
     protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via'];
 
@@ -130,6 +137,24 @@ class Colaborador extends Authenticatable
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new RedefinirSenha($token));
+    }
+
+    /** Tem cartão corporativo: regime cv ou cv_rda (24/09/2026). */
+    public function usaCartao(): bool
+    {
+        return in_array($this->regime, ['cv', 'cv_rda'], true);
+    }
+
+    /** Cartão para o RDM e dinheiro em conta para o RDA (24/09/2026). */
+    public function ehCvRda(): bool
+    {
+        return $this->regime === 'cv_rda';
+    }
+
+    /** Recebe dinheiro em conta para a alimentação: rdm_rda e cv_rda. */
+    public function recebeRdaEmConta(): bool
+    {
+        return in_array($this->regime, ['rdm_rda', 'cv_rda'], true);
     }
 
     public function ehAdmin(): bool

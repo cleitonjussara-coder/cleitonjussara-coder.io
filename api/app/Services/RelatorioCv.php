@@ -64,7 +64,13 @@ class RelatorioCv
              é dela que o BANCO DE DADOS tira o "REEMBOLSO DE" (gastos − total pago).
            • RDM/RDA (dinheiro em conta): como antes (19/09/2026) — as duas
              grades recebem os MESMOS lançamentos. */
-        if ($c->ehCV()) {
+        if ($c->usaCartao()) {
+            /* 24/09/2026 — regime cv_rda: o cartão entra no lugar do RDM, e a
+               alimentação (RDA) é dinheiro em conta, prestada na planilha
+               RDM/RDA. Então a nota de RDA fica FORA desta planilha. */
+            if ($c->ehCvRda()) {
+                $notas = $notas->reject(fn (Nota $n) => $n->tipo === 'RDA');
+            }
             $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
             $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
             if ($ws = $this->abaDoCartao($ss)) {
@@ -97,15 +103,16 @@ class RelatorioCv
         $linhaReembolso = 15;    // I/J — reembolso
         foreach ($reps as $r) {
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
-            $ehRecarga = $c->ehCV() && $r->destino === 'recarga';
-            if (! $c->ehCV() || $ehRecarga) {
+            $ehRecarga = $c->usaCartao() && $r->destino === 'recarga';
+            if (! $c->usaCartao() || $ehRecarga) {
                 if ($linhaExtrato <= 94) {
                     $bd->setCellValue([2, $linhaExtrato], $dt);
                     $bd->setCellValue([3, $linhaExtrato], (float) $r->valor);
                     $linhaExtrato++;
                 }
             }
-            if (! $ehRecarga) {
+            $ehRdaEmConta = $c->ehCvRda() && $r->destino === 'rda';
+            if (! $ehRecarga && ! $ehRdaEmConta) {
                 if ($linhaReembolso <= 94) {
                     $bd->setCellValue([9, $linhaReembolso], $dt);
                     $bd->setCellValue([10, $linhaReembolso], (float) $r->valor);
@@ -214,7 +221,7 @@ class RelatorioCv
             $prefixo = $this->prefixoAba($c->nome ?: $c->email, $usados);
             /* cada um no modelo do seu regime (21/09/2026): CV → PLANILHA_CV;
                RDM/RDA → PLANILHA_RDM_RDA (abas CABEÇALHO, BANCO DE DADOS, R.D.M., R.D.A) */
-            $ss = $c->ehCV() ? $this->gerar($c, $ano) : app(RelatorioRdmRda::class)->gerar($c, $ano);
+            $ss = $c->usaCartao() ? $this->gerar($c, $ano) : app(RelatorioRdmRda::class)->gerar($c, $ano);
             foreach (['NORMAS', 'AJUDA DE CUSTOS'] as $t) {
                 if ($ws = $ss->getSheetByName($t)) {
                     $ss->removeSheetByIndex($ss->getIndex($ws));

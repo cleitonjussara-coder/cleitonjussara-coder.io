@@ -36,7 +36,7 @@ class RelatorioCvPdf
         /* 24/09/2026: no CV o dinheiro anda por dois caminhos e cada um tem
            a sua coluna — recarga do cartão e reembolso ao colaborador.
            Lançamento antigo, sem destino, conta como reembolso. */
-        $ehCv = $c->ehCV();
+        $ehCv = $c->usaCartao();   // cv e cv_rda (24/09/2026)
         $recargas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'recarga') : $reps;
         $ajudas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'ajuda') : collect();
         $reembolsos = $ehCv

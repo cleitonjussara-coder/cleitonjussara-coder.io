@@ -152,7 +152,7 @@ class RelatorioController extends Controller
                 $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($c->nome ?: 'colaborador'));
                 $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
                 $temps[] = $tmp;
-                if ($c->ehCV()) {
+                if ($c->usaCartao()) {
                     $ss = $this->cv->gerar($c, $ano);
                     $this->cv->xlsx($ss, $tmp);
                     $rotulo = 'CV';
@@ -165,6 +165,20 @@ class RelatorioController extends Controller
                 $ss->disconnectWorksheets();
                 unset($ss);
                 $zip->addFile($tmp, "Planilha_{$rotulo}_{$nome}_{$ano}.xlsx");
+
+                /* 24/09/2026 — cv_rda entrega DUAS planilhas: a de C.V. com o
+                   que o cartão pagou (no lugar do RDM) e a de RDM/RDA só com
+                   a parte de RDA, que é dinheiro na conta. */
+                if ($c->ehCvRda()) {
+                    $tmp2 = tempnam(sys_get_temp_dir(), 'rda_').'.xlsx';
+                    $temps[] = $tmp2;
+                    $svc2 = app(RelatorioRdmRda::class);
+                    $ss2 = $svc2->gerar($c, $ano);
+                    $svc2->xlsx($ss2, $tmp2);
+                    $ss2->disconnectWorksheets();
+                    unset($ss2);
+                    $zip->addFile($tmp2, "Planilha_RDA_{$nome}_{$ano}.xlsx");
+                }
             }
             $zip->close();   // é aqui que os arquivos são lidos e gravados no zip
         } finally {
