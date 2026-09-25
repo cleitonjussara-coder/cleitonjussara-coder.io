@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=270">
+  <link rel="manifest" href="manifest.json?v=271">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1713,7 +1713,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=270" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=271" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2214,7 +2214,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec">
       <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>
-      <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente e de 20 em 20 minutos, se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e a troca só acontece quando você tocar. O número da versão fica no <b>Perfil</b>.</p>
+      <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente, quando o sinal volta e <b>de 3 em 3 minutos</b> (era 20, mudou em 25/09/2026), se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e você pode tocar nele na hora que quiser. Se não tocar, tudo bem: <b>assim que você fechar o lançamento o app se atualiza sozinho</b>, em até meio minuto. O número da versão fica no <b>Perfil</b>.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -2605,25 +2605,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=270"></script>
-<script defer src="js/db.js?v=270"></script>
-<script defer src="js/nfce.js?v=270"></script>
-<script defer src="js/sefaz.js?v=270"></script>
-<script defer src="js/brasilapi.js?v=270"></script>
-<script defer src="js/ocr.js?v=270"></script>
-<script defer src="js/recorte.js?v=270"></script>
-<script defer src="js/excel.js?v=270"></script>
-<script defer src="js/gestor.js?v=270"></script>
-<script defer src="js/frota.js?v=270"></script>
-<script defer src="js/ponto.js?v=270"></script>
-<script defer src="js/arquivos.js?v=270"></script>
-<script defer src="js/gdrive.js?v=270"></script>
-<script defer src="js/app.js?v=270"></script>
+<script defer src="js/api.js?v=271"></script>
+<script defer src="js/db.js?v=271"></script>
+<script defer src="js/nfce.js?v=271"></script>
+<script defer src="js/sefaz.js?v=271"></script>
+<script defer src="js/brasilapi.js?v=271"></script>
+<script defer src="js/ocr.js?v=271"></script>
+<script defer src="js/recorte.js?v=271"></script>
+<script defer src="js/excel.js?v=271"></script>
+<script defer src="js/gestor.js?v=271"></script>
+<script defer src="js/frota.js?v=271"></script>
+<script defer src="js/ponto.js?v=271"></script>
+<script defer src="js/arquivos.js?v=271"></script>
+<script defer src="js/gdrive.js?v=271"></script>
+<script defer src="js/app.js?v=271"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=270').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=271').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

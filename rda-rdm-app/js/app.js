@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 270;
+const APP_BUILD = 271;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7216,7 +7216,13 @@ async function desligarNotificacoes(btn) {
    e recarrega sozinho. Se houver formulário aberto, não interrompe: mostra
    um aviso com o botão Atualizar e espera.
 ═══════════════════════════════════════════════════════════ */
-const VERSAO_INTERVALO_MS = 20 * 60 * 1000;
+/* 25/09/2026: 20 minutos era muito — num dia de várias publicações a
+   pessoa ficava meia hora numa versão velha. Passou para 3 minutos, e
+   quando já há versão nova esperando o app reverifica de 30 em 30 s até
+   achar uma brecha sem formulário aberto. */
+const VERSAO_INTERVALO_MS = 3 * 60 * 1000;
+const VERSAO_INSISTE_MS   = 30 * 1000;
+let _versaoInsistindo = null;
 
 /* O build publicado vem do próprio sw.js (petermann-vNNN), que muda a cada
    versão — assim não há um quarto marcador de build para esquecer. */
@@ -7262,12 +7268,22 @@ async function verificarVersao() {
   let publicado = null;
   try { publicado = await _buildPublicado(); } catch (_) { return; }
   if (!publicado || publicado <= APP_BUILD) return;
+
   /* Uma tentativa automática por versão: se depois de recarregar o build
      continuar velho (cache travado, arquivo pela metade), não entra em
      laço — passa a pedir o toque da pessoa. */
   let tentado = 0;
   try { tentado = Number(sessionStorage.getItem('build-tentado') || 0); } catch (_) {}
-  if (tentado === publicado || !_momentoBomParaRecarregar()) { _avisarVersaoNova(publicado); return; }
+  if (tentado === publicado) { _avisarVersaoNova(publicado); return; }
+  /* Só o formulário aberto segura a atualização — e só enquanto ele estiver
+     aberto: o app volta a tentar de 30 em 30 s até achar a brecha, em vez de
+     ficar na faixa esperando o toque (pedido do Cleiton, 25/09/2026). */
+  if (!_momentoBomParaRecarregar()) {
+    _avisarVersaoNova(publicado);
+    if (!_versaoInsistindo) _versaoInsistindo = setInterval(verificarVersao, VERSAO_INSISTE_MS);
+    return;
+  }
+  if (_versaoInsistindo) { clearInterval(_versaoInsistindo); _versaoInsistindo = null; }
   try { sessionStorage.setItem('build-tentado', String(publicado)); } catch (_) {}
   await _aplicarAtualizacao();
 }
@@ -7277,6 +7293,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(verificarVersao, 4000);
   setInterval(verificarVersao, VERSAO_INTERVALO_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
+  window.addEventListener('online', () => verificarVersao());   // voltou o sinal no campo (25/09/2026)
   renderAuth('login');
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') fecharFotoViewer();
