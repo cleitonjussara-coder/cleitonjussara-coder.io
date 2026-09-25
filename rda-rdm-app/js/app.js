@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 268;
+const APP_BUILD = 269;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1958,11 +1958,11 @@ let _pagamentoCV = null;         // 'cv' | 'reembolso' — escolhido na página 
    e é ela que decide para qual aba da planilha a nota vai. */
 const PAGAMENTOS_CV = [
   { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
-    sub: 'Pagou com o cartão corporativo. Vai para a aba CV ALELO.' },
+    sub: 'Pagou com o cartão corporativo.' },
   { chave: 'rda', ico: '🍽️', nome: 'Nota paga com o RDA',
     sub: 'Saiu do dinheiro de alimentação que caiu na conta. Vai para a planilha RDM/RDA.' },
   { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
-    sub: 'Pagou do próprio bolso. Vai para a aba CV REEMBOLSO e a empresa devolve.' },
+    sub: 'Pagamento de carteira.' },
 ];
 
 function _pagamentoCVInfo(chave) {
@@ -2347,7 +2347,7 @@ function renderDespesas() {
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
-    ${PAGAMENTOS_CV.map(p => `
+    ${PAGAMENTOS_CV.filter(p => p.chave !== 'rda').map(p => `
       <button class="pnl pnl-atalho pag-cv-card" style="margin-bottom:10px" onclick="escolherPagamentoCV('${p.chave}')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">${p.ico}</span>
