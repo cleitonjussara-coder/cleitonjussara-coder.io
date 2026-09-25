@@ -710,6 +710,13 @@ window.DB = (() => {
     return limpas;
   }
 
+  /* Ids que ainda esperam subir — nada que esteja aqui pode ser removido
+     do aparelho, sob pena de perder um lançamento que o servidor nunca viu. */
+  async function idsNaFila() {
+    const fila = await _getAll('sync_queue').catch(() => []);
+    return new Set(fila.map(i => i.entity_id).filter(Boolean));
+  }
+
   async function pullIncremental(sb, userId) {
     if (!sb || !navigator.onLine || !userId) return 0;
     const since = await getMeta('last_sync', null);
@@ -824,7 +831,7 @@ window.DB = (() => {
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
     saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse,
     upsertFromDrive,
-    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, repararQrUrls,
+    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
     garantirAno, anosSincronizados, getNotasEquipe,
   };
 })();

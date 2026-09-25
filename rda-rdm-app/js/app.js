@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 272;
+const APP_BUILD = 273;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3645,13 +3645,63 @@ function abrirPendencias() {
               ${n.foto_path || n.foto_local
                 ? `<button class="btn btn-sm btn-outline" onclick="verFoto('${n.id}')" title="Ver o anexo">📎 Ver</button>`
                 : '<span class="pend-tag" style="text-align:center">sem anexo</span>'}
-              <button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button>
+              <span data-acao-pend="${n.id}"><button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button></span>
             </div>
           </div>`).join('')}
       </div>
     </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  _marcarPendenciasFantasma(lista.map(x => x.nota)).catch(() => {});
+}
+
+/* 25/09/2026 — a nota que o servidor não tem mais.
+   O "apagar em definitivo" antigo tirava a linha sem deixar rastro, e a
+   cópia deste aparelho ficava para sempre na faixa de pendências. A lápide
+   resolve daí para a frente; as que já ficaram para trás só se descobrem
+   perguntando. Aqui a gente pergunta e AVISA — quem remove é a pessoa, no
+   botão. Nada some sozinho. */
+async function _marcarPendenciasFantasma(lista) {
+  if (!sb || !navigator.onLine) return;
+  const naFila = (await DB.idsNaFila?.()) || new Set();
+  const ids = lista.map(n => n.id).filter(id => typeof id === 'string' && id.length === 36 && !naFila.has(id));
+  if (!ids.length) return;
+
+  const achadas = new Set((await sb.notas.existem(ids)).map(x => x.id));
+  for (const id of ids) {
+    if (achadas.has(id)) continue;
+    const alvo = document.querySelector('[data-acao-pend="' + id + '"]');
+    if (!alvo) continue;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-outline';
+    btn.title = 'Some só deste aparelho';
+    btn.textContent = '🧹 Remover daqui';
+    btn.addEventListener('click', () => removerNotaFantasma(id));
+    alvo.replaceChildren(btn);
+    alvo.closest('.pend-item')?.querySelector('.pend-motivos')
+      ?.insertAdjacentHTML('beforeend', '<span class="pend-tag">já não existe no servidor</span>');
+  }
+}
+
+async function removerNotaFantasma(id) {
+  const n = _notaPorId(id);
+  const quem = n
+    ? [n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'), n.data ? fmtDataBR(n.data) : null].filter(Boolean).join(' · ')
+    : id;
+  const nl = String.fromCharCode(10);
+  const aviso = [
+    'Esta nota já foi apagada do sistema — o que sobrou é a cópia guardada neste aparelho.',
+    '',
+    quem,
+    '',
+    'Remover daqui?',
+  ].join(nl);
+  if (!confirm(aviso)) return;
+  await DB.purgeNotaLocal(id);
+  await carregarDadosLocais();
+  document.getElementById('pend-overlay')?.remove();
+  if (viewAtual === 'inicio') renderInicio(); else if (viewAtual === 'notas') renderNotas();
+  toast('Cópia local removida');
 }
 
 function _notaIncompletaParaPlanilha(n) {
