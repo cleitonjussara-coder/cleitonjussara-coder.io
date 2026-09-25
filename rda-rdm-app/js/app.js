@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 269;
+const APP_BUILD = 270;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2061,8 +2061,8 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
       return {
         id,
         nome: (id === user?.id ? user?.nome : equipePorId[id]?.nome) || 'Colaborador',
-        valor: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(quem), 'RDM'),   // só RDM (22/09/2026)
-        total: _devedorDe(d.ns, d.rs, mes, ano, _ehCV(quem)),
+        valor: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDM'),   // só RDM (22/09/2026)
+        total: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem)),
       };
     })
     .filter(c => c.valor > LIMITE_DEVEDOR)
@@ -2073,7 +2073,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
 function _resumoHub() {
   const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno);
   const rda = doMes('RDA'), rdm = doMes('RDM');
-  const cv = _ehCV();
+  const cv = _usaCartao();   // cv_rda também deve pelo reembolso (25/09/2026)
   const ns = notas.filter(n => !n.deleted), rs = repasses.filter(r => !r.deleted);
   const devedor = _devedorDe(ns, rs, filMes, filAno, cv);
   const devedorRdm = _devedorDe(ns, rs, filMes, filAno, cv, 'RDM');
@@ -2081,6 +2081,14 @@ function _resumoHub() {
      o colaborador vê os números, mas não é cobrado pelo app. */
   const acima = _ehGestorOuAdmin() && devedorRdm > LIMITE_DEVEDOR;
   const outros = _equipeDevedora().filter(c => c.id !== user?.id);
+
+  /* 25/09/2026: no regime de cartão não existe RDA x RDM — o gasto se divide
+     nas quatro categorias da planilha. O resumo segue a mesma divisão. */
+  const ehCartao = _usaCartao();
+  const doMesTodas = notas.filter(n => !n.deleted && n.mes === filMes && n.ano === filAno);
+  const porCategoria = CATEGORIAS_CV.map(c => ({
+    c, arr: doMesTodas.filter(n => _chaveCategoriaDaNota(n) === c.chave),
+  }));
 
   const linha = (ico, sigla, arr) => `
     <div class="res-col">
@@ -2141,7 +2149,38 @@ function _resumoHub() {
       ${linhas.length > mostra.length ? `<div class="res-tab-mais">+ ${linhas.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}`;
   };
 
-  const detalhe = `
+  /* No cartão o reembolso é UM valor só (o próprio _devedorDe ignora o
+     filtro por aba) — mostrar duas caixas repetia o mesmo número. */
+  const tabelaReembolso = () => {
+    const linhas = [];
+    for (let m = 12; m >= 1; m--) {
+      const g = _soma(ns.filter(n => n.pagamento === 'reembolso' && n.mes === m && n.ano === filAno));
+      const rec = _soma(rs.filter(r => r.mes === m && r.ano === filAno && _repasseEhRecebido(r) && _repasseEhReembolso(r)));
+      if (g || rec) linhas.push({ m, g, rec, falta: g - rec });
+    }
+    if (!linhas.length) return '';
+    const mostra = linhas.slice(0, 6);
+    return `
+      <div class="res-tab-tit">👛 Reembolso — mês a mês</div>
+      <table class="res-tab">
+        <tr><th>Mês</th><th>Do bolso</th><th>Recebido</th><th>A receber</th></tr>
+        ${mostra.map(l => `
+        <tr>
+          <td>${MESES[l.m - 1]}</td>
+          <td>${brl(l.g)}</td>
+          <td>${brl(l.rec)}</td>
+          <td class="${l.falta > 0 ? 'pos' : l.falta < 0 ? 'neg' : ''}">${brl(l.falta)}</td>
+        </tr>`).join('')}
+      </table>
+      ${linhas.length > mostra.length ? `<div class="res-tab-mais">+ ${linhas.length - mostra.length} mês(es) em ${filAno} — veja tudo em C.V. e Planilha.</div>` : ''}`;
+  };
+
+  const detalhe = ehCartao ? `
+    <div class="res-rec-tit">${rotulo}</div>
+    <div class="res-recs">
+      ${caixaRec('👛', 'Reembolso', devedor)}
+    </div>
+    ${tabelaReembolso()}` : `
     <div class="res-rec-tit">${rotulo} — por aba</div>
     <div class="res-recs">
       ${caixaRec('🍽️', 'RDA', devedorRda)}
@@ -2153,9 +2192,10 @@ function _resumoHub() {
   return `
     <div class="ini-titulo">Resumo de ${MESES[filMes - 1]} ${filAno}</div>
     <div class="res-card ${acima ? 'alerta' : ''}" onclick="switchView('saldo')">
-      <div class="res-linha">
-        ${linha('🍽️', 'RDA', rda)}
-        ${linha('💼', 'RDM', rdm)}
+      <div class="res-linha ${ehCartao ? 'res-linha-4' : ''}">
+        ${ehCartao
+          ? porCategoria.map(({ c, arr }) => linha(c.ico, c.nome, arr)).join('')
+          : linha('🍽️', 'RDA', rda) + linha('💼', 'RDM', rdm)}
       </div>
       ${detalhe}
       ${acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : ''}
