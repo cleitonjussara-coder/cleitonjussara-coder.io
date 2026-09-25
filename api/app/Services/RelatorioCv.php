@@ -65,13 +65,6 @@ class RelatorioCv
            • RDM/RDA (dinheiro em conta): como antes (19/09/2026) — as duas
              grades recebem os MESMOS lançamentos. */
         if ($c->usaCartao()) {
-            /* 24/09/2026 — regime cv_rda: o cartão entra no lugar do RDM, e a
-               alimentação (RDA) é dinheiro em conta, prestada na planilha
-               RDM/RDA. Então a nota de RDA fica FORA desta planilha. */
-            if ($c->ehCvRda()) {
-                // exceção de 24/09/2026: alimentação paga no cartão fica aqui mesmo
-                $notas = $notas->reject(fn (Nota $n) => $n->tipo === 'RDA' && $n->pagamento !== 'cv');
-            }
             $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
             $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
             if ($ws = $this->abaDoCartao($ss)) {
@@ -112,8 +105,7 @@ class RelatorioCv
                     $linhaExtrato++;
                 }
             }
-            $ehRdaEmConta = $c->ehCvRda() && $r->destino === 'rda';
-            if (! $ehRecarga && ! $ehRdaEmConta) {
+            if (! $ehRecarga) {
                 if ($linhaReembolso <= 94) {
                     $bd->setCellValue([9, $linhaReembolso], $dt);
                     $bd->setCellValue([10, $linhaReembolso], (float) $r->valor);

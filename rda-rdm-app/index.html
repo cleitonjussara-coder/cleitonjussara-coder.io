@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=273">
+  <link rel="manifest" href="manifest.json?v=274">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1713,7 +1713,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=273" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=274" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -2178,20 +2178,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
     </div>
 
-    <div class="ajuda-sec ajuda-cv">
-      <h4>🍽️ C.V. + RDA na conta — o regime novo (24/09/2026)</h4>
-      <p>É o meio do caminho entre os outros dois: o <b>cartão corporativo entra no lugar do RDM</b> (abastecimento, hospedagem e outros) e a <b>alimentação continua sendo dinheiro na sua conta</b>, como no RDA de sempre. Quem define o regime de cada pessoa é o gestor, na <b>Equipe</b>.</p>
-      <p><b>A pergunta vem depois da categoria.</b> Você escolhe a categoria primeiro e aí o app pergunta como aquela nota foi paga:</p>
-      <ul>
-        <li><b>🍽️ Alimentação</b> — <b>Do dinheiro do RDA</b> (o normal: sai do valor que caiu na sua conta) ou <b>💳 No cartão</b>. O cartão aqui é <b>exceção</b>, mas pode: nesse caso a nota vai para a aba <b>CV ALELO</b> e <b>não</b> desconta do seu RDA.</li>
-        <li><b>⛽ Abastecimento, 🏨 Hospedagem e 📦 Outros</b> — <b>💳 No cartão</b> (vai para <b>CV ALELO</b>) ou <b>👛 Do meu bolso</b> (vira <b>reembolso</b>, a empresa devolve).</li>
-      </ul>
-      <p>No <b>Início</b> aparecem três painéis: <b>👛 Reembolso</b>, <b>💳 Recarga do cartão</b> e <b>🍽️ RDA na conta</b> — esse último para pedir ao gestor o dinheiro da alimentação.</p>
-      <p>Em <b>RDM/RDA e Planilhas</b> você acompanha os dois saldos: <b>💳 Saldo do cartão</b> e <b>🍽️ RDA na conta</b> (recebido menos o que saiu do RDA — o que foi no cartão não entra nessa conta).</p>
-      <p class="ajuda-note">São <b>duas planilhas</b>: a <b>C.V.</b> com o que passou no cartão e os reembolsos, e a <b>RDM/RDA</b> só com a parte do <b>R.D.A</b> — sem bloco de RDM, porque isso agora está no cartão. No download da equipe as duas vêm juntas.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
+        <div class="ajuda-sec ajuda-gestor">
       <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
       <ul>
         <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. A <b>contabilidade</b> consulta e baixa relatórios; não edita nem apaga.</li>
@@ -2606,25 +2593,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=273"></script>
-<script defer src="js/db.js?v=273"></script>
-<script defer src="js/nfce.js?v=273"></script>
-<script defer src="js/sefaz.js?v=273"></script>
-<script defer src="js/brasilapi.js?v=273"></script>
-<script defer src="js/ocr.js?v=273"></script>
-<script defer src="js/recorte.js?v=273"></script>
-<script defer src="js/excel.js?v=273"></script>
-<script defer src="js/gestor.js?v=273"></script>
-<script defer src="js/frota.js?v=273"></script>
-<script defer src="js/ponto.js?v=273"></script>
-<script defer src="js/arquivos.js?v=273"></script>
-<script defer src="js/gdrive.js?v=273"></script>
-<script defer src="js/app.js?v=273"></script>
+<script defer src="js/api.js?v=274"></script>
+<script defer src="js/db.js?v=274"></script>
+<script defer src="js/nfce.js?v=274"></script>
+<script defer src="js/sefaz.js?v=274"></script>
+<script defer src="js/brasilapi.js?v=274"></script>
+<script defer src="js/ocr.js?v=274"></script>
+<script defer src="js/recorte.js?v=274"></script>
+<script defer src="js/excel.js?v=274"></script>
+<script defer src="js/gestor.js?v=274"></script>
+<script defer src="js/frota.js?v=274"></script>
+<script defer src="js/ponto.js?v=274"></script>
+<script defer src="js/arquivos.js?v=274"></script>
+<script defer src="js/gdrive.js?v=274"></script>
+<script defer src="js/app.js?v=274"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=273').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=274').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

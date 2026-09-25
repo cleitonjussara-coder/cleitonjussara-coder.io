@@ -67,9 +67,7 @@ class RelatorioRdmRda
         }
         $prox = [];
         $fora = 0;
-        /* 24/09/2026 — regime cv_rda: o cartão entra no lugar do RDM, e esses
-           gastos são prestados na planilha C.V. Aqui entra só o RDA. */
-        $doRdm = $c->ehCvRda() ? collect() : $notas->where('tipo', 'RDM');
+        $doRdm = $notas->where('tipo', 'RDM');
         foreach ($doRdm as $n) {
             $m = (int) $n->mes;
             if (! isset(self::RDM[$m])) {
@@ -93,11 +91,7 @@ class RelatorioRdmRda
             $this->limpar($rda, 2, $ini + 2, 7, $tot - 1);
         }
         $idx = [];
-        /* 24/09/2026 — cv_rda: alimentação paga no cartão (exceção) já é
-           prestada na planilha C.V.; aqui entra só o que saiu do dinheiro da conta. */
-        $doRda = $notas->where('tipo', 'RDA')
-            ->reject(fn (Nota $n) => $c->ehCvRda() && $n->pagamento === 'cv');
-        foreach ($doRda as $n) {
+        foreach ($notas->where('tipo', 'RDA') as $n) {
             $m = (int) $n->mes;
             if (! isset(self::RDA[$m])) {
                 continue;
@@ -128,13 +122,8 @@ class RelatorioRdmRda
         $r1 = 15;
         $r2 = 15;
         foreach ($reps as $r) {
-            /* cv_rda: recarga do cartão e reembolso são da planilha C.V.;
-               aqui entra o dinheiro de RDA que caiu na conta. */
-            if ($c->ehCvRda() && $r->destino !== 'rda') {
-                continue;
-            }
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
-            if ($r->tipo === 'RDA' || ($c->ehCvRda() && $r->destino === 'rda')) {
+            if ($r->tipo === 'RDA') {
                 if ($r2 > 26) {
                     continue;
                 }

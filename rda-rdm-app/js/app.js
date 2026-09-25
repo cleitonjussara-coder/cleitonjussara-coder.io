@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 273;
+const APP_BUILD = 274;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -791,18 +791,10 @@ function _ehGestorOuAdmin() {
 function _ehContabilidade() { return user?.role === 'contabilidade'; }
 /* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
 function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
-/* 24/09/2026 — terceiro regime: cartão no lugar do RDM e alimentação (RDA)
-   em dinheiro na conta. Quem "usa cartão" é cv ou cv_rda; quem recebe RDA
-   em conta é rdm_rda ou cv_rda. */
-function _ehCvRda(u = user) { return (u?.regime || 'rdm_rda') === 'cv_rda'; }
-function _usaCartao(u = user) { return _ehCV(u) || _ehCvRda(u); }
-function _recebeRdaEmConta(u = user) { return !_ehCV(u); }
-/* A categoria vai SEMPRE no cartão? No cv_rda, alimentação normalmente sai
-   do dinheiro do RDA — mas 24/09/2026 o Cleiton abriu a exceção de ela
-   também poder ir no cartão, então quem decide é a pergunta, nota a nota. */
-function _categoriaVaiNoCartao(chave) {
-  return !(_ehCvRda() && chave === 'alimentacao');
-}
+/* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
+   separado de propósito: é por ele que passam saldo do cartão, reembolso e
+   resumo por categoria, que são do cartão e não do nome do regime. */
+function _usaCartao(u = user) { return _ehCV(u); }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 /* Corrigir a nota de QUALQUER colaborador: só gestor e admin. A
@@ -1959,8 +1951,6 @@ let _pagamentoCV = null;         // 'cv' | 'reembolso' — escolhido na página 
 const PAGAMENTOS_CV = [
   { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
     sub: 'Pagou com o cartão corporativo.' },
-  { chave: 'rda', ico: '🍽️', nome: 'Nota paga com o RDA',
-    sub: 'Saiu do dinheiro de alimentação que caiu na conta. Vai para a planilha RDM/RDA.' },
   { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
     sub: 'Pagamento de carteira.' },
 ];
@@ -2073,7 +2063,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
 function _resumoHub() {
   const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno);
   const rda = doMes('RDA'), rdm = doMes('RDM');
-  const cv = _usaCartao();   // cv_rda também deve pelo reembolso (25/09/2026)
+  const cv = _usaCartao();
   const ns = notas.filter(n => !n.deleted), rs = repasses.filter(r => !r.deleted);
   const devedor = _devedorDe(ns, rs, filMes, filAno, cv);
   const devedorRdm = _devedorDe(ns, rs, filMes, filAno, cv, 'RDM');
@@ -2254,56 +2244,7 @@ function _catCardCV(chave) {
 function lancarNaCategoriaCV(chave, modo) {
   const c = _categoriaCV(chave);
   if (!c) return;
-  /* 24/09/2026 — regime cv_rda: alimentação é dinheiro da conta (não passa
-     pelo cartão) e as outras três perguntam cartão ou bolso AQUI, depois da
-     categoria. No CV puro a pergunta já veio antes, na primeira página. */
-  if (_ehCvRda()) {
-    _perguntarPagamentoDaCategoria(c, modo);    // alimentação também pergunta (exceção do cartão)
-    return;
-  }
   _lancarCategoria(c, modo, _pagamentoCV || 'cv');
-}
-
-/* Pergunta cartão ou bolso para UMA categoria (cv_rda). */
-/* As opções mudam com a categoria: alimentação no cv_rda sai do dinheiro do
-   RDA (normal) ou do cartão (exceção aberta em 24/09/2026); as outras três
-   são cartão ou bolso. */
-function _opcoesPagamentoDaCategoria(c) {
-  if (_ehCvRda() && c.chave === 'alimentacao') {
-    return [
-      { pag: 'rda', ico: '🍽️', tit: 'Do dinheiro do RDA', sub: 'o valor que caiu na sua conta', cls: 'rep-aba-pedir' },
-      { pag: 'cv',  ico: '💳', tit: 'No cartão', sub: 'exceção: vai para a aba CV ALELO', cls: 'rep-aba-receber' },
-    ];
-  }
-  return [
-    { pag: 'cv',        ico: '💳', tit: 'No cartão',   sub: 'vai para a aba CV ALELO', cls: 'rep-aba-receber' },
-    { pag: 'reembolso', ico: '👛', tit: 'Do meu bolso', sub: 'vira reembolso, na aba própria', cls: 'rep-aba-pedir' },
-  ];
-}
-
-function _perguntarPagamentoDaCategoria(c, modo) {
-  const ov = document.createElement('div');
-  ov.className = 'modal-overlay open';
-  ov.id = 'pagcat-overlay';
-  ov.innerHTML = `
-    <div class="modal-card" style="max-width:420px">
-      <div class="modal-hd"><h3>${c.ico} ${esc(c.nome)} — como foi paga?</h3>
-        <button class="btn-icon-sm" onclick="document.getElementById('pagcat-overlay')?.remove()">✕</button></div>
-      <div class="modal-bd">
-        ${_opcoesPagamentoDaCategoria(c).map(o => `
-        <button class="rep-aba ${o.cls}" style="width:100%;margin-bottom:10px" onclick="_escolhiPagamentoDaCategoria('${c.chave}','${modo || ''}','${o.pag}')">
-          <span class="rep-aba-ico">${o.ico}</span><span class="rep-aba-tit">${esc(o.tit)}</span><span class="rep-aba-sub">${esc(o.sub)}</span>
-        </button>`).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
-  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
-}
-
-function _escolhiPagamentoDaCategoria(chave, modo, pagamento) {
-  document.getElementById('pagcat-overlay')?.remove();
-  const c = _categoriaCV(chave);
-  if (c) _lancarCategoria(c, modo, pagamento);
 }
 
 function _lancarCategoria(c, modo, pag) {
@@ -2387,7 +2328,7 @@ function renderDespesas() {
     <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
-    ${PAGAMENTOS_CV.filter(p => p.chave !== 'rda').map(p => `
+    ${PAGAMENTOS_CV.map(p => `
       <button class="pnl pnl-atalho pag-cv-card" style="margin-bottom:10px" onclick="escolherPagamentoCV('${p.chave}')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">${p.ico}</span>
@@ -2402,7 +2343,6 @@ function renderDespesas() {
       <button class="btn btn-sm btn-outline" onclick="trocarPagamentoCV()">Trocar</button>
     </div>` : ''}
     <div class="ini-titulo">Escolha a categoria e lance a nota</div>
-    ${_ehCvRda() ? '<p class="ini-dica" style="cursor:default">🍽️ <b>Alimentação</b> sai do dinheiro que você recebe na conta. As outras três vão no <b>cartão</b> — e, pagando por fora, viram reembolso.</p>' : ''}
     ${CATEGORIAS_CV.map(c => _catCardCV(c.chave)).join('')}
     ` : `
     <div class="ini-titulo">Escolha a aba e lance a nota</div>
@@ -2414,7 +2354,7 @@ function renderDespesas() {
       ${_ehContabilidade() ? '' : `
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
       <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_usaCartao() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCvRda() ? 'C.V., RDA e Planilhas' : _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_usaCartao() ? 'cartão, reembolsos e planilha' : 'saldo e relatórios'}</span></button>`}
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_usaCartao() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_usaCartao() ? 'cartão, reembolsos e planilha' : 'saldo e relatórios'}</span></button>`}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">baixar relatórios</span></button>` : ''}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
@@ -2469,11 +2409,9 @@ function renderInicio() {
                 grande é a ação do cartão, que era o subtítulo miúdo. */''}
           <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
             ? "Equipe e relatórios"
-            : _ehCvRda()
-              ? "Postar nota de C.V., RDA e reembolso"
-              : _ehCV()
-                ? "Postar nota de C.V. e reembolso"
-                : "Lançar nota de RDM e RDA"}</span>
+            : _ehCV()
+              ? "Postar nota de C.V. e reembolso"
+              : "Lançar nota de RDM e RDA"}</span>
         </span>
       </button>
       ${_ehContabilidade() ? '' : _usaCartao() ? `
@@ -2491,14 +2429,7 @@ function renderInicio() {
           <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'pedir recarga ao gestor'}</span>
         </span>
       </button>
-      ${_ehCvRda() ? `
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'rda')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🍽️</span>
-          <span class="pnl-tit">RDA na conta</span>
-          <span class="pnl-sub">${_saldoRda() != null ? 'saldo hoje: ' + brl(_saldoRda()) : 'dinheiro de alimentação'}</span>
-        </span>
-      </button>` : ''}` : `
+` : `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse()">
         <span class="pnl-conteudo">
           <span class="pnl-ico">💸</span>
@@ -3915,7 +3846,7 @@ function renderSaldo() {
   /* Fase 3 (21/09/2026) — regime CV: o cartão corporativo paga; o que circula
      é reembolso. Cards: gasto no cartão (mês), do bolso, reembolsos. Só a
      Planilha CV para baixar. RDM/RDA: os cards de sempre e só o Excel/CSV. */
-  const cv = _usaCartao();   // cv e cv_rda (24/09/2026)
+  const cv = _usaCartao();
   let cardsCV = '';
   if (cv) {
     const nsAno = notas.filter(n => !n.deleted && n.ano === filAno);
@@ -3944,18 +3875,12 @@ function renderSaldo() {
       <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
       ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Peça a recarga pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
-    ${_ehCvRda() ? `
-    <div class="saldo-card ${(_saldoRda() || 0) < 0 ? 'neg' : ''}">
-      <div class="saldo-label">🍽️ RDA na conta · ${filAno}</div>
-      <div class="saldo-val">${brl(_saldoRda() || 0)}</div>
-      <div class="saldo-detail"><span>Recebido <b>${brl(soma(rsAno.filter(r => r.destino === 'rda' && _repasseEhRecebido(r))))}</b></span><span>Gasto do RDA <b>${brl(soma(nsAno.filter(n => n.tipo === 'RDA' && n.pagamento !== 'cv')))}</b></span></div>
-    </div>` : ''}
     <div class="saldo-card">
       <div class="saldo-label">💳 Gasto no cartão · ${MESES[filMes-1]}</div>
       <div class="saldo-val">${brl(cartaoMes)}</div>
       <div class="saldo-detail"><span>No ano <b>${brl(cartaoAno)}</b></span><span>Do bolso no mês <b>${brl(bolsoMes)}</b></span></div>
       <div class="sub-breakdown">
-        ${(!_ehCvRda() || cat(n => n.tipo === 'RDA') > 0) ? `<div class="sub-row"><span>Alimentação (RDA)</span><span>${brl(cat(n => n.tipo === 'RDA'))}</span></div>` : ''}${/* no cv_rda a alimentação só cai aqui pela exceção; sem ela a linha seria sempre R$ 0,00 (24/09/2026) */''}
+        <div class="sub-row"><span>Alimentação (RDA)</span><span>${brl(cat(n => n.tipo === 'RDA'))}</span></div>
         <div class="sub-row"><span>Abastecimento</span><span>${brl(cat(n => n.subtipo === 'Abastecimento'))}</span></div>
         <div class="sub-row"><span>Hospedagens</span><span>${brl(cat(n => n.subtipo === 'Hospedagem'))}</span></div>
         <div class="sub-row"><span>Outros</span><span>${brl(cat(n => n.tipo === 'RDM' && n.subtipo === 'Outros'))}</span></div>
@@ -6708,7 +6633,6 @@ function _repasseTitulo(modo) {
   /* 24/09/2026: no CV há dois caminhos — a recarga do cartão pré-pago e o
      reembolso do que saiu do bolso. Chamar tudo de reembolso fazia o pedido
      de recarga abrir com o título errado. */
-  if (_repasseDestino === 'rda') return modo === 'requested' ? 'Pedir o RDA na conta' : 'Registrar RDA recebido na conta';
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Pedir recarga do cartão' : 'Registrar recarga do cartão';
   /* colaborador CV (21/09/2026): o dinheiro que circula é REEMBOLSO do que saiu do bolso */
   if (_ehCV()) return modo === 'requested' ? 'Registrar reembolso (a receber)' : 'Registrar reembolso recebido';
@@ -6725,7 +6649,6 @@ function _repasseTituloCabecalho() {
 }
 
 function _repassePlaceholder(modo) {
-  if (_repasseDestino === 'rda') return modo === 'requested' ? 'Ex: RDA da quinzena' : 'Ex: RDA recebido do gestor';
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Ex: cartão sem saldo para abastecer amanhã' : 'Ex: recarga feita pelo gestor';
   if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: reembolso recebido do gestor';
   return modo === 'requested'
@@ -6734,9 +6657,6 @@ function _repassePlaceholder(modo) {
 }
 
 function _repasseHelpText(modo) {
-  if (_repasseDestino === 'rda') return modo === 'requested'
-    ? 'O gestor recebe o pedido. Quando marcar como pago, o valor entra como RDA recebido na sua conta.'
-    : 'Registra o RDA que caiu na sua conta; as notas de alimentação abatem dele.';
   if (_repasseDestino === 'recarga') return modo === 'requested'
     ? 'O gestor recebe o pedido e faz a transferência para o cartão. O valor entra no saldo do cartão quando ele marcar como pago.'
     : 'Registra uma recarga que já entrou no cartão; soma ao saldo do cartão.';
@@ -6853,7 +6773,7 @@ let _repasseDestino = null;
    gravado, conta como reembolso: era assim que o relatório o tratava antes
    da separação. */
 function _repasseEhReembolso(r) {
-  return r && r.destino !== 'recarga' && r.destino !== 'rda';
+  return r && r.destino !== 'recarga';
 }
 
 /* Nenhum dinheiro do regime de cartão é lançado por aba (24/09/2026): as
@@ -6908,14 +6828,6 @@ function _formatarDoc(d) {
 /* Nota paga no cartão: tudo que não saiu do bolso. A nota antiga, gravada
    antes de existir a coluna pagamento, conta como cartão. */
 function _notaDoCartao(n) {
-  /* cv_rda: o cartão é só o que foi marcado como cartão. A alimentação pode
-     ir nele por exceção (24/09/2026); sem marcação, RDA sai da conta e o
-     resto é cartão — que é como as notas antigas foram gravadas. */
-  if (_ehCvRda()) {
-    if (n.pagamento === 'cv') return true;
-    if (n.pagamento) return false;                    // 'rda' ou 'reembolso'
-    return n.tipo !== 'RDA';
-  }
   return n.pagamento !== 'reembolso';
 }
 
@@ -6927,22 +6839,6 @@ function _saldoCartaoDe(ns, rs, temCartao) {
   return soma(recargas) - soma(noCartao);
 }
 
-
-/* Dinheiro de alimentação que caiu na conta, menos o que foi gasto em RDA
-   (regime cv_rda, 24/09/2026). */
-function _saldoRdaDe(ns, rs, ehCvRda) {
-  if (!ehCvRda) return null;
-  const soma = arr => arr.reduce((a, x) => a + (Number(x.valor) || 0), 0);
-  const recebido = rs.filter(r => !r.deleted && r.destino === 'rda' && _repasseEhRecebido(r));
-  // a alimentação que foi no cartão não sai do dinheiro do RDA (24/09/2026)
-  const gasto = ns.filter(n => !n.deleted && n.tipo === 'RDA' && n.pagamento !== 'cv');
-  return soma(recebido) - soma(gasto);
-}
-
-function _saldoRda() {
-  if (!_ehCvRda()) return null;
-  return _saldoRdaDe(notas, repasses, true);
-}
 
 function _saldoCartao() {
   if (!_usaCartao()) return null;
@@ -6995,7 +6891,7 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
      o reembolso vindo de uma nota, que já traz modo e aba, entra no 3. */
   /* A recarga do cartão não tem categoria na planilha (a coluna do extrato
      tem só DATA e R$), então o passo das abas não faz sentido para ela. */
-  if (_repasseSemCategoria()) setRepasseTipo(_repasseDestino === 'rda' ? 'RDA' : 'RDM');
+  if (_repasseSemCategoria()) setRepasseTipo('RDM');
   _repassePassoMin = pre?.tipo ? 3
     : (modo || _repasseAlvo) ? (_repasseSemCategoria() ? 3 : 2)
     : 1;

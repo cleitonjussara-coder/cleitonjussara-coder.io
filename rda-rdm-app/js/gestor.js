@@ -633,7 +633,6 @@ window.Gestor = (() => {
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
             <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; reembolso do que sai do bolso; gera Planilha CV</option>
-            <option value="cv_rda"${colab.regime==='cv_rda'?' selected':''}>💳🍽️ CV + RDA na conta — cartão no lugar do RDM; alimentação em dinheiro na conta; gera as duas planilhas</option>
           </select>
           <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
           ${souEu ? '' : `
