@@ -93,7 +93,11 @@ class RelatorioRdmRda
             $this->limpar($rda, 2, $ini + 2, 7, $tot - 1);
         }
         $idx = [];
-        foreach ($notas->where('tipo', 'RDA') as $n) {
+        /* 24/09/2026 — cv_rda: alimentação paga no cartão (exceção) já é
+           prestada na planilha C.V.; aqui entra só o que saiu do dinheiro da conta. */
+        $doRda = $notas->where('tipo', 'RDA')
+            ->reject(fn (Nota $n) => $c->ehCvRda() && $n->pagamento === 'cv');
+        foreach ($doRda as $n) {
             $m = (int) $n->mes;
             if (! isset(self::RDA[$m])) {
                 continue;

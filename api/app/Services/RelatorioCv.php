@@ -69,7 +69,8 @@ class RelatorioCv
                alimentação (RDA) é dinheiro em conta, prestada na planilha
                RDM/RDA. Então a nota de RDA fica FORA desta planilha. */
             if ($c->ehCvRda()) {
-                $notas = $notas->reject(fn (Nota $n) => $n->tipo === 'RDA');
+                // exceção de 24/09/2026: alimentação paga no cartão fica aqui mesmo
+                $notas = $notas->reject(fn (Nota $n) => $n->tipo === 'RDA' && $n->pagamento !== 'cv');
             }
             $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
             $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');

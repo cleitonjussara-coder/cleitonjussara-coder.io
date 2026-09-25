@@ -16,7 +16,9 @@ class Nota extends Model
     /** Com que dinheiro a despesa foi paga, no regime de cartão (CV):
      *  cv        → cartão corporativo Alelo (aba CV ALELO)
      *  reembolso → bolso do colaborador, a devolver (aba CV REEMBOLSO) */
-    public const PAGAMENTOS = ['cv', 'reembolso'];
+    /* 'rda' (24/09/2026): regime cv_rda — alimentação paga com o dinheiro
+       que caiu na conta. 'cv' numa nota de RDA é a exceção do cartão. */
+    public const PAGAMENTOS = ['cv', 'reembolso', 'rda'];
 
     /** Único consumidor aceito na nota, além de nenhum (24/09/2026):
      *  o CNPJ da Petermann & Morais. Nota no CPF de terceiro não presta

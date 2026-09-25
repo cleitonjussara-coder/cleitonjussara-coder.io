@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=266">
+  <link rel="manifest" href="manifest.json?v=267">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1705,7 +1705,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=266" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=267" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1969,7 +1969,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       </div>
       <div class="field" style="max-width:120px">
         <label class="lbl" id="nf-serie-lbl">Série</label>
-        <input class="inp" id="nf-serie" type="text" inputmode="numeric" maxlength="5" placeholder="—">
+        <!-- 24/09/2026: série de nota fiscal de serviço passa de 6 dígitos; o limite 5 travava a digitação. -->
+        <input class="inp" id="nf-serie" type="text" inputmode="numeric" maxlength="20" placeholder="—">
       </div>
     </div>
 
@@ -2157,8 +2158,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec ajuda-cv">
       <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
-      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b>, <b>👛 Nota de reembolso</b> ou <b>🧾 Pago com ajuda de custos</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
-      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Reembolso, recarga e ajuda de custos também não perguntam aba nenhuma.</p>
+      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b> ou <b>👛 Nota de reembolso</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
+      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Reembolso e recarga também não perguntam aba nenhuma.</p>
       <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
       <ul>
         <li><b>👛 Reembolso</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
@@ -2166,6 +2167,19 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       </ul>
       <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
+    </div>
+
+    <div class="ajuda-sec ajuda-cv">
+      <h4>🍽️ C.V. + RDA na conta — o regime novo (24/09/2026)</h4>
+      <p>É o meio do caminho entre os outros dois: o <b>cartão corporativo entra no lugar do RDM</b> (abastecimento, hospedagem e outros) e a <b>alimentação continua sendo dinheiro na sua conta</b>, como no RDA de sempre. Quem define o regime de cada pessoa é o gestor, na <b>Equipe</b>.</p>
+      <p><b>A pergunta vem depois da categoria.</b> Você escolhe a categoria primeiro e aí o app pergunta como aquela nota foi paga:</p>
+      <ul>
+        <li><b>🍽️ Alimentação</b> — <b>Do dinheiro do RDA</b> (o normal: sai do valor que caiu na sua conta) ou <b>💳 No cartão</b>. O cartão aqui é <b>exceção</b>, mas pode: nesse caso a nota vai para a aba <b>CV ALELO</b> e <b>não</b> desconta do seu RDA.</li>
+        <li><b>⛽ Abastecimento, 🏨 Hospedagem e 📦 Outros</b> — <b>💳 No cartão</b> (vai para <b>CV ALELO</b>) ou <b>👛 Do meu bolso</b> (vira <b>reembolso</b>, a empresa devolve).</li>
+      </ul>
+      <p>No <b>Início</b> aparecem três painéis: <b>👛 Reembolso</b>, <b>💳 Recarga do cartão</b> e <b>🍽️ RDA na conta</b> — esse último para pedir ao gestor o dinheiro da alimentação.</p>
+      <p>Em <b>RDM/RDA e Planilhas</b> você acompanha os dois saldos: <b>💳 Saldo do cartão</b> e <b>🍽️ RDA na conta</b> (recebido menos o que saiu do RDA — o que foi no cartão não entra nessa conta).</p>
+      <p class="ajuda-note">São <b>duas planilhas</b>: a <b>C.V.</b> com o que passou no cartão e os reembolsos, e a <b>RDM/RDA</b> só com a parte do <b>R.D.A</b> — sem bloco de RDM, porque isso agora está no cartão. No download da equipe as duas vêm juntas.</p>
     </div>
 
     <div class="ajuda-sec ajuda-gestor">
@@ -2583,25 +2597,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=266"></script>
-<script defer src="js/db.js?v=266"></script>
-<script defer src="js/nfce.js?v=266"></script>
-<script defer src="js/sefaz.js?v=266"></script>
-<script defer src="js/brasilapi.js?v=266"></script>
-<script defer src="js/ocr.js?v=266"></script>
-<script defer src="js/recorte.js?v=266"></script>
-<script defer src="js/excel.js?v=266"></script>
-<script defer src="js/gestor.js?v=266"></script>
-<script defer src="js/frota.js?v=266"></script>
-<script defer src="js/ponto.js?v=266"></script>
-<script defer src="js/arquivos.js?v=266"></script>
-<script defer src="js/gdrive.js?v=266"></script>
-<script defer src="js/app.js?v=266"></script>
+<script defer src="js/api.js?v=267"></script>
+<script defer src="js/db.js?v=267"></script>
+<script defer src="js/nfce.js?v=267"></script>
+<script defer src="js/sefaz.js?v=267"></script>
+<script defer src="js/brasilapi.js?v=267"></script>
+<script defer src="js/ocr.js?v=267"></script>
+<script defer src="js/recorte.js?v=267"></script>
+<script defer src="js/excel.js?v=267"></script>
+<script defer src="js/gestor.js?v=267"></script>
+<script defer src="js/frota.js?v=267"></script>
+<script defer src="js/ponto.js?v=267"></script>
+<script defer src="js/arquivos.js?v=267"></script>
+<script defer src="js/gdrive.js?v=267"></script>
+<script defer src="js/app.js?v=267"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=266').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=267').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

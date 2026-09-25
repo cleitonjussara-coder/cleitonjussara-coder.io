@@ -100,7 +100,8 @@ class NotaController extends Controller
             'modelo' => ['nullable', 'string', 'size:2'],
             'documento' => ['nullable', Rule::in(Nota::DOCUMENTOS)],
             'numero' => ['nullable', 'string', 'max:20'],
-            'serie' => ['nullable', 'string', 'max:5'],
+            // 24/09/2026: séries com mais de 6 dígitos existem (NFS-e); o limite era 5.
+            'serie' => ['nullable', 'string', 'max:20'],
             'foto_path' => ['nullable', 'string', 'max:255'],
             'qr_url' => ['nullable', 'string'],
             'observacao' => ['nullable', 'string'],
