@@ -2434,11 +2434,6 @@ function renderInicio() {
               : _ehCV()
                 ? "Postar nota de C.V. e reembolso"
                 : "Lançar nota de RDM e RDA"}</span>
-          <span class="pnl-sub">${_ehContabilidade()
-            ? "baixar planilhas · arquivos"
-            : _usaCartao()
-              ? "painel · minhas notas · planilhas"
-              : `painel · minhas notas · planilhas${_veEquipe() ? " · equipe" : ""}`}</span>
         </span>
       </button>
       ${_ehContabilidade() ? '' : _usaCartao() ? `
