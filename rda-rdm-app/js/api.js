@@ -245,6 +245,8 @@ window.API = (() => {
     list: params => req('GET', '/notas', { query: params }),
     upsert: rec => req('PUT', `/notas/${rec.id}`, { body: rec }),
     delete: id => req('DELETE', `/notas/${id}`),
+    /* ids apagados em definitivo desde `since` — as lápides (25/09/2026) */
+    apagadas: since => req('GET', '/notas/apagadas' + (since ? '?since=' + encodeURIComponent(since) : '')),
     /* gestor/admin corrige o grupo do lançamento (23/09/2026) */
     corrigirTipo: (id, tipo, subtipo = null) => req('PATCH', `/notas/${id}/tipo`, { body: { tipo, subtipo } }),
     /* valor/data/emitente oficiais pela URL do QR (servidor abre o portal do

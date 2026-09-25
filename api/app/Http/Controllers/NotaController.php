@@ -7,6 +7,7 @@ use App\Models\Nota;
 use App\Services\FotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -238,6 +239,28 @@ class NotaController extends Controller
         return response()->json(['nota' => $nota->fresh(), 'mudou' => true]);
     }
 
+    /* Ids apagados em definitivo desde `since`, para o app limpar o que
+       ainda tem guardado (25/09/2026). Só ids — nada da nota sobrevive. */
+    public function apagadas(Request $r): JsonResponse
+    {
+        $u = $r->user();
+        $q = DB::table('notas_apagadas');
+
+        if ($since = $r->query('since')) {
+            try {
+                $since = \Carbon\Carbon::parse($since)->utc()->format('Y-m-d H:i:s');
+            } catch (\Throwable) {
+            }
+            $q->where('apagada_em', '>=', $since);
+        }
+        /* Quem não enxerga a equipe só precisa saber das próprias. */
+        if (! $u->veTudo()) {
+            $q->where('user_id', $u->id);
+        }
+
+        return response()->json($q->orderBy('apagada_em')->limit(5000)->pluck('id'));
+    }
+
     public function destroy(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
@@ -245,6 +268,14 @@ class NotaController extends Controller
         abort_unless($nota->user_id === $u->id || $u->ehAdmin(), 403, 'Só o dono ou o admin apagam em definitivo');
 
         $this->fotos->apagarTodasVersoes($nota);
+
+        /* A lápide (25/09/2026): sem ela a linha some e o sync incremental
+           nunca conta aos outros aparelhos que a nota foi apagada — a cópia
+           local ficava para sempre, aparecendo em pendências. */
+        DB::table('notas_apagadas')->updateOrInsert(
+            ['id' => $nota->id],
+            ['user_id' => $nota->user_id, 'apagada_por' => $u->id, 'apagada_em' => now()],
+        );
         $nota->delete();
 
         return response()->json(['ok' => true]);

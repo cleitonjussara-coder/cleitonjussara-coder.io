@@ -692,6 +692,24 @@ window.DB = (() => {
     return Array.isArray(a) ? a : [];
   }
 
+  /* Só apaga o que o servidor DIZ que foi apagado — nunca por dedução. E
+     nunca o que ainda está na fila para subir. */
+  async function _limparApagadas(sb, since) {
+    if (!sb?.notas?.apagadas) return 0;
+    const ids = await sb.notas.apagadas(since);
+    if (!Array.isArray(ids) || !ids.length) return 0;
+    const fila = await _getAll('sync_queue').catch(() => []);
+    const pendentes = new Set(fila.map(i => i.entity_id));
+    let limpas = 0;
+    for (const id of ids) {
+      if (pendentes.has(id)) continue;
+      if (!(await _get('notas', id).catch(() => null))) continue;
+      await purgeNotaLocal(id);
+      limpas++;
+    }
+    return limpas;
+  }
+
   async function pullIncremental(sb, userId) {
     if (!sb || !navigator.onLine || !userId) return 0;
     const since = await getMeta('last_sync', null);
@@ -712,6 +730,10 @@ window.DB = (() => {
           pulled += await _mesclarRemotas(table, data);
         } catch (_) {}
       }
+      /* As lápides (25/09/2026): nota apagada em definitivo sai da tabela, e
+         a consulta por updated_at nunca mais a mostra — sem isto, a cópia
+         deste aparelho ficava para sempre, aparecendo em pendências. */
+      try { await _limparApagadas(sb, since); } catch (_) {}
     }
 
     await setMeta('last_sync', new Date().toISOString());
