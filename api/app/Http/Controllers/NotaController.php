@@ -267,15 +267,18 @@ class NotaController extends Controller
         $nota = Nota::findOrFail($id);
         abort_unless($nota->user_id === $u->id || $u->ehAdmin(), 403, 'Só o dono ou o admin apagam em definitivo');
 
-        $this->fotos->apagarTodasVersoes($nota);
-
         /* A lápide (25/09/2026): sem ela a linha some e o sync incremental
            nunca conta aos outros aparelhos que a nota foi apagada — a cópia
-           local ficava para sempre, aparecendo em pendências. */
+           local ficava para sempre, aparecendo em pendências.
+
+           Ela vem ANTES da foto: se falhar (migração ainda não aplicada, por
+           exemplo), nada foi perdido e dá para tentar de novo. Na ordem
+           inversa a foto já tinha ido e a nota ficava. */
         DB::table('notas_apagadas')->updateOrInsert(
             ['id' => $nota->id],
             ['user_id' => $nota->user_id, 'apagada_por' => $u->id, 'apagada_em' => now()],
         );
+        $this->fotos->apagarTodasVersoes($nota);
         $nota->delete();
 
         return response()->json(['ok' => true]);
