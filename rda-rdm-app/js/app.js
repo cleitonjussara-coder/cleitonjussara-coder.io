@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 283;
+const APP_BUILD = 284;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6690,17 +6690,6 @@ async function _salvarNotaInterno() {
       semValor ? 'err' : 'ok');
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
-    /* CV pagou do bolso (21/09/2026): oferece pedir o repasse na hora,
-       já com valor e justificativa. */
-    if (payload.pagamento === 'carteira' && !_idEdicao && ownerId === user?.id && valor > 0) {
-      setTimeout(() => {
-        if (confirm(`Você pagou ${brl(valor)} do próprio bolso.
-
-Pedir o REPASSE agora (data, valor e justificativa já preenchidos)? O gestor recebe a notificação.`)) {
-          abrirFormRepasse('requested', { tipo, valor, data, descricao: 'Repasse: ' + (payload.razao_social || (tipo === 'RDM' ? payload.subtipo : 'alimentação') || 'despesa') + (payload.numero ? ' · nº ' + payload.numero : '') });
-        }
-      }, 400);
-    }
   } finally { setLoading(false); }
 }
 
