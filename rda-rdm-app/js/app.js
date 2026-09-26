@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 281;
+const APP_BUILD = 282;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3766,9 +3766,21 @@ function _notasComPendencia() {
     .sort((a, b) => String(b.nota.data || '').localeCompare(String(a.nota.data || '')));
 }
 
+/* dd/mm/aaaa hh:mm do updated_at — no gestor/admin é a referência de
+   "quando foi enviada pela última vez para o servidor" (pedido do
+   Cleiton, 26/09/2026): é o próprio servidor quem grava esse carimbo a
+   cada envio (upsert, correção de categoria ou anexo). */
+function _fmtEnvioServidor(n) {
+  if (!n.updated_at) return null;
+  try {
+    return new Date(n.updated_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  } catch (_) { return null; }
+}
+
 function abrirPendencias() {
   const lista = _notasComPendencia();
   if (!lista.length) { toast('Nenhuma pendência 🎉'); return; }
+  const vejoEquipe = _ehGestorOuAdmin();
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
   ov.id = 'pend-overlay';
@@ -3782,6 +3794,7 @@ function abrirPendencias() {
             <div style="flex:1;min-width:0">
               <div style="font-weight:800">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
               <div style="font-size:13.5px;opacity:.8">${_ehNotaDeOutroUsuario(n) ? '👤 ' + esc(n.user_nome || _rotuloProprietario(n)) + ' · ' : ''}${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}</div>
+              ${vejoEquipe && _fmtEnvioServidor(n) ? `<div style="font-size:12.5px;opacity:.65;margin-top:2px">📡 enviada ao servidor em ${_fmtEnvioServidor(n)}</div>` : ''}
               <div class="pend-motivos">${motivos.map(m => `<span class="pend-tag">${esc(m)}</span>`).join('')}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px">
