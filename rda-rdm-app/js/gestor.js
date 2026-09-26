@@ -121,24 +121,36 @@ window.Gestor = (() => {
         <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
       </div>`;
 
-      /* Faturamento da equipe (26/09/2026): notas pagas direto pela empresa
-         (pagamento='empresa') não entram no saldo de ninguém, mas são
-         lançadas pelo gestor/admin e precisam aparecer em algum lugar —
-         um resumo geral do mês, com quem lançou cada uma. */
-      const notasFat = ns.filter(n => n.pagamento === 'empresa');
-      if (notasFat.length) {
-        const totalFat = soma(notasFat);
+      /* Faturamento da equipe (26/09/2026, redefinido a pedido do Cleiton):
+         é a soma de TODAS as despesas do mês, não só o que a empresa paga
+         direto — esse valor menor (pagamento='empresa') vira "Pago direto
+         pela empresa" logo abaixo, um recorte dentro do total. */
+      const faturamentoEquipeMes = soma(ns);
+      if (ns.length) {
+        html += `<div class="dash-card">
+          <div class="dash-card-title">🧮 Faturamento da equipe · ${MESES[mes-1]} ${ano}</div>
+          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(faturamentoEquipeMes)}</div>
+          <div style="font-size:13px;color:var(--text2)">${ns.length} nota${ns.length===1?'':'s'} no mês · soma de RDM, RDA e CV de toda a equipe</div>
+        </div>`;
+      }
+
+      /* Pago direto pela empresa (pagamento='empresa'): recorte do total
+         acima — não entra no saldo de ninguém, mas é lançado pelo
+         gestor/admin e precisa mostrar quem lançou cada uma. */
+      const pagoEmpresa = ns.filter(n => n.pagamento === 'empresa');
+      if (pagoEmpresa.length) {
+        const totalPagoEmpresa = soma(pagoEmpresa);
         const porLancador = new Map();
-        notasFat.forEach(n => {
+        pagoEmpresa.forEach(n => {
           const lid = n.created_by || '';
           const cur = porLancador.get(lid) || { nome: todos.find(c => c.id === lid)?.nome || 'Desconhecido', val: 0, qtd: 0 };
           cur.val += Number(n.valor || 0); cur.qtd++;
           porLancador.set(lid, cur);
         });
         html += `<div class="dash-card">
-          <div class="dash-card-title">🏢 Faturamento da equipe · ${MESES[mes-1]} ${ano}</div>
-          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(totalFat)}</div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${notasFat.length} nota${notasFat.length===1?'':'s'} paga${notasFat.length===1?'':'s'} direto pela empresa, sem passar pelo colaborador</div>
+          <div class="dash-card-title">🏢 Pago direto pela empresa · ${MESES[mes-1]} ${ano}</div>
+          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(totalPagoEmpresa)}</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${pagoEmpresa.length} nota${pagoEmpresa.length===1?'':'s'} sem passar pelo colaborador — já incluída no Faturamento acima, não entra no saldo de ninguém</div>
           ${[...porLancador.values()].sort((a,b)=>b.val-a.val).map(p => `
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:4px 0;border-top:1px solid var(--border)">
             <span>Lançado por <b>${esc(p.nome)}</b></span>
@@ -165,8 +177,9 @@ window.Gestor = (() => {
              colaborador — fica de fora do Gasto/Saldo RDM/RDA e aparece
              separado, como valor pago direto pela empresa em nome dele. */
           const mnsProprias = mns.filter(n=>n.pagamento!=='empresa');
-          const mnsFat = mns.filter(n=>n.pagamento==='empresa');
-          const fatM = mnsFat.reduce((a,n)=>a+Number(n.valor||0),0);
+          const mnsPagoEmpresa = mns.filter(n=>n.pagamento==='empresa');
+          const pagoEmpresaM = mnsPagoEmpresa.reduce((a,n)=>a+Number(n.valor||0),0);
+          const faturamentoM = mns.reduce((a,n)=>a+Number(n.valor||0),0);
           const rdmG = mnsProprias.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
           const rdmR = mrs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
           const rdaG = mnsProprias.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
@@ -208,7 +221,8 @@ window.Gestor = (() => {
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>
-            ${fatM ? `<div class="colab-resumo">🏢 Faturamento: <b>${brl(fatM)}</b> <span style="color:var(--text2)">(paga direto pela empresa, não entra no saldo)</span></div>` : ''}
+            ${mns.length ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
+            ${pagoEmpresaM ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
             <div class="colab-resumo">${resumo}</div>
           </div>`;
         });
@@ -266,7 +280,7 @@ window.Gestor = (() => {
         sb.colaboradores.get(id).catch(() => null),
         sb.notas.list({ user_id: id, ano, mes, deleted: '0' }),
         sb.repasses.list({ user_id: id, ano, mes, deleted: '0' }),
-        sb.notas.list({ user_id: id, ano, deleted: '0', fields: 'valor,mes,tipo,subtipo' }).catch(() => []),
+        sb.notas.list({ user_id: id, ano, deleted: '0', fields: 'valor,mes,tipo,subtipo,pagamento' }).catch(() => []),
       ]);
       if (!colab) { fechar(); return; }
       const notas = ns || [], reps = rs || [];
@@ -275,7 +289,17 @@ window.Gestor = (() => {
       window._repassesDaFicha = reps;
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
       const recebido = r => !r.kind || r.kind === 'received';
-      const g = t => soma(notas.filter(n => n.tipo === t));
+      /* O que a empresa paga DIRETO (pagamento='empresa') não é dívida com o
+         colaborador — fica fora do Gasto/Saldo (26/09/2026), senão o saldo
+         mostraria uma dívida que a empresa já quitou na hora. "Faturamento"
+         (pedido do Cleiton) é outra coisa: a soma de TODAS as despesas dele
+         no período, pago por quem for — é só informativo, nunca entra no
+         saldo. */
+      const notasProprias = notas.filter(n => n.pagamento !== 'empresa');
+      const pagoEmpresa = notas.filter(n => n.pagamento === 'empresa');
+      const pagoEmpresaMes = soma(pagoEmpresa);
+      const faturamentoMes = soma(notas);
+      const g = t => soma(notasProprias.filter(n => n.tipo === t));
       const r = t => soma(reps.filter(x => x.tipo === t && recebido(x)));
       const gasto = g('RDM') + g('RDA');
       const rec = r('RDM') + r('RDA');
@@ -286,14 +310,15 @@ window.Gestor = (() => {
 
       /* RDM por categoria (barra proporcional) */
       const cats = [['abastecimento', '⛽ Abastecimento'], ['hospedagem', '🏨 Hospedagem'], ['outros', '🧰 Outros']];
-      const porCat = cats.map(([k, rot]) => [rot, soma(notas.filter(n => n.tipo === 'RDM' && (String(n.subtipo || '').toLowerCase() === k || (k === 'outros' && !['abastecimento', 'hospedagem'].includes(String(n.subtipo || '').toLowerCase())))))]);
+      const porCat = cats.map(([k, rot]) => [rot, soma(notasProprias.filter(n => n.tipo === 'RDM' && (String(n.subtipo || '').toLowerCase() === k || (k === 'outros' && !['abastecimento', 'hospedagem'].includes(String(n.subtipo || '').toLowerCase())))))]);
       const maxCat = Math.max(1, ...porCat.map(x => x[1]));
 
-      /* evolução do ano (só deste colaborador) */
+      /* evolução do ano (só deste colaborador, sem Faturamento) */
+      const nsAnoProprias = (nsAno || []).filter(n => n.pagamento !== 'empresa');
       const evo = [];
-      for (let m = 1; m <= 12; m++) evo.push(soma((nsAno || []).filter(n => n.mes === m)));
+      for (let m = 1; m <= 12; m++) evo.push(soma(nsAnoProprias.filter(n => n.mes === m)));
       const maxEvo = Math.max(1, ...evo);
-      const totalAno = soma(nsAno || []);
+      const totalAno = soma(nsAnoProprias);
 
       const podeEditar = currentUser.role === 'admin' || currentUser.role === 'gestor';
       const bal = (t, ico, gasto, rec) => `
@@ -350,10 +375,12 @@ window.Gestor = (() => {
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">Recebido</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
           <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">recebido − gasto</span></div>
+          <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
         </div>
 
         <div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'))}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'))}</div>
+        ${pagoEmpresaMes ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaMes)}</b> <span style="color:var(--text2)">(já incluso no Faturamento acima, não entra no saldo)</span></div>` : ''}
 
         <div class="dash-card">
           <div class="dash-card-title">RDM por categoria · ${MESES[mes-1]}</div>

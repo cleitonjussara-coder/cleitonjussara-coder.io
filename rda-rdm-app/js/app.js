@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 291;
+const APP_BUILD = 292;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3835,6 +3835,11 @@ function renderDashEquipe() {
   const todasBase    = notas.concat(notasEquipe);
   const todas    = todasBase.filter(n => doPeriodo(n, filMes, filAno) && _naoEhFaturamento(n));
   const todasAnt = todasBase.filter(n => doPeriodo(n, pAnt.mes, pAnt.ano) && _naoEhFaturamento(n));
+  /* Faturamento (26/09/2026, pedido do Cleiton): é a soma de TODAS as
+     despesas do período, pago por quem for — inclui o que a empresa paga
+     direto (pagamento='empresa'), que fica fora de `todas`/`totalGasto`
+     porque esse não é dívida de ninguém. */
+  const todasComFat    = todasBase.filter(n => doPeriodo(n, filMes, filAno));
 
   const passaFiltro = n => {
     if (_deColab !== 'todos' && n.user_id !== _deColab) return false;
@@ -3846,6 +3851,7 @@ function renderDashEquipe() {
   const filtradasAnt = todasAnt.filter(passaFiltro);
   const totalGasto = _soma(filtradas);
   const totalAnt   = _soma(filtradasAnt);
+  const totalFaturamento = _soma(todasComFat.filter(passaFiltro));
 
   /* ranking por colaborador, já dentro do filtro escolhido */
   const pessoas = new Map();
@@ -3933,6 +3939,11 @@ function renderDashEquipe() {
     </div>
 
     <div class="db-grid">
+      <div class="db-kpi">
+        <div class="db-kpi-top"><span class="db-kpi-title">🧮 Faturamento</span></div>
+        <span class="db-kpi-val">${brl(totalFaturamento)}</span>
+        <span class="db-kpi-sub">soma de todas as despesas</span>
+      </div>
       <div class="db-kpi">
         <div class="db-kpi-top"><span class="db-kpi-title">Média por colaborador</span></div>
         <span class="db-kpi-val">${brl(media)}</span>
