@@ -61,7 +61,7 @@ window.Gestor = (() => {
 
       // busca o ANO inteiro (p/ a evolução); o mês é filtrado no cliente
       const [notasAno, repAno] = await Promise.all([
-        sb.notas.list({ ano, fields: 'user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted' }),
+        sb.notas.list({ ano, fields: 'user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted,pagamento,created_by' }),
         sb.repasses.list({ ano }),
       ]);
       const nsAno = (notasAno || []).filter(n => !n.deleted);
@@ -121,6 +121,32 @@ window.Gestor = (() => {
         <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
       </div>`;
 
+      /* Faturamento da equipe (26/09/2026): notas pagas direto pela empresa
+         (pagamento='empresa') não entram no saldo de ninguém, mas são
+         lançadas pelo gestor/admin e precisam aparecer em algum lugar —
+         um resumo geral do mês, com quem lançou cada uma. */
+      const notasFat = ns.filter(n => n.pagamento === 'empresa');
+      if (notasFat.length) {
+        const totalFat = soma(notasFat);
+        const porLancador = new Map();
+        notasFat.forEach(n => {
+          const lid = n.created_by || '';
+          const cur = porLancador.get(lid) || { nome: todos.find(c => c.id === lid)?.nome || 'Desconhecido', val: 0, qtd: 0 };
+          cur.val += Number(n.valor || 0); cur.qtd++;
+          porLancador.set(lid, cur);
+        });
+        html += `<div class="dash-card">
+          <div class="dash-card-title">🏢 Faturamento da equipe · ${MESES[mes-1]} ${ano}</div>
+          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(totalFat)}</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${notasFat.length} nota${notasFat.length===1?'':'s'} paga${notasFat.length===1?'':'s'} direto pela empresa, sem passar pelo colaborador</div>
+          ${[...porLancador.values()].sort((a,b)=>b.val-a.val).map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:4px 0;border-top:1px solid var(--border)">
+            <span>Lançado por <b>${esc(p.nome)}</b></span>
+            <span style="font-weight:700">${brl(p.val)} · ${p.qtd} nota${p.qtd===1?'':'s'}</span>
+          </div>`).join('')}
+        </div>`;
+      }
+
       html += `<div class="section-hd">Detalhe por colaborador</div>
       <div class="busca-colab">
         <span class="busca-ico">🔍</span>
@@ -135,9 +161,15 @@ window.Gestor = (() => {
         collabs.forEach(m => {
           const mns = ns.filter(n=>n.user_id===m.id);
           const mrs = rs.filter(r=>r.user_id===m.id);
-          const rdmG = mns.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
+          /* Faturamento (pagamento='empresa') não é gasto do bolso do
+             colaborador — fica de fora do Gasto/Saldo RDM/RDA e aparece
+             separado, como valor pago direto pela empresa em nome dele. */
+          const mnsProprias = mns.filter(n=>n.pagamento!=='empresa');
+          const mnsFat = mns.filter(n=>n.pagamento==='empresa');
+          const fatM = mnsFat.reduce((a,n)=>a+Number(n.valor||0),0);
+          const rdmG = mnsProprias.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
           const rdmR = mrs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
-          const rdaG = mns.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
+          const rdaG = mnsProprias.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
           const rdaR = mrs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
 
           const canEdit = currentUser.role==='admin' || currentUser.role==='gestor';
@@ -176,6 +208,7 @@ window.Gestor = (() => {
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>
+            ${fatM ? `<div class="colab-resumo">🏢 Faturamento: <b>${brl(fatM)}</b> <span style="color:var(--text2)">(paga direto pela empresa, não entra no saldo)</span></div>` : ''}
             <div class="colab-resumo">${resumo}</div>
           </div>`;
         });
