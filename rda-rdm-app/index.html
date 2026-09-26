@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=292">
+  <link rel="manifest" href="manifest.json?v=293">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1771,7 +1771,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=292" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=293" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2378,6 +2378,12 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     </div>
 
     <div class="ajuda-sec ajuda-gestor">
+      <h4>🧮 Faturamento</h4>
+      <p><b>Faturamento</b> é a soma de <b>todas as despesas</b> (RDM, RDA e C.V.) de um colaborador ou da equipe no período — aparece na <b>Equipe</b> (card geral e em cada cartão), na ficha de cada colaborador e no <b>Dashboard Equipe</b>.</p>
+      <p>Dentro dele, o que a <b>empresa paga direto</b> (sem passar pelo colaborador, lançado por <b>🏢 Lançar Faturamento</b>) aparece separado como <b>"Pago direto pela empresa"</b> — nunca entra no saldo de ninguém. Esse recorte tem um <b>relatório em PDF</b> próprio, com a lista das notas e quem lançou cada uma, para levar à contabilidade.</p>
+    </div>
+
+    <div class="ajuda-sec ajuda-gestor">
       <h4>📁 Arquivos no servidor (no lugar do Drive)</h4>
       <p>Em <b>Início → Arquivos</b>, toque no colaborador e depois no mês: as notas aparecem em miniatura, agrupadas como na pasta modelo (<b>RDA ALIMENTAÇÃO</b>, <b>RDM · ABASTECIMENTO / HOSPEDAGENS / OUTROS</b>). Toque na miniatura para ver a foto inteira.</p>
       <p><b>⬇️ Baixar ZIP</b> monta, na hora, a pasta do mês (ou do ano) já com os nomes do modelo — <i>Colaborador/Ano/RDM DESPESAS CORPORATIVAS/ABASTECIMENTO/09 set/2026-09-03 POSTO X R$120,00.jpg</i> — e a <b>Planilha CV</b> do ano dentro. Notas sem anexo entram numa lista <i>SEM ANEXO.txt</i>. Não depende do Google Drive.</p>
@@ -2683,25 +2689,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=292"></script>
-<script defer src="js/db.js?v=292"></script>
-<script defer src="js/nfce.js?v=292"></script>
-<script defer src="js/sefaz.js?v=292"></script>
-<script defer src="js/brasilapi.js?v=292"></script>
-<script defer src="js/ocr.js?v=292"></script>
-<script defer src="js/recorte.js?v=292"></script>
-<script defer src="js/excel.js?v=292"></script>
-<script defer src="js/gestor.js?v=292"></script>
-<script defer src="js/frota.js?v=292"></script>
-<script defer src="js/ponto.js?v=292"></script>
-<script defer src="js/arquivos.js?v=292"></script>
-<script defer src="js/gdrive.js?v=292"></script>
-<script defer src="js/app.js?v=292"></script>
+<script defer src="js/api.js?v=293"></script>
+<script defer src="js/db.js?v=293"></script>
+<script defer src="js/nfce.js?v=293"></script>
+<script defer src="js/sefaz.js?v=293"></script>
+<script defer src="js/brasilapi.js?v=293"></script>
+<script defer src="js/ocr.js?v=293"></script>
+<script defer src="js/recorte.js?v=293"></script>
+<script defer src="js/excel.js?v=293"></script>
+<script defer src="js/gestor.js?v=293"></script>
+<script defer src="js/frota.js?v=293"></script>
+<script defer src="js/ponto.js?v=293"></script>
+<script defer src="js/arquivos.js?v=293"></script>
+<script defer src="js/gdrive.js?v=293"></script>
+<script defer src="js/app.js?v=293"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=292').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=293').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

@@ -156,6 +156,7 @@ window.Gestor = (() => {
             <span>Lançado por <b>${esc(p.nome)}</b></span>
             <span style="font-weight:700">${brl(p.val)} · ${p.qtd} nota${p.qtd===1?'':'s'}</span>
           </div>`).join('')}
+          <button class="btn btn-sm btn-outline" style="margin-top:10px" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
         </div>`;
       }
 

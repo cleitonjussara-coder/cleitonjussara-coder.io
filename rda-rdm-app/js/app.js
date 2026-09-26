@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 292;
+const APP_BUILD = 293;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5200,6 +5200,14 @@ function baixarRelatorioRdmRda(userId = null, nome = null, formato = 'xlsx') {
 function baixarRelatorioEquipe(ids = []) {   // ids = marcados no seletor da Equipe (21/09/2026)
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
   return _baixarBlob(sb.relatorio.equipe(filAno, filMes, ids), `Relatorio_Equipe_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF da equipe…');
+}
+
+/* Relatório de Faturamento em PDF (26/09/2026): notas pagas direto pela
+   empresa no mês, fora das planilhas-modelo de propósito — lista simples
+   pra contabilidade, com quem lançou. Gestor/admin/contabilidade. */
+function baixarRelatorioFaturamento() {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
+  return _baixarBlob(sb.relatorio.faturamento(filAno, filMes), `Relatorio_Faturamento_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF de Faturamento…');
 }
 
 /* Planilha de C.V. de vários colaboradores (21/09/2026), escolhidos no modal

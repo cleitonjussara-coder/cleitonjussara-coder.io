@@ -197,4 +197,25 @@ class RelatorioController extends Controller
         return response()->download($arquivo, sprintf('Relatorio_Equipe_%d-%02d.pdf', $ano, $mes), ['Content-Type' => 'application/pdf'])
             ->deleteFileAfterSend(true);
     }
+
+    /** GET /relatorio/faturamento?ano&mes — PDF do que a empresa pagou direto no mês (26/09/2026). */
+    public function faturamento(Request $r): BinaryFileResponse
+    {
+        $u = $r->user();
+        abort_unless($u->veTudo(), 403, 'Só gestor, admin ou contabilidade gera o relatório de Faturamento');
+        $d = $r->validate([
+            'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+        $ano = (int) ($d['ano'] ?? now()->year);
+        $mes = (int) ($d['mes'] ?? now()->month);
+
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+        $arquivo = tempnam(sys_get_temp_dir(), 'fat_').'.pdf';
+        app(\App\Services\RelatorioFaturamentoPdf::class)->gerar($ano, $mes, $arquivo, $u);
+
+        return response()->download($arquivo, sprintf('Relatorio_Faturamento_%d-%02d.pdf', $ano, $mes), ['Content-Type' => 'application/pdf'])
+            ->deleteFileAfterSend(true);
+    }
 }

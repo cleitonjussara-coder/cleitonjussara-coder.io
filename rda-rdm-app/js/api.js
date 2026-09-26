@@ -359,6 +359,7 @@ window.API = (() => {
     rdmrda: (ano, userId, formato) => req('GET', '/relatorio/rdmrda', { query: { ano, user_id: userId || undefined, formato: formato || 'xlsx' }, blob: true, timeout: 300_000 }),   // modelo RDM/RDA (21/09/2026)
     equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
     cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
+    faturamento: (ano, mes) => req('GET', '/relatorio/faturamento', { query: { ano, mes }, blob: true, timeout: 120_000 }),   // pago direto pela empresa (26/09/2026)
   };
 
   /* Arquivos no servidor, no lugar do Drive (19/09/2026). */
