@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=276">
+  <link rel="manifest" href="manifest.json?v=277">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -197,38 +197,63 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
 #app-screen{display:flex;flex-direction:column}
 
 /* Header */
-/* Cabeçalho = logomarca ocupando a faixa inteira (20/09/2026). O fundo
-   usa a mesma cor da borda da imagem, então ela "continua" até as laterais. */
+/* 26/09/2026: cabeçalho + faixa do usuário viraram "um só ambiente" — é o
+   #hdr-grupo que carrega o fundo contínuo agora; os dois filhos ficam
+   transparentes, então não existe mais linha/sombra dividindo os dois. */
+#hdr-grupo{flex-shrink:0;background:linear-gradient(180deg,#0a4a24,#062d16);box-shadow:0 4px 14px rgba(0,0,0,.4)}
+/* Cabeçalho = logomarca, mais compacta (26/09/2026: "ocupar o menos espaço
+   possível"), com a foto de perfil e o sino no canto direito. */
 #app-header{
-  flex-shrink:0;position:relative;
-  background:linear-gradient(90deg,#0a1d09 0%,#0f2a0d 30%,#0f2a0d 70%,#0a1d09 100%);color:#fff;
+  position:relative;background:transparent;color:#fff;
   display:flex;align-items:center;justify-content:center;
-  padding:calc(env(safe-area-inset-top,0px) + 2px) 0 2px;z-index:10;   /* 23/09/2026: faixa mais fina */
+  padding:calc(env(safe-area-inset-top,0px) + 2px) 104px 2px 10px;z-index:10;
 }
-.hdr-banner{display:block;width:100%;max-width:820px;height:auto;max-height:112px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.hdr-sync{position:absolute;left:10px;bottom:6px;font-size:13px;opacity:.85}
-/* sininho de notificações (21/09/2026) */
-/* 23/09/2026: o sino saiu do canto esquerdo para o DIREITO, maior e um
-   pouco mais abaixo — pedido do Cleiton, para enxergar melhor. */
-#hdr-sino{position:absolute;right:12px;bottom:4px;width:70px;height:70px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
-  background:rgba(0,0,0,.38);color:#fff;font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11;-webkit-tap-highlight-color:transparent;
-  box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.hdr-banner{display:block;width:100%;max-width:640px;height:auto;max-height:64px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hdr-sync{position:absolute;left:10px;bottom:6px;font-size:12.5px;opacity:.85}
+/* sininho de notificações (21/09/2026) e foto de perfil, lado a lado no
+   canto direito (26/09/2026: a foto subiu pra cá — pedido do Cleiton). */
+#hdr-avatar-slot{position:absolute;right:54px;bottom:5px;z-index:11}
+#hdr-avatar-slot .avatar{width:40px;height:40px;font-size:16px;box-shadow:0 4px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.5)}
+#hdr-sino{position:absolute;right:8px;bottom:4px;width:42px;height:42px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
+  background:rgba(0,0,0,.38);color:#fff;font-size:23px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11;-webkit-tap-highlight-color:transparent;
+  box-shadow:0 4px 10px rgba(0,0,0,.4)}
 #hdr-sino.tem{border-color:#b9e24a;animation:sino-pulsa 2.4s ease-in-out 3}
-#hdr-sino-num{position:absolute;top:-4px;right:-4px;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:#e11d48;color:#fff;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #083d1e}
-/* celular: o cabeçalho é mais baixo, então o sino encosta no "online" se
-   ficar grande demais */
-@media (max-width:520px){
-  /* 24/09/2026: no celular a logomarca ia de ponta a ponta e o fim de
-     "MORAIS" ficava embaixo do sino, com o "online" cobrindo o canto de
-     baixo — parecia cortada. Agora o cabeçalho reserva um espaço de cada
-     lado e a imagem inteira cabe no meio. */
-  #hdr-sino{width:52px;height:52px;font-size:27px;bottom:2px;right:6px}
-  #hdr-sino-num{min-width:20px;height:20px;font-size:12.5px}
-  .hdr-sync{bottom:3px;left:6px;font-size:11.5px}
-  #app-header{padding-left:68px;padding-right:62px}
-  .hdr-banner{max-height:92px}
-}
+#hdr-sino-num{position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 4px;border-radius:10px;background:#e11d48;color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #083d1e}
+/* 26/09/2026: menu ☰ desceu pra faixa do usuário, no lugar de onde era a
+   foto — pedido do Cleiton ("mais aparente, num lugar estratégico"). Cor
+   de destaque do app, pra saltar aos olhos. */
+#hdr-menu{flex:0 0 auto;width:46px;height:46px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.5);background:linear-gradient(160deg,#d9f5a0,#8fc93a);
+  color:#0a1d09;font-size:23px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;box-shadow:0 3px 8px rgba(0,0,0,.4)}
+#hdr-menu:active{transform:scale(.94)}
 @keyframes sino-pulsa{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+
+/* ── Menu lateral (gaveta, 26/09/2026) ───────────────────────
+   Mesmo padrão visual do .bottom-sheet, só deslizando da esquerda em vez
+   de subir de baixo — reúne Perfil, Sair e o que era "Ir para". */
+.menu-drawer-overlay{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);
+  display:flex;align-items:stretch;opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s}
+.menu-drawer-overlay.open{opacity:1;visibility:visible}
+.menu-drawer{width:min(84vw,336px);height:100%;background:var(--surface);
+  display:flex;flex-direction:column;transform:translateX(-100%);
+  transition:transform .32s cubic-bezier(.32,.72,0,1);will-change:transform;overflow-y:auto}
+.menu-drawer-overlay.open .menu-drawer{transform:translateX(0)}
+.menu-drawer-hd{display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px 18px;background:var(--primary-d);color:#fff;flex-shrink:0}
+.menu-drawer-hd .avatar{width:50px;height:50px;font-size:20px;flex-shrink:0;background:rgba(255,255,255,.18);color:#fff}
+.menu-drawer-hd-txt{min-width:0;flex:1}
+.menu-drawer-hd-txt h3{margin:0;font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu-drawer-hd-txt .role-pill{margin-top:5px;display:inline-block}
+.menu-drawer-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:15px;cursor:pointer;flex-shrink:0}
+.menu-lista{list-style:none;margin:0;padding:8px 0;flex:1}
+.menu-item{display:flex;align-items:center;gap:14px;width:100%;padding:13px 18px;background:none;border:none;
+  font:inherit;font-size:16px;font-weight:700;color:var(--text);cursor:pointer;text-align:left}
+.menu-item:active{background:var(--surface2)}
+.menu-item .menu-item-ico{font-size:21px;width:24px;text-align:center;flex-shrink:0}
+.menu-item-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+.menu-item-sub{font-size:12.5px;font-weight:500;color:var(--text2)}
+.menu-drawer-ft{padding:10px 12px calc(10px + var(--safe-bottom));border-top:1px solid var(--border);flex-shrink:0}
+.menu-drawer-ft .menu-item.sair{color:#b91c1c;font-weight:800}
 .notif-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .notif-ico{font-size:24px;flex:0 0 auto}
 .notif-txt{flex:1;min-width:0}
@@ -836,7 +861,7 @@ select.inp{cursor:pointer}
 /* Agora é um elemento da moldura (entre o cabeçalho e o conteúdo):
    largura inteira da tela, sem margens negativas e sem sticky — ele nem
    entra na área que rola. */
-.ini-ola-fixa{flex:0 0 auto;z-index:20;padding:10px 16px;
+.ini-ola-fixa{flex:0 0 auto;z-index:20;padding:6px 14px;
   background:var(--surface);box-shadow:0 4px 12px rgba(0,0,0,.10)}
 .ini-ola-acoes{display:flex;gap:7px;margin-left:auto;flex-shrink:0}
 .ini-ola-acoes .btn{white-space:nowrap}
@@ -924,7 +949,9 @@ select.inp{cursor:pointer}
 .ini-ola span{color:#cfe8d6;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .ini-titulo{color:var(--lima-2);text-shadow:0 1px 2px rgba(0,0,0,.55)}
 .ini-titulo{letter-spacing:.9px}
-.ini-ola-fixa{background:linear-gradient(160deg,#0f6b34,#083d1e);border-bottom:1px solid rgba(255,255,255,.10);box-shadow:0 8px 18px rgba(0,0,0,.45)}
+/* 26/09/2026: fundo/sombra saíram daqui — quem pinta agora é o #hdr-grupo,
+   pra virar "um só ambiente" contínuo com o cabeçalho, sem linha entre eles. */
+#barra-usuario.ini-ola-fixa{background:transparent;border-bottom:none;box-shadow:none}
 .ini-kpi,.ini-ir-btn,.ini-dica{background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:5px solid var(--esm-frame);
   box-shadow:inset 2px 2px 4px rgba(255,255,255,.2),inset -2px -2px 5px rgba(0,0,0,.55),0 8px 18px rgba(0,0,0,.4)}
 .ini-kpi-lbl,.ini-kpi-sub,.ini-ir-sub,.ini-dica{color:#cfe8d6}
@@ -1577,7 +1604,7 @@ body.homolog #app-screen,body.homolog #auth-screen{padding-top:var(--homolog-h)}
 #barra-usuario .btn-outline:active{background:rgba(185,226,74,.2)}
 #barra-usuario .btn-danger-outline{color:#ffd0c8;border-color:rgba(255,190,180,.8);background:rgba(255,255,255,.04)}
 #barra-usuario .btn-danger-outline:active{background:rgba(255,180,168,.18)}
-#barra-usuario .avatar{background:var(--primary)}
+#hdr-avatar-slot .avatar{background:var(--primary)}
 
 /* pílula "voltar" ao lado do botão flutuante do rodapé (23/09/2026) */
 #btn-voltar-rodape{
@@ -1617,7 +1644,6 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   #barra-usuario .role-pill{font-size:12px;padding:2px 7px}
   #barra-usuario .ini-ola-txt h2{font-size:18.5px;line-height:1.2;white-space:normal}
   #barra-usuario .ini-ola-txt span{font-size:13px}
-  #barra-usuario .avatar{width:62px;height:62px;font-size:25px}
   #barra-usuario{padding:8px 12px;gap:10px}
   #barra-usuario .ini-ola-acoes{gap:8px;margin-top:2px}
 }
@@ -1626,6 +1652,19 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
    Cleiton: o repasse saiu de dentro de Despesas e virou entrada própria). */
 .ini-paineis{display:grid;grid-template-columns:1fr;gap:12px}
 @media (min-width:900px){ .ini-paineis{grid-template-columns:1fr 1fr} }
+
+/* Resumo de gastos compacto na Início (26/09/2026, pedido do Cleiton) —
+   mesma conta do Painel, só resumida; o cartão inteiro leva pra lá. */
+.ini-resumo{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;
+  background:var(--surface2);border:1px solid var(--border);cursor:pointer}
+.ini-resumo-donut{flex-shrink:0;width:72px;height:72px;pointer-events:none}
+.ini-resumo-donut svg{width:72px;height:72px}
+.ini-resumo-txt{flex:1;min-width:0}
+.ini-resumo-tot{font-size:20px;font-weight:800;color:var(--primary-d)}
+.ini-resumo-lbl{font-size:12.5px;color:var(--text2);margin-bottom:6px}
+.ini-resumo-cat{font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px;line-height:1.6}
+.ini-resumo-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ini-resumo-seta{font-size:24px;color:var(--text2);flex-shrink:0}
 /* Sub-abas RDA/RDM do repasse (23/09/2026; maiores em 24/09 a pedido do
    Cleiton). Cada uma já nasce com a cor da sua conta, para dar vontade de
    tocar e para não haver dúvida de qual está marcada. */
@@ -1710,22 +1749,55 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <div id="offline-banner" class="offline-banner">
     <span id="offline-banner-text">📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.</span>
   </div>
-  <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
-       saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
-  <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=276" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
-    <div class="sync-indicator hdr-sync">
-      <div class="sync-dot online" id="sync-dot"></div>
-      <span id="sync-txt">online</span>
-    </div>
-    <div id="drive-badge" class="sync-indicator" style="display:none"><span id="drive-dot"></span><span id="drive-txt"></span></div>
-    <!-- notificações no app (21/09/2026): pedidos de repasse pendentes (gestor) / pagos (colaborador) -->
-    <button id="hdr-sino" style="display:none" onclick="abrirNotificacoes()" aria-label="Notificações" title="Notificações">🔔<span id="hdr-sino-num" style="display:none">0</span></button>
-  </header>
+  <!-- 26/09/2026: cabeçalho + faixa do usuário viraram "um só ambiente" —
+       pedido do Cleiton. Um wrapper só, com UM fundo contínuo, pra sumir a
+       sombra/borda que separava as duas faixas em duas caixas. -->
+  <div id="hdr-grupo">
+    <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
+         saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
+    <header id="app-header">
+      <img class="hdr-banner" src="topo.png?v=277" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <div class="sync-indicator hdr-sync">
+        <div class="sync-dot online" id="sync-dot"></div>
+        <span id="sync-txt">online</span>
+      </div>
+      <div id="drive-badge" class="sync-indicator" style="display:none"><span id="drive-dot"></span><span id="drive-txt"></span></div>
+      <!-- 26/09/2026: a foto de perfil subiu pra cá, no canto direito, ao
+           lado do sino — pedido do Cleiton. Preenchida por _pintarBarraUsuario(). -->
+      <div id="hdr-avatar-slot"></div>
+      <!-- notificações no app (21/09/2026): pedidos de repasse pendentes (gestor) / pagos (colaborador) -->
+      <button id="hdr-sino" style="display:none" onclick="abrirNotificacoes()" aria-label="Notificações" title="Notificações">🔔<span id="hdr-sino-num" style="display:none">0</span></button>
+    </header>
 
-  <!-- 23/09/2026: faixa do usuário fora do conteúdo — vale para todas as
-       abas e não sobe com a rolagem. Preenchida por _pintarBarraUsuario(). -->
-  <div id="barra-usuario" class="ini-ola ini-ola-foto ini-ola-fixa" style="display:none"></div>
+    <!-- 23/09/2026: faixa do usuário — vale para todas as abas e não sobe
+         com a rolagem. Preenchida por _pintarBarraUsuario().
+         26/09/2026: o menu ☰ desceu pra cá, no lugar onde era a foto. -->
+    <div id="barra-usuario" class="ini-ola ini-ola-foto ini-ola-fixa" style="display:none">
+      <button id="hdr-menu" onclick="abrirMenu()" aria-label="Menu" title="Menu">☰</button>
+      <div id="barra-usuario-conteudo" style="display:contents"></div>
+    </div>
+  </div>
+
+  <!-- 26/09/2026: gaveta lateral — reúne Perfil, Sair e tudo que era "Ir
+       para" espalhado em Início e Despesas. Preenchida por abrirMenu(). -->
+  <div id="menu-drawer-overlay" class="menu-drawer-overlay" onclick="if(event.target===this)fecharMenu()">
+    <aside class="menu-drawer">
+      <div class="menu-drawer-hd">
+        <div class="avatar" id="menu-avatar">?</div>
+        <div class="menu-drawer-hd-txt">
+          <h3 id="menu-nome">Usuário</h3>
+          <span id="menu-role-pill"></span>
+        </div>
+        <button class="menu-drawer-close" onclick="fecharMenu()" aria-label="Fechar menu">✕</button>
+      </div>
+      <ul class="menu-lista" id="menu-lista"></ul>
+      <div class="menu-drawer-ft">
+        <button class="menu-item sair" onclick="fecharMenu();if(confirm('Sair da conta neste aparelho?'))logout()">
+          <span class="menu-item-ico">🚪</span> Sair
+        </button>
+      </div>
+    </aside>
+  </div>
 
   <main id="app-content"></main>
   <!-- 20/09/2026: em alguns iPhones o "‹ Início" do topo some (barra do
@@ -2593,25 +2665,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=276"></script>
-<script defer src="js/db.js?v=276"></script>
-<script defer src="js/nfce.js?v=276"></script>
-<script defer src="js/sefaz.js?v=276"></script>
-<script defer src="js/brasilapi.js?v=276"></script>
-<script defer src="js/ocr.js?v=276"></script>
-<script defer src="js/recorte.js?v=276"></script>
-<script defer src="js/excel.js?v=276"></script>
-<script defer src="js/gestor.js?v=276"></script>
-<script defer src="js/frota.js?v=276"></script>
-<script defer src="js/ponto.js?v=276"></script>
-<script defer src="js/arquivos.js?v=276"></script>
-<script defer src="js/gdrive.js?v=276"></script>
-<script defer src="js/app.js?v=276"></script>
+<script defer src="js/api.js?v=277"></script>
+<script defer src="js/db.js?v=277"></script>
+<script defer src="js/nfce.js?v=277"></script>
+<script defer src="js/sefaz.js?v=277"></script>
+<script defer src="js/brasilapi.js?v=277"></script>
+<script defer src="js/ocr.js?v=277"></script>
+<script defer src="js/recorte.js?v=277"></script>
+<script defer src="js/excel.js?v=277"></script>
+<script defer src="js/gestor.js?v=277"></script>
+<script defer src="js/frota.js?v=277"></script>
+<script defer src="js/ponto.js?v=277"></script>
+<script defer src="js/arquivos.js?v=277"></script>
+<script defer src="js/gdrive.js?v=277"></script>
+<script defer src="js/app.js?v=277"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=276').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=277').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

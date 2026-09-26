@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 276;
+const APP_BUILD = 277;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -585,12 +585,16 @@ function _marcarHomologacao() {
   document.body.appendChild(f);
 }
 
-/* Faixa do usuário na moldura do app (23/09/2026): foto, saudação, papel e
-   os botões Perfil e Sair. Vale para todas as abas; some na tela de login. */
+/* Faixa do usuário na moldura do app (23/09/2026): foto, saudação e papel.
+   Vale para todas as abas; some na tela de login.
+   26/09/2026: os botões Perfil e Sair saíram daqui — foram pro menu ☰
+   lateral, junto com Notas/Painel/Saldo/Equipe/Arquivos/Frota/Ponto. */
 function _pintarBarraUsuario() {
   const el = $('barra-usuario');
-  if (!el) return;
-  if (!user || _telaAtual !== 'app') { el.style.display = 'none'; return; }
+  const avEl = $('hdr-avatar-slot');
+  const conteudo = $('barra-usuario-conteudo');
+  if (!el || !conteudo) return;
+  if (!user || _telaAtual !== 'app') { el.style.display = 'none'; if (avEl) avEl.innerHTML = ''; return; }
   const hora = new Date().getHours();
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
@@ -600,18 +604,61 @@ function _pintarBarraUsuario() {
   const hojeCurto = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
   const papel = user?.role || 'colaborador';
   el.style.display = '';
-  el.innerHTML = `
-    <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>
+  if (avEl) avEl.innerHTML = `
+    <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>`;
+  conteudo.innerHTML = `
     <div class="ini-ola-txt">
       <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
       <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · <span class="data-longa">${esc(hojeTxt)}</span><span class="data-curta">${esc(hojeCurto)}</span></span></span>
-    </div>
-    <div class="ini-ola-acoes">
-      <button class="btn btn-sm btn-outline" onclick="switchView('perfil')">👤 Perfil</button>
-      <button class="btn btn-sm btn-danger-outline" onclick="if(confirm('Sair da conta neste aparelho?')) logout()">🚪 Sair</button>
     </div>`;
   _mostrarAvatar();
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MENU LATERAL (26/09/2026) — gaveta que reúne Perfil, Sair e tudo que
+   era "Ir para" espalhado em Início e Despesas. Cada item só aparece pra
+   quem já tinha acesso a ele hoje — mesmas checagens de sempre, só que
+   num lugar só em vez de duplicadas em duas telas.
+═══════════════════════════════════════════════════════════ */
+function _itensMenu() {
+  const itens = [
+    { view:'inicio', ico:'🏠', lbl:'Início', sub:'lançar nota e repasse' },
+  ];
+  if (!_ehContabilidade()) {
+    itens.push({ view:'home', ico:'📊', lbl:'Painel', sub:'gráficos e pendências' });
+    itens.push({ acao:"irParaNotas()", ico:'🧾', lbl:'Minhas notas', sub:'lista completa' });
+    itens.push({ view:'saldo', ico: _usaCartao() ? '💳' : '💰', lbl: _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas', sub: _usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios' });
+  }
+  if (_veEquipe()) {
+    itens.push({ view:'equipe', ico:'👥', lbl:'Equipe', sub:'baixar relatórios' });
+    itens.push({ view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
+  }
+  if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
+    itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
+    itens.push({ view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
+  }
+  itens.push({ view:'perfil', ico:'👤', lbl:'Perfil', sub:'conta, backup, ajuda' });
+  return itens;
+}
+
+function abrirMenu() {
+  const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
+  const papel = user?.role || 'colaborador';
+  const av = $('menu-avatar');
+  if (av) av.textContent = (user?.nome || user?.email || '?')[0].toUpperCase();
+  const nm = $('menu-nome'); if (nm) nm.textContent = nome || 'Usuário';
+  const rp = $('menu-role-pill'); if (rp) rp.innerHTML = `<span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span>`;
+  const lista = $('menu-lista');
+  if (lista) lista.innerHTML = _itensMenu().map(it => `
+      <li>
+        <button class="menu-item" onclick="fecharMenu();${it.acao || `switchView('${it.view}')`}">
+          <span class="menu-item-ico">${it.ico}</span>
+          <span class="menu-item-txt"><span>${esc(it.lbl)}</span><span class="menu-item-sub">${esc(it.sub)}</span></span>
+        </button>
+      </li>`).join('');
+  $('menu-drawer-overlay')?.classList.add('open');
+}
+function fecharMenu() { $('menu-drawer-overlay')?.classList.remove('open'); }
 
 /* Mostra (ou esconde) a pílula "voltar" do rodapé. `acao` é o código que o
    botão executa — o mesmo que ficava no botão de dentro da tela. */
@@ -2458,16 +2505,6 @@ function renderDespesas() {
     <div class="ini-titulo">Escolha a aba e lance a nota</div>
     ${_abaCard('RDA') + _abaCard('RDM')}`}
     ${_resumoHub()}`}
-
-    <div class="ini-titulo">Ir para</div>
-    <div class="ini-ir">
-      ${_ehContabilidade() ? '' : `
-      <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
-      <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_usaCartao() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios'}</span></button>`}
-      ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">baixar relatórios</span></button>` : ''}
-      ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
-    </div>
   </div>`;
 }
 
@@ -2498,14 +2535,31 @@ function renderInicio() {
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
 
+  /* Resumo de gastos (26/09/2026, pedido do Cleiton): mesma conta do
+     Painel (_composicaoGastos + gerarDonut), só resumida — o donut não é
+     tocável aqui (isso é lá no Painel), o cartão inteiro leva pra lá. */
+  const _cats = !_ehContabilidade() ? _composicaoGastos(A) : [];
+  const resumoGastos = (!_ehContabilidade() && A.gasto > 0) ? `
+    <div class="ini-resumo" onclick="switchView('home')">
+      <div class="ini-resumo-donut">${gerarDonut(_cats, A.gasto)}</div>
+      <div class="ini-resumo-txt">
+        <div class="ini-resumo-tot">${brl(A.gasto)}</div>
+        <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>
+        ${_cats.slice(0, 3).map(c => `<div class="ini-resumo-cat"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}
+      </div>
+      <span class="ini-resumo-seta">›</span>
+    </div>` : '';
+
   $('app-content').innerHTML = `
   <div class="db-container">
     </div>
+    ${resumoGastos}
 
     <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
          tela com os três. 21/09/2026: virou "Petermann – Despesas" e passou a
-         guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos — o
-         Início ficou só com os módulos (Despesas, Frota, Ponto) e o Perfil. -->
+         guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos.
+         26/09/2026: Perfil/Frota/Ponto saíram pro menu ☰ lateral — o
+         "Ir para" da Início não existe mais. -->
     <div class="ini-paineis">
       <button class="pnl pnl-grande" onclick="switchView('despesas')">
         <span class="pnl-conteudo">
@@ -2563,19 +2617,6 @@ function renderInicio() {
     <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
       ? `⚠️ <b>1 nota para corrigir</b>: ${_ehNotaDeOutroUsuario(_pendNotas[0].nota) ? esc(_pendNotas[0].nota.user_nome || _rotuloProprietario(_pendNotas[0].nota)) + ' · ' : ''}${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
       : `⚠️ <b>${_pendNotas.length} notas para corrigir</b>: ${esc(pendTxt)} — <b>toque para ver e corrigir</b>.`}</div>` : ''}
-
-    <!-- 22/09/2026: o Início ficou com o painel de Despesas e os atalhos.
-         Os cartões grandes de Frota/Ponto e os números do mês saíram daqui
-         (pedido do Cleiton): Frota e Ponto viraram atalhos em "Ir para" e os
-         números continuam no Painel e no Saldo, de onde nunca saíram. -->
-    <div class="ini-titulo">Ir para</div>
-    <div class="ini-ir">
-      <button class="ini-ir-btn" onclick="switchView('perfil')"><span class="ini-ir-ico">👤</span><span class="ini-ir-lbl">Perfil</span><span class="ini-ir-sub">conta, backup, ajuda</span></button>
-      ${MODULOS_EXTRAS && _ehGestorOuAdmin() ? `
-      <button class="ini-ir-btn" onclick="switchView('frota')"><span class="ini-ir-ico">🚗</span><span class="ini-ir-lbl">Frota / KM</span><span class="ini-ir-sub">odômetro dos veículos</span></button>
-      <button class="ini-ir-btn" onclick="switchView('ponto')"><span class="ini-ir-ico">⏱️</span><span class="ini-ir-lbl">Ponto</span><span class="ini-ir-sub">entrada, saída, extras</span></button>` : ''}
-    </div>
-
 
     ${_ehContabilidade() ? '' : ultimas.length ? `
     <div class="ini-titulo">Últimos lançamentos</div>
@@ -2843,6 +2884,39 @@ function gerarGraficoEvolucao(dados) {
             aria-label="Evolução de gastos por período">${svg}</svg>`;
 }
 
+/* Composição dos gastos do período (26/09/2026): saiu de dentro de
+   renderHome pra virar função à parte — o resumo compacto da Início chama
+   a mesma conta, em vez de duplicar a lógica.
+   25/09/2026: quem usa cartão corporativo não divide o gasto em RDM/RDA —
+   divide por QUEM PAGOU: o cartão da empresa ou a carteira do próprio
+   colaborador (a ser repassada). É a mesma divisão que já existia na tela
+   Saldo (_notaDoCartao / pagamento==='carteira'). */
+function _composicaoGastos(A) {
+  if (_usaCartao()) {
+    return [
+      { key:'cartao',   name:'Cartão Corporativo', curto:'Cartão',   cor:'var(--accent-d)',
+        val: _soma(A.ns.filter(_notaDoCartao)) },
+      { key:'carteira', name:'Carteira (do bolso)', curto:'Carteira', cor:'var(--primary)',
+        val: _soma(A.ns.filter(n => n.pagamento === 'carteira')) },
+    ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+  }
+  const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
+  const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && _naoEhFaturamento(n) && f(n)));
+  /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
+     o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
+  return [
+    { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
+      val: somaRDM(n => n.subtipo === 'Abastecimento') },
+    { key:'hosp',   name:'RDM · Hospedagens',   curto:'Hosped.',  cor:'var(--accent)',
+      val: somaRDM(n => n.subtipo === 'Hospedagem') },
+    // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
+    { key:'outros', name:'RDM · Outros (Borracharia/Oficina/EPIs)', curto:'Outros', cor:'#94a3b8',
+      val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
+    { key:'rda',    name:'RDA · Alimentação',   curto:'RDA',      cor:'var(--primary)',
+      val: A.rdaG },
+  ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+}
+
 /* ── Donut de composição (SVG, fatias tocáveis) ─────────── */
 function gerarDonut(cats, total) {
   const CX = 66, CY = 66, R = 50, C = 2*Math.PI*R;
@@ -2939,32 +3013,7 @@ function renderHome() {
   if (dashBarraSel !== null && !_dashEvo[dashBarraSel]) dashBarraSel = null;
 
   /* ── Composição dos gastos (donut) ──────────────────────── */
-  /* 25/09/2026: quem usa cartão corporativo não divide o gasto em RDM/RDA no
-     Painel — divide por QUEM PAGOU: o cartão da empresa ou a carteira do
-     próprio colaborador (a ser repassada). É a mesma divisão que já existia
-     na tela Saldo (_notaDoCartao / pagamento==='carteira'), agora também aqui. */
-  const cats = _usaCartao() ? [
-    { key:'cartao',   name:'Cartão Corporativo', curto:'Cartão',   cor:'var(--accent-d)',
-      val: _soma(A.ns.filter(_notaDoCartao)) },
-    { key:'carteira', name:'Carteira (do bolso)', curto:'Carteira', cor:'var(--primary)',
-      val: _soma(A.ns.filter(n => n.pagamento === 'carteira')) },
-  ].filter(c => c.val > 0).sort((a,b) => b.val - a.val) : (() => {
-    const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
-    const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && _naoEhFaturamento(n) && f(n)));
-    /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
-       o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
-    return [
-      { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
-        val: somaRDM(n => n.subtipo === 'Abastecimento') },
-      { key:'hosp',   name:'RDM · Hospedagens',   curto:'Hosped.',  cor:'var(--accent)',
-        val: somaRDM(n => n.subtipo === 'Hospedagem') },
-      // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
-      { key:'outros', name:'RDM · Outros (Borracharia/Oficina/EPIs)', curto:'Outros', cor:'#94a3b8',
-        val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
-      { key:'rda',    name:'RDA · Alimentação',   curto:'RDA',      cor:'var(--primary)',
-        val: A.rdaG },
-    ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
-  })();
+  const cats = _composicaoGastos(A);
   if (dashFatiaSel && !cats.some(c => c.key === dashFatiaSel)) dashFatiaSel = null;
 
   /* ── Ranking de fornecedores ────────────────────────────── */
