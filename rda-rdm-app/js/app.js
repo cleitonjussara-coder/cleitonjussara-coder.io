@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 284;
+const APP_BUILD = 285;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1646,6 +1646,7 @@ function _repassePendente(r) { return _repasseEhPedido(r) && !r.atendido_em && !
 function _notificacoes() {
   if (!user) return [];
   const out = [];
+  const vistos = _notifVistos();
   if (_ehGestorOuAdmin()) {
     repassesEquipe.filter(_repassePendente)
       .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
@@ -1670,10 +1671,13 @@ function _notificacoes() {
   }
   /* Cartão corporativo acabando (24/09/2026): quem recarrega é o gestor, e
      sem saldo o colaborador passa a pagar do bolso. O id carrega a faixa de
-     centenas, então o aviso volta se o saldo cair mais. */
+     centenas, então o aviso volta se o saldo cair mais (ou for dispensado e
+     cair de novo). 26/09/2026: também é dispensável — "Fechar" some com ela
+     até o saldo mudar de faixa. */
   if (_ehGestorOuAdmin()) {
     _equipeCartaoBaixo().forEach(c => {
       const id = `cartao:${c.id}:${Math.floor(c.saldo / 100)}`;
+      if (vistos.has(id)) return;
       out.push({
         id, tipo: 'cartao', userId: c.id, nome: c.nome,
         titulo: `💳 Cartão de ${c.nome} com ${brl(c.saldo)}`,
@@ -1681,7 +1685,6 @@ function _notificacoes() {
       });
     });
   }
-  const vistos = _notifVistos();
   /* Saldo devedor acima do limite (22/09/2026): a empresa deve mais de
      R$ 1.500 a alguém. O id carrega a faixa do valor (centenas), então o
      aviso volta se a dívida crescer depois de dispensado. */
@@ -1734,6 +1737,7 @@ function abrirNotificacoes() {
         ${it.tipo === 'cartao' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: '${it.userId}', nome: '${esc((it.nome || '').replace(/'/g, ''))}' }, 'recarga')">💳 Registrar recarga</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}')">Fechar</button>
         </div>` : it.tipo === 'novo' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
           <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
@@ -7227,6 +7231,10 @@ async function _salvarRepasseInterno() {
     fecharFormRepasse();
     toast(`Repasse ${tipo} de ${brl(valor)} lançado para ${quem} ✅`);
     _repasseAlvo = null;
+    /* 26/09/2026: sem isso, a notificação de "cartão baixo"/"devedor" que
+       trouxe o gestor até aqui (recarga ou repasse lançado direto pro
+       colaborador) ficava no sino mesmo depois de resolvida. */
+    await atualizarNotificacoes();
     if (viewAtual === 'equipe') renderEquipe();
     return;
   }
@@ -7235,6 +7243,7 @@ async function _salvarRepasseInterno() {
   await syncBadge(false);
   fecharFormRepasse();
   await carregarDadosLocais();
+  await atualizarNotificacoes();
   if (viewAtual === 'home') renderHome();
   if (viewAtual === 'inicio') renderInicio();
   else renderSaldo();
