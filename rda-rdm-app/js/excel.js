@@ -330,7 +330,12 @@ window.Excel = (() => {
   }
 
   /* ── Exportar Excel anual ─────────────────────────────── */
+  /* Faturamento (pagamento='empresa', 25/09/2026): a empresa pagou direto,
+     não é gasto DO colaborador — sai de toda planilha/CSV individual. */
+  const _semFaturamento = notas => notas.filter(n => n.pagamento !== 'empresa');
+
   function exportarAnual(ano, notas, repasses, colab) {
+    notas = _semFaturamento(notas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, buildResumo(notas,repasses,ano,colab), 'RESUMO');
     XLSX.utils.book_append_sheet(wb, buildRDM(notas,repasses,ano),          'RDM Detalhado');
@@ -342,6 +347,7 @@ window.Excel = (() => {
 
   /* ── Exportar Equipe (gestor) ─────────────────────────── */
   function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
+    notas = _semFaturamento(notas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano), 'EQUIPE');
     const nome = (gestorNome||'equipe').replace(/\s+/g,'_');
@@ -350,6 +356,7 @@ window.Excel = (() => {
 
   /* ── Exportar CSV mensal ──────────────────────────────── */
   function exportarCSV(mes, ano, notas, repasses, colab) {
+    notas = _semFaturamento(notas);
     const mesNome = MESES[mes-1];
     const rows = [
       ['PETERMANN', `${mesNome}/${ano}`, '', '', colab.nome||''], [''],

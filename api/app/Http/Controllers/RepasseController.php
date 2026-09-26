@@ -62,6 +62,12 @@ class RepasseController extends Controller
     public function upsert(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
+        /* 25/09/2026: 'reembolso' virou 'carteira'. Um aparelho que ficou
+           offline durante a troca pode ter isso na fila de sincronização —
+           normaliza antes de validar, em vez de recusar com 422 pra sempre. */
+        if ($r->input('destino') === 'reembolso') {
+            $r->merge(['destino' => 'carteira']);
+        }
         $d = $r->validate([
             'user_id' => ['required', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
             'tipo' => ['required', Rule::in(['RDA', 'RDM'])],
@@ -83,13 +89,6 @@ class RepasseController extends Controller
            é como o gestor registra o repasse que já pagou, entrando direto no
            saldo da pessoa (sem a 2ª etapa, que é só para pedido atendido). */
         abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
-        /* 25/09/2026: o colaborador não se autodeclara "já recebi" mais — só
-           gestor/admin registra um repasse como recebido (para si ou para
-           outro). O colaborador continua podendo SOLICITAR (kind=requested);
-           quem atende o pedido é sempre o gestor, pelo endpoint /atendido.
-           Um pedido sendo apagado (deleted=true, ex.: recusa) não é "receber"
-           dinheiro, então passa direto mesmo vindo de quem pediu. */
-        abort_if($d['kind'] === 'received' && ! $d['deleted'] && ! $u->gerencia(), 403, 'Só gestor ou admin registra um repasse como recebido — solicite o repasse.');
 
 
         /* 24/09/2026: HOJE é o presente — nada é gravado com data adiante
@@ -136,6 +135,19 @@ class RepasseController extends Controller
         }
         $rep = Repasse::find($id);
         $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
+        /* 25/09/2026: o colaborador não se autodeclara "já recebi" mais — só
+           gestor/admin faz um repasse NASCER (ou virar) "recebido", para si ou
+           para outro. Em vez de recusar (o que travaria pra sempre um item da
+           fila offline gravado antes desta regra existir), rebaixa pra pedido
+           — o colaborador continua podendo solicitar; quem atende é sempre o
+           gestor, pelo endpoint /atendido. Um repasse que JÁ ERA recebido
+           continua podendo ser editado (descrição, data) por quem é dono dele,
+           sem reabrir essa porta. Apagar (deleted=true, ex.: recusa) também
+           passa direto, não é "receber" dinheiro. */
+        $jaEraRecebido = $rep && $rep->kind === 'received';
+        if ($d['kind'] === 'received' && ! $jaEraRecebido && ! $d['deleted'] && ! $u->gerencia()) {
+            $d['kind'] = 'requested';
+        }
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             unset($d['created_at']);

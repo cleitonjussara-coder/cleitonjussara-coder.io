@@ -577,15 +577,19 @@ window.GSheets = (() => {
     ];
   }
 
+  /* Faturamento (pagamento='empresa', 25/09/2026): a empresa pagou direto,
+     não é gasto DO colaborador — sai de toda planilha ao vivo. */
+  const _semFaturamento = notas => notas.filter(n => n.pagamento !== 'empresa');
+
   function exportarAnual(ano, notas, repasses, colab) {
     return _publicar(`Petermann ${((colab && colab.nome) || 'Colaborador').trim()} ${ano}`,
-                     montarAnual(ano, notas, repasses, colab));
+                     montarAnual(ano, _semFaturamento(notas), repasses, colab));
   }
 
   /* planilha consolidada da equipe (mensal, 1 aba) */
   function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
     return _publicar(`Petermann Equipe ${MESES[mes-1]} ${ano}`,
-                     [buildEquipe(notas, repasses, collabs, mes, ano, gestorNome)]);
+                     [buildEquipe(_semFaturamento(notas), repasses, collabs, mes, ano, gestorNome)]);
   }
 
   return {

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 275;
+const APP_BUILD = 276;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1895,7 +1895,7 @@ function iniciarEdicaoNotaColaborador() {
    pedido fixo. Agora abre um passo com o valor editável (o acerto pode ser
    diferente do pedido) e a opção de recusar — pedido do Cleiton. */
 function abrirModalAtenderPedido(id) {
-  const r = repassesEquipe.find(x => x.id === id);
+  const r = _repasseDaEquipe(id);
   if (!r) { toast('Pedido não encontrado', 'err'); return; }
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
   const ov = document.createElement('div');
@@ -1924,7 +1924,7 @@ function abrirModalAtenderPedido(id) {
 
 async function _confirmarAtenderPedido(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
-  const r = repassesEquipe.find(x => x.id === id);
+  const r = _repasseDaEquipe(id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
   const valor = Number(document.getElementById('pedido-valor')?.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido', 'err'); return; }
@@ -1942,8 +1942,9 @@ async function _confirmarAtenderPedido(id, btn) {
 }
 
 async function _recusarPedido(id, btn) {
+  if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin recusa um pedido', 'err'); return; }
   if (!sb || !navigator.onLine) { toast('Precisa de internet para recusar', 'err'); return; }
-  const r = repassesEquipe.find(x => x.id === id);
+  const r = _repasseDaEquipe(id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
   if (!confirm(`Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?\n\nO pedido some das pendências. Avise a pessoa por fora do app, se precisar.`)) return;
   if (btn) btn.disabled = true;
@@ -2118,7 +2119,10 @@ const LIMITE_DEVEDOR = 1500;
 
 function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
   const k = ano * 12 + mes;
-  const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k && (!tipo || o.tipo === tipo);
+  /* Faturamento (pagamento='empresa') não é dívida da empresa COM o
+     colaborador — quem pagou foi a empresa, direto. _naoEhFaturamento não
+     mexe com repasse (que não tem campo pagamento, só destino). */
+  const ate = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k && (!tipo || o.tipo === tipo) && _naoEhFaturamento(o);
   if (ehCv) {
     /* 24/09/2026: no cartão corporativo a dívida NÃO vem de pedidos — vem
        das notas que a pessoa pagou do próprio bolso, que é o que a aba CV
@@ -2164,7 +2168,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
 
 /* Bloco "Resumo do mês" do hub: RDA, RDM e o que há para receber. */
 function _resumoHub() {
-  const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno);
+  const doMes = t => notas.filter(n => !n.deleted && n.tipo === t && n.mes === filMes && n.ano === filAno && _naoEhFaturamento(n));
   const rda = doMes('RDA'), rdm = doMes('RDM');
   const cv = _usaCartao();
   const ns = notas.filter(n => !n.deleted), rs = repasses.filter(r => !r.deleted);
@@ -2178,7 +2182,7 @@ function _resumoHub() {
   /* 25/09/2026: no regime de cartão não existe RDA x RDM — o gasto se divide
      nas quatro categorias da planilha. O resumo segue a mesma divisão. */
   const ehCartao = _usaCartao();
-  const doMesTodas = notas.filter(n => !n.deleted && n.mes === filMes && n.ano === filAno);
+  const doMesTodas = notas.filter(n => !n.deleted && n.mes === filMes && n.ano === filAno && _naoEhFaturamento(n));
   const porCategoria = CATEGORIAS_CV.map(c => ({
     c, arr: doMesTodas.filter(n => _chaveCategoriaDaNota(n) === c.chave),
   }));
@@ -2538,7 +2542,7 @@ function renderInicio() {
           <span class="pnl-sub">recebido ou a pedir (PIX)</span>
         </span>
       </button>`}
-      ${user?.role === 'gestor' ? `
+      ${_ehGestorOuAdmin() ? `
       <button class="pnl pnl-grande" onclick="iniciarFaturamento()">
         <span class="pnl-conteudo">
           <span class="pnl-ico">🏢</span>
@@ -2628,9 +2632,13 @@ function _escalaTopo(pico) {
 /* Agrega notas e repasses de um período (mês ou ano inteiro) */
 function _agregaPeriodo(mes, ano, modo) {
   const doPeriodo = o => !o.deleted && o.ano === ano && (modo === 'anual' || o.mes === mes);
+  /* ns fica com TODAS as notas do período (Faturamento incluído) — pendências,
+     ranking de fornecedor e listas continuam enxergando a nota, é só o
+     GASTO (rdmG/rdaG/gasto) que não conta Faturamento como despesa da
+     pessoa (25/09/2026). */
   const ns = notas.filter(doPeriodo);
   const rs = repasses.filter(doPeriodo).filter(_repasseEhRecebido);
-  const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t));
+  const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t && _naoEhFaturamento(x)));
   const rdmG = porTipo(ns,'RDM'), rdaG = porTipo(ns,'RDA');
   const rdmR = porTipo(rs,'RDM'), rdaR = porTipo(rs,'RDA');
   return { ns, rs, rdmG, rdaG, rdmR, rdaR,
@@ -2642,7 +2650,7 @@ function _agregaPeriodo(mes, ano, modo) {
 function _resumoTrimestral(ano) {
   const porMes = Array.from({ length: 13 }, () => ({ rdm: 0, rda: 0 }));
   notas.forEach(n => {
-    if (n.deleted || n.ano !== ano) return;
+    if (n.deleted || n.ano !== ano || !_naoEhFaturamento(n)) return;
     const m = porMes[n.mes];
     if (!m) return;
     if (n.tipo === 'RDM') m.rdm += _n(n.valor);
@@ -2669,10 +2677,12 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
   const targetKey = targetAno * 12 + targetMes;
   const ePassado  = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) < targetKey);
   const eAtual    = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) === targetKey);
-  const gastosPassados   = _soma(notas.filter(ePassado));
+  /* notas: Faturamento (pagamento='empresa') não é gasto do colaborador.
+     repasses não tem campo pagamento, então o filtro não afeta eles. */
+  const gastosPassados   = _soma(notas.filter(o => ePassado(o) && _naoEhFaturamento(o)));
   const repassesPassados = _soma(repasses.filter(o => ePassado(o) && _repasseEhRecebido(o)));
   const pendenciaAnterior = repassesPassados - gastosPassados;
-  const gastoMes   = _soma(notas.filter(eAtual));
+  const gastoMes   = _soma(notas.filter(o => eAtual(o) && _naoEhFaturamento(o)));
   const repasseMes = _soma(repasses.filter(o => eAtual(o) && _repasseEhRecebido(o)));
   const saldoMes   = repasseMes - gastoMes;
   const saldoLiquido = pendenciaAnterior + saldoMes;
@@ -2940,7 +2950,7 @@ function renderHome() {
       val: _soma(A.ns.filter(n => n.pagamento === 'carteira')) },
   ].filter(c => c.val > 0).sort((a,b) => b.val - a.val) : (() => {
     const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
-    const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && f(n)));
+    const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && _naoEhFaturamento(n) && f(n)));
     /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
        o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
     return [
@@ -3913,7 +3923,7 @@ function renderSaldo() {
   const rdm = _saldoAcumuladoAte(filMes, filAno, 'RDM');
   const rda = _saldoAcumuladoAte(filMes, filAno, 'RDA');
 
-  const ns = notas.filter(n => n.mes===filMes && n.ano===filAno);
+  const ns = notas.filter(n => n.mes===filMes && n.ano===filAno && _naoEhFaturamento(n));
   const rs = repasses.filter(r => !r.deleted && r.mes===filMes && r.ano===filAno);
 
   // breakdown RDM por subtipo — rotulo conforme a planilha padrao, chave inalterada
@@ -6970,6 +6980,15 @@ function _formatarDoc(d) {
    existir a coluna pagamento, conta como cartão (25/09/2026). */
 function _notaDoCartao(n) {
   return n.pagamento !== 'carteira' && n.pagamento !== 'empresa';
+}
+
+/* Faturamento (25/09/2026): a empresa pagou direto, então a nota não é gasto
+   DO colaborador — usado em todo cálculo/soma pessoal (Painel, resumo do
+   mês, "a receber"), nunca nas listas (a nota continua visível em Minhas
+   notas, só não entra nas contas). Uma única função pra não repetir o
+   filtro em cada lugar que soma nota. */
+function _naoEhFaturamento(n) {
+  return n.pagamento !== 'empresa';
 }
 
 function _saldoCartaoDe(ns, rs, temCartao) {

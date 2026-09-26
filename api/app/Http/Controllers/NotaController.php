@@ -83,6 +83,12 @@ class NotaController extends Controller
                 $r->merge([$campo => preg_replace('/\D/', '', (string) $r->input($campo)) ?: null]);
             }
         }
+        /* 25/09/2026: 'reembolso' virou 'carteira'. Um aparelho que ficou offline
+           durante a troca pode ter isso na fila de sincronização — normaliza
+           aqui em vez de recusar o lançamento com 422 pra sempre. */
+        if ($r->input('pagamento') === 'reembolso') {
+            $r->merge(['pagamento' => 'carteira']);
+        }
         $d = $r->validate([
             'user_id' => ['required', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
             'tipo' => ['required', Rule::in(Nota::TIPOS)],
@@ -160,6 +166,11 @@ class NotaController extends Controller
         if ($nota) {
             $this->podeGravar($u, $nota->user_id);
         }
+        /* 25/09/2026: nota de Faturamento (paga direto pela empresa, exclui do
+           saldo/cartão de quem for escolhido) só gestor ou admin lança —
+           mesma regra vale editando uma nota já existente. */
+        $pagamentoAlvo = $d['pagamento'] ?? $nota?->pagamento;
+        abort_if($pagamentoAlvo === 'empresa' && ! $u->gerencia(), 403, 'Só gestor ou admin lança nota de Faturamento.');
 
         $d['metodo_captura'] = $d['metodo_captura'] ?? 'manual';
         $d['deleted'] = (bool) ($d['deleted'] ?? false);
