@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 285;
+const APP_BUILD = 286;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3067,6 +3067,18 @@ function renderHome() {
     n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local) || _dupMapa.has(n.id)
   ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
+  /* Pendências da equipe (26/09/2026, pedido do Cleiton: "aparecer
+     pendências de toda equipe especificando cada colaborador"). Mesmo
+     período em foco, mesmos critérios — só que em notasEquipe, e só pra
+     gestor/admin. Fica numa lista à parte porque "Ver todas"/os contadores
+     acima levam pra Minhas notas, que não mostra nota de outra pessoa. */
+  const _doPeriodoPend = o => !o.deleted && o.ano === filAno && (modo === 'anual' || o.mes === filMes);
+  const pendentesEquipe = _ehGestorOuAdmin()
+    ? notasEquipe.filter(_doPeriodoPend).filter(n =>
+        n.sync_status === 'failed' || n.synced === false || _n(n.valor) <= 0 || (!n.foto_path && !n.foto_local) || _dupMapa.has(n.id)
+      ).sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)))
+    : [];
+
   const resumoPend = [
     { ico:'⚠️', txt:'Sem valor',    n: pendentes.filter(n => _n(n.valor) <= 0).length, flag:'sem-valor' },
     { ico:'📎', txt:'Sem anexo',    n: pendentes.filter(n => !n.foto_path && !n.foto_local).length, flag:'sem-anexo' },
@@ -3115,10 +3127,30 @@ function renderHome() {
           ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
       </div>
       <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
-      <button class="btn btn-sm btn-outline" onclick="abrirTransferirNota('${n.id}')" style="flex-shrink:0">Mover</button>
+      <button class="btn btn-sm btn-outline" onclick="corrigirGrupoNota('${n.id}')" style="flex-shrink:0">Mover</button>
     </div>`).join('');
 
-  const pendHtml = pendentes.length
+  const itemEquipePendHtml = n => `
+    <div class="db-pend-item" style="gap:10px">
+      <span class="tipo-badge tipo-${n.tipo}" style="flex-shrink:0">${esc(n.tipo)}</span>
+      <div style="flex:1;min-width:0">
+        <div class="db-pend-txt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          👤 ${esc(n.user_nome || _rotuloProprietario(n))} · ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:1px">
+          ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
+      </div>
+      <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
+      <button class="btn btn-sm btn-outline" onclick="corrigirGrupoNota('${n.id}')" style="flex-shrink:0">Mover</button>
+    </div>`;
+  const pendEquipeHtml = pendentesEquipe.length ? `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+        Pendências da equipe (${pendentesEquipe.length})</div>
+      <div class="db-pend">${pendentesEquipe.slice(0, 10).map(itemEquipePendHtml).join('')}</div>
+      ${pendentesEquipe.length > 10 ? `<div style="font-size:13px;color:var(--text2);margin-top:6px">+ ${pendentesEquipe.length - 10} outras — toque no sino ou em Equipe para ver todas.</div>` : ''}
+    </div>` : '';
+
+  const pendHtml = (pendentes.length
     ? linhaSuspeita + resumoPend.map(linhaResumo).join('')
       + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
            <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
@@ -3132,7 +3164,7 @@ function renderHome() {
          <span class="db-pend-ico">✅</span>
          <span class="db-pend-txt">Nada pendente em ${esc(rotulo)}</span>
          <span class="db-pend-n">0</span>
-       </div>`;
+       </div>`) + pendEquipeHtml;
 
   const pendingHint = pendentes.length ? `<div class="db-pend-item alerta" style="margin-bottom:8px">
     <span class="db-pend-ico">📡</span>
