@@ -14,6 +14,13 @@ window.NFCE = (() => {
 
   function digits(s) { return String(s || '').replace(/\D/g, ''); }
 
+  /* 26/09/2026: "algumas notas estão puxando o valor incorreto" — o formato
+     de pipe do QR não é padronizado entre estados, e um campo que num
+     estado é o valor pode ser outra coisa (hash, token) noutro. Sem essa
+     trava, um número gigante (chave, hash) virava "valor" sem ninguém
+     perceber. Nenhuma nota de verdade custa R$ 1 milhão. */
+  function valorPlausivel(v) { return typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000000; }
+
   /* Chave de 44 dígitos → objeto com todos os campos */
   function parseChave44(raw) {
     const c = digits(raw);
@@ -116,19 +123,25 @@ window.NFCE = (() => {
              no 5º campo — visto em GO em 19/09/2026 ("…|3|1|18|124.36|||hash") */
           if (digits(parts[0]).length === 44 && parts.length >= 5) {
             const v5 = parseFloat(String(parts[4] || '').replace(',', '.'));
-            if (!isNaN(v5) && v5 > 0) valor = v5;
+            if (valorPlausivel(v5)) valor = v5;
           }
-          // vNF = índice 10
+          /* vNF = índice 10 num formato mais longo. 26/09/2026: NÃO usar
+             digits() aqui — ela apaga o ponto/vírgula decimal e faz um
+             "124.36" virar 12436, que o /100 de antes tentava (mal)
+             compensar. Mantém o separador e valida o resultado. */
           const candidate = parts[10];
           if (candidate) {
-            const v = parseFloat(digits(candidate).replace(',', '.'));
-            if (!isNaN(v) && v > 0) valor = v > 99999 ? v / 100 : v;
+            const v = parseFloat(String(candidate).replace(',', '.'));
+            if (valorPlausivel(v)) valor = v;
           }
           // fallback: qualquer valor monetário no pipe
           if (!valor) {
             parts.forEach(pt => {
               const m = pt.match(/^([0-9]{1,6})[.,]([0-9]{2})$/);
-              if (m) valor = parseFloat(m[1] + '.' + m[2]);
+              if (m) {
+                const v = parseFloat(m[1] + '.' + m[2]);
+                if (valorPlausivel(v)) valor = v;
+              }
             });
           }
         }
@@ -136,7 +149,10 @@ window.NFCE = (() => {
 
       if (!valor) {
         const vNF = u.searchParams.get('vNF') || u.searchParams.get('valor');
-        if (vNF) valor = parseFloat(vNF.replace(',', '.'));
+        if (vNF) {
+          const v = parseFloat(vNF.replace(',', '.'));
+          if (valorPlausivel(v)) valor = v;
+        }
       }
     } catch (_) {
       const raw = digits(url);
