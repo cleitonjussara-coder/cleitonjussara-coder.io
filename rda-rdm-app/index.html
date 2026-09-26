@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=279">
+  <link rel="manifest" href="manifest.json?v=280">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -201,32 +201,32 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
    #hdr-grupo que carrega o fundo contínuo agora; os dois filhos ficam
    transparentes, então não existe mais linha/sombra dividindo os dois. */
 #hdr-grupo{flex-shrink:0;background:linear-gradient(180deg,#0a4a24,#062d16);box-shadow:0 4px 14px rgba(0,0,0,.4)}
-/* Cabeçalho = logomarca, mais compacta (26/09/2026: "ocupar o menos espaço
-   possível"), com a foto de perfil e o sino no canto direito. */
+/* Cabeçalho = só a logomarca agora, mais compacta (26/09/2026: "ocupar o
+   menos espaço possível"). Sino e foto desceram pra faixa de saudação. */
 #app-header{
   position:relative;background:transparent;color:#fff;
   display:flex;align-items:center;justify-content:center;
-  padding:calc(env(safe-area-inset-top,0px) + 2px) 122px 2px 10px;z-index:10;
+  padding:calc(env(safe-area-inset-top,0px) + 2px) 10px 2px;z-index:10;
 }
 .hdr-banner{display:block;width:100%;max-width:640px;height:auto;max-height:64px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .hdr-sync{position:absolute;left:10px;bottom:6px;font-size:12.5px;opacity:.85}
-/* sininho de notificações (21/09/2026) e foto de perfil, lado a lado no
-   canto direito (26/09/2026: a foto subiu pra cá — pedido do Cleiton;
-   maior, pra dar pra reconhecer o rosto; ordem invertida — a foto vai no
-   canto extremo e o sino fica à esquerda dela — pedido do Cleiton). */
-#hdr-avatar-slot{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:11}
-#hdr-avatar-slot .avatar{width:56px;height:56px;font-size:21px;box-shadow:0 4px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.5)}
-#hdr-sino{position:absolute;right:70px;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
-  background:rgba(0,0,0,.38);color:#fff;font-size:23px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11;-webkit-tap-highlight-color:transparent;
+/* 26/09/2026: sino e foto desceram pra faixa de saudação (onde já mora o
+   menu ☰) — pedido do Cleiton: "mover esses botões para baixo... enquadrar
+   ao tamanho da coluna abaixo, e imagem maiores". Ficam do lado direito,
+   no mesmo tamanho/altura dos outros itens dessa faixa. */
+#barra-usuario-direita{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0}
+#hdr-avatar-slot .avatar{width:64px;height:64px;font-size:24px;box-shadow:0 4px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.5)}
+#hdr-sino{position:relative;flex-shrink:0;width:52px;height:52px;border-radius:50%;border:2px solid rgba(255,255,255,.5);
+  background:rgba(0,0,0,.38);color:#fff;font-size:27px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;
   box-shadow:0 4px 10px rgba(0,0,0,.4)}
 #hdr-sino.tem{border-color:#b9e24a;animation:sino-pulsa 2.4s ease-in-out 3}
-#hdr-sino-num{position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 4px;border-radius:10px;background:#e11d48;color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #083d1e}
-/* 26/09/2026: menu ☰ desceu pra faixa do usuário, no lugar de onde era a
-   foto — pedido do Cleiton ("mais aparente, num lugar estratégico"). Cor
-   de destaque do app, pra saltar aos olhos. */
-#hdr-menu{flex:0 0 auto;width:46px;height:46px;border-radius:50%;
+#hdr-sino-num{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:#e11d48;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #083d1e}
+/* 26/09/2026: menu ☰ na faixa de saudação — pedido do Cleiton ("mais
+   aparente, num lugar estratégico"). Cor de destaque do app, pra saltar
+   aos olhos. */
+#hdr-menu{flex:0 0 auto;width:52px;height:52px;border-radius:50%;
   border:2px solid rgba(255,255,255,.5);background:linear-gradient(160deg,#d9f5a0,#8fc93a);
-  color:#0a1d09;font-size:23px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:#0a1d09;font-size:26px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;
   -webkit-tap-highlight-color:transparent;box-shadow:0 3px 8px rgba(0,0,0,.4)}
 #hdr-menu:active{transform:scale(.94)}
 @keyframes sino-pulsa{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
@@ -1758,25 +1758,28 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=279" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=280" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
       </div>
       <div id="drive-badge" class="sync-indicator" style="display:none"><span id="drive-dot"></span><span id="drive-txt"></span></div>
-      <!-- 26/09/2026: a foto de perfil subiu pra cá, no canto direito, ao
-           lado do sino — pedido do Cleiton. Preenchida por _pintarBarraUsuario(). -->
-      <div id="hdr-avatar-slot"></div>
-      <!-- notificações no app (21/09/2026): pedidos de repasse pendentes (gestor) / pagos (colaborador) -->
-      <button id="hdr-sino" style="display:none" onclick="abrirNotificacoes()" aria-label="Notificações" title="Notificações">🔔<span id="hdr-sino-num" style="display:none">0</span></button>
     </header>
 
     <!-- 23/09/2026: faixa do usuário — vale para todas as abas e não sobe
          com a rolagem. Preenchida por _pintarBarraUsuario().
-         26/09/2026: o menu ☰ desceu pra cá, no lugar onde era a foto. -->
+         26/09/2026: o menu ☰ desceu pra cá, no lugar onde era a foto.
+         Sino e foto também desceram pra cá (pedido do Cleiton) — mesma
+         faixa, do mesmo tamanho dos outros itens dela, maiores. -->
     <div id="barra-usuario" class="ini-ola ini-ola-foto ini-ola-fixa" style="display:none">
       <button id="hdr-menu" onclick="abrirMenu()" aria-label="Menu" title="Menu">☰</button>
       <div id="barra-usuario-conteudo" style="display:contents"></div>
+      <div id="barra-usuario-direita">
+        <!-- notificações no app (21/09/2026): pedidos de repasse pendentes (gestor) / pagos (colaborador) -->
+        <button id="hdr-sino" style="display:none" onclick="abrirNotificacoes()" aria-label="Notificações" title="Notificações">🔔<span id="hdr-sino-num" style="display:none">0</span></button>
+        <!-- a foto de perfil, no canto direito — pedido do Cleiton. Preenchida por _pintarBarraUsuario(). -->
+        <div id="hdr-avatar-slot"></div>
+      </div>
     </div>
   </div>
 
@@ -2667,25 +2670,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=279"></script>
-<script defer src="js/db.js?v=279"></script>
-<script defer src="js/nfce.js?v=279"></script>
-<script defer src="js/sefaz.js?v=279"></script>
-<script defer src="js/brasilapi.js?v=279"></script>
-<script defer src="js/ocr.js?v=279"></script>
-<script defer src="js/recorte.js?v=279"></script>
-<script defer src="js/excel.js?v=279"></script>
-<script defer src="js/gestor.js?v=279"></script>
-<script defer src="js/frota.js?v=279"></script>
-<script defer src="js/ponto.js?v=279"></script>
-<script defer src="js/arquivos.js?v=279"></script>
-<script defer src="js/gdrive.js?v=279"></script>
-<script defer src="js/app.js?v=279"></script>
+<script defer src="js/api.js?v=280"></script>
+<script defer src="js/db.js?v=280"></script>
+<script defer src="js/nfce.js?v=280"></script>
+<script defer src="js/sefaz.js?v=280"></script>
+<script defer src="js/brasilapi.js?v=280"></script>
+<script defer src="js/ocr.js?v=280"></script>
+<script defer src="js/recorte.js?v=280"></script>
+<script defer src="js/excel.js?v=280"></script>
+<script defer src="js/gestor.js?v=280"></script>
+<script defer src="js/frota.js?v=280"></script>
+<script defer src="js/ponto.js?v=280"></script>
+<script defer src="js/arquivos.js?v=280"></script>
+<script defer src="js/gdrive.js?v=280"></script>
+<script defer src="js/app.js?v=280"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=279').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=280').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
