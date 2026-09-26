@@ -34,9 +34,12 @@ class CartoesVerificar extends Command
             $recarga = (float) Repasse::where('user_id', $c->id)->where('deleted', false)
                 ->where('kind', 'received')->where('destino', 'recarga')
                 ->whereNotNull('confirmado_em')->sum('valor');
+            /* 25/09/2026: só conta como gasto do CARTÃO quem saiu do cartão (cv) ou é
+               lançamento antigo sem pagamento gravado. 'carteira' (era 'reembolso') e
+               'empresa' (nota de faturamento) não passam pelo cartão da pessoa. */
             $gasto = (float) Nota::where('user_id', $c->id)->where('deleted', false)
                 ->where(function ($q) {
-                    $q->where('pagamento', '!=', 'reembolso')->orWhereNull('pagamento');
+                    $q->where('pagamento', 'cv')->orWhereNull('pagamento');
                 })->sum('valor');
             $saldo = $recarga - $gasto;
 

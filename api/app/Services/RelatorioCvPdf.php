@@ -34,8 +34,8 @@ class RelatorioCvPdf
             ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
 
         /* 24/09/2026: no CV o dinheiro anda por dois caminhos e cada um tem
-           a sua coluna — recarga do cartão e reembolso ao colaborador.
-           Lançamento antigo, sem destino, conta como reembolso. */
+           a sua coluna — recarga do cartão e repasse (carteira) ao colaborador.
+           Lançamento antigo, sem destino, conta como carteira (era 'reembolso'). */
         $ehCv = $c->usaCartao();
         $recargas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'recarga') : $reps;
         $ajudas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'ajuda') : collect();

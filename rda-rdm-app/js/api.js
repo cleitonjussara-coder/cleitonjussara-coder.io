@@ -274,8 +274,9 @@ window.API = (() => {
   const repasses = {
     list: params => req('GET', '/repasses', { query: params }),
     upsert: rec => req('PUT', `/repasses/${rec.id}`, { body: rec }),
-    /* gestor/admin marca o pedido como pago: o servidor cria o repasse recebido (21/09/2026) */
-    atendido: id => req('PATCH', `/repasses/${id}/atendido`),
+    /* gestor/admin marca o pedido como pago: o servidor cria o repasse recebido (21/09/2026).
+       valor é opcional (25/09/2026): paga um valor diferente do que foi pedido. */
+    atendido: (id, valor) => req('PATCH', `/repasses/${id}/atendido`, { body: { valor: valor ?? undefined } }),
   };
 
   /* Notificação no celular (24/09/2026) */

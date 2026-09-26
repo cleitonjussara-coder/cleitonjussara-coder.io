@@ -35,7 +35,10 @@ class RelatorioRdmRdaPdf
     /** O HTML do PDF (separado para inspeção no navegador). */
     public function html(Colaborador $c, int $ano): string
     {
+        /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
+           colaborador — sai da planilha individual dele, só soma no painel geral. */
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+            ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=274">
+  <link rel="manifest" href="manifest.json?v=275">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -902,7 +902,7 @@ select.inp{cursor:pointer}
 .pnl-grande .pnl-conteudo{min-height:150px;justify-content:flex-end;padding:20px 20px 22px;max-width:78%}
 .pnl-grande .pnl-tit{font-size:24px}
 /* 25/09/2026: o título do painel virou frase ("Postar nota de C.V. e
-   reembolso"). Em duas linhas precisa respirar e quebrar equilibrado. */
+   repasse"). Em duas linhas precisa respirar e quebrar equilibrado. */
 .pnl-tit-frase{line-height:1.18;text-wrap:balance;max-width:16ch}
 .pnl-grande .pnl-conteudo:has(.pnl-tit-frase){gap:4px}
 .pnl-linha{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
@@ -1713,7 +1713,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
        saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
   <header id="app-header">
-    <img class="hdr-banner" src="topo.png?v=274" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+    <img class="hdr-banner" src="topo.png?v=275" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
     <div class="sync-indicator hdr-sync">
       <div class="sync-dot online" id="sync-dot"></div>
       <span id="sync-txt">online</span>
@@ -1953,7 +1953,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <label class="lbl">Pagamento *</label>
       <select class="inp" id="nf-pagamento">
         <option value="cv">💳 Cartão corporativo (C.V.)</option>
-        <option value="reembolso">👛 Do meu bolso — pedir reembolso</option>
+        <option value="carteira">👛 Do meu bolso — pedir repasse</option>
       </select>
     </div>
 
@@ -2166,12 +2166,12 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     </div>
 
     <div class="ajuda-sec ajuda-cv">
-      <h4>💳 Cartão corporativo (C.V.) — recarga e reembolso</h4>
-      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b> ou <b>👛 Nota de reembolso</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
-      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Reembolso e recarga também não perguntam aba nenhuma. Desde 25/09/2026 o <b>Resumo do mês</b>, lá embaixo, segue essa mesma divisão: as <b>quatro categorias</b> no lugar de RDA e RDM, e um <b>único</b> quadro de <b>👛 Reembolso a receber</b> — no cartão o que a empresa deve é um valor só.</p>
+      <h4>💳 Cartão corporativo (C.V.) — recarga e repasse</h4>
+      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b> ou <b>👛 Nota de repasse</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
+      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Repasse e recarga também não perguntam aba nenhuma. Desde 25/09/2026 o <b>Resumo do mês</b>, lá embaixo, segue essa mesma divisão: as <b>quatro categorias</b> no lugar de RDA e RDM, e um <b>único</b> quadro de <b>👛 Repasse a receber</b> — no cartão o que a empresa deve é um valor só.</p>
       <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
       <ul>
-        <li><b>👛 Reembolso</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
+        <li><b>👛 Repasse</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
         <li><b>💳 Recarga do cartão</b> — pedir ao gestor a transferência para o cartão pré-pago. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>
       </ul>
       <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>
@@ -2181,8 +2181,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
         <div class="ajuda-sec ajuda-gestor">
       <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
       <ul>
-        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. A <b>contabilidade</b> consulta e baixa relatórios; não edita nem apaga.</li>
-        <li><b>Repasse e reembolso</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora.</li>
+        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
+        <li><b>Repasse</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora.</li>
       </ul>
       <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>
     </div>
@@ -2192,8 +2192,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p>Dá para receber os avisos no celular mesmo com o app fechado — e é isso que faz aparecer <b>o número no ícone do app</b>, como nos outros aplicativos. Quem liga é você, uma vez em cada aparelho: <b>Perfil → 🔔 Ligar notificações neste aparelho</b>. O celular vai pedir autorização; sem ela nada chega.</p>
       <p>O que toca o aviso:</p>
       <ul>
-        <li>💸 <b>Pedido de repasse, reembolso ou recarga</b> — para quem gerencia, assim que a pessoa pede.</li>
-        <li>✅ <b>Repasse ou reembolso pago</b> — para quem recebe, quando o gestor marca como pago.</li>
+        <li>💸 <b>Pedido de repasse ou recarga</b> — para quem gerencia, assim que a pessoa pede.</li>
+        <li>✅ <b>Repasse ou recarga pago</b> — para quem recebe, quando o gestor marca como pago.</li>
         <li>🙋 <b>Cadastro novo aguardando liberação</b> — para quem gerencia.</li>
         <li>💳 <b>Cartão abaixo de R$ 300</b> — para quem gerencia, uma vez por dia.</li>
       </ul>
@@ -2207,24 +2207,24 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
     <div class="ajuda-sec">
       <h4>🏠 Tela Início — por onde tudo começa</h4>
-      <p>Ao entrar, o app abre no <b>Início</b>. O <b>botão grande 🧾 do topo</b> — que desde 25/09/2026 mostra direto o que ele faz (<b>“Postar nota de C.V. e reembolso”</b>, <b>“Lançar nota de RDM e RDA”</b>…, conforme o seu regime) — reúne tudo de despesas. Dentro dele a tela continua se chamando <b>Petermann – Despesas</b>. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
+      <p>Ao entrar, o app abre no <b>Início</b>. O <b>botão grande 🧾 do topo</b> — que desde 25/09/2026 mostra direto o que ele faz (<b>“Postar nota de C.V. e repasse”</b>, <b>“Lançar nota de RDM e RDA”</b>…, conforme o seu regime) — reúne tudo de despesas. Dentro dele a tela continua se chamando <b>Petermann – Despesas</b>. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
       <ul>
         <li>🍽️ <b>RDA — Alimentação</b>: refeição, lanche, café, água.</li>
         <li>💼 <b>RDM — Despesas corporativas</b>: abastecimento, hospedagem e outros gastos de serviço.</li>
       </ul>
       <p>Cada aba mostra, no cantinho, <b>quanto você já lançou nela no mês</b>. Toque na aba e ela <b>abre</b>, revelando as duas formas de lançar <b>dentro dela</b>: <b>📷 Nota pelo QR Code</b> e <b>📝 Nota sem QR</b>. Como a aba já está escolhida, o app não pergunta RDA/RDM de novo — vai direto para o comprovante (e, se o fornecedor parecer da outra aba, avisa ali com o botão <b>Trocar</b>). Tocar na aba aberta fecha de novo.</p>
       <ul>
-        <li>💸 <b>Repasse / Reembolso</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
+        <li>💸 <b>Repasse</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
       </ul>
-      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>💰 Registrar recebido</b> (o dinheiro já caiu) ou <b>🙋 Solicitar repasse</b> (pedir ao gestor); o título do alto acompanha a escolha. <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o reembolso criado a partir de uma nota entra direto no passo 3.</p>
+      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>🙋 Solicitar repasse</b> (pedir ao gestor) ou, só para <b>Gestor/Admin</b> (25/09/2026: colaborador não se autodeclara "já recebi" mais), <b>💰 Registrar recebido</b>; o título do alto acompanha a escolha. <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o repasse criado a partir de uma nota entra direto no passo 3.</p>
       <ul>
       </ul>
-      <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os reembolsos registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
+      <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os repasses registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
       <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
       <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto, à direita) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
       <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
       <p><b>Barra congelada (23/09/2026):</b> a saudação do Início tem, à direita, os botões <b>👤 Perfil</b> e <b>🚪 Sair</b>, e essa faixa <b>não sobe com a rolagem</b> — fica fixa no topo enquanto você desce a tela, então os dois estão sempre a um toque. Em telas estreitas os botões descem para a linha de baixo, dentro da mesma faixa.</p>
-      <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contabilidade.</p>
+      <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contador.</p>
       <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
       <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), e os <b>últimos lançamentos</b>. Para sair da conta, use o <b>🚪 Sair</b> da faixa congelada do topo (o botão grande do rodapé saiu em 23/09/2026, era o mesmo comando duas vezes). Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
       <p>Para voltar (23/09/2026): o botão fixo de baixo leva para a <b>tela onde você estava antes</b> e mostra o nome dela — entrou no Painel vindo da <b>Equipe</b>? ele diz <b>‹ Equipe</b>. Tocando várias vezes você refaz o caminho de volta até o Início; no Início ele some. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
@@ -2313,9 +2313,9 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p>Cada colaborador está em um <b>regime</b>, definido pelo gestor/admin em <b>Equipe → cartão → Editar → Regime de despesas</b>:</p>
       <ul>
         <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo. O relatório é a <b>Planilha de RDM e RDA</b> no <b>modelo oficial da empresa</b> (abas CABEÇALHO, BANCO DE DADOS, R.D.M. e R.D.A), preenchida pelo servidor com as notas do ano — o R.D.M. por categoria (Abastecimento, Hospedagens, Outros) e o R.D.A em duas colunas por mês; o BANCO DE DADOS recebe os repasses recebidos de RDM e de RDA. Sai em <b>Excel</b> (o modelo preenchido) e em <b>PDF</b> (A4 paisagem: capa, BANCO DE DADOS com extratos e quadro mês × trimestre, R.D.M. por categoria e R.D.A por mês — só os meses com lançamento). Continuam disponíveis o Excel anual resumido do app e o CSV.</li>
-        <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? O app oferece na hora <b>Registrar reembolso</b> (data, valor e justificativa já preenchidos) — é o pedido da versão CV, e o gestor recebe a notificação. Quando o gestor marca como pago, o <b>Reembolso recebido</b> é registrado sozinho e <b>abate</b> do que foi registrado.</li>
+        <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? O app oferece na hora <b>Pedir o repasse</b> (data, valor e justificativa já preenchidos) — e o gestor recebe a notificação. Quando o gestor marca como pago, o <b>Repasse recebido</b> é registrado sozinho e <b>abate</b> do que foi registrado.</li>
       </ul>
-      <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>reembolsos</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = reembolsos recebidos. O Início mostra "Reembolso a receber" em vez de saldo.</p>
+      <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>repasses</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = repasses recebidos. O Início mostra "Repasse a receber" em vez de saldo.</p>
       <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV; <b>Planilha RDM/RDA</b> (Excel e PDF) e <b>Excel resumo</b> para os demais. <b>📗 Planilhas</b> (topo da Equipe) gera as planilhas de quem você marcar, <b>cada um no modelo do seu regime</b> — Excel único (aba RESUMO + abas de cada pessoa, ex.: <i>Cleiton_R.D.M.</i>, <i>Maria_RDM_RDA</i>) ou ZIP. A RDM/RDA leva uns 20 s por pessoa.</p>
       <h4>🔔 Notificações e pedido de repasse pago</h4>
       <p>O <b>🔔 sininho</b> no canto superior direito mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
@@ -2364,9 +2364,9 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
         <li><b>Colaborador:</b> vê só as próprias notas.</li>
         <li><b>Gestor:</b> o <b>cargo maior</b>. Vê a equipe e baixa os relatórios de todos em <b>Equipe / Baixar relatórios</b>; em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as notas dele. Em <b>Equipe → Editar</b> muda o <b>nome, o papel e o regime de qualquer pessoa</b> — inclusive tirar ou dar o papel de administrador. <b>Convida</b> por link (até outro gestor) e tem no Perfil as <b>ferramentas de servidor</b>: armazenamento, backup, cópia no Google Drive e atualizar estrutura do banco.</li>
         <li><b>Admin:</b> o papel <b>técnico</b>, de quem mantém o app. Faz o mesmo que o gestor e ainda <b>apaga lançamento em definitivo</b>. Quem dá e quem tira esse papel é o gestor, em Equipe → Editar (o app pede confirmação nos dois sentidos). Ninguém muda o próprio papel — sempre outra pessoa faz.</li>
-        <li><b>Contabilidade</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início e o Petermann – Despesas dela mostram só Equipe e Arquivos.</li>
+        <li><b>Contador</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início dele mostra só Equipe e Arquivos.</li>
       </ul>
-      <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contabilidade, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
+      <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contador, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
       <p class="ajuda-gestor"><b>🙋 Liberar cadastro novo (22/09/2026):</b> ninguém entra sozinho. Quem cria conta — pelo cadastro do app, pelo link de convite ou entrando com o Google — fica na tela <b>"Aguardando liberação"</b> e não lança nada até um gestor ou admin confirmar. Você é avisado de três formas: a notificação <b>🙋 no sino</b> (com <b>✅ Confirmar entrada</b> e <b>🚫 Recusar</b>), a etiqueta laranja <b>aguardando liberação</b> no cartão da pessoa na <b>Equipe</b>, e um <b>e-mail</b> para o caso de você não abrir o app. Confirmando, o app dela libera na hora (ela pode tocar em "Já fui liberado, conferir"); recusando, a conta é desativada na mesma hora — e dá para reativar depois pela Equipe. Fica registrado no cadastro <b>quem confirmou e quando</b>, e por qual caminho a pessoa entrou.</p>
 
       <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
@@ -2593,25 +2593,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=274"></script>
-<script defer src="js/db.js?v=274"></script>
-<script defer src="js/nfce.js?v=274"></script>
-<script defer src="js/sefaz.js?v=274"></script>
-<script defer src="js/brasilapi.js?v=274"></script>
-<script defer src="js/ocr.js?v=274"></script>
-<script defer src="js/recorte.js?v=274"></script>
-<script defer src="js/excel.js?v=274"></script>
-<script defer src="js/gestor.js?v=274"></script>
-<script defer src="js/frota.js?v=274"></script>
-<script defer src="js/ponto.js?v=274"></script>
-<script defer src="js/arquivos.js?v=274"></script>
-<script defer src="js/gdrive.js?v=274"></script>
-<script defer src="js/app.js?v=274"></script>
+<script defer src="js/api.js?v=275"></script>
+<script defer src="js/db.js?v=275"></script>
+<script defer src="js/nfce.js?v=275"></script>
+<script defer src="js/sefaz.js?v=275"></script>
+<script defer src="js/brasilapi.js?v=275"></script>
+<script defer src="js/ocr.js?v=275"></script>
+<script defer src="js/recorte.js?v=275"></script>
+<script defer src="js/excel.js?v=275"></script>
+<script defer src="js/gestor.js?v=275"></script>
+<script defer src="js/frota.js?v=275"></script>
+<script defer src="js/ponto.js?v=275"></script>
+<script defer src="js/arquivos.js?v=275"></script>
+<script defer src="js/gdrive.js?v=275"></script>
+<script defer src="js/app.js?v=275"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=274').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=275').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

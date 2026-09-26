@@ -23,7 +23,10 @@ class RelatorioEquipePdf
     public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null, ?array $ids = null): void
     {
         $colabs = Colaborador::query()->when($ids, fn ($q) => $q->whereIn('id', $ids))->orderBy('nome')->get();
+        /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
+           colaborador — sai do quadro individual, não infla o RDM/RDA de ninguém. */
         $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
+            ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get()->groupBy('user_id');
         $reps = Repasse::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
             ->orderBy('data')->get()->groupBy('user_id');

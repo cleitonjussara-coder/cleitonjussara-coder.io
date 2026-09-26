@@ -57,7 +57,10 @@ class RelatorioRdmRda
         $cab->setCellValue('B7', sprintf('%02d/%02d', ($ano - 1) % 100, $ano % 100));   // safra: "25/26" para 2026, como no exemplo
         $cab->setCellValue('I7', $ano);
 
+        /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
+           colaborador — sai da planilha individual dele, só soma no painel geral. */
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+            ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
 
         /* ── R.D.M. ─────────────────────────────────────────── */

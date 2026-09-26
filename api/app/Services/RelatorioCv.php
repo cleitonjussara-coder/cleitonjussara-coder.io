@@ -60,13 +60,17 @@ class RelatorioCv
             ->orderBy('data')->orderBy('created_at')->get();
         /* Regime (reunião de 21/09/2026):
            • CV (cartão corporativo): RDM_RDA ← notas pagas no cartão;
-             CV REEMBOLSO ← notas pagas do próprio bolso (pagamento=reembolso) —
-             é dela que o BANCO DE DADOS tira o "REEMBOLSO DE" (gastos − total pago).
+             CV REEMBOLSO ← notas pagas do próprio bolso (pagamento=carteira, era
+             'reembolso') — é dela que o BANCO DE DADOS tira o "REEMBOLSO DE"
+             (gastos − total pago).
            • RDM/RDA (dinheiro em conta): como antes (19/09/2026) — as duas
-             grades recebem os MESMOS lançamentos. */
+             grades recebem os MESMOS lançamentos.
+           25/09/2026: nota de Faturamento (pagamento=empresa) não entra em nenhuma
+           das duas grades — a planilha não tem coluna pra isso; ela só soma no
+           painel geral da equipe, não na planilha individual do colaborador. */
         if ($c->usaCartao()) {
-            $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'reembolso');
-            $noCartao = $notas->reject(fn (Nota $n) => $n->pagamento === 'reembolso');
+            $doBolso = $notas->filter(fn (Nota $n) => $n->pagamento === 'carteira');
+            $noCartao = $notas->reject(fn (Nota $n) => in_array($n->pagamento, ['carteira', 'empresa'], true));
             if ($ws = $this->abaDoCartao($ss)) {
                 $this->preencherGrade($ws, $noCartao);
             }
@@ -74,9 +78,10 @@ class RelatorioCv
                 $this->preencherGrade($ws, $doBolso);
             }
         } else {
+            $semFaturamento = $notas->reject(fn (Nota $n) => $n->pagamento === 'empresa');
             foreach ([$this->abaDoCartao($ss), $ss->getSheetByName('CV REEMBOLSO')] as $ws) {
                 if ($ws) {
-                    $this->preencherGrade($ws, $notas);
+                    $this->preencherGrade($ws, $semFaturamento);
                 }
             }
         }

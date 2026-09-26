@@ -10,7 +10,7 @@ window.Gestor = (() => {
     colaborador  : 'Colaborador — lança as próprias notas',
     gestor       : 'Gestor — vê a equipe, edita papéis e cuida do servidor',
     admin        : 'Administrador — tudo, inclusive promover administrador',
-    contabilidade: 'Contabilidade — só vê e baixa relatórios',
+    contabilidade: 'Contador — só vê e baixa relatórios',
   };
 
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
@@ -102,7 +102,7 @@ window.Gestor = (() => {
           <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um)">📗 Planilhas ${ano}</button>
 
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
-          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contabilidade, colaborador…)">✉️ Convidar</button>` : ''}
+          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contador, colaborador…)">✉️ Convidar</button>` : ''}
         </div>
       </div>`;
 
@@ -305,7 +305,10 @@ window.Gestor = (() => {
           <button class="cdet-acao" onclick="baixarRelatorioRdmRda('${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
           <button class="cdet-acao" onclick="baixarRelatorioRdmRda('${colab.id}','${esc(colab.nome||'')}','pdf')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">PDF ${ano}</span></button>
           <button class="cdet-acao" onclick="Gestor.excelAnualColab('${colab.id}')"><span class="cdet-acao-ico">📄</span><span class="cdet-acao-lbl">Excel resumo</span><span class="cdet-acao-sub">do app · ${ano}</span></button>`}
-          ${podeEditar ? `<button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>` : ''}
+          ${podeEditar ? (colab.regime === 'cv' ? `
+          <button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' }, 'carteira')"><span class="cdet-acao-ico">👛</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">carteira, entra direto no saldo</span></button>
+          <button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' }, 'recarga')"><span class="cdet-acao-ico">💳</span><span class="cdet-acao-lbl">Lançar recarga</span><span class="cdet-acao-sub">cartão corporativo, sem esperar pedido</span></button>
+          ` : `<button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>`) : ''}
           <button class="cdet-acao" onclick="switchView('arquivos');setTimeout(()=>Arquivos.abrirColab('${colab.id}'),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>
           ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
@@ -500,10 +503,10 @@ window.Gestor = (() => {
   }
 
   /* ── Convidar por link (21/09/2026, reunião) ─────────────────
-     Gestor/admin gera um link com o papel já definido (Contabilidade, p.ex.)
+     Gestor/admin gera um link com o papel já definido (Contador, p.ex.)
      e manda pelo WhatsApp. Quem abre cria a conta com aquele papel. Uso
      único, vale 7 dias. Só o admin convida gestor. */
-  const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
+  const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
   async function abrirConvite() {
     const sb = _ctx?.sb, eu = _ctx?.currentUser || window.user || {};
     if (!sb) { toast('Abra a Equipe com internet primeiro', 'err'); return; }
@@ -522,12 +525,12 @@ window.Gestor = (() => {
           </p>
           <label class="lbl">Papel</label>
           <select class="inp" id="cv-role">
-            <option value="contabilidade" selected>Contabilidade — só vê e baixa relatórios</option>
+            <option value="contabilidade" selected>Contador — só vê e baixa relatórios</option>
             <option value="colaborador">Colaborador — lança as próprias notas</option>
             <option value="gestor">Gestor — vê e administra a equipe</option>
           </select>
           <label class="lbl">Nome de quem vai entrar (opcional)</label>
-          <input class="inp" id="cv-nome" type="text" placeholder="Ex.: Maria da Contabilidade" autocapitalize="words">
+          <input class="inp" id="cv-nome" type="text" placeholder="Ex.: Maria do Contador" autocapitalize="words">
           <button class="btn btn-primary btn-full" id="cv-gerar" style="margin-top:10px">🔗 Gerar link</button>
           <div id="cv-resultado" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:10px">
             <div style="font-size:14px;color:var(--text2);margin-bottom:6px">Link gerado (vale 7 dias):</div>
@@ -632,7 +635,7 @@ window.Gestor = (() => {
           <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
-            <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; reembolso do que sai do bolso; gera Planilha CV</option>
+            <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; repasse do que sai do bolso; gera Planilha CV</option>
           </select>
           <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
           ${souEu ? '' : `

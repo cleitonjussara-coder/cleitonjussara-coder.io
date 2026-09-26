@@ -12,11 +12,15 @@ class Nota extends Model
 
     public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Outros'];
 
-    /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; reembolso = do próprio bolso */
-    /** Com que dinheiro a despesa foi paga, no regime de cartão (CV):
-     *  cv        → cartão corporativo Alelo (aba CV ALELO)
-     *  reembolso → bolso do colaborador, a devolver (aba CV REEMBOLSO) */
-    public const PAGAMENTOS = ['cv', 'reembolso'];
+    /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; carteira = do próprio bolso.
+       25/09/2026: 'reembolso' virou 'carteira' — Reembolso e Repasse eram o mesmo dinheiro (o que vai
+       para a conta do colaborador) com nomes diferentes por regime; unificado como Repasse na tela.
+       'empresa' é novo: nota de faturamento que a empresa paga direto, sem passar pelo colaborador. */
+    /** Com que dinheiro a despesa foi paga:
+     *  cv        → cartão corporativo Alelo, no regime CV (aba CV ALELO)
+     *  carteira  → bolso do colaborador, a devolver por repasse (aba CV REEMBOLSO)
+     *  empresa   → nota de faturamento paga direto pela empresa; não entra no saldo de ninguém */
+    public const PAGAMENTOS = ['cv', 'carteira', 'empresa'];
 
     /** Único consumidor aceito na nota, além de nenhum (24/09/2026):
      *  o CNPJ da Petermann & Morais. Nota no CPF de terceiro não presta

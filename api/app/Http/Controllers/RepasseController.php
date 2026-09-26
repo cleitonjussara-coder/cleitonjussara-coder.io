@@ -71,7 +71,7 @@ class RepasseController extends Controller
             'ano' => ['required', 'integer', 'min:2020'],
             'descricao' => ['nullable', 'string'],
             'kind' => ['nullable', Rule::in(Repasse::KINDS)],
-            'destino' => ['nullable', Rule::in(Repasse::DESTINOS)],   // CV: recarga do cartão ou reembolso (24/09/2026)
+            'destino' => ['nullable', Rule::in(Repasse::DESTINOS)],   // CV: recarga do cartão ou carteira (24/09/2026)
             'deleted' => ['nullable', 'boolean'],
             'created_at' => ['nullable', 'date'],
         ]);
@@ -83,6 +83,13 @@ class RepasseController extends Controller
            é como o gestor registra o repasse que já pagou, entrando direto no
            saldo da pessoa (sem a 2ª etapa, que é só para pedido atendido). */
         abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Sem permissão para lançar repasse de outro colaborador');
+        /* 25/09/2026: o colaborador não se autodeclara "já recebi" mais — só
+           gestor/admin registra um repasse como recebido (para si ou para
+           outro). O colaborador continua podendo SOLICITAR (kind=requested);
+           quem atende o pedido é sempre o gestor, pelo endpoint /atendido.
+           Um pedido sendo apagado (deleted=true, ex.: recusa) não é "receber"
+           dinheiro, então passa direto mesmo vindo de quem pediu. */
+        abort_if($d['kind'] === 'received' && ! $d['deleted'] && ! $u->gerencia(), 403, 'Só gestor ou admin registra um repasse como recebido — solicite o repasse.');
 
 
         /* 24/09/2026: HOJE é o presente — nada é gravado com data adiante
@@ -153,8 +160,7 @@ class RepasseController extends Controller
            o registro segue valendo. */
         if ($novo && $rep->kind === 'requested') {
             $dono = $rep->dono?->nome ?: 'Um colaborador';
-            $oque = $rep->destino === 'recarga' ? 'recarga do cartão'
-                : ($rep->destino === 'reembolso' ? 'reembolso' : 'repasse');
+            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
             $this->push->avisarGestores(
                 'Pedido de ' . $oque,
                 $dono . ' pediu ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
@@ -166,11 +172,15 @@ class RepasseController extends Controller
         return response()->json($rep->fresh());
     }
 
-    /** PATCH /repasses/{id}/atendido — gestor/admin. Idempotente: pedido já atendido devolve o que existe. */
+    /** PATCH /repasses/{id}/atendido {valor?} — gestor/admin. Idempotente: pedido já atendido devolve o
+     *  que existe. `valor` é opcional (25/09/2026): o gestor pode pagar um valor diferente do pedido
+     *  (ex.: pediu 900, mas o acerto é 850) — o pedido guarda o que foi PEDIDO, o repasse guarda o que
+     *  foi PAGO. */
     public function atendido(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
         abort_unless($u->gerencia(), 403, 'Só gestor ou admin marca o pedido como pago');
+        $valor = $r->validate(['valor' => ['nullable', 'numeric', 'min:0.01']])['valor'] ?? null;
         $pedido = Repasse::findOrFail($id);
         abort_if($pedido->deleted, 404, 'Pedido excluído');
         abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
@@ -186,7 +196,7 @@ class RepasseController extends Controller
             'id' => (string) Str::uuid(),
             'user_id' => $pedido->user_id,
             'tipo' => $pedido->tipo,
-            'valor' => (float) $pedido->valor,
+            'valor' => $valor ?? (float) $pedido->valor,
             'data' => $hoje->format('Y-m-d'),
             'mes' => (int) $hoje->format('n'),
             'ano' => (int) $hoje->format('Y'),
@@ -207,8 +217,7 @@ class RepasseController extends Controller
         ])->save();
         $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
 
-        $oque = $pedido->destino === 'recarga' ? 'Recarga do cartão registrada'
-            : ($pedido->destino === 'reembolso' ? 'Reembolso pago' : 'Repasse pago');
+        $oque = $pedido->destino === 'recarga' ? 'Recarga do cartão registrada' : 'Repasse pago';
         $this->push->enviar(
             $pedido->user_id,
             $oque . ' ✅',

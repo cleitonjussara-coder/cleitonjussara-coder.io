@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 274;
+const APP_BUILD = 275;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -792,9 +792,16 @@ function _ehContabilidade() { return user?.role === 'contabilidade'; }
 /* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
 function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
-   separado de propósito: é por ele que passam saldo do cartão, reembolso e
+   separado de propósito: é por ele que passam saldo do cartão, repasse e
    resumo por categoria, que são do cartão e não do nome do regime. */
 function _usaCartao(u = user) { return _ehCV(u); }
+/* Regime de quem a nota é (25/09/2026): Faturamento lança em nome de outro
+   colaborador, então o seletor de categoria/aba precisa olhar o regime DELE,
+   não o de quem está lançando (gestor/admin). Sem dono definido ou dono = eu,
+   cai no regime de quem está usando o app, como sempre. */
+function _usaCartaoDe(donoId) {
+  return donoId && donoId !== user?.id ? _usaCartao(equipePorId[donoId]) : _usaCartao();
+}
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 /* Corrigir a nota de QUALQUER colaborador: só gestor e admin. A
@@ -1034,7 +1041,7 @@ let _abrirPerfilAoEntrar = false; // retorno da autorização do Drive p/ backup
 /* Convite por link (21/09/2026): token lido da URL (?convite=…) e os dados
    que o servidor devolveu (papel, nome sugerido, quem convidou). */
 let _convite = null;              // { token, role, nome, gestor }
-const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
+const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
 function _limparUrlRecuperacao() {
   _recuperandoSenha = false;
   _recuperacao = null;
@@ -1597,7 +1604,7 @@ function _notificacoes() {
       .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
       .forEach(r => out.push({
         id: r.id, tipo: 'pedido', rep: r,
-        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} ${_ehCV(equipePorId[r.user_id]) ? 'registrou reembolso de' : 'pediu'} ${brl(r.valor)} (${r.tipo})`,
+        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} pediu ${brl(r.valor)} (${r.tipo})`,
         sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
       }));
   }
@@ -1621,7 +1628,7 @@ function _notificacoes() {
     _equipeCartaoBaixo().forEach(c => {
       const id = `cartao:${c.id}:${Math.floor(c.saldo / 100)}`;
       out.push({
-        id, tipo: 'cartao', userId: c.id,
+        id, tipo: 'cartao', userId: c.id, nome: c.nome,
         titulo: `💳 Cartão de ${c.nome} com ${brl(c.saldo)}`,
         sub: `Abaixo de ${brl(CARTAO_SALDO_MINIMO)} — faça a recarga antes que ele passe a pagar do bolso.`,
       });
@@ -1646,8 +1653,8 @@ function _notificacoes() {
   repasses.filter(r => _repasseEhPedido(r) && r.atendido_em && !vistos.has(r.id) && new Date(r.atendido_em).getTime() > lim)
     .forEach(r => out.push({
       id: r.id, tipo: 'atendido', rep: r,
-      titulo: `Seu ${_ehCV() ? 'reembolso' : 'pedido'} de ${brl(r.valor)} (${r.tipo}) foi pago ✅`,
-      sub: `${_ehCV() ? 'Reembolso' : 'Pedido'} de ${fmtDataBR(r.data)} · pago em ${fmtDataBR(String(r.atendido_em).slice(0, 10))}. O ${_ehCV() ? 'reembolso' : 'repasse'} recebido já foi registrado para você.`,
+      titulo: `Seu pedido de ${brl(r.valor)} (${r.tipo}) foi pago ✅`,
+      sub: `Pedido de ${fmtDataBR(r.data)} · pago em ${fmtDataBR(String(r.atendido_em).slice(0, 10))}. O repasse recebido já foi registrado para você.`,
     }));
   return out;
 }
@@ -1678,8 +1685,8 @@ function abrirNotificacoes() {
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
         ${it.tipo === 'cartao' ? `<div class="notif-acoes">
-          ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
-          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
+          <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: '${it.userId}', nome: '${esc((it.nome || '').replace(/'/g, ''))}' }, 'recarga')">💳 Registrar recarga</button>
+          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : it.tipo === 'novo' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
           <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
@@ -1687,7 +1694,7 @@ function abrirNotificacoes() {
           ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
           <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
         </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="marcarPedidoPago('${it.id}', this)">✅ Marcar como pago</button>
+          <button class="btn btn-sm btn-primary" onclick="abrirModalAtenderPedido('${it.id}')">✅ Marcar como pago</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.rep.user_id}'), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button></div>`}
       </div>
@@ -1723,8 +1730,7 @@ async function confirmarEntrada(id, aceita, btn) {
 
 /* ═══════════════════════════════════════════════════════════
    REPASSE DE OUTRO COLABORADOR (24/09/2026)
-   Pedido do Cleiton: o gestor precisa corrigir e apagar repasse e reembolso
-   da equipe. O registro é de outra pessoa, então NÃO passa pelo IndexedDB
+   Pedido do Cleiton: o gestor precisa corrigir e apagar repasse da equipe. O registro é de outra pessoa, então NÃO passa pelo IndexedDB
    daqui — vai direto ao servidor, como o lançamento do gestor (34ba623) e a
    correção de categoria da nota.
 ═══════════════════════════════════════════════════════════ */
@@ -1838,20 +1844,117 @@ async function _recarregarEquipe() {
   if (viewAtual === 'equipe') renderEquipe();
 }
 
-async function marcarPedidoPago(id, btn) {
+/* Seletor de colaborador único (25/09/2026) — usado pelo Gestor pra escolher
+   de quem é a nota de Faturamento e pelo Admin pra escolher quem vai editar.
+   Diferente do seletor de exportação (gestor.js), que é de marcar vários. */
+function abrirSeletorColaborador(titulo, aoEscolher) {
+  const lista = Object.values(equipePorId).filter(c => c && c.ativo !== false)
+    .sort((a, b) => (a.nome || a.email || '').localeCompare(b.nome || b.email || ''));
+  if (!lista.length) { toast('Nenhum colaborador encontrado — abra a Equipe com internet primeiro', 'err'); return; }
+  window._seletorColabCallback = aoEscolher;
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'seletor-colab-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:420px" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3>${esc(titulo)}</h3>
+        <button class="btn-icon-sm" onclick="document.getElementById('seletor-colab-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        ${lista.map(c => `
+          <button class="btn btn-outline btn-full" style="justify-content:flex-start;margin-bottom:8px;text-align:left"
+                  onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback('${c.id}')">
+            ${esc(c.nome || c.email)} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${esc(c.email || '')}</span>
+          </button>`).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+}
+
+/* Faturamento (25/09/2026): nota paga direto pela empresa, sem passar pelo
+   colaborador — Gestor escolhe de quem é (pra registro) e lança pelo mesmo
+   formulário de sempre, só que com pagamento='empresa': essa marca exclui a
+   nota do saldo/cartão da pessoa e soma só no painel geral da equipe. */
+function iniciarFaturamento() {
+  abrirSeletorColaborador('🏢 Faturamento — de qual colaborador?', id => {
+    abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa' });
+  });
+}
+
+/* Atalho direto na Início pro Admin editar nota de colaborador sem passar
+   pela Equipe primeiro — o fluxo de edição em si é o mesmo de sempre
+   (Gestor.abrir → cardNotaHTML → editarNota → abrirFormNota). */
+function iniciarEdicaoNotaColaborador() {
+  abrirSeletorColaborador('✏️ Editar nota — de qual colaborador?', id => {
+    switchView('equipe');
+    setTimeout(() => Gestor.abrir(id), 400);
+  });
+}
+
+/* Atender pedido (25/09/2026): antes ia direto por um confirm() com o valor
+   pedido fixo. Agora abre um passo com o valor editável (o acerto pode ser
+   diferente do pedido) e a opção de recusar — pedido do Cleiton. */
+function abrirModalAtenderPedido(id) {
+  const r = repassesEquipe.find(x => x.id === id);
+  if (!r) { toast('Pedido não encontrado', 'err'); return; }
+  const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'pedido-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-hd"><h3>💸 Pedido de ${esc(quem)}</h3>
+        <button class="btn-icon-sm" onclick="document.getElementById('pedido-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 12px;opacity:.75;font-size:14.5px">${esc(r.tipo)} · ${fmtDataBR(r.data)}${r.descricao ? ' · ' + esc(r.descricao) : ''}</p>
+        <div class="field">
+          <label class="lbl">Valor a pagar (R$) *</label>
+          <input class="inp" id="pedido-valor" type="number" inputmode="decimal" step="0.01" min="0.01" value="${Number(r.valor || 0).toFixed(2)}">
+        </div>
+        <p style="opacity:.7;font-size:13px;margin:6px 0 0">Pedido original: ${brl(r.valor)}. Mude o valor se o acerto for diferente do que foi pedido.</p>
+      </div>
+      <div class="modal-ft" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-danger-outline" onclick="_recusarPedido('${id}', this)">🚫 Recusar</button>
+        <button class="btn btn-primary" onclick="_confirmarAtenderPedido('${id}', this)">✅ Confirmar pagamento</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+}
+
+async function _confirmarAtenderPedido(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para marcar como pago', 'err'); return; }
   const r = repassesEquipe.find(x => x.id === id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
-  if (!confirm(`Confirmar que o repasse de ${brl(r?.valor || 0)} para ${quem} foi PAGO?\n\nO repasse entra no saldo de ${quem} e o pedido sai das pendências.`)) return;
+  const valor = Number(document.getElementById('pedido-valor')?.value);
+  if (!valor || valor <= 0) { toast('Informe um valor válido', 'err'); return; }
+  if (!confirm(`Confirmar que ${brl(valor)} foi PAGO para ${quem}?\n\nO repasse entra no saldo dele e o pedido sai das pendências.`)) return;
   if (btn) btn.disabled = true;
   try {
-    await sb.repasses.atendido(id);
+    await sb.repasses.atendido(id, valor);
     toast(`Pago ✅ — repasse registrado no saldo de ${quem}`);
-    if (sb && user) await DB.sync(sb, user.id).catch(() => {});
-    await carregarDadosLocais();
+    document.getElementById('pedido-overlay')?.remove();
     document.getElementById('notif-overlay')?.remove();
+    await _recarregarEquipe();
+    await atualizarNotificacoes();
     abrirNotificacoes();
-    if (viewAtual === 'equipe') renderEquipe();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+
+async function _recusarPedido(id, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para recusar', 'err'); return; }
+  const r = repassesEquipe.find(x => x.id === id);
+  const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
+  if (!confirm(`Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?\n\nO pedido some das pendências. Avise a pessoa por fora do app, se precisar.`)) return;
+  if (btn) btn.disabled = true;
+  try {
+    await sb.repasses.upsert({ ...r, deleted: true });
+    toast(`Pedido de ${quem} recusado`);
+    document.getElementById('pedido-overlay')?.remove();
+    document.getElementById('notif-overlay')?.remove();
+    await _recarregarEquipe();
+    await atualizarNotificacoes();
+    abrirNotificacoes();
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
 }
 function dispensarNotificacao(id) { _notifMarcarVistos([id]); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); abrirNotificacoes(); }
@@ -1942,7 +2045,7 @@ const ABAS_DESPESA = {
 let _abaDespesa = null;          // 'RDA' | 'RDM' | chave de categoria (CV) | null
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
 let _subtipoPreEscolhido = null; // categoria já escolhida junto (regime CV)
-let _pagamentoCV = null;         // 'cv' | 'reembolso' — escolhido na página nova
+let _pagamentoCV = null;         // 'cv' | 'carteira' — escolhido na página nova
 
 /* 24/09/2026 — pedido do Cleiton: no regime de cartão, antes de escolher a
    categoria a pessoa diz COM QUE DINHEIRO pagou. Era um campo no meio do
@@ -1951,7 +2054,7 @@ let _pagamentoCV = null;         // 'cv' | 'reembolso' — escolhido na página 
 const PAGAMENTOS_CV = [
   { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
     sub: 'Pagou com o cartão corporativo.' },
-  { chave: 'reembolso', ico: '👛', nome: 'Nota de reembolso',
+  { chave: 'carteira', ico: '👛', nome: 'Nota de repasse',
     sub: 'Pagamento de carteira.' },
 ];
 
@@ -2007,7 +2110,7 @@ function _chaveCategoriaDaNota(n) {
 
    Saldo devedor = o que a EMPRESA deve ao colaborador, acumulado até o mês:
      • regime RDM/RDA → gastos − repasses recebidos;
-     • regime CV      → reembolsos registrados − reembolsos recebidos
+     • regime CV      → repasses registrados − repasses recebidos
        (as notas do cartão não entram: quem pagou foi a empresa).
    Positivo = a empresa deve; negativo = o colaborador está com dinheiro
    da empresa para gastar. */
@@ -2022,13 +2125,13 @@ function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
        REEMBOLSO soma na planilha. Dela se abate o que a empresa já
        transferiu (coluna "REEMBOLSO DE:"). A recarga do cartão fica fora:
        aquele dinheiro foi para o cartão, não para a conta da pessoa.
-       O filtro por categoria também não vale aqui: o reembolso é um valor
+       O filtro por categoria também não vale aqui: o repasse é um valor
        só, sem separar RDA de RDM. */
     const ateData = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k;
-    const doBolso = _soma(ns.filter(n => ateData(n) && n.pagamento === 'reembolso'));
-    const reembolsado = _soma(rs.filter(r => ateData(r) && _repasseEhRecebido(r) && _repasseEhReembolso(r)));
+    const doBolso = _soma(ns.filter(n => ateData(n) && n.pagamento === 'carteira'));
+    const repassado = _soma(rs.filter(r => ateData(r) && _repasseEhRecebido(r) && _repasseEhCarteira(r)));
 
-    return doBolso - reembolsado;
+    return doBolso - repassado;
   }
 
   return _soma(ns.filter(ate)) - _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
@@ -2088,11 +2191,11 @@ function _resumoHub() {
       <span class="res-sub">${arr.length} nota${arr.length === 1 ? '' : 's'}</span>
     </div>`;
 
-  const rotulo = cv ? 'Reembolso a receber' : 'A receber da empresa';
+  const rotulo = cv ? 'Repasse a receber' : 'A receber da empresa';
 
   /* 22/09/2026: "especificar os gastos no resumo a receber e apontar os
      gastos RDM/RDA e os valores por mês" — o que forma o valor a receber,
-     separado por aba e mês a mês. No regime CV, "gasto" aqui é o reembolso
+     separado por aba e mês a mês. No regime CV, "gasto" aqui é o repasse
      registrado (nota do cartão não é dívida da empresa com a pessoa). */
   const devedorRda = _devedorDe(ns, rs, filMes, filAno, cv, 'RDA');
   const gastoDe = (t, mes) => cv
@@ -2106,7 +2209,7 @@ function _resumoHub() {
      em dia. */
   const caixaRec = (ico, sigla, v) => {
     const estado = v > 0 ? 'receber' : v < 0 ? 'adiantado' : 'zerado';
-    const legenda = v > 0 ? (cv ? 'a reembolsar' : 'a receber')
+    const legenda = v > 0 ? 'a receber'
                   : v < 0 ? 'adiantado com você'
                   : 'em dia';
     return `
@@ -2127,7 +2230,7 @@ function _resumoHub() {
     return `
       <div class="res-tab-tit">${ico} ${tipo} — mês a mês</div>
       <table class="res-tab">
-        <tr><th>Mês</th><th>${cv ? 'Reembolso' : 'Gasto'}</th><th>Recebido</th><th>A receber</th></tr>
+        <tr><th>Mês</th><th>${cv ? 'Repasse' : 'Gasto'}</th><th>Recebido</th><th>A receber</th></tr>
         ${mostra.map(l => `
         <tr>
           <td>${MESES[l.m - 1]}</td>
@@ -2139,19 +2242,19 @@ function _resumoHub() {
       ${linhas.length > mostra.length ? `<div class="res-tab-mais">+ ${linhas.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}`;
   };
 
-  /* No cartão o reembolso é UM valor só (o próprio _devedorDe ignora o
+  /* No cartão o repasse é UM valor só (o próprio _devedorDe ignora o
      filtro por aba) — mostrar duas caixas repetia o mesmo número. */
-  const tabelaReembolso = () => {
+  const tabelaCarteira = () => {
     const linhas = [];
     for (let m = 12; m >= 1; m--) {
-      const g = _soma(ns.filter(n => n.pagamento === 'reembolso' && n.mes === m && n.ano === filAno));
-      const rec = _soma(rs.filter(r => r.mes === m && r.ano === filAno && _repasseEhRecebido(r) && _repasseEhReembolso(r)));
+      const g = _soma(ns.filter(n => n.pagamento === 'carteira' && n.mes === m && n.ano === filAno));
+      const rec = _soma(rs.filter(r => r.mes === m && r.ano === filAno && _repasseEhRecebido(r) && _repasseEhCarteira(r)));
       if (g || rec) linhas.push({ m, g, rec, falta: g - rec });
     }
     if (!linhas.length) return '';
     const mostra = linhas.slice(0, 6);
     return `
-      <div class="res-tab-tit">👛 Reembolso — mês a mês</div>
+      <div class="res-tab-tit">👛 Repasse — mês a mês</div>
       <table class="res-tab">
         <tr><th>Mês</th><th>Do bolso</th><th>Recebido</th><th>A receber</th></tr>
         ${mostra.map(l => `
@@ -2168,9 +2271,9 @@ function _resumoHub() {
   const detalhe = ehCartao ? `
     <div class="res-rec-tit">${rotulo}</div>
     <div class="res-recs">
-      ${caixaRec('👛', 'Reembolso', devedor)}
+      ${caixaRec('👛', 'Repasse', devedor)}
     </div>
-    ${tabelaReembolso()}` : `
+    ${tabelaCarteira()}` : `
     <div class="res-rec-tit">${rotulo} — por aba</div>
     <div class="res-recs">
       ${caixaRec('🍽️', 'RDA', devedorRda)}
@@ -2258,6 +2361,9 @@ function _lancarCategoria(c, modo, pag) {
 /* O QR abre a câmera e só depois monta os dados: a escolha fica guardada
    aqui até o formulário nascer. */
 let _pagamentoPreEscolhido = null;
+/* Faturamento (25/09/2026): pagamento='empresa' definido de fora do campo
+   Pagamento (que só existe pra CV) — ver abrirFormNota/_salvarNotaInterno. */
+let _pagamentoForcado = null;
 
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
@@ -2325,7 +2431,7 @@ function renderDespesas() {
     </div>
 
     ${_ehContabilidade() ? `
-    <div class="ini-dica">👀 Perfil <b>Contabilidade</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
+    <div class="ini-dica">👀 Perfil <b>Contador</b>: consulta e relatórios. Lançamentos são feitos pelos colaboradores.</div>` : `
     ${_ehCV() && !_pagamentoCV ? `
     <div class="ini-titulo">Como esta nota foi paga?</div>
     ${PAGAMENTOS_CV.map(p => `
@@ -2354,7 +2460,7 @@ function renderDespesas() {
       ${_ehContabilidade() ? '' : `
       <button class="ini-ir-btn" onclick="irParaNotas()"><span class="ini-ir-ico">🧾</span><span class="ini-ir-lbl">Minhas notas</span><span class="ini-ir-sub">lista completa</span></button>
       <button class="ini-ir-btn" onclick="switchView('home')"><span class="ini-ir-ico">📊</span><span class="ini-ir-lbl">Painel</span><span class="ini-ir-sub">gráficos e pendências</span></button>
-      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_usaCartao() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_usaCartao() ? 'cartão, reembolsos e planilha' : 'saldo e relatórios'}</span></button>`}
+      <button class="ini-ir-btn" onclick="switchView('saldo')"><span class="ini-ir-ico">${_usaCartao() ? '💳' : '💰'}</span><span class="ini-ir-lbl">${_ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas'}</span><span class="ini-ir-sub">${_usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios'}</span></button>`}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('equipe')"><span class="ini-ir-ico">👥</span><span class="ini-ir-lbl">Equipe</span><span class="ini-ir-sub">baixar relatórios</span></button>` : ''}
       ${_veEquipe() ? `<button class="ini-ir-btn" onclick="switchView('arquivos')"><span class="ini-ir-ico">📁</span><span class="ini-ir-lbl">Arquivos</span><span class="ini-ir-sub">pastas e ZIP do mês</span></button>` : ''}
     </div>
@@ -2388,11 +2494,6 @@ function renderInicio() {
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
 
-  /* 21/09/2026 (reunião): a saudação mostra a FOTO do colaborador e o PAPEL
-     dele. O avatar usa a mesma classe da Equipe — o observador do gestor.js
-     baixa a imagem sozinho quando vê .avatar[data-foto]. */
-  const PAPEL = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contabilidade' };
-  const papel = user?.role || 'colaborador';
   $('app-content').innerHTML = `
   <div class="db-container">
     </div>
@@ -2410,15 +2511,15 @@ function renderInicio() {
           <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
             ? "Equipe e relatórios"
             : _ehCV()
-              ? "Postar nota de C.V. e reembolso"
+              ? "Postar nota de C.V. e repasse"
               : "Lançar nota de RDM e RDA"}</span>
         </span>
       </button>
       ${_ehContabilidade() ? '' : _usaCartao() ? `
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'reembolso')">
+      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'carteira')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">👛</span>
-          <span class="pnl-tit">Reembolso</span>
+          <span class="pnl-tit">Repasse</span>
           <span class="pnl-sub">o que você pagou do bolso · e o que já recebeu</span>
         </span>
       </button>
@@ -2437,6 +2538,22 @@ function renderInicio() {
           <span class="pnl-sub">recebido ou a pedir (PIX)</span>
         </span>
       </button>`}
+      ${user?.role === 'gestor' ? `
+      <button class="pnl pnl-grande" onclick="iniciarFaturamento()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">🏢</span>
+          <span class="pnl-tit">Lançar Faturamento</span>
+          <span class="pnl-sub">nota paga direto pela empresa</span>
+        </span>
+      </button>` : ''}
+      ${user?.role === 'admin' ? `
+      <button class="pnl pnl-grande" onclick="iniciarEdicaoNotaColaborador()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">✏️</span>
+          <span class="pnl-tit">Editar nota de colaborador</span>
+          <span class="pnl-sub">corrigir lançamento de alguém da equipe</span>
+        </span>
+      </button>` : ''}
     </div>
     ${!_ehContabilidade() && pendTotal ? `
     <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
@@ -2812,21 +2929,32 @@ function renderHome() {
   if (dashBarraSel !== null && !_dashEvo[dashBarraSel]) dashBarraSel = null;
 
   /* ── Composição dos gastos (donut) ──────────────────────── */
-  const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
-  const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && f(n)));
-  /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
-     o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
-  const cats = [
-    { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
-      val: somaRDM(n => n.subtipo === 'Abastecimento') },
-    { key:'hosp',   name:'RDM · Hospedagens',   curto:'Hosped.',  cor:'var(--accent)',
-      val: somaRDM(n => n.subtipo === 'Hospedagem') },
-    // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
-    { key:'outros', name:'RDM · Outros (Borracharia/Oficina/EPIs)', curto:'Outros', cor:'#94a3b8',
-      val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
-    { key:'rda',    name:'RDA · Alimentação',   curto:'RDA',      cor:'var(--primary)',
-      val: A.rdaG },
-  ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+  /* 25/09/2026: quem usa cartão corporativo não divide o gasto em RDM/RDA no
+     Painel — divide por QUEM PAGOU: o cartão da empresa ou a carteira do
+     próprio colaborador (a ser repassada). É a mesma divisão que já existia
+     na tela Saldo (_notaDoCartao / pagamento==='carteira'), agora também aqui. */
+  const cats = _usaCartao() ? [
+    { key:'cartao',   name:'Cartão Corporativo', curto:'Cartão',   cor:'var(--accent-d)',
+      val: _soma(A.ns.filter(_notaDoCartao)) },
+    { key:'carteira', name:'Carteira (do bolso)', curto:'Carteira', cor:'var(--primary)',
+      val: _soma(A.ns.filter(n => n.pagamento === 'carteira')) },
+  ].filter(c => c.val > 0).sort((a,b) => b.val - a.val) : (() => {
+    const SUBS_RDM = ['Abastecimento','Hospedagem','Outros'];
+    const somaRDM  = f => _soma(A.ns.filter(n => n.tipo === 'RDM' && f(n)));
+    /* nomes conforme a planilha padrao da empresa (abas R.D.M. / R.D.A);
+       o subtipo gravado no banco continua 'Hospedagem'/'Outros' — só o rótulo muda */
+    return [
+      { key:'abast',  name:'RDM · Abastecimento', curto:'Abastec.', cor:'var(--accent-d)',
+        val: somaRDM(n => n.subtipo === 'Abastecimento') },
+      { key:'hosp',   name:'RDM · Hospedagens',   curto:'Hosped.',  cor:'var(--accent)',
+        val: somaRDM(n => n.subtipo === 'Hospedagem') },
+      // "Outros" absorve também RDM sem categoria — o donut sempre fecha no gasto total
+      { key:'outros', name:'RDM · Outros (Borracharia/Oficina/EPIs)', curto:'Outros', cor:'#94a3b8',
+        val: somaRDM(n => !SUBS_RDM.includes(n.subtipo) || n.subtipo === 'Outros') },
+      { key:'rda',    name:'RDA · Alimentação',   curto:'RDA',      cor:'var(--primary)',
+        val: A.rdaG },
+    ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+  })();
   if (dashFatiaSel && !cats.some(c => c.key === dashFatiaSel)) dashFatiaSel = null;
 
   /* ── Ranking de fornecedores ────────────────────────────── */
@@ -3802,11 +3930,11 @@ function renderSaldo() {
   const repHtml = rs.length ? rs.map(r => {
     const pedido = _repasseEhPedido(r);
     const cvR = _ehCV();
-    const label = pedido ? (cvR ? 'Reembolso registrado' : 'Pedido') : (cvR ? 'Reembolso recebido' : 'Recebido');
-    const desc = esc(r.descricao || (pedido ? (cvR ? 'Reembolso a receber' : 'Pedido de repasse') : (cvR ? 'Reembolso recebido' : 'Repasse recebido')));
+    const label = pedido ? 'Pedido' : 'Recebido';
+    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
     const detail = pedido
       ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
-      : (cvR ? 'Abate dos reembolsos registrados' : 'Registrado como repasse recebido');
+      : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido');
     return `
       <div class="rep-item">
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
@@ -3844,29 +3972,29 @@ function renderSaldo() {
      seção "Baixar relatório" em destaque. Na fase 3 (enquadramento CV) os
      botões passam a depender do regime do colaborador. */
   /* Fase 3 (21/09/2026) — regime CV: o cartão corporativo paga; o que circula
-     é reembolso. Cards: gasto no cartão (mês), do bolso, reembolsos. Só a
+     é repasse. Cards: gasto no cartão (mês), do bolso, repasses. Só a
      Planilha CV para baixar. RDM/RDA: os cards de sempre e só o Excel/CSV. */
   const cv = _usaCartao();
   let cardsCV = '';
   if (cv) {
     const nsAno = notas.filter(n => !n.deleted && n.ano === filAno);
     const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
-    const semReemb = n => _notaDoCartao(n);
-    const cartaoMes = soma(ns.filter(semReemb));
-    const bolsoMes = soma(ns.filter(n => n.pagamento === 'reembolso'));
-    const cartaoAno = soma(nsAno.filter(semReemb));
+    const semCarteira = n => _notaDoCartao(n);
+    const cartaoMes = soma(ns.filter(semCarteira));
+    const bolsoMes = soma(ns.filter(n => n.pagamento === 'carteira'));
+    const cartaoAno = soma(nsAno.filter(semCarteira));
     const rsAno = repasses.filter(r => !r.deleted && r.ano === filAno);
-    /* 24/09/2026: recarga do cartão não é reembolso — sem separar, o quadro
-       de reembolsos dizia que a pessoa já tinha recebido o que na verdade
-       foi para o cartão. */
-    const soReemb = _repasseEhReembolso;
-    const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soReemb(r)));
+    /* 24/09/2026: recarga do cartão não é repasse de carteira — sem separar,
+       o quadro de repasses dizia que a pessoa já tinha recebido o que na
+       verdade foi para o cartão. */
+    const soCarteira = _repasseEhCarteira;
+    const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soCarteira(r)));
     /* O que a empresa deve é o que saiu do bolso menos o que ela já pagou —
        a mesma conta da planilha (CV REEMBOLSO menos "REEMBOLSO DE:"). */
-    const bolsoAno = soma(nsAno.filter(n => n.pagamento === 'reembolso'));
+    const bolsoAno = soma(nsAno.filter(n => n.pagamento === 'carteira'));
     const saldoCartao = _saldoCartao();
     const aReceber = bolsoAno - recAno;
-    const cat = f => soma(ns.filter(n => semReemb(n) && f(n)));
+    const cat = f => soma(ns.filter(n => semCarteira(n) && f(n)));
     cardsCV = `
   <div class="saldo-grid">
     <div class="saldo-card ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? 'neg' : ''}">
@@ -3887,15 +4015,15 @@ function renderSaldo() {
       </div>
     </div>
     <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
-      <div class="saldo-label">👛 Reembolsos · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
+      <div class="saldo-label">👛 Repasses · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
       <div class="saldo-val">${brl(aReceber)}</div>
-      <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já reembolsado <b>${brl(recAno)}</b></span></div>
-      <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soReemb(r))))}</span></div></div>
+      <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
+      <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
     </div>
   </div>`;
   }
   $('app-content').innerHTML = `
-  <div class="ini-ola" style="padding:4px 2px 6px"><h2>${cv ? '💳 C.V. e Planilha' : '📊 RDM/RDA e Planilhas'}</h2><span>${cv ? 'cartão corporativo e reembolsos' : 'gasto, repasse e saldo por aba'}</span></div>
+  <div class="ini-ola" style="padding:4px 2px 6px"><h2>${cv ? '💳 C.V. e Planilha' : '📊 RDM/RDA e Planilhas'}</h2><span>${cv ? 'cartão corporativo e repasses' : 'gasto, repasse e saldo por aba'}</span></div>
   <div class="page-hd">
     <div class="mes-nav">
       <button class="btn-mes-nav" onclick="mudarMes(-1)">‹</button>
@@ -3928,10 +4056,10 @@ function renderSaldo() {
   </div>`}
 
   <div class="section-hd">
-    <span>${cv ? 'Reembolsos' : 'Repasses'}</span>
+    <span>Repasses</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-      <button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">${cv ? '+ Reembolso recebido' : '+ Registrar recebido'}</button>
-      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">${cv ? 'Registrar reembolso' : 'Solicitar repasse'}</button>
+      ${_ehGestorOuAdmin() ? `<button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">+ Registrar recebido</button>` : ''}
+      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">Solicitar repasse</button>
     </div>
   </div>
   <div class="rep-list">${repHtml}</div>`;
@@ -5446,7 +5574,7 @@ function fecharSeletorTipoLancamento() {
 function _montarGradeDoSeletor() {
   const cv = $('tipo-lancamento-grid-cv'), abas = $('tipo-lancamento-grid-abas');
   if (!cv || !abas) return;
-  const ehCv = _usaCartao();
+  const ehCv = _usaCartaoDe(_dadosLancamentoPendentes?.user_id);
   cv.style.display = ehCv ? '' : 'none';
   abas.style.display = ehCv ? 'none' : '';
   const titulo = $('tipo-lancamento-passo1')?.querySelector('p');
@@ -5558,9 +5686,13 @@ async function abrirFormNota(dados = {}) {
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
   $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
+  /* Faturamento (25/09/2026): paga direto pela empresa, não passa pelo campo
+     Pagamento (que é só cartão x carteira) — fica gravado à parte e prevalece
+     na hora de salvar, não importa o regime de quem é a nota. */
+  _pagamentoForcado = dados.pagamento === 'empresa' ? 'empresa' : null;
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
-  { const donoId = dados.user_id || user?.id; const donoCV = donoId === user?.id ? _usaCartao() : _usaCartao(equipePorId[donoId]);
-    const g = $('nf-pagamento-group'); if (g) g.style.display = donoCV ? '' : 'none';
+  { const donoCV = _usaCartaoDe(dados.user_id);
+    const g = $('nf-pagamento-group'); if (g) g.style.display = (donoCV && !_pagamentoForcado) ? '' : 'none';
   _ajustarCamposDeCategoria();
     const p = $('nf-pagamento'); if (p) p.value = dados.pagamento || 'cv'; }
   _valorEditadoManual = false; _sugestaoPendente = null;
@@ -5615,15 +5747,18 @@ async function abrirFormNota(dados = {}) {
   // link de consulta no SEFAZ (quando há chave de 44 dígitos)
   _atualizarLinkConsulta();
 
-  // título e banner de correção por gestor/admin
+  // título e banner de correção por gestor/admin (ou nota de Faturamento)
   const isGestorEdit = _ehGestorOuAdmin() && !!dados.id && _ehNotaDeOutroUsuario(dados);
+  const isFaturamento = _pagamentoForcado === 'empresa';
   const banner = $('gestor-edit-banner');
   const bannerTitle = $('gestor-edit-title');
   const bannerText = $('gestor-edit-text');
-  if (banner) banner.style.display = isGestorEdit ? 'flex' : 'none';
-  if (bannerTitle) bannerTitle.textContent = 'Correção de gestor';
-  if (bannerText) bannerText.textContent = `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
-  $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : 'Nova Nota';
+  if (banner) banner.style.display = (isGestorEdit || isFaturamento) ? 'flex' : 'none';
+  if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : 'Correção de gestor';
+  if (bannerText) bannerText.textContent = isFaturamento
+    ? `Paga direto pela empresa em nome de ${_rotuloProprietario(dados)} — não entra no saldo nem no cartão dela, só no painel geral da equipe.`
+    : `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
+  $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : (isFaturamento ? `Faturamento · ${_rotuloProprietario(dados)}` : 'Nova Nota');
 }
 
 /* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
@@ -5689,6 +5824,7 @@ async function enriquecerViaSefaz(chave) {
 
 function fecharFormNota() {
   _formEsperandoLeitura = false;
+  _pagamentoForcado = null;
   $('nota-form-overlay').style.display = 'none';
 }
 
@@ -5722,7 +5858,7 @@ function aplicarCategoriaCV() {
 function _ajustarCamposDeCategoria() {
   const grupo = $('nf-cat-cv-group'), linha = $('nf-aba-row');
   if (!grupo || !linha) return;
-  const ehCv = _usaCartao();
+  const ehCv = _usaCartaoDe($('nf-owner-id')?.value);
   grupo.style.display = ehCv ? '' : 'none';
   linha.style.display = ehCv ? 'none' : '';
   if (!ehCv) return;
@@ -6372,7 +6508,7 @@ async function _salvarNotaInterno() {
     id             : $('nf-id').value || undefined,
     tipo, valor, data, mes, ano,
     subtipo        : tipo==='RDM' ? $('nf-subtipo').value : null,
-    pagamento      : $('nf-pagamento-group')?.style.display !== 'none' ? ($('nf-pagamento')?.value || 'cv') : (_notaAtual?.pagamento || null),
+    pagamento      : _pagamentoForcado || ($('nf-pagamento-group')?.style.display !== 'none' ? ($('nf-pagamento')?.value || 'cv') : (_notaAtual?.pagamento || null)),
     cnpj           : cnpjRaw || null,
     razao_social   : $('nf-razao').value.trim() || null,
     observacao     : $('nf-obs').value.trim()   || null,
@@ -6457,14 +6593,14 @@ async function _salvarNotaInterno() {
       semValor ? 'err' : 'ok');
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
-    /* CV pagou do bolso (21/09/2026): oferece registrar o reembolso na hora,
-       já com valor e justificativa — é o "pedido de repasse" da versão CV. */
-    if (payload.pagamento === 'reembolso' && !_idEdicao && ownerId === user?.id && valor > 0) {
+    /* CV pagou do bolso (21/09/2026): oferece pedir o repasse na hora,
+       já com valor e justificativa. */
+    if (payload.pagamento === 'carteira' && !_idEdicao && ownerId === user?.id && valor > 0) {
       setTimeout(() => {
         if (confirm(`Você pagou ${brl(valor)} do próprio bolso.
 
-Registrar o REEMBOLSO agora (data, valor e justificativa já preenchidos)? O gestor recebe a notificação.`)) {
-          abrirFormRepasse('requested', { tipo, valor, data, descricao: 'Reembolso: ' + (payload.razao_social || (tipo === 'RDM' ? payload.subtipo : 'alimentação') || 'despesa') + (payload.numero ? ' · nº ' + payload.numero : '') });
+Pedir o REPASSE agora (data, valor e justificativa já preenchidos)? O gestor recebe a notificação.`)) {
+          abrirFormRepasse('requested', { tipo, valor, data, descricao: 'Repasse: ' + (payload.razao_social || (tipo === 'RDM' ? payload.subtipo : 'alimentação') || 'despesa') + (payload.numero ? ' · nº ' + payload.numero : '') });
         }
       }, 400);
     }
@@ -6630,12 +6766,11 @@ function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
 let _repasseModo = 'received';
 
 function _repasseTitulo(modo) {
-  /* 24/09/2026: no CV há dois caminhos — a recarga do cartão pré-pago e o
-     reembolso do que saiu do bolso. Chamar tudo de reembolso fazia o pedido
-     de recarga abrir com o título errado. */
+  /* 25/09/2026: Reembolso (CV) e Repasse (RDM/RDA) eram o mesmo dinheiro
+     (o que vai para a conta do colaborador) com nomes diferentes por regime —
+     unificado como Repasse. A recarga do cartão continua um caminho à parte:
+     aquele dinheiro vai para o cartão, não para a conta da pessoa. */
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Pedir recarga do cartão' : 'Registrar recarga do cartão';
-  /* colaborador CV (21/09/2026): o dinheiro que circula é REEMBOLSO do que saiu do bolso */
-  if (_ehCV()) return modo === 'requested' ? 'Registrar reembolso (a receber)' : 'Registrar reembolso recebido';
   return modo === 'requested' ? 'Solicitar repasse' : 'Registrar repasse recebido';
 }
 
@@ -6644,13 +6779,13 @@ function _repasseTitulo(modo) {
    repasse recebido" ali escondia metade da tela. */
 function _repasseTituloCabecalho() {
   if (_repasseAlvo) return 'Lançar repasse para o colaborador';
-  if (_repassePasso === 1) return _ehCV() ? 'Registrar ou solicitar reembolso' : 'Registrar ou solicitar repasse';
+  if (_repassePasso === 1) return 'Registrar ou solicitar repasse';
   return _repasseTitulo(_repasseModo);
 }
 
 function _repassePlaceholder(modo) {
   if (_repasseDestino === 'recarga') return modo === 'requested' ? 'Ex: cartão sem saldo para abastecer amanhã' : 'Ex: recarga feita pelo gestor';
-  if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: reembolso recebido do gestor';
+  if (_ehCV()) return modo === 'requested' ? 'Ex: almoço pago do bolso — cartão não passou' : 'Ex: repasse recebido do gestor';
   return modo === 'requested'
     ? 'Ex: combustível, hospedagem ou custo do mês'
     : 'Ex: repasse recebido do gestor';
@@ -6661,8 +6796,8 @@ function _repasseHelpText(modo) {
     ? 'O gestor recebe o pedido e faz a transferência para o cartão. O valor entra no saldo do cartão quando ele marcar como pago.'
     : 'Registra uma recarga que já entrou no cartão; soma ao saldo do cartão.';
   if (_ehCV()) return modo === 'requested'
-    ? 'O gestor recebe a notificação (e o e-mail). Quando marcar como pago, o reembolso recebido é registrado para você e abate deste valor.'
-    : 'Registra um reembolso que já caiu na sua conta; abate dos reembolsos registrados.';
+    ? 'O gestor recebe a notificação (e o e-mail). Quando marcar como pago, o repasse recebido é registrado para você e abate deste valor.'
+    : 'Registra um repasse que já caiu na sua conta; abate dos repasses registrados.';
   return modo === 'requested'
     ? 'Este pedido envia um e-mail ao gestor automaticamente e fica marcado como solicitação pendente.'
     : 'Este registro entra no saldo como repasse recebido e não gera e-mail.';
@@ -6684,13 +6819,18 @@ function _atualizarUiRepasse() {
   /* o ✓ do passo 1 só aparece depois do toque: _repasseModo tem um valor
      desde a abertura (o título e os textos dependem dele), mas marcar uma
      opção que ninguém escolheu é o mesmo engano que tiramos das sub-abas. */
-  if (btnReceived) btnReceived.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'received'));
+  if (btnReceived) {
+    btnReceived.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'received'));
+    /* 25/09/2026: colaborador não se autodeclara "já recebi" mais — só
+       gestor/admin registra um repasse como recebido. Some a opção inteira. */
+    btnReceived.style.display = _ehGestorOuAdmin() ? '' : 'none';
+  }
   if (btnRequest) btnRequest.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'requested'));
   const txt = (id, valor) => { const e = $(id); if (e) e.textContent = valor; };
-  txt('rep-mode-received-tit', _ehCV() ? 'Reembolso recebido' : 'Registrar recebido');
-  txt('rep-mode-received-sub', _ehCV() ? 'você já foi reembolsado' : 'o dinheiro já caiu');
-  txt('rep-mode-request-tit', _ehCV() ? 'Registrar reembolso' : 'Solicitar repasse');
-  txt('rep-mode-request-sub', _ehCV() ? 'pagou do próprio bolso' : 'pedir ao gestor');
+  txt('rep-mode-received-tit', 'Registrar recebido');
+  txt('rep-mode-received-sub', 'o dinheiro já caiu');
+  txt('rep-mode-request-tit', 'Solicitar repasse');
+  txt('rep-mode-request-sub', 'pedir ao gestor');
   if (labelDesc) labelDesc.textContent = _repasseModo === 'requested' ? 'Custo / justificativa *' : 'Descrição';
   if (descInput) descInput.placeholder = _repassePlaceholder(_repasseModo);
   if (helpText) helpText.textContent = _repasseHelpText(_repasseModo);
@@ -6719,7 +6859,7 @@ function irParaPassoRepasse(n) {
   if (resumo) {
     const tipo = $('rep-tipo')?.value || '';
     resumo.textContent = n === 3 && tipo
-      ? '· ' + (_repasseModo === 'requested' ? (_ehCV() ? 'reembolso' : 'pedido') : 'recebido') + ' · ' + tipo
+      ? '· ' + (_repasseModo === 'requested' ? 'pedido' : 'recebido') + ' · ' + tipo
       : '';
   }
 }
@@ -6763,21 +6903,21 @@ let _repasseAlvo = null;
 
 /* Regime CV (24/09/2026): o dinheiro anda por dois caminhos e a planilha da
    empresa os guarda em colunas diferentes —
-     recarga   → cartão pré-pago Alelo, de onde saem os gastos do cartão;
-     reembolso → conta do colaborador, pelo que ele pagou do bolso.
+     recarga  → cartão pré-pago Alelo, de onde saem os gastos do cartão;
+     carteira → conta do colaborador, pelo que ele pagou do bolso (era 'reembolso').
    Para quem é RDM/RDA fica null: lá a distinção não existe. */
 let _repasseDestino = null;
 
-/* Repasse que a empresa transferiu para a CONTA da pessoa como reembolso —
-   não é recarga do cartão (24/09/2026). Lançamento antigo de CV, sem destino
-   gravado, conta como reembolso: era assim que o relatório o tratava antes
+/* Repasse que a empresa transferiu para a CONTA da pessoa (carteira) — não é
+   recarga do cartão (24/09/2026). Lançamento antigo de CV, sem destino
+   gravado, conta como carteira: era assim que o relatório o tratava antes
    da separação. */
-function _repasseEhReembolso(r) {
+function _repasseEhCarteira(r) {
   return r && r.destino !== 'recarga';
 }
 
 /* Nenhum dinheiro do regime de cartão é lançado por aba (24/09/2026): as
-   colunas do BANCO DE DADOS — recarga e reembolso — trazem só DATA e R$. E
+   colunas do BANCO DE DADOS — recarga e carteira — trazem só DATA e R$. E
    no CV não existe RDA x RDM: o gasto é dividido nas quatro categorias,
    todas juntas. _repasseDestino só é preenchido para quem é CV, então ele
    próprio responde a pergunta. */
@@ -6825,10 +6965,11 @@ function _formatarDoc(d) {
 
 /* Saldo do cartão pré-pago: recargas confirmadas menos as notas pagas nele.
    Vale só para quem é CV; para os demais devolve null (24/09/2026). */
-/* Nota paga no cartão: tudo que não saiu do bolso. A nota antiga, gravada
-   antes de existir a coluna pagamento, conta como cartão. */
+/* Nota paga no cartão: tudo que não saiu do bolso do colaborador nem foi
+   faturamento pago direto pela empresa. A nota antiga, gravada antes de
+   existir a coluna pagamento, conta como cartão (25/09/2026). */
 function _notaDoCartao(n) {
-  return n.pagamento !== 'reembolso';
+  return n.pagamento !== 'carteira' && n.pagamento !== 'empresa';
 }
 
 function _saldoCartaoDe(ns, rs, temCartao) {
@@ -6879,16 +7020,16 @@ function setRepasseTipo(tipo) {
   });
 }
 
-function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) {   // pre = { tipo, valor, data, descricao } (reembolso a partir da nota, 21/09/2026)
+function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) {   // pre = { tipo, valor, data, descricao } (repasse a partir da nota, 21/09/2026)
   /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
      e entra direto no saldo dele (não passa pela confirmação). */
   _repasseAlvo = alvo && alvo.id ? alvo : null;
-  _repasseDestino = _usaCartao(_repasseAlvo ? equipePorId[_repasseAlvo.id] : undefined) ? (destino || 'reembolso') : null;
+  _repasseDestino = _usaCartao(_repasseAlvo ? equipePorId[_repasseAlvo.id] : undefined) ? (destino || 'carteira') : null;
   if (_repasseAlvo) modo = 'received';
   setRepasseModo(modo || 'received');
   /* Começa no passo 1 quando nada foi decidido ainda (painel do Início). Quem
      já chega com o modo (botões do saldo, lançamento do gestor) entra no 2, e
-     o reembolso vindo de uma nota, que já traz modo e aba, entra no 3. */
+     o repasse vindo de uma nota, que já traz modo e aba, entra no 3. */
   /* A recarga do cartão não tem categoria na planilha (a coluna do extrato
      tem só DATA e R$), então o passo das abas não faz sentido para ela. */
   if (_repasseSemCategoria()) setRepasseTipo('RDM');
@@ -6901,9 +7042,9 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
   if (!_repasseSemCategoria()) setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
-  /* CV pedindo reembolso: o valor não é chute — é o que a empresa deve pelas
+  /* CV pedindo repasse: o valor não é chute — é o que a empresa deve pelas
      notas pagas do bolso, menos o que já transferiu (24/09/2026). */
-  if (!pre && !_repasseAlvo && _repasseDestino === 'reembolso') {
+  if (!pre && !_repasseAlvo && _repasseDestino === 'carteira') {
     const deve = _devedorDe(notas, repasses, filMes, filAno, true);
     if (deve > 0) $('rep-valor').value = deve.toFixed(2);
   }
@@ -7003,9 +7144,9 @@ async function _salvarRepasseInterno() {
   if (viewAtual === 'inicio') renderInicio();
   else renderSaldo();
   if (kind === 'requested') {
-    toast(_ehCV() ? `Reembolso ${tipo} de ${brl(valor)} registrado — o gestor foi notificado.` : `Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
+    toast(`Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
   } else {
-    toast(_ehCV() ? `Reembolso recebido ${tipo} de ${brl(valor)} registrado.` : `Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
+    toast(`Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
   }
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
