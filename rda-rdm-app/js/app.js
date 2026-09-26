@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 287;
+const APP_BUILD = 288;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7281,6 +7281,17 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
     }
     /* para outro só existe "recebido": o passo 1 nem entra no caminho
        (o form abre direto no passo 2 — ver _repassePassoMin). */
+  }
+  /* 26/09/2026, pedido do Cleiton: "registrar recebido" só existe de
+     verdade pra gestor/admin — o servidor já rebaixa o do colaborador pra
+     pedido (RepasseController::upsert), então mostrar a opção pra ele era
+     enganoso. Some pros dois regimes; quem lança para outro colaborador
+     nem passa por aqui (_repasseAlvo pula o passo 1). */
+  {
+    const rm = $('rep-mode-received'), rq = $('rep-mode-request');
+    const soPedido = !_ehGestorOuAdmin();
+    if (rm) rm.style.display = soPedido ? 'none' : '';
+    if (rq) rq.style.gridColumn = soPedido ? '1 / -1' : '';
   }
   $('rep-overlay').style.display = 'flex';
 }
