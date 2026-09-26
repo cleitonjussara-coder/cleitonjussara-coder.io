@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -81,6 +82,24 @@ class ColaboradorController extends Controller
         }
         if (isset($d['role']) && $d['role'] !== $alvo->role) {
             Log::info('papel alterado', ['alvo' => $alvo->email, 'de' => $alvo->role, 'para' => $d['role'], 'por' => $u->email]);
+        }
+        /* Histórico visível no app (26/09/2026): até aqui só o role ia pro
+           log de texto (acima) — e o regime nem isso. O gestor não tinha
+           como ver quem trocou o papel ou o regime de alguém sem entrar no
+           servidor. Uma linha por campo mudado, junto do Histórico de nota
+           e repasse (build 287). */
+        foreach (['role', 'regime'] as $campo) {
+            if (isset($d[$campo]) && $d[$campo] !== $alvo->$campo) {
+                DB::table('colaboradores_historico')->insert([
+                    'id' => (string) Str::uuid(),
+                    'colaborador_id' => $alvo->id,
+                    'campo' => $campo,
+                    'de' => $alvo->$campo,
+                    'para' => $d[$campo],
+                    'alterado_por' => $u->id,
+                    'alterado_em' => now(),
+                ]);
+            }
         }
         $alvo->update($d);
 
@@ -235,6 +254,29 @@ class ColaboradorController extends Controller
         Log::info('exclusão de colaborador CANCELADA', ['alvo' => $alvo->email, 'por' => $u->email]);
 
         return response()->json($this->comPedido($alvo->fresh()));
+    }
+
+    /**
+     * GET /colaboradores/historico?since= — trocas de papel/regime dos
+     * últimos N dias, pro Histórico do app (26/09/2026). Só gestor/admin,
+     * igual à tela que consome isso.
+     */
+    public function historico(Request $r): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin vê o histórico de papel/regime');
+        $q = DB::table('colaboradores_historico');
+        if ($since = $r->query('since')) {
+            try {
+                $since = \Carbon\Carbon::parse($since)->utc()->format('Y-m-d H:i:s');
+            } catch (\Throwable) {
+            }
+            $q->where('alterado_em', '>=', $since);
+        }
+
+        return response()->json(
+            $q->orderByDesc('alterado_em')->limit(500)->get(['id', 'colaborador_id', 'campo', 'de', 'para', 'alterado_por', 'alterado_em'])
+        );
     }
 
     /** JSON do colaborador + nome de quem pediu a exclusão (para a tela). */

@@ -238,6 +238,8 @@ window.API = (() => {
     cancelarExclusao: id => req('DELETE', `/colaboradores/${id}/excluir`),
     /* 22/09/2026: gestor confirma (ou recusa) a entrada de cadastro novo */
     confirmar: (id, aceita = true) => req('POST', `/colaboradores/${id}/confirmar`, { body: { aceita } }),
+    /* troca de papel/regime, pro Histórico do gestor/admin (26/09/2026) */
+    historico: since => req('GET', '/colaboradores/historico', { query: { since: since || undefined } }),
   };
 
   /* params: { since, ano, mes, user_id, deleted: '0'|'1', fields: 'a,b' } */

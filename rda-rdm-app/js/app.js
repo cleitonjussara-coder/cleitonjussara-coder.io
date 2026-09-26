@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 293;
+const APP_BUILD = 294;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3719,19 +3719,20 @@ async function renderHistorico() {
   const el = $('app-content');
   if (!_ehGestorOuAdmin()) { switchView('inicio'); return; }
   const cabecalho = `<div class="page-hd"><div class="mes-nav"><span class="mes-label">Histórico de alterações</span></div></div>
-    <p style="padding:0 14px;color:var(--text2);font-size:13.5px;margin-top:-6px">Últimos 60 dias · notas e repasses de toda a equipe.</p>`;
+    <p style="padding:0 14px;color:var(--text2);font-size:13.5px;margin-top:-6px">Últimos 60 dias · notas, repasses e troca de papel/regime de toda a equipe.</p>`;
   if (!sb || !navigator.onLine) {
     el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">📡</div><p>Precisa de internet para ver o histórico — é auditoria, então busca sempre no servidor.</p></div>`;
     return;
   }
   el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">🕓</div><p>Carregando…</p></div>`;
   const sinceIso = new Date(Date.now() - 60 * 86400_000).toISOString();
-  let notasMudadas, repassesMudados, apagadasDet;
+  let notasMudadas, repassesMudados, apagadasDet, papelRegime;
   try {
-    [notasMudadas, repassesMudados, apagadasDet] = await Promise.all([
+    [notasMudadas, repassesMudados, apagadasDet, papelRegime] = await Promise.all([
       sb.notas.list({ since: sinceIso, fields: 'id,user_id,tipo,subtipo,valor,data,razao_social,cnpj,deleted,created_at,updated_at,created_by,updated_by' }),
       sb.repasses.list({ since: sinceIso }),
       sb.notas.apagadasDetalhe(sinceIso),
+      sb.colaboradores.historico(sinceIso),
     ]);
   } catch (e) {
     el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Não deu para carregar: ${esc(e.message || 'erro')}</p></div>`;
@@ -3765,9 +3766,23 @@ async function renderHistorico() {
     dono: nome(a.user_id),
     resumo: 'nota apagada em definitivo — sem volta, não passou pela lixeira',
   }));
+  const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
+  const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
+  (papelRegime || []).forEach(h => {
+    const ehPapel = h.campo === 'role';
+    const rot = ehPapel ? PAPEL_NOME : REGIME_NOME;
+    entradas.push({
+      quando: h.alterado_em,
+      acao: ehPapel ? 'trocou o papel' : 'trocou o regime',
+      tipoItem: '',
+      quem: nome(h.alterado_por),
+      dono: nome(h.colaborador_id),
+      resumo: `de ${esc(rot[h.de] || h.de || '—')} para ${esc(rot[h.para] || h.para || '—')}`,
+    });
+  });
   entradas.sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
 
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔' };
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁' };
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return '—'; }

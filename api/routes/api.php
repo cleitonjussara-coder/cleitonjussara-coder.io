@@ -53,6 +53,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::delete('/me/foto', [AuthController::class, 'removerFotoPerfil']);
 
     Route::get('/colaboradores', [ColaboradorController::class, 'index']);
+    Route::get('/colaboradores/historico', [ColaboradorController::class, 'historico']);   // troca de papel/regime (26/09/2026) — antes do {id}, senão "historico" vira id
     Route::post('/convites', [ConviteController::class, 'criar']);
     Route::get('/convites', [ConviteController::class, 'lista']);
     Route::get('/colaboradores/{id}', [ColaboradorController::class, 'show']);
