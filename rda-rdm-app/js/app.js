@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 280;
+const APP_BUILD = 281;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2535,19 +2535,44 @@ function renderInicio() {
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
 
-  /* Resumo de gastos (26/09/2026, pedido do Cleiton): mesma conta do
-     Painel (_composicaoGastos + gerarDonut), só resumida — o donut não é
-     tocável aqui (isso é lá no Painel), o cartão inteiro leva pra lá. */
-  const _cats = !_ehContabilidade() ? _composicaoGastos(A) : [];
+  /* Resumo de gastos (26/09/2026, pedido do Cleiton): mesmo total do
+     Painel, só resumido — o donut não é tocável aqui, o cartão inteiro
+     leva pra lá. RDM e RDA (ou Cartão e Carteira, no C.V.) aparecem
+     separados, cada um com gasto do mês + saldo a receber (pedido do
+     Cleiton: "mostrar saldo dos dois separados", "de forma mais resumida
+     possível" — por isso não repete as subcategorias do Painel aqui). */
+  const _ehCartaoIni = _usaCartao();
+  let _cats = [], _tipos = [];
+  if (!_ehContabilidade()) {
+    if (_ehCartaoIni) {
+      _cats = _composicaoGastos(A);
+    } else {
+      const _nsAll = notas.filter(n => !n.deleted), _rsAll = repasses.filter(r => !r.deleted);
+      _cats = [
+        { key:'rdm', curto:'RDM', cor:'var(--accent-d)', val:A.rdmG },
+        { key:'rda', curto:'RDA', cor:'var(--primary)',  val:A.rdaG },
+      ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
+      _tipos = [
+        { sigla:'RDM', cor:'var(--accent-d)', gasto:A.rdmG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDM') },
+        { sigla:'RDA', cor:'var(--primary)',  gasto:A.rdaG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDA') },
+      ].filter(t => t.gasto > 0);
+    }
+  }
   const resumoGastos = (!_ehContabilidade() && A.gasto > 0) ? `
     <div class="ini-resumo" onclick="switchView('home')">
-      <div class="ini-resumo-donut">${gerarDonut(_cats, A.gasto)}</div>
-      <div class="ini-resumo-txt">
-        <div class="ini-resumo-tot">${brl(A.gasto)}</div>
-        <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>
-        ${_cats.slice(0, 3).map(c => `<div class="ini-resumo-cat"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}
+      <div class="ini-resumo-cab">
+        <div class="ini-resumo-donut">${gerarDonut(_cats, A.gasto)}</div>
+        <div class="ini-resumo-txt">
+          <div class="ini-resumo-tot">${brl(A.gasto)}</div>
+          <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>
+        </div>
+        <span class="ini-resumo-seta">›</span>
       </div>
-      <span class="ini-resumo-seta">›</span>
+      ${_tipos.length ? `<div class="ini-resumo-tipos">${_tipos.map(t => `
+        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}<span class="ini-resumo-saldo ${t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : ''}">${
+          t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
+        }</span></div>`).join('')}</div>`
+        : `<div class="ini-resumo-tipos">${_cats.slice(0, 3).map(c => `<div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}</div>`}
     </div>` : '';
 
   $('app-content').innerHTML = `

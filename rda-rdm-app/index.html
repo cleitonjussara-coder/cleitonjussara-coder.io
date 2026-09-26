@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=280">
+  <link rel="manifest" href="manifest.json?v=281">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1656,17 +1656,30 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 @media (min-width:900px){ .ini-paineis{grid-template-columns:1fr 1fr} }
 
 /* Resumo de gastos compacto na Início (26/09/2026, pedido do Cleiton) —
-   mesma conta do Painel, só resumida; o cartão inteiro leva pra lá. */
-.ini-resumo{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;
+   mesma conta do Painel, só resumida; o cartão inteiro leva pra lá.
+   RDM e RDA (ou Cartão e Carteira, no regime de C.V.) andam separados —
+   pedido do Cleiton, "mostrar saldo dos dois separados". */
+.ini-resumo{display:flex;flex-direction:column;gap:8px;padding:12px 16px;border-radius:16px;
   background:var(--surface2);border:1px solid var(--border);cursor:pointer}
-.ini-resumo-donut{flex-shrink:0;width:72px;height:72px;pointer-events:none}
-.ini-resumo-donut svg{width:72px;height:72px}
+.ini-resumo-cab{display:flex;align-items:center;gap:12px}
+.ini-resumo-donut{flex-shrink:0;width:60px;height:60px;pointer-events:none}
+.ini-resumo-donut svg{width:60px;height:60px}
 .ini-resumo-txt{flex:1;min-width:0}
-.ini-resumo-tot{font-size:20px;font-weight:800;color:var(--primary-d)}
-.ini-resumo-lbl{font-size:12.5px;color:var(--text2);margin-bottom:6px}
+.ini-resumo-tot{font-size:19px;font-weight:800;color:var(--primary-d)}
+.ini-resumo-lbl{font-size:12px;color:var(--text2)}
 .ini-resumo-cat{font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px;line-height:1.6}
 .ini-resumo-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .ini-resumo-seta{font-size:24px;color:var(--text2);flex-shrink:0}
+/* RDM x RDA (ou Cartão x Carteira) lado a lado, cada um com gasto + saldo —
+   bem resumido, sem quebrar a caixa. */
+.ini-resumo-tipos{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;
+  padding-top:8px;border-top:1px solid var(--border)}
+.ini-resumo-tipo{font-size:12.5px;color:var(--text);line-height:1.4;min-width:0}
+.ini-resumo-tipo b{font-weight:800}
+.ini-resumo-tipo .ini-resumo-dot{margin-right:4px}
+.ini-resumo-saldo{display:block;font-size:11px;color:var(--text2);padding-left:12px}
+.ini-resumo-saldo.receber{color:#b45309;font-weight:700}
+.ini-resumo-saldo.adiantado{color:var(--primary-d);font-weight:700}
 /* Sub-abas RDA/RDM do repasse (23/09/2026; maiores em 24/09 a pedido do
    Cleiton). Cada uma já nasce com a cor da sua conta, para dar vontade de
    tocar e para não haver dúvida de qual está marcada. */
@@ -1758,7 +1771,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=280" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=281" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2670,25 +2683,25 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=280"></script>
-<script defer src="js/db.js?v=280"></script>
-<script defer src="js/nfce.js?v=280"></script>
-<script defer src="js/sefaz.js?v=280"></script>
-<script defer src="js/brasilapi.js?v=280"></script>
-<script defer src="js/ocr.js?v=280"></script>
-<script defer src="js/recorte.js?v=280"></script>
-<script defer src="js/excel.js?v=280"></script>
-<script defer src="js/gestor.js?v=280"></script>
-<script defer src="js/frota.js?v=280"></script>
-<script defer src="js/ponto.js?v=280"></script>
-<script defer src="js/arquivos.js?v=280"></script>
-<script defer src="js/gdrive.js?v=280"></script>
-<script defer src="js/app.js?v=280"></script>
+<script defer src="js/api.js?v=281"></script>
+<script defer src="js/db.js?v=281"></script>
+<script defer src="js/nfce.js?v=281"></script>
+<script defer src="js/sefaz.js?v=281"></script>
+<script defer src="js/brasilapi.js?v=281"></script>
+<script defer src="js/ocr.js?v=281"></script>
+<script defer src="js/recorte.js?v=281"></script>
+<script defer src="js/excel.js?v=281"></script>
+<script defer src="js/gestor.js?v=281"></script>
+<script defer src="js/frota.js?v=281"></script>
+<script defer src="js/ponto.js?v=281"></script>
+<script defer src="js/arquivos.js?v=281"></script>
+<script defer src="js/gdrive.js?v=281"></script>
+<script defer src="js/app.js?v=281"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=280').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=281').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
