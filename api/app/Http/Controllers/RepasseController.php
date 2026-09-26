@@ -151,10 +151,14 @@ class RepasseController extends Controller
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             unset($d['created_at']);
-            $rep->fill($d)->save();
+            $rep->fill($d);
+            $rep->updated_by = $u->id;
+            $rep->save();
         } else {
             abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Repasse só pode ser lançado pelo próprio colaborador');
             $rep = new Repasse(['id' => $id] + $d);
+            $rep->created_by = $u->id;
+            $rep->updated_by = $u->id;
             $rep->save();
         }
         /* Nasce confirmado, venha de onde vier (23/09/2026): o que o
@@ -226,8 +230,10 @@ class RepasseController extends Controller
             /* 24/09/2026: pedido de recarga do cartão vira recarga recebida —
                sem isto o valor cairia na coluna de reembolso da planilha. */
             'destino' => $pedido->destino,
+            'created_by' => $u->id,
+            'updated_by' => $u->id,
         ])->save();
-        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id])->save();
+        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
 
         $oque = $pedido->destino === 'recarga' ? 'Recarga do cartão registrada' : 'Repasse pago';
         $this->push->enviar(

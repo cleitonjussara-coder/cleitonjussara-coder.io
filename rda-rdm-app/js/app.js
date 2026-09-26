@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 286;
+const APP_BUILD = 287;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -632,6 +632,9 @@ function _itensMenu() {
   if (_veEquipe()) {
     itens.push({ view:'equipe', ico:'👥', lbl:'Equipe', sub:'baixar relatórios' });
     itens.push({ view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
+  }
+  if (_ehGestorOuAdmin()) {
+    itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
   }
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
     itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
@@ -2020,7 +2023,7 @@ function dispensarTodasNotificacoes() { _notifMarcarVistos(_notificacoes().filte
 const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
-  perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto',
+  perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico',
 };
 let _histViews = [];
 
@@ -2076,6 +2079,7 @@ function switchView(v, voltando = false) {
   else if (v==='saldo')  renderSaldo();
   else if (v==='equipe') renderEquipe();
   else if (v==='perfil') renderPerfil();
+  else if (v==='historico') renderHistorico();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3697,6 +3701,87 @@ async function renderNotasApagadas() {
   }
 
   el.innerHTML = html;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HISTÓRICO (26/09/2026, pedido do Cleiton) — "criar rastro de qualquer
+   modificação (edição, arquivos apagados), especificar quem realizou".
+   Só gestor/admin. Junta, dos últimos 60 dias: notas criadas/editadas/
+   apagadas (updated_by já existia) e apagadas em definitivo (lápide em
+   notas_apagadas), mais repasses/recargas criados/editados/apagados
+   (created_by/updated_by novos, build 287 — repasse antigo aparece sem
+   "quem", só a partir de agora fica completo). Sempre busca no servidor:
+   é auditoria, não pode confiar só na cópia local. */
+async function renderHistorico() {
+  const el = $('app-content');
+  if (!_ehGestorOuAdmin()) { switchView('inicio'); return; }
+  const cabecalho = `<div class="page-hd"><div class="mes-nav"><span class="mes-label">Histórico de alterações</span></div></div>
+    <p style="padding:0 14px;color:var(--text2);font-size:13.5px;margin-top:-6px">Últimos 60 dias · notas e repasses de toda a equipe.</p>`;
+  if (!sb || !navigator.onLine) {
+    el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">📡</div><p>Precisa de internet para ver o histórico — é auditoria, então busca sempre no servidor.</p></div>`;
+    return;
+  }
+  el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">🕓</div><p>Carregando…</p></div>`;
+  const sinceIso = new Date(Date.now() - 60 * 86400_000).toISOString();
+  let notasMudadas, repassesMudados, apagadasDet;
+  try {
+    [notasMudadas, repassesMudados, apagadasDet] = await Promise.all([
+      sb.notas.list({ since: sinceIso, fields: 'id,user_id,tipo,subtipo,valor,data,razao_social,cnpj,deleted,created_at,updated_at,created_by,updated_by' }),
+      sb.repasses.list({ since: sinceIso }),
+      sb.notas.apagadasDetalhe(sinceIso),
+    ]);
+  } catch (e) {
+    el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Não deu para carregar: ${esc(e.message || 'erro')}</p></div>`;
+    return;
+  }
+  const nome = id => !id ? '—' : (id === user?.id ? (user?.nome || 'Você') : (equipePorId[id]?.nome || 'Colaborador'));
+  const _mesmoInstante = (a, b) => a && b && Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 3000;
+
+  const entradas = [];
+  (notasMudadas || []).forEach(n => entradas.push({
+    quando: n.updated_at,
+    acao: n.deleted ? 'apagou' : (_mesmoInstante(n.created_at, n.updated_at) ? 'lançou' : 'editou'),
+    tipoItem: 'nota',
+    quem: nome(n.updated_by),
+    dono: nome(n.user_id),
+    resumo: `${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'sem empresa'))} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}`,
+  }));
+  (repassesMudados || []).forEach(r => entradas.push({
+    quando: r.updated_at,
+    acao: r.deleted ? 'apagou' : (_mesmoInstante(r.created_at, r.updated_at) ? 'lançou' : 'editou'),
+    tipoItem: 'repasse',
+    quem: nome(r.updated_by),
+    dono: nome(r.user_id),
+    resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
+  }));
+  (apagadasDet || []).forEach(a => entradas.push({
+    quando: a.apagada_em,
+    acao: 'apagou em definitivo',
+    tipoItem: 'nota',
+    quem: nome(a.apagada_por),
+    dono: nome(a.user_id),
+    resumo: 'nota apagada em definitivo — sem volta, não passou pela lixeira',
+  }));
+  entradas.sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
+
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔' };
+  const fmtHora = d => {
+    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch (_) { return '—'; }
+  };
+  const itens = entradas.slice(0, 200).map(e => `
+    <div class="db-pend-item" style="gap:10px">
+      <span style="font-size:20px;flex-shrink:0">${ICO[e.acao] || '•'}</span>
+      <div style="flex:1;min-width:0">
+        <div class="db-pend-txt"><b>${esc(e.quem)}</b> ${esc(e.acao)} ${e.tipoItem} de <b>${esc(e.dono)}</b></div>
+        <div style="font-size:13px;color:var(--text2);margin-top:1px">${e.resumo}</div>
+      </div>
+      <span style="font-size:12px;color:var(--text2);white-space:nowrap;flex-shrink:0">${fmtHora(e.quando)}</span>
+    </div>`).join('');
+
+  el.innerHTML = cabecalho + (entradas.length
+    ? `<div class="db-card"><div class="db-pend">${itens}</div></div>`
+    : `<div class="empty-state"><div class="empty-icon">🕓</div><p>Nada mudou nos últimos 60 dias.</p></div>`);
 }
 
 function renderNotas() {

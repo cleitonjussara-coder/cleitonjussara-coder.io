@@ -251,7 +251,11 @@ class NotaController extends Controller
     }
 
     /* Ids apagados em definitivo desde `since`, para o app limpar o que
-       ainda tem guardado (25/09/2026). Só ids — nada da nota sobrevive. */
+       ainda tem guardado (25/09/2026). Só ids — nada da nota sobrevive.
+       26/09/2026: com `detalhe=1` devolve a linha inteira da lápide
+       (quem apagou, de quem era, quando) — usado pelo Histórico do
+       gestor/admin; o uso original (limpeza da lixeira local) continua
+       pedindo só os ids, sem esse parâmetro. */
     public function apagadas(Request $r): JsonResponse
     {
         $u = $r->user();
@@ -267,6 +271,12 @@ class NotaController extends Controller
         /* Quem não enxerga a equipe só precisa saber das próprias. */
         if (! $u->veTudo()) {
             $q->where('user_id', $u->id);
+        }
+
+        if ($r->boolean('detalhe')) {
+            return response()->json(
+                $q->orderByDesc('apagada_em')->limit(500)->get(['id', 'user_id', 'apagada_por', 'apagada_em'])
+            );
         }
 
         return response()->json($q->orderBy('apagada_em')->limit(5000)->pluck('id'));

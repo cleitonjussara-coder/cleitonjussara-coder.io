@@ -247,6 +247,9 @@ window.API = (() => {
     delete: id => req('DELETE', `/notas/${id}`),
     /* ids apagados em definitivo desde `since` — as lápides (25/09/2026) */
     apagadas: since => req('GET', '/notas/apagadas' + (since ? '?since=' + encodeURIComponent(since) : '')),
+    /* mesma lápide, mas com quem apagou/de quem era — pro Histórico do
+       gestor/admin (26/09/2026). */
+    apagadasDetalhe: since => req('GET', '/notas/apagadas', { query: { detalhe: 1, since: since || undefined } }),
     /* gestor/admin corrige o grupo do lançamento (23/09/2026) */
     corrigirTipo: (id, tipo, subtipo = null) => req('PATCH', `/notas/${id}/tipo`, { body: { tipo, subtipo } }),
     /* valor/data/emitente oficiais pela URL do QR (servidor abre o portal do
