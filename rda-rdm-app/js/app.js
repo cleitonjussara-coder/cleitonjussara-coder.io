@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 295;
+const APP_BUILD = 296;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2060,6 +2060,7 @@ function switchView(v, voltando = false) {
     $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
   if (v !== 'arquivos') window.Arquivos?.reset?.();
+  if (v !== 'historico') window.SvelteHistorico?.desmontar?.();   // desmonta o componente Svelte ao sair
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     const ativo = b.dataset.view === v;
     if (ativo && !b.classList.contains('active')) {      // pulinho só ao ENTRAR na aba
@@ -3715,91 +3716,18 @@ async function renderNotasApagadas() {
    (created_by/updated_by novos, build 287 — repasse antigo aparece sem
    "quem", só a partir de agora fica completo). Sempre busca no servidor:
    é auditoria, não pode confiar só na cópia local. */
-async function renderHistorico() {
+/* 27/09/2026: segunda tela migrada pra componente (Svelte) — Histórico é só
+   leitura (nenhum botão de ação), mesmo mostrando valores em R$; a lógica
+   de buscar/juntar as 4 fontes e montar a lista mora inteira em
+   svelte-historico/src/App.svelte agora. */
+function renderHistorico() {
   const el = $('app-content');
   if (!_ehGestorOuAdmin()) { switchView('inicio'); return; }
-  const cabecalho = `<div class="page-hd"><div class="mes-nav"><span class="mes-label">Histórico de alterações</span></div></div>
-    <p style="padding:0 14px;color:var(--text2);font-size:13.5px;margin-top:-6px">Últimos 60 dias · notas, repasses e troca de papel/regime de toda a equipe.</p>`;
-  if (!sb || !navigator.onLine) {
-    el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">📡</div><p>Precisa de internet para ver o histórico — é auditoria, então busca sempre no servidor.</p></div>`;
-    return;
-  }
-  el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">🕓</div><p>Carregando…</p></div>`;
-  const sinceIso = new Date(Date.now() - 60 * 86400_000).toISOString();
-  let notasMudadas, repassesMudados, apagadasDet, papelRegime;
-  try {
-    [notasMudadas, repassesMudados, apagadasDet, papelRegime] = await Promise.all([
-      sb.notas.list({ since: sinceIso, fields: 'id,user_id,tipo,subtipo,valor,data,razao_social,cnpj,deleted,created_at,updated_at,created_by,updated_by' }),
-      sb.repasses.list({ since: sinceIso }),
-      sb.notas.apagadasDetalhe(sinceIso),
-      sb.colaboradores.historico(sinceIso),
-    ]);
-  } catch (e) {
-    el.innerHTML = cabecalho + `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Não deu para carregar: ${esc(e.message || 'erro')}</p></div>`;
-    return;
-  }
-  const nome = id => !id ? '—' : (id === user?.id ? (user?.nome || 'Você') : (equipePorId[id]?.nome || 'Colaborador'));
-  const _mesmoInstante = (a, b) => a && b && Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 3000;
-
-  const entradas = [];
-  (notasMudadas || []).forEach(n => entradas.push({
-    quando: n.updated_at,
-    acao: n.deleted ? 'apagou' : (_mesmoInstante(n.created_at, n.updated_at) ? 'lançou' : 'editou'),
-    tipoItem: 'nota',
-    quem: nome(n.updated_by),
-    dono: nome(n.user_id),
-    resumo: `${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'sem empresa'))} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}`,
-  }));
-  (repassesMudados || []).forEach(r => entradas.push({
-    quando: r.updated_at,
-    acao: r.deleted ? 'apagou' : (_mesmoInstante(r.created_at, r.updated_at) ? 'lançou' : 'editou'),
-    tipoItem: 'repasse',
-    quem: nome(r.updated_by),
-    dono: nome(r.user_id),
-    resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
-  }));
-  (apagadasDet || []).forEach(a => entradas.push({
-    quando: a.apagada_em,
-    acao: 'apagou em definitivo',
-    tipoItem: 'nota',
-    quem: nome(a.apagada_por),
-    dono: nome(a.user_id),
-    resumo: 'nota apagada em definitivo — sem volta, não passou pela lixeira',
-  }));
-  const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
-  const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
-  (papelRegime || []).forEach(h => {
-    const ehPapel = h.campo === 'role';
-    const rot = ehPapel ? PAPEL_NOME : REGIME_NOME;
-    entradas.push({
-      quando: h.alterado_em,
-      acao: ehPapel ? 'trocou o papel' : 'trocou o regime',
-      tipoItem: '',
-      quem: nome(h.alterado_por),
-      dono: nome(h.colaborador_id),
-      resumo: `de ${esc(rot[h.de] || h.de || '—')} para ${esc(rot[h.para] || h.para || '—')}`,
-    });
+  el.innerHTML = '';   // Svelte.mount() só ANEXA no alvo — precisa esvaziar antes, como todo renderX()
+  window.SvelteHistorico?.montar(el, {
+    sb, user, equipePorId, brl, esc,
+    formatarCnpj: cnpj => window.BrasilAPI?.formatar?.(cnpj) || cnpj,
   });
-  entradas.sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
-
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁' };
-  const fmtHora = d => {
-    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
-    catch (_) { return '—'; }
-  };
-  const itens = entradas.slice(0, 200).map(e => `
-    <div class="db-pend-item" style="gap:10px">
-      <span style="font-size:20px;flex-shrink:0">${ICO[e.acao] || '•'}</span>
-      <div style="flex:1;min-width:0">
-        <div class="db-pend-txt"><b>${esc(e.quem)}</b> ${esc(e.acao)} ${e.tipoItem} de <b>${esc(e.dono)}</b></div>
-        <div style="font-size:13px;color:var(--text2);margin-top:1px">${e.resumo}</div>
-      </div>
-      <span style="font-size:12px;color:var(--text2);white-space:nowrap;flex-shrink:0">${fmtHora(e.quando)}</span>
-    </div>`).join('');
-
-  el.innerHTML = cabecalho + (entradas.length
-    ? `<div class="db-card"><div class="db-pend">${itens}</div></div>`
-    : `<div class="empty-state"><div class="empty-icon">🕓</div><p>Nada mudou nos últimos 60 dias.</p></div>`);
 }
 
 /* ═══════════════════════════════════════════════════════════
