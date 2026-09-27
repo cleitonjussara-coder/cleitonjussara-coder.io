@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 294;
+const APP_BUILD = 295;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7199,8 +7199,12 @@ function fecharFotoViewer() {
 }
 
 /* ── Ajuda / Como usar ───────────────────────────────────── */
-function abrirAjuda()  { document.querySelectorAll('.ajuda-gestor').forEach(e => { e.style.display = _veEquipe() ? '' : 'none'; }); $('ajuda-overlay').style.display = 'flex'; $('ajuda-overlay').querySelector('.form-body').scrollTop = 0; }
-function fecharAjuda() { $('ajuda-overlay').style.display = 'none'; }
+/* 26/09/2026: primeira tela migrada pra um componente (Svelte) — sem
+   dinheiro envolvido, só texto de ajuda. abrirAjuda()/fecharAjuda() viraram
+   uma ponte fina para window.SvelteAjuda (js/svelte-ajuda.js); o resto do
+   app nem percebe a troca, chama do mesmo jeito de sempre. */
+function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _veEquipe(), onFechar: fecharAjuda }); }
+function fecharAjuda() { window.SvelteAjuda?.desmontar(); }
 
 /* ── Form Repasse ────────────────────────────────────────── */
 let _repasseModo = 'received';
