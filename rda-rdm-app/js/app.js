@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 297;
+const APP_BUILD = 298;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2061,6 +2061,7 @@ function switchView(v, voltando = false) {
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
   if (v !== 'arquivos') { window.Arquivos?.reset?.(); window.Arquivos?.desmontar?.(); }
   if (v !== 'historico') window.SvelteHistorico?.desmontar?.();   // desmonta o componente Svelte ao sair
+  if (v !== 'perfil') window.SveltePerfil?.desmontar?.();
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     const ativo = b.dataset.view === v;
     if (ativo && !b.classList.contains('active')) {      // pulinho só ao ENTRAR na aba
@@ -4871,32 +4872,23 @@ async function _pintarCartaoPush() {
     </div>`;
 }
 
+/* 27/09/2026: quarta tela migrada pra componente (Svelte) — só o TOPO do
+   Perfil (foto + nome). A parte de baixo (Drive, armazenamento, backup,
+   CPF, atualizar banco) mexe com infraestrutura de verdade e continua
+   vanilla JS de propósito — ver svelte-perfil/README.md. O componente
+   monta DIRETO em #app-content (não num mount-point aninhado): existe
+   uma regra de CSS que exige .perfil-card como FILHO DIRETO de
+   #app-content pro centro de 1040px no desktop funcionar. */
 function renderPerfil() {
-  $('app-content').innerHTML = `
-  <div class="page-hd"><h2>Perfil</h2></div>
-  <div class="perfil-card">
-    <div class="perfil-avatar" id="perfil-avatar">${esc((user?.nome||'?')[0].toUpperCase())}</div>
-    <input type="file" id="p-foto" accept="image/*" capture="user" style="display:none" onchange="enviarFotoPerfil(event)">
-    <input type="file" id="p-foto-galeria" accept="image/*" style="display:none" onchange="enviarFotoPerfil(event)">
-    <div style="display:flex;gap:8px;justify-content:center;margin:-4px 0 10px;flex-wrap:wrap">
-      <button class="btn btn-sm btn-primary" onclick="$('p-foto').click()">📷 Tirar foto</button>
-      <button class="btn btn-sm btn-outline" onclick="$('p-foto-galeria').click()">🖼️ Da galeria</button>
-      ${user?.foto_path ? `<button class="btn btn-sm btn-outline" onclick="removerFotoPerfil()">Remover</button>` : ''}
-    </div>
-    <p style="font-size:15px;color:var(--text2);text-align:center;margin:-4px 0 8px">Depois da foto, enquadre o rosto e toque em <b>Usar recorte</b>.</p>
-    <div class="perfil-nome">${esc(user?.nome||user?.email||'')}</div>
-    <div class="perfil-email">${esc(user?.email||'')}</div>
-    <div class="perfil-meta">
-      <span class="role-pill role-${esc(user?.role||'colaborador')}">${esc(user?.role||'colaborador')}</span>
-    </div>
-  </div>
-
-  <div class="perfil-form">
-    <label class="lbl">Nome</label>
-    <input class="inp" id="p-nome"   value="${esc(user?.nome||'')}" autocomplete="name" autocapitalize="words">
-    <button class="btn btn-primary" onclick="salvarPerfil()">Salvar perfil</button>
-  </div>
-
+  const el = $('app-content');
+  el.innerHTML = '<div class="page-hd"><h2>Perfil</h2></div>';
+  window.SveltePerfil?.montar(el, {
+    user,
+    onEnviarFoto: enviarFotoPerfil,
+    onRemoverFoto: removerFotoPerfil,
+    onSalvarPerfil: salvarPerfil,
+  });
+  el.insertAdjacentHTML('beforeend', `
   <div class="perfil-actions">
     <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
@@ -4960,7 +4952,7 @@ function renderPerfil() {
       </p>
     </div>
     ` : ''}
-  </div>`;
+  </div>`);
   _pintarBotaoInstalar();
   _mostrarAvatar();
   _listarBackupsAuto();
