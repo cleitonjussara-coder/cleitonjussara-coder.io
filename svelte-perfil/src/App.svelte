@@ -3,7 +3,7 @@
      armazenamento, backup, CPF, atualizar banco) continua vanilla JS,
      colado logo depois deste componente no mesmo #app-content — de
      propósito, ver README. */
-  let { user, onEnviarFoto, onRemoverFoto, onSalvarPerfil } = $props();
+  let { user, onEnviarFoto, onRemoverFoto, onSalvarPerfil, temSb, cpfFormatado, onSalvarCpf } = $props();
 
   const iniciais = (user?.nome || '?')[0].toUpperCase();
 </script>
@@ -33,7 +33,22 @@
   <button class="btn btn-primary" onclick={onSalvarPerfil}>Salvar perfil</button>
 </div>
 
+{#if temSb}
+  <!-- 27/09/2026: antes só gestor/admin via este campo (preso no bloco de
+       backup) — corrigido, é exceção pessoal, qualquer colaborador
+       cadastra o próprio CPF. -->
+  <div class="perfil-form">
+    <div class="field">
+      <label class="lbl">Seu CPF <span class="opcional">— opcional</span></label>
+      <input class="inp" id="p-cpf" inputmode="numeric" placeholder="000.000.000-00" value={cpfFormatado} onblur={onSalvarCpf}>
+      <p class="ajuda-cpf">Serve para uma exceção: nota que sai no <b>seu</b> CPF — recarga de celular na sua linha, por exemplo — deixa de ser barrada. Sem ele, só passa nota sem consumidor ou no CNPJ da empresa.</p>
+    </div>
+  </div>
+{/if}
+
 <style>
+  .opcional { font-weight: 400; color: var(--text2); }
+  .ajuda-cpf { font-size: 13.5px; color: var(--text2); line-height: 1.45; margin-top: 4px; }
   .botoes-foto { display: flex; gap: 8px; justify-content: center; margin: -4px 0 10px; flex-wrap: wrap; }
   .dica-recorte { font-size: 15px; color: var(--text2); text-align: center; margin: -4px 0 8px; }
 </style>

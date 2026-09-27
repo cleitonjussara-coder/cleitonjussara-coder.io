@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 298;
+const APP_BUILD = 299;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4887,6 +4887,13 @@ function renderPerfil() {
     onEnviarFoto: enviarFotoPerfil,
     onRemoverFoto: removerFotoPerfil,
     onSalvarPerfil: salvarPerfil,
+    /* CPF (27/09/2026): estava preso no bloco só-gestor/admin do backup —
+       era pra qualquer colaborador cadastrar o próprio, pra exceção de
+       nota no seu CPF (ver Como usar o app). Corrigido: qualquer um com
+       internet (sb) vê o campo agora, não só quem gerencia a equipe. */
+    temSb: !!sb,
+    cpfFormatado: _formatarDoc(user?.cpf || ''),
+    onSalvarCpf: e => salvarCpfDoPerfil(e.target),
   });
   el.insertAdjacentHTML('beforeend', `
   <div class="perfil-actions">
@@ -4936,13 +4943,6 @@ function renderPerfil() {
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
       <div id="backups-auto" style="margin-top:10px;font-size:15px;color:var(--text2)">Carregando backups automáticos…</div>
-      <div class="field" style="margin-top:12px">
-        <label class="lbl">Seu CPF <span style="font-weight:400;color:var(--text2)">— opcional</span></label>
-        <input class="inp" id="p-cpf" inputmode="numeric" placeholder="000.000.000-00" value="${esc(_formatarDoc(user?.cpf || ''))}"
-               onblur="salvarCpfDoPerfil(this)">
-        <p style="font-size:13.5px;color:var(--text2);line-height:1.45;margin-top:4px">
-          Serve para uma exceção: nota que sai no <b>seu</b> CPF — recarga de celular na sua linha, por exemplo — deixa de ser barrada. Sem ele, só passa nota sem consumidor ou no CNPJ da empresa.</p>
-      </div>
       <div id="perfil-push" style="margin-top:12px"></div>
       <div id="backup-drive" style="margin-top:12px;font-size:15px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
