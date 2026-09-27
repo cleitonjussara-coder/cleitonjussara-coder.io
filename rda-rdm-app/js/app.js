@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 296;
+const APP_BUILD = 297;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2059,7 +2059,7 @@ function switchView(v, voltando = false) {
     }
     $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
-  if (v !== 'arquivos') window.Arquivos?.reset?.();
+  if (v !== 'arquivos') { window.Arquivos?.reset?.(); window.Arquivos?.desmontar?.(); }
   if (v !== 'historico') window.SvelteHistorico?.desmontar?.();   // desmonta o componente Svelte ao sair
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     const ativo = b.dataset.view === v;
@@ -2076,7 +2076,7 @@ function switchView(v, voltando = false) {
   else if (v==='despesas') { _pagamentoCV = null; _abaDespesa = null; renderDespesas(); }
   else if (v==='frota')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Frota?.render(); else switchView('inicio'); }
   else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
-  else if (v==='arquivos') window.Arquivos?.render();
+  else if (v==='arquivos') _montarArquivos();
   else if (v==='notas')  renderNotas();
   else if (v==='lixeira') renderNotasApagadas();
   else if (v==='saldo')  renderSaldo();
@@ -3728,6 +3728,43 @@ function renderHistorico() {
     sb, user, equipePorId, brl, esc,
     formatarCnpj: cnpj => window.BrasilAPI?.formatar?.(cnpj) || cnpj,
   });
+}
+
+/* 27/09/2026: terceira tela migrada pra componente (Svelte) — Arquivos.
+   Diferente de Ajuda/Histórico, tem estado de navegação (colaborador/ano/
+   mês) e é chamado de fora (gestor.js: Arquivos.abrirColab(id)) — por
+   isso o módulo continua se chamando window.Arquivos, só substitui o
+   antigo arquivos.js por dentro. montar() é chamado toda vez que a view
+   'arquivos' é escolhida; a lógica de qual nível mostrar mora no bridge. */
+const MESES_LONGO_ARQUIVOS = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+function _montarArquivos() {
+  const el = $('app-content');
+  el.innerHTML = '';   // Svelte.mount() só ANEXA no alvo
+  window.Arquivos?.montar(el, {
+    sb, user, esc, brl, fmtData, filAno,
+    MESES, MESES_LONGO: MESES_LONGO_ARQUIVOS,
+    veEquipe: _veEquipe, toast, setLoading,
+    voltarRodape: _voltarRodape,
+    carregarAvatares: () => window.Gestor?.carregarAvatares?.(),
+    verFotoCompartilhado: _verArquivoCompartilhado,
+  });
+}
+
+/* Abre a foto/PDF/XML de uma nota (antes vivia dentro do arquivos.js
+   original, como Arquivos.ver()) — usa o mesmo visualizador de foto
+   compartilhado com o resto do app (#foto-viewer-overlay). */
+async function _verArquivoCompartilhado(n) {
+  setLoading(true);
+  try {
+    const url = await sb.fotos.url(n.foto_path);
+    if (!url) { toast('Anexo não encontrado', 'err'); return; }
+    if (n.ext === 'pdf' || n.ext === 'xml') { window.open(url, '_blank'); return; }
+    $('foto-viewer-img').src = url;
+    $('foto-viewer-info').innerHTML = `<b style="font-size:18px;color:#fff">${esc(n.razao_social || 'Sem fornecedor')}</b><br>${esc(n.grupo)} · ${fmtData(n.data)} · ${brl(n.valor)}<br><small style="opacity:.7">${esc(n.pasta)}/${esc(n.arquivo || '')}</small>`;
+    $('foto-viewer-overlay').style.display = 'flex';
+  } catch (e) { toast('Não abriu: ' + (e.message || 'erro'), 'err'); }
+  finally { setLoading(false); }
 }
 
 /* ═══════════════════════════════════════════════════════════
