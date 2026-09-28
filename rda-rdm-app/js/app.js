@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 300;
+const APP_BUILD = 301;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3019,6 +3019,11 @@ function renderHome() {
   const B    = _agregaPeriodo(pAnt.mes, pAnt.ano, modo);
 
   const rotulo = modo === 'mensal' ? `${MESES[filMes-1]} ${filAno}` : String(filAno);
+  /* Rótulo do "Saldo Acumulado": esse número é o saldo corrido (desde
+     sempre até o mês em foco) e NÃO muda com o toggle Mês/Ano — só a
+     Evolução/Recebido/Gasto mudam. Rótulo fixo evita a impressão de que
+     o valor do ano é diferente do valor do mês quando não é (27/09/2026). */
+  const rotuloAcumulado = `até ${MESES[filMes-1]}/${filAno}`;
 
   /* ── Primeiro acesso: convite em vez de painel vazio ────── */
   if (!notas.length && !repasses.some(r => _repasseEhRecebido(r))) {
@@ -3363,7 +3368,7 @@ function renderHome() {
     <div class="db-hero">
       <div class="db-hero-top">
         <div>
-          <div class="db-hero-lbl">Saldo Acumulado · ${esc(rotulo)}</div>
+          <div class="db-hero-lbl">Saldo Acumulado · ${esc(rotuloAcumulado)}</div>
           <div class="db-hero-val ${totalAcumulado < 0 ? 'neg' : ''}">${brl(totalAcumulado)}</div>
         </div>
       </div>
