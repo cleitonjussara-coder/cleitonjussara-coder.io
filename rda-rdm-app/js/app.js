@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 302;
+const APP_BUILD = 303;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1908,6 +1908,7 @@ async function _recarregarEquipe() {
    Diferente do seletor de exportação (gestor.js), que é de marcar vários. */
 function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
   const lista = Object.values(equipePorId).filter(c => c && c.ativo !== false)
+    .filter(c => opts.filtro ? opts.filtro(c) : true)
     .sort((a, b) => (a.nome || a.email || '').localeCompare(b.nome || b.email || ''));
   if (!lista.length && !opts.semColaborador) { toast('Nenhum colaborador encontrado — abra a Equipe com internet primeiro', 'err'); return; }
   window._seletorColabCallback = aoEscolher;
@@ -1981,6 +1982,26 @@ function iniciarEdicaoNotaColaborador() {
     switchView('equipe');
     setTimeout(() => Gestor.abrir(id), 400);
   });
+}
+
+/* Atalhos da Início pro gestor/admin lançar repasse/recarga direto num
+   colaborador, sem passar por Equipe → abrir o colaborador → achar o
+   botão (28/09/2026, pedido do Cleiton). Mesma ação que já existe no
+   card do colaborador em gestor.js — só o caminho até ela que é mais
+   curto. Recarga só faz sentido pra quem usa cartão pré-pago (CV). */
+function iniciarRepasseColaborador() {
+  abrirSeletorColaborador('👛 Repasse — para qual colaborador?', id => {
+    const c = equipePorId[id];
+    if (!c) return;
+    abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
+  });
+}
+function iniciarRecargaColaborador() {
+  abrirSeletorColaborador('💳 Recarga — para qual colaborador?', id => {
+    const c = equipePorId[id];
+    if (!c) return;
+    abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, 'recarga');
+  }, { filtro: c => _ehCV(c) });
 }
 
 /* Atender pedido (25/09/2026): antes ia direto por um confirm() com o valor
@@ -2682,6 +2703,20 @@ function renderInicio() {
           <span class="pnl-ico">🏢</span>
           <span class="pnl-tit">Lançar Faturamento</span>
           <span class="pnl-sub">nota paga direto pela empresa</span>
+        </span>
+      </button>
+      <button class="pnl pnl-grande" onclick="iniciarRepasseColaborador()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">👛</span>
+          <span class="pnl-tit">Lançar repasse</span>
+          <span class="pnl-sub">para um colaborador, entra direto no saldo</span>
+        </span>
+      </button>
+      <button class="pnl pnl-grande" onclick="iniciarRecargaColaborador()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">💳</span>
+          <span class="pnl-tit">Lançar recarga</span>
+          <span class="pnl-sub">cartão corporativo de um colaborador CV</span>
         </span>
       </button>` : ''}
       ${user?.role === 'admin' ? `
