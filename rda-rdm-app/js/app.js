@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 304;
+const APP_BUILD = 305;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5375,12 +5375,14 @@ async function iniciarQR() {
   }
   const setDiag = t => { diag.textContent = `[${APP_VERSION}·${APP_BUILD}] ` + t; };
   setDiag('Abrindo câmera…');
-  /* Atalho de "Foto OCR" some enquanto a câmera funciona e só aparece se
-     ela falhar — antes só dava pra chegar nele fechando o leitor com o X
-     primeiro (pedido do Cleiton, 28/09/2026, depois de ver o erro
-     NotAllowedError no iPhone dele). */
-  const btnOcr = $('qr-btn-ocr');
-  if (btnOcr) btnOcr.style.display = 'none';
+  /* Atalhos de "Foto OCR" e "Tentar de novo" somem enquanto a câmera
+     funciona e só aparecem se ela falhar — antes só dava pra chegar no
+     OCR fechando o leitor com o X primeiro (pedido do Cleiton,
+     28/09/2026, depois de ver o erro NotAllowedError no iPhone dele). */
+  const btnOcr   = $('qr-btn-ocr');
+  const btnRetry = $('qr-btn-retry');
+  if (btnOcr)   btnOcr.style.display = 'none';
+  if (btnRetry) btnRetry.style.display = 'none';
 
   // checa suporte do navegador
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -5450,8 +5452,24 @@ async function iniciarQR() {
 
   const onErro = e => {
     const nome = e?.name || e?.message || 'erro';
-    setDiag('ERRO ao abrir câmera: ' + nome + '. Use "Chave" ou "Foto OCR" abaixo.');
-    if (btnOcr) btnOcr.style.display = '';
+    /* NotAllowedError = permissão de câmera negada no iOS/Safari. Nenhum
+       site consegue abrir os Ajustes do iPhone sozinho (bloqueio de
+       segurança da Apple) — o melhor que dá pra fazer é apontar o
+       caminho certo. No app instalado (ícone na tela) o iOS às vezes
+       trava a permissão e só libera abrindo o site direto pelo Safari,
+       não pelo ícone — por isso o aviso muda nesse caso (28/09/2026). */
+    if (nome === 'NotAllowedError' && _ehIOS()) {
+      const viaIcone = _jaInstalado();
+      setDiag('Câmera bloqueada. Ajustes → Safari → Câmera → Permitir.'
+        + (viaIcone ? ' Se não aparecer a opção, abra petermann pelo Safari (não pelo ícone).' : '')
+        + ' Ou use "Chave"/"Foto OCR" abaixo.');
+    } else if (nome === 'NotAllowedError') {
+      setDiag('Câmera bloqueada. Toque no cadeado/ícone ao lado do endereço → Permissões → Câmera → Permitir. Ou use "Chave"/"Foto OCR" abaixo.');
+    } else {
+      setDiag('ERRO ao abrir câmera: ' + nome + '. Use "Chave" ou "Foto OCR" abaixo.');
+    }
+    if (btnOcr)   btnOcr.style.display = '';
+    if (btnRetry) btnRetry.style.display = '';
   };
 
   // 1ª tentativa: câmera traseira em HD. Se falhar (constraint), cai p/ câmera simples.
