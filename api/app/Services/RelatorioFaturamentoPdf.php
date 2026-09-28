@@ -33,6 +33,10 @@ class RelatorioFaturamentoPdf
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
         $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
         $nomeDe = fn (?string $id) => $id && $pessoas->has($id) ? ($pessoas[$id]->nome ?: $pessoas[$id]->email) : 'Desconhecido';
+        /* 28/09/2026: user_id nulo aqui é sempre Faturamento sem colaborador
+           (a nota escolheu não apontar ninguém) — 'Desconhecido' soaria como
+           um erro de dado; isto é intencional. */
+        $nomeDono = fn (?string $id) => $id === null ? 'Sem colaborador específico' : $nomeDe($id);
         $periodo = self::MESES[$mes].' / '.$ano;
         $geradoEm = now(PontoCalculo::TZ)->format('d/m/Y H:i');
 
@@ -51,7 +55,7 @@ class RelatorioFaturamentoPdf
         }
         foreach ($notas as $n) {
             $cat = $n->tipo === 'RDA' ? 'Alimentação' : (self::CAT[mb_strtolower((string) $n->subtipo)] ?? ($n->subtipo ?: 'Outros'));
-            $h .= '<tr><td>'.$dt($n->data).'</td><td class="esq">'.$e($nomeDe($n->user_id)).'</td>'
+            $h .= '<tr><td>'.$dt($n->data).'</td><td class="esq">'.$e($nomeDono($n->user_id)).'</td>'
                 .'<td><span class="tipo '.$e($n->tipo).'">'.$e($n->tipo).'</span></td><td>'.$e($cat).'</td>'
                 .'<td class="esq">'.$e(mb_substr((string) ($n->razao_social ?: '—'), 0, 40)).'</td><td>'.$e($cnpj($n->cnpj)).'</td>'
                 .'<td class="num">'.$brl($n->valor).'</td><td class="esq">'.$e($nomeDe($n->created_by)).'</td></tr>';

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 299;
+const APP_BUILD = 300;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -866,6 +866,10 @@ function _ehNotaDeOutroUsuario(n) {
 
 function _rotuloProprietario(n) {
   if (!n) return 'Você';
+  /* Faturamento sem colaborador (28/09/2026): só nota de pagamento='empresa'
+     nasce com user_id null — nunca é "não sei de quem é", é "de propósito
+     sem ninguém". */
+  if (!n.user_id) return 'Faturamento geral (sem colaborador)';
   if (n.user_id === user?.id) return user?.nome || 'Você';
   return equipePorId[n.user_id]?.nome || n.user_nome || 'Colaborador';
 }
@@ -1902,10 +1906,10 @@ async function _recarregarEquipe() {
 /* Seletor de colaborador único (25/09/2026) — usado pelo Gestor pra escolher
    de quem é a nota de Faturamento e pelo Admin pra escolher quem vai editar.
    Diferente do seletor de exportação (gestor.js), que é de marcar vários. */
-function abrirSeletorColaborador(titulo, aoEscolher) {
+function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
   const lista = Object.values(equipePorId).filter(c => c && c.ativo !== false)
     .sort((a, b) => (a.nome || a.email || '').localeCompare(b.nome || b.email || ''));
-  if (!lista.length) { toast('Nenhum colaborador encontrado — abra a Equipe com internet primeiro', 'err'); return; }
+  if (!lista.length && !opts.semColaborador) { toast('Nenhum colaborador encontrado — abra a Equipe com internet primeiro', 'err'); return; }
   window._seletorColabCallback = aoEscolher;
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
@@ -1915,6 +1919,13 @@ function abrirSeletorColaborador(titulo, aoEscolher) {
       <div class="modal-hd"><h3>${esc(titulo)}</h3>
         <button class="btn-icon-sm" onclick="document.getElementById('seletor-colab-overlay')?.remove()">✕</button></div>
       <div class="modal-bd">
+        ${opts.semColaborador ? `
+          <button class="btn btn-outline btn-full" style="justify-content:flex-start;margin-bottom:12px;text-align:left;border-style:dashed"
+                  onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback(null)">
+            🏢 ${esc(opts.semColaborador)}
+          </button>
+          ${lista.length ? '<div style="border-top:1px solid var(--border);margin-bottom:10px"></div>' : ''}
+        ` : ''}
         ${lista.map(c => `
           <button class="btn btn-outline btn-full" style="justify-content:flex-start;margin-bottom:8px;text-align:left"
                   onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback('${c.id}')">
@@ -1929,11 +1940,14 @@ function abrirSeletorColaborador(titulo, aoEscolher) {
 /* Faturamento (25/09/2026): nota paga direto pela empresa, sem passar pelo
    colaborador — Gestor escolhe de quem é (pra registro) e lança pelo mesmo
    formulário de sempre, só que com pagamento='empresa': essa marca exclui a
-   nota do saldo/cartão da pessoa e soma só no painel geral da equipe. */
+   nota do saldo/cartão da pessoa e soma só no painel geral da equipe.
+   28/09/2026: "muitas vezes vai ter Faturamento que não terá como
+   especificar" — o gestor pode pular a escolha, e a nota nasce sem dono
+   nenhum (user_id null no banco), só possível pra pagamento='empresa'. */
 function iniciarFaturamento() {
   abrirSeletorColaborador('🏢 Faturamento — de qual colaborador?', id => {
-    abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa' });
-  });
+    abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa', semColaborador: id === null });
+  }, { semColaborador: 'Sem colaborador específico' });
 }
 
 /* Atalho direto na Início pro Admin editar nota de colaborador sem passar
@@ -2428,6 +2442,11 @@ let _pagamentoPreEscolhido = null;
 /* Faturamento (25/09/2026): pagamento='empresa' definido de fora do campo
    Pagamento (que só existe pra CV) — ver abrirFormNota/_salvarNotaInterno. */
 let _pagamentoForcado = null;
+/* Faturamento sem colaborador (28/09/2026): true quando o gestor pulou a
+   escolha de colaborador, ou está editando uma nota que já nasceu assim —
+   força user_id=null no payload final, ignorando os vários "|| user?.id"
+   que existem pra nota normal (ver _salvarNotaInterno, _cpfDoDono). */
+let _semColaboradorForcado = false;
 
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
@@ -3838,7 +3857,10 @@ function renderDashEquipe() {
   const pessoas = new Map();
   filtradas.forEach(n => {
     const uid = n.user_id;
-    const nome = uid === user?.id ? (user?.nome || 'Você') : (equipePorId[uid]?.nome || n.user_nome || 'Colaborador');
+    /* Faturamento sem colaborador (28/09/2026): só chega aqui com uid null
+       quando a nota foi lançada de propósito sem apontar ninguém. */
+    const nome = !uid ? 'Faturamento geral (sem colaborador)'
+      : uid === user?.id ? (user?.nome || 'Você') : (equipePorId[uid]?.nome || n.user_nome || 'Colaborador');
     const cur = pessoas.get(uid) || { nome, val: 0, qtd: 0 };
     cur.val += _n(n.valor); cur.qtd++;
     pessoas.set(uid, cur);
@@ -4197,8 +4219,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           ${docBadgeHTML(n)}
           ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${esc(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
-          ${!opts.semDono && _ehGestorOuAdmin() && _ehNotaDeOutroUsuario(n)
-            ? `<span class="subtipo-tag" title="Nota de outro colaborador">👤 ${esc(_rotuloProprietario(n))}</span>`
+          ${!opts.semDono && _ehGestorOuAdmin() && (_ehNotaDeOutroUsuario(n) || !n.user_id)
+            ? `<span class="subtipo-tag" title="${n.user_id ? 'Nota de outro colaborador' : 'Faturamento sem colaborador específico'}">${n.user_id ? '👤' : '🏢'} ${esc(_rotuloProprietario(n))}</span>`
             : ''}
           <span class="nota-data">${fmtData(n.data)}</span>
           ${pendSync}
@@ -6080,8 +6102,12 @@ async function abrirFormNota(dados = {}) {
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
 
+  /* Faturamento sem colaborador (28/09/2026): nova (semColaborador explícito)
+     ou edição de uma nota que já nasceu assim (id presente e user_id===null,
+     nunca undefined — dados aqui é o registro de verdade, já com a chave). */
+  _semColaboradorForcado = dados.semColaborador === true || (!!dados.id && dados.user_id === null);
   $('nf-id').value       = dados.id       || '';
-  $('nf-owner-id').value = dados.user_id || user?.id || '';
+  $('nf-owner-id').value = _semColaboradorForcado ? '' : (dados.user_id || user?.id || '');
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
   $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
   $('nf-qr-url').value   = dados.qr_url   || '';
@@ -6164,7 +6190,9 @@ async function abrirFormNota(dados = {}) {
   if (banner) banner.style.display = (isGestorEdit || isFaturamento) ? 'flex' : 'none';
   if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : 'Correção de gestor';
   if (bannerText) bannerText.textContent = isFaturamento
-    ? `Paga direto pela empresa em nome de ${_rotuloProprietario(dados)} — não entra no saldo nem no cartão dela, só no painel geral da equipe.`
+    ? (_semColaboradorForcado
+        ? 'Paga direto pela empresa, sem colaborador específico — não entra no saldo nem no cartão de ninguém, só no painel geral da equipe.'
+        : `Paga direto pela empresa em nome de ${_rotuloProprietario(dados)} — não entra no saldo nem no cartão dela, só no painel geral da equipe.`)
     : `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
   $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : (isFaturamento ? `Faturamento · ${_rotuloProprietario(dados)}` : 'Nova Nota');
 }
@@ -6233,6 +6261,7 @@ async function enriquecerViaSefaz(chave) {
 function fecharFormNota() {
   _formEsperandoLeitura = false;
   _pagamentoForcado = null;
+  _semColaboradorForcado = false;
   $('nota-form-overlay').style.display = 'none';
 }
 
@@ -6814,7 +6843,17 @@ async function _salvarNotaInterno() {
     return;
   }
 
-  const donoDaNota = { user_id: $('nf-owner-id')?.value || _notaAtual?.user_id || user?.id };
+  /* 28/09/2026: achado corrigindo o Faturamento sem colaborador — estas duas
+     linhas viviam MAIS ABAIXO (build 262), depois de já serem usadas aqui em
+     cima (donoDaNota). const/let têm TDZ: toda vez que esta função rodava com
+     data válida, `_notaAtual` estourava "Cannot access before initialization"
+     — ou seja, NENHUMA nota vinha salvando desde o build 262. Subiu pra cá,
+     antes do primeiro uso; o resto da função continua igual, só lendo o que
+     já foi declarado. */
+  const _idEdicao  = $('nf-id').value || null;
+  const _notaAtual = _notaPorId(_idEdicao);
+
+  const donoDaNota = { user_id: _semColaboradorForcado ? null : ($('nf-owner-id')?.value || _notaAtual?.user_id || user?.id) };
   const proibido = _consumidorProibido($('nf-consumidor').value, donoDaNota);
   if (proibido) {
     setLoading(false);
@@ -6838,9 +6877,8 @@ async function _salvarNotaInterno() {
   /* ANEXO OBRIGATÓRIO — nota de prestação de contas sem comprovante não vale.
      Ao EDITAR, o anexo que a nota já tem no servidor conta: depois que a foto
      sobe, o blob local é apagado e `fotoBlob` fica null. Sem essa ressalva,
-     nenhuma nota já sincronizada poderia mais ser corrigida. */
-  const _idEdicao  = $('nf-id').value || null;
-  const _notaAtual = _notaPorId(_idEdicao);
+     nenhuma nota já sincronizada poderia mais ser corrigida.
+     (_idEdicao/_notaAtual foram declarados mais acima, antes de donoDaNota) */
   const _temAnexoSalvo = !!(_notaAtual && (_notaAtual.foto_path || _notaAtual.foto_local));
   if (!fotoBlob && !_temAnexoSalvo) {
     toast('Anexe a foto ou o arquivo da nota antes de salvar', 'err');
@@ -6907,7 +6945,10 @@ async function _salvarNotaInterno() {
     }
   }
 
-  const ownerId = $('nf-owner-id').value || _notaAtual?.user_id || user?.id || null;
+  /* Faturamento sem colaborador: dono fica null de propósito — quem LANÇOU
+     (created_by) continua sendo uma pessoa real (o gestor logado), só o
+     "de quem é" (user_id) que fica em aberto. */
+  const ownerId = _semColaboradorForcado ? null : ($('nf-owner-id').value || _notaAtual?.user_id || user?.id || null);
   const createdBy = _notaAtual?.created_by || _notaAtual?.user_id || user?.id || null;
   /* 24/09/2026 — regra da empresa: a nota pode sair sem consumidor ou no
      CNPJ da Petermann & Morais. No CPF/CNPJ de terceiro ela não presta
@@ -7339,6 +7380,10 @@ function _soDigitos(v) {
 /* Dono da nota: quem gastou, não quem está com o app aberto (o gestor pode
    estar corrigindo a nota de outra pessoa). */
 function _cpfDoDono(n) {
+  /* Faturamento sem colaborador (28/09/2026): user_id explicitamente null
+     (não "ainda não escolhido") — não existe CPF de ninguém pra aplicar a
+     exceção; sem isso caía no CPF de quem está LOGADO, o que é errado aqui. */
+  if (n && n.user_id === null) return '';
   const id = n?.user_id || user?.id;
   const dono = id === user?.id ? user : equipePorId[id];
 

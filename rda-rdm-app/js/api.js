@@ -265,12 +265,16 @@ window.API = (() => {
       (await req('POST', '/notas/chave-existe', { body: { chave, ignore_id: ignoreId || null } })).existe,
     /* sobe o anexo; o servidor grava em disco e devolve { foto_path }.
        userId = dono da nota, para quando ela ainda não existe no servidor
-       (o anexo sobe antes da nota — anexo obrigatório vale na API). */
-    foto(id, blob, ext, userId) {
+       (o anexo sobe antes da nota — anexo obrigatório vale na API).
+       semColaborador (28/09/2026): Faturamento sem dono — sem isso o
+       servidor não sabe distinguir "não mandei user_id" de "esta nota é
+       de propósito sem colaborador nenhum". */
+    foto(id, blob, ext, userId, semColaborador) {
       const form = new FormData();
       form.append('file', blob, `anexo.${ext || 'jpg'}`);
       if (ext) form.append('ext', ext);
       if (userId) form.append('user_id', userId);
+      if (semColaborador) form.append('sem_colaborador', '1');
       return req('POST', `/notas/${id}/foto`, { form, timeout: 120_000 });
     },
     repararFotos: () => req('POST', '/notas/reparar-fotos'),

@@ -31,6 +31,12 @@ class Nota extends Model
        NFS-e (serviço) ou outro comprovante (recibo). */
     public const DOCUMENTOS = ['nfce', 'nfe', 'danfe', 'nfse', 'outro'];
 
+    /** Pasta de anexo para nota de Faturamento sem colaborador (28/09/2026):
+     *  user_id pode ser null só nessas notas — mas o caminho do arquivo
+     *  (FotoStorage) precisa de um nome de pasta, então usa esta em vez do
+     *  user_id de ninguém. Nunca é um id real de colaborador (UUID). */
+    public const PASTA_GERAL = 'geral';
+
     protected $table = 'notas';
 
     protected $keyType = 'string';

@@ -13,6 +13,10 @@
   let entradas = $state([]);
 
   const nome = id => !id ? '—' : (id === user?.id ? (user?.nome || 'Você') : (equipePorId[id]?.nome || 'Colaborador'));
+  /* Faturamento sem colaborador (28/09/2026): só a nota (dono = user_id)
+     pode ser null de propósito — quem editou/lançou (quem = updated_by)
+     nunca é, então continua usando nome() puro. */
+  const nomeDono = id => id === null ? 'Faturamento geral (sem colaborador)' : nome(id);
   const mesmoInstante = (a, b) => a && b && Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 3000;
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
@@ -41,7 +45,7 @@
       acao: n.deleted ? 'apagou' : (mesmoInstante(n.created_at, n.updated_at) ? 'lançou' : 'editou'),
       tipoItem: 'nota',
       quem: nome(n.updated_by),
-      dono: nome(n.user_id),
+      dono: nomeDono(n.user_id),
       resumo: `${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${esc(n.razao_social || (n.cnpj ? formatarCnpj(n.cnpj) : 'sem empresa'))} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}`,
     }));
     (repassesMudados || []).forEach(r => lista.push({
@@ -57,7 +61,7 @@
       acao: 'apagou em definitivo',
       tipoItem: 'nota',
       quem: nome(a.apagada_por),
-      dono: nome(a.user_id),
+      dono: nomeDono(a.user_id),
       resumo: 'nota apagada em definitivo — sem volta, não passou pela lixeira',
     }));
     (papelRegime || []).forEach(h => {

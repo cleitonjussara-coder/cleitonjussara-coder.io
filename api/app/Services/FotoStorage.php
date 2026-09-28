@@ -57,13 +57,20 @@ class FotoStorage
 
     public function caminho(Nota $nota, string $ext): string
     {
-        return "{$nota->user_id}/{$nota->id}.{$ext}";
+        return "{$this->pastaDe($nota)}/{$nota->id}.{$ext}";
     }
 
     /** Grava o arquivo e devolve o caminho relativo a guardar em foto_path. */
     public function salvar(Nota $nota, UploadedFile $file, ?string $extHint = null): string
     {
-        return $this->salvarPara($nota->user_id, $nota->id, $file, $extHint);
+        return $this->salvarPara($this->pastaDe($nota), $nota->id, $file, $extHint);
+    }
+
+    /** Nota de Faturamento sem colaborador (28/09/2026) não tem user_id — a
+     *  pasta do anexo cai numa pasta fixa, nunca um id de colaborador de verdade. */
+    public function pastaDe(Nota $nota): string
+    {
+        return $nota->user_id ?? Nota::PASTA_GERAL;
     }
 
     /** Idem, sem precisar da linha da nota (o anexo sobe antes dela existir). */
@@ -140,7 +147,7 @@ class FotoStorage
     /** Remove qualquer <nota_id>.* da pasta do dono. */
     public function apagarTodasVersoes(Nota $nota): void
     {
-        $this->apagarVersoesDe($nota->user_id, $nota->id);
+        $this->apagarVersoesDe($this->pastaDe($nota), $nota->id);
     }
 
     public function apagarVersoesDe(string $userId, string $notaId): void

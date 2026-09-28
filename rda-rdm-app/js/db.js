@@ -186,7 +186,10 @@ window.DB = (() => {
     const obj = {
       ...nota,                                        // spread primeiro
       id,
-      user_id    : nota.user_id || userId,
+      /* Faturamento sem colaborador (28/09/2026): user_id explicitamente
+         null (não "ainda não escolhido") tem que continuar null aqui —
+         só cai no userId de quem está logado quando a chave nem veio. */
+      user_id    : nota.user_id === undefined ? userId : nota.user_id,
       created_at : nota.created_at || now,
       updated_at : now,
       synced     : false,
@@ -569,7 +572,11 @@ window.DB = (() => {
           const payload = item.payload || null;
           if (!payload?.blob) { await _del('sync_queue', item.id); continue; }
           const nota = await _get('notas', item.entity_id);
-          if (!nota?.user_id) { await delFotoLocal(item.entity_id); await _del('sync_queue', item.id); continue; }
+          /* 28/09/2026: user_id === undefined é registro quebrado de verdade
+             (limpa e desiste, como antes). user_id === null é Faturamento
+             sem colaborador — legítimo, não é mais motivo pra descartar o
+             anexo em silêncio. */
+          if (!nota || nota.user_id === undefined) { await delFotoLocal(item.entity_id); await _del('sync_queue', item.id); continue; }
           const ext = (payload.ext || 'jpg').toLowerCase();
           const mime = MIME_POR_EXT[ext] || 'application/octet-stream';
           /* A API grava o arquivo em disco (user_id/nota_id.ext) e, se a nota
@@ -577,7 +584,7 @@ window.DB = (() => {
              não existe, o arquivo fica esperando e o upsert da nota (logo em
              seguida) o encontra pelo id — por isso vai o user_id junto. */
           const blob = payload.blob instanceof Blob ? payload.blob : new Blob([payload.blob], { type: mime });
-          const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id);
+          const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id, nota.user_id === null);
           await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
           await delFotoLocal(item.entity_id);
           await _del('sync_queue', item.id);

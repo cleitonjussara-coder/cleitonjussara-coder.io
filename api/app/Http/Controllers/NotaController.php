@@ -89,8 +89,18 @@ class NotaController extends Controller
         if ($r->input('pagamento') === 'reembolso') {
             $r->merge(['pagamento' => 'carteira']);
         }
+        /* Faturamento sem colaborador (28/09/2026): "muitas vezes vai ter
+           Faturamento que não terá como especificar" de quem é — só essa
+           nota pode nascer sem dono. String vazia normaliza pra null antes
+           de validar (o app manda '' quando o gestor não escolhe ninguém). */
+        if ($r->input('user_id') === '') {
+            $r->merge(['user_id' => null]);
+        }
         $d = $r->validate([
-            'user_id' => ['required', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
+            'user_id' => [
+                Rule::requiredIf(fn () => $r->input('pagamento') !== 'empresa'),
+                'nullable', 'string', 'size:36', Rule::exists('colaboradores', 'id'),
+            ],
             'tipo' => ['required', Rule::in(Nota::TIPOS)],
             'subtipo' => ['nullable', Rule::in(Nota::SUBTIPOS)],
             'pagamento' => ['nullable', Rule::in(Nota::PAGAMENTOS)],   // colaborador CV: cartão ou do bolso (21/09/2026)
@@ -192,7 +202,7 @@ class NotaController extends Controller
                de gravar a nota — POST /notas/{id}/foto aceita nota que ainda
                não existe). O caminho vem do disco, nunca do que o app mandou.
                Nota que já nasce na lixeira passa sem anexo: não é lançamento. */
-            $arquivo = $this->fotos->arquivoDaNota($d['user_id'], $id);
+            $arquivo = $this->fotos->arquivoDaNota($d['user_id'] ?? Nota::PASTA_GERAL, $id);
             if ($arquivo === null && ! $d['deleted']) {
                 throw ValidationException::withMessages([
                     'foto_path' => 'Anexo obrigatório: envie a foto ou o arquivo da nota antes de gravá-la.',
@@ -356,12 +366,15 @@ class NotaController extends Controller
     }
 
     /**
-     * POST /notas/{id}/foto (multipart: file, ext?, user_id?) → {foto_path}
+     * POST /notas/{id}/foto (multipart: file, ext?, user_id?, sem_colaborador?) → {foto_path}
      *
      * A nota pode ainda NÃO existir: o app sobe o anexo primeiro e grava a
      * nota depois (o upsert exige o arquivo no disco). Nesse caso o dono vem
      * em user_id (padrão: quem está logado) e o arquivo fica esperando em
      * <user_id>/<id>.<ext>; o upsert acha por arquivoDaNota().
+     *
+     * sem_colaborador=1 (28/09/2026): Faturamento sem dono — só gestor/admin,
+     * e o arquivo vai pra pasta Nota::PASTA_GERAL em vez de <user_id>/.
      */
     public function foto(Request $r, string $id): JsonResponse
     {
@@ -371,13 +384,20 @@ class NotaController extends Controller
             'file' => ['required', 'file', 'max:'.config('petermann.foto_max_kb')],
             'ext' => ['nullable', 'string', 'max:5'],
             'user_id' => ['nullable', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
+            'sem_colaborador' => ['nullable', 'boolean'],
         ]);
 
         $nota = Nota::find($id);
-        $dono = $nota ? $nota->user_id : ($r->input('user_id') ?: $u->id);
-        $this->podeGravar($u, $dono);
+        $semColaborador = $nota ? $nota->user_id === null : $r->boolean('sem_colaborador');
+        if ($semColaborador) {
+            abort_unless($u->gerencia(), 403, 'Só gestor ou admin lança Faturamento sem colaborador.');
+            $pasta = Nota::PASTA_GERAL;
+        } else {
+            $pasta = $nota ? $nota->user_id : ($r->input('user_id') ?: $u->id);
+            $this->podeGravar($u, $pasta);
+        }
 
-        $path = $this->fotos->salvarPara($dono, $id, $r->file('file'), $r->input('ext'));
+        $path = $this->fotos->salvarPara($pasta, $id, $r->file('file'), $r->input('ext'));
         try {
             $this->fotos->miniatura($path);   // pronta para a tela Arquivos; se falhar, gera depois
         } catch (\Throwable) {
@@ -417,7 +437,10 @@ class NotaController extends Controller
         return response()->json(['recuperadas' => count($recuperadas), 'notas' => $recuperadas]);
     }
 
-    private function podeGravar(Colaborador $u, string $donoId): void
+    /* $donoId nula só acontece em nota de Faturamento sem colaborador
+       (28/09/2026) — nesse caso só passa quem gerencia (a validação já
+       garante isso, aqui é a segunda trava do lado do servidor). */
+    private function podeGravar(Colaborador $u, ?string $donoId): void
     {
         abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança notas');
         abort_unless($donoId === $u->id || $u->gerencia(), 403, 'Sem permissão para esta nota');
