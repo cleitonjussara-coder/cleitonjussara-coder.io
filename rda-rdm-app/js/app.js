@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 305;
+const APP_BUILD = 306;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7398,8 +7398,8 @@ function irParaPassoRepasse(n) {
 function escolherModoRepasse(modo) {
   _modoEscolhido = true;
   setRepasseModo(modo);
-  /* no regime de cartão não há passo de aba: do "o que fazer" vai direto
-     para os campos (24/09/2026) */
+  /* recarga do cartão não tem passo de aba: do "o que fazer" vai direto
+     para os campos (24/09/2026, ajustado 28/09/2026) */
   irParaPassoRepasse(_repasseSemCategoria() ? 3 : 2);
 }
 
@@ -7447,13 +7447,14 @@ function _repasseEhCarteira(r) {
   return r && r.destino !== 'recarga';
 }
 
-/* Nenhum dinheiro do regime de cartão é lançado por aba (24/09/2026): as
-   colunas do BANCO DE DADOS — recarga e carteira — trazem só DATA e R$. E
-   no CV não existe RDA x RDM: o gasto é dividido nas quatro categorias,
-   todas juntas. _repasseDestino só é preenchido para quem é CV, então ele
-   próprio responde a pergunta. */
+/* Recarga do cartão não passa por aba (24/09/2026): a coluna do BANCO DE
+   DADOS — recarga — traz só DATA e R$, sem RDA x RDM.
+   28/09/2026, pedido do Cleiton: reembolso de carteira (destino
+   'carteira') passou a perguntar a aba também, igual pra quem é
+   RDM/RDA — antes ficava sempre RDM sem dar escolha, e "RDA não
+   aparecia" pro CV no repasse. Só recarga continua sem esse passo. */
 function _repasseSemCategoria() {
-  return _repasseDestino !== null;
+  return _repasseDestino === 'recarga';
 }
 const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
 
