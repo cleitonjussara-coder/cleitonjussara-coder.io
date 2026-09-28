@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 303;
+const APP_BUILD = 304;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5375,10 +5375,17 @@ async function iniciarQR() {
   }
   const setDiag = t => { diag.textContent = `[${APP_VERSION}·${APP_BUILD}] ` + t; };
   setDiag('Abrindo câmera…');
+  /* Atalho de "Foto OCR" some enquanto a câmera funciona e só aparece se
+     ela falhar — antes só dava pra chegar nele fechando o leitor com o X
+     primeiro (pedido do Cleiton, 28/09/2026, depois de ver o erro
+     NotAllowedError no iPhone dele). */
+  const btnOcr = $('qr-btn-ocr');
+  if (btnOcr) btnOcr.style.display = 'none';
 
   // checa suporte do navegador
   if (!navigator.mediaDevices?.getUserMedia) {
     setDiag('SEM SUPORTE a câmera neste navegador. Use "Chave" ou "Foto OCR".');
+    if (btnOcr) btnOcr.style.display = '';
     return;
   }
 
@@ -5443,7 +5450,8 @@ async function iniciarQR() {
 
   const onErro = e => {
     const nome = e?.name || e?.message || 'erro';
-    setDiag('ERRO ao abrir câmera: ' + nome + '. Toque no X e use "Chave" ou "Foto OCR".');
+    setDiag('ERRO ao abrir câmera: ' + nome + '. Use "Chave" ou "Foto OCR" abaixo.');
+    if (btnOcr) btnOcr.style.display = '';
   };
 
   // 1ª tentativa: câmera traseira em HD. Se falhar (constraint), cai p/ câmera simples.
