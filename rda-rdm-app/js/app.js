@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 301;
+const APP_BUILD = 302;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1919,6 +1919,10 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
       <div class="modal-hd"><h3>${esc(titulo)}</h3>
         <button class="btn-icon-sm" onclick="document.getElementById('seletor-colab-overlay')?.remove()">✕</button></div>
       <div class="modal-bd">
+        ${lista.length > 6 ? `
+          <input class="inp" id="seletor-colab-busca" type="text" placeholder="🔎 Buscar colaborador..."
+                 style="margin-bottom:12px" oninput="_filtrarSeletorColab(this.value)">
+        ` : ''}
         ${opts.semColaborador ? `
           <button class="btn btn-outline btn-full" style="justify-content:flex-start;margin-bottom:12px;text-align:left;border-style:dashed"
                   onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback(null)">
@@ -1927,14 +1931,33 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
           ${lista.length ? '<div style="border-top:1px solid var(--border);margin-bottom:10px"></div>' : ''}
         ` : ''}
         ${lista.map(c => `
-          <button class="btn btn-outline btn-full" style="justify-content:flex-start;margin-bottom:8px;text-align:left"
+          <button class="btn btn-outline btn-full" data-busca="${esc(`${c.nome || ''} ${c.email || ''}`)}" style="justify-content:flex-start;margin-bottom:8px;text-align:left"
                   onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback('${c.id}')">
             ${esc(c.nome || c.email)} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${esc(c.email || '')}</span>
           </button>`).join('')}
+        <p id="seletor-colab-vazio" style="display:none;opacity:.7;font-size:14px;text-align:center;margin:10px 0 0">Nenhum colaborador encontrado.</p>
       </div>
     </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.getElementById('seletor-colab-busca')?.focus();
+}
+
+/* Filtro em tempo real do seletor de colaborador (28/09/2026, pedido do
+   Cleiton — a lista já passa de 20 nomes e rolar pra achar alguém era
+   ruim). Ignora acento pra "jose"/"José" acharem a mesma pessoa. */
+function _filtrarSeletorColab(termo) {
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const t = norm(termo);
+  const botoes = document.querySelectorAll('#seletor-colab-overlay [data-busca]');
+  let algumVisivel = false;
+  botoes.forEach(btn => {
+    const bate = !t || norm(btn.dataset.busca).includes(t);
+    btn.style.display = bate ? '' : 'none';
+    if (bate) algumVisivel = true;
+  });
+  const vazio = document.getElementById('seletor-colab-vazio');
+  if (vazio) vazio.style.display = (botoes.length && !algumVisivel) ? '' : 'none';
 }
 
 /* Faturamento (25/09/2026): nota paga direto pela empresa, sem passar pelo
