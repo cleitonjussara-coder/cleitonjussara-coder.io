@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 315;
+const APP_BUILD = 316;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1170,14 +1170,22 @@ async function loginSocial(id) {
   /* o navegador está saindo para o Google — o loading fica */
 }
 
+/* "Usar sem conta" é ferramenta de teste (injetar dado fake sem precisar de
+   login de verdade) — não faz sentido pro colaborador real. Fica visível em
+   teste.pmservicosagronomicos.com.br e localhost; some em produção
+   (28/09/2026, pedido do Cleiton). */
+function _mostrarModoLocal() {
+  return !!window.API?.HOMOLOG || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+}
+
 function renderAuth(mode='login') {
   authMode = mode;
   const rodape = `
     <div style="margin-top:8px;text-align:center">
       <hr class="auth-hr">
       <div class="install-slot"></div>
-      <button class="btn btn-outline btn-full auth-local"
-              onclick="usarSemConta()">Usar sem conta (modo local)</button>
+      ${_mostrarModoLocal() ? `<button class="btn btn-outline btn-full auth-local"
+              onclick="usarSemConta()">Usar sem conta (modo local)</button>` : ''}
       <p class="auth-versao">Versão ${APP_VERSION}</p>
     </div>`;
 
@@ -1248,8 +1256,8 @@ function renderAuth(mode='login') {
     <div style="margin-top:8px;text-align:center">
       <hr class="auth-hr">
       <div class="install-slot"></div>
-      <button class="btn btn-outline btn-full auth-local"
-              onclick="usarSemConta()">Usar sem conta (modo local)</button>
+      ${_mostrarModoLocal() ? `<button class="btn btn-outline btn-full auth-local"
+              onclick="usarSemConta()">Usar sem conta (modo local)</button>` : ''}
     </div>
   `;
   _pintarBotaoInstalar();
