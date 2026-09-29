@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 311;
+const APP_BUILD = 312;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2848,7 +2848,12 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
   const repasseMes = _soma(repasses.filter(o => eAtual(o) && _repasseEhRecebido(o) && _repasseEhCarteira(o)));
   const saldoMes   = repasseMes - gastoMes;
   const saldoLiquido = pendenciaAnterior + saldoMes;
-  return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido };
+  /* 28/09/2026, pedido do Cleiton: quanto do gasto do mês foi no cartão
+     corporativo x do bolso — só faz diferença pra quem é CV (RDM/RDA não
+     usa cartão, _notaDoCartao dá sempre true e os dois somam pro mesmo). */
+  const gastoCartaoMes = _soma(notas.filter(o => eAtual(o) && _naoEhFaturamento(o) && _notaDoCartao(o)));
+  const gastoBolsoMes  = gastoMes - gastoCartaoMes;
+  return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido, gastoCartaoMes, gastoBolsoMes };
 }
 
 /* ── Nota com data implausível ───────────────────────────────
@@ -3465,6 +3470,7 @@ function renderHome() {
         </div>
         <span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
         <span class="db-kpi-sub">Gasto ${brl(rdmAcc.gastoMes)} · Recebido ${brl(rdmAcc.repasseMes)}</span>
+        ${_usaCartao() ? `<span class="db-kpi-sub">💳 No cartão ${brl(rdmAcc.gastoCartaoMes)} · 👛 Do bolso ${brl(rdmAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi rda" onclick="switchView('saldo')">
         <div class="db-kpi-top">
@@ -3476,6 +3482,7 @@ function renderHome() {
         </div>
         <span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
         <span class="db-kpi-sub">Gasto ${brl(rdaAcc.gastoMes)} · Recebido ${brl(rdaAcc.repasseMes)}</span>
+        ${_usaCartao() ? `<span class="db-kpi-sub">💳 No cartão ${brl(rdaAcc.gastoCartaoMes)} · 👛 Do bolso ${brl(rdaAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
