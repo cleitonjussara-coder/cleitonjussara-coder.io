@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 309;
+const APP_BUILD = 310;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4421,7 +4421,10 @@ function renderSaldo() {
     return v>0 ? `<div class="sub-row"><span>${s.lbl}</span><span>${brl(v)}</span></div>` : '';
   }).join('');
 
-  const repHtml = rs.length ? rs.map(r => {
+  /* 28/09/2026, pedido do Cleiton: a lista misturava RDA e RDM em ordem
+     cronológica só — os cards de saldo já são separados por aba, a lista
+     ficou separada também, pra não precisar catar pelo selinho colorido. */
+  const itemHtml = r => {
     const pedido = _repasseEhPedido(r);
     const cvR = _ehCV();
     const label = pedido ? 'Pedido' : 'Recebido';
@@ -4439,7 +4442,14 @@ function renderSaldo() {
         <span class="rep-val">${brl(r.valor)}</span>
         <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
       </div>`;
-  }).join('') : '<p class="muted-p">Nenhum repasse registrado.</p>';
+  };
+  const secaoTipo = (tipo, lbl) => {
+    const doTipo = rs.filter(r => r.tipo === tipo);
+    return `
+    <div style="font-weight:800;font-size:14px;color:var(--text2);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.3px">${lbl} · ${doTipo.length}</div>
+    ${doTipo.length ? doTipo.map(itemHtml).join('') : `<p class="muted-p">Nenhum repasse ${tipo} neste mês.</p>`}`;
+  };
+  const repHtml = rs.length ? secaoTipo('RDM', '💼 RDM') + secaoTipo('RDA', '🍽️ RDA') : '<p class="muted-p">Nenhum repasse registrado.</p>';
 
   /* card independente do tipo */
   const cardTipo = (lbl, d) => {
