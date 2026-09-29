@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 308;
+const APP_BUILD = 309;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4517,13 +4517,13 @@ function renderSaldo() {
       </div>
     </div>
     <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
-      <div class="saldo-label">👛 Repasses · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
+      <div class="saldo-label">👛 Saldo de RDM Recebido · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
       <div class="saldo-val">${brl(aReceber)}</div>
       <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
       <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
     </div>
     <div class="saldo-card">
-      <div class="saldo-label">🍽️ Saldo de RDA Recebido</div>
+      <div class="saldo-label">🍽️ Saldo de RDA Recebido · ${filAno}</div>
       <div class="saldo-val">${brl(rdaRecAno)}</div>
       <div class="saldo-detail"><span>No mês <b>${brl(rdaRecMes)}</b></span><span>No ano <b>${brl(rdaRecAno)}</b></span></div>
     </div>
