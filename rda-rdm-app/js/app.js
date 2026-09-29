@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 312;
+const APP_BUILD = 313;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2799,8 +2799,13 @@ function _agregaPeriodo(mes, ano, modo) {
   const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t && _naoEhFaturamento(x)));
   const rdmG = porTipo(ns,'RDM'), rdaG = porTipo(ns,'RDA');
   const rdmR = porTipo(rs,'RDM'), rdaR = porTipo(rs,'RDA');
+  /* 28/09/2026: quanto do gasto foi no cartão corporativo x do bolso — só
+     diferencia pra quem é CV, mesma ideia do _saldoAcumuladoAte. */
+  const gastoCartao = _soma(ns.filter(x => _naoEhFaturamento(x) && _notaDoCartao(x)));
+  const gasto = rdmG + rdaG;
   return { ns, rs, rdmG, rdaG, rdmR, rdaR,
-           gasto: rdmG + rdaG, recebido: rdmR + rdaR };
+           gasto, recebido: rdmR + rdaR,
+           gastoCartao, gastoBolso: gasto - gastoCartao };
 }
 
 /* Resumo por trimestre do exercício, como o quadro da aba BANCO DE DADOS.
@@ -3447,6 +3452,7 @@ function renderHome() {
         <span>${rdmAcc.pendenciaAnterior !== 0 || rdaAcc.pendenciaAnterior !== 0
           ? `<span>Pend. anterior <b style="color:${(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior) < 0 ? 'var(--danger)' : 'inherit'}">${brl(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior)}</b></span>`
           : ''}</span>
+        ${_usaCartao() ? `<span>💳 No cartão <b>${brl(A.gastoCartao)}</b></span><span>👛 Do bolso <b>${brl(A.gastoBolso)}</b></span>` : ''}
       </div>
       <div class="db-consumo">
         <div class="db-consumo-fill ${consumoPct > 100 ? 'over' : ''}"
