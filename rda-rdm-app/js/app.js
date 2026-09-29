@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 306;
+const APP_BUILD = 307;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4480,8 +4480,13 @@ function renderSaldo() {
     const rsAno = repasses.filter(r => !r.deleted && r.ano === filAno);
     /* 24/09/2026: recarga do cartão não é repasse de carteira — sem separar,
        o quadro de repasses dizia que a pessoa já tinha recebido o que na
-       verdade foi para o cartão. */
-    const soCarteira = _repasseEhCarteira;
+       verdade foi para o cartão.
+       28/09/2026: repasse de carteira agora pode ser RDM ou RDA (pedido do
+       Cleiton — tem colaborador CV que recebe o RDA à parte, em dinheiro,
+       enquanto o RDM fica todo no cartão). O reembolso deste card é só do
+       que foi pago do bolso (RDM) — o RDA vira o card próprio abaixo, senão
+       o RDA recebido abatia um "a receber" que não tem nada a ver com ele. */
+    const soCarteira = r => _repasseEhCarteira(r) && r.tipo !== 'RDA';
     const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soCarteira(r)));
     /* O que a empresa deve é o que saiu do bolso menos o que ela já pagou —
        a mesma conta da planilha (CV REEMBOLSO menos "REEMBOLSO DE:"). */
@@ -4489,6 +4494,9 @@ function renderSaldo() {
     const saldoCartao = _saldoCartao();
     const aReceber = bolsoAno - recAno;
     const cat = f => soma(ns.filter(n => semCarteira(n) && f(n)));
+    const rdaCarteira = r => _repasseEhCarteira(r) && r.tipo === 'RDA';
+    const rdaRecMes = soma(rs.filter(r => _repasseEhRecebido(r) && rdaCarteira(r)));
+    const rdaRecAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && rdaCarteira(r)));
     cardsCV = `
   <div class="saldo-grid">
     <div class="saldo-card ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? 'neg' : ''}">
@@ -4513,6 +4521,11 @@ function renderSaldo() {
       <div class="saldo-val">${brl(aReceber)}</div>
       <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
       <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
+    </div>
+    <div class="saldo-card">
+      <div class="saldo-label">🍽️ Saldo de RDA Recebido</div>
+      <div class="saldo-val">${brl(rdaRecAno)}</div>
+      <div class="saldo-detail"><span>No mês <b>${brl(rdaRecMes)}</b></span><span>No ano <b>${brl(rdaRecAno)}</b></span></div>
     </div>
   </div>`;
   }
