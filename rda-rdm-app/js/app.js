@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 314;
+const APP_BUILD = 315;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4537,7 +4537,7 @@ function renderSaldo() {
     <div class="saldo-card">
       <div class="saldo-label">💳 Gasto no cartão · ${MESES[filMes-1]}</div>
       <div class="saldo-val">${brl(cartaoMes)}</div>
-      <div class="saldo-detail"><span>No ano <b>${brl(cartaoAno)}</b></span><span>Do bolso no mês <b>${brl(bolsoMes)}</b></span></div>
+      <div class="saldo-detail"><span>No ano <b>${brl(cartaoAno)}</b></span><span>Carteira no mês <b>${brl(bolsoMes)}</b></span></div>
       <div class="sub-breakdown">
         <div class="sub-row"><span>Alimentação (RDA)</span><span>${brl(cat(n => n.tipo === 'RDA'))}</span></div>
         <div class="sub-row"><span>Abastecimento</span><span>${brl(cat(n => n.subtipo === 'Abastecimento'))}</span></div>
@@ -4548,7 +4548,7 @@ function renderSaldo() {
     <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
       <div class="saldo-label">👛 Saldo de RDM Recebido · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
       <div class="saldo-val">${brl(aReceber)}</div>
-      <div class="saldo-detail"><span>Notas do bolso <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
+      <div class="saldo-detail"><span>Notas Carteira <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
       <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
     </div>
     <div class="saldo-card">
