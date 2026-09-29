@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 316;
+const APP_BUILD = 317;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -956,7 +956,16 @@ function showTela(t) {
    vira instrução. */
 let _promptInstalar = null;
 
-const _ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+/* iPadOS 13+ se apresenta como Macintosh; o que o denuncia é a tela de toque. */
+const _ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (/macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const _ehAndroid = () => /android/i.test(navigator.userAgent);
+const _ehMac = () => /macintosh/i.test(navigator.userAgent) && !_ehIOS();
+const _ehFirefox = () => /firefox|fxios/i.test(navigator.userAgent);
+const _ehEdge = () => /edg\//i.test(navigator.userAgent);
+const _ehSafariMac = () => _ehMac() && /safari/i.test(navigator.userAgent)
+  && !/chrome|chromium|crios|edg\/|firefox|opr\//i.test(navigator.userAgent);
+const _ehCelular = () => _ehIOS() ? /iphone|ipod/i.test(navigator.userAgent) : _ehAndroid();
 const _jaInstalado = () =>
   window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
@@ -980,7 +989,7 @@ function _pintarBotaoInstalar() {
   if (!_jaInstalado()) {
     const acao = _promptInstalar ? 'instalarApp()' : 'comoInstalar()';
     html = `<button class="btn btn-outline btn-full" style="margin-bottom:8px"
-              onclick="${acao}">📱 Instalar app no celular</button>`;
+              onclick="${acao}">Instalar app</button>`;
   }
   slots.forEach(s => { s.innerHTML = html; });
 }
@@ -1001,22 +1010,53 @@ async function instalarApp() {
 }
 
 function comoInstalar() {
-  alert(_ehIOS()
-    ? 'Para instalar no iPhone:\n\n'
-      + '1. Abra este link no SAFARI (pelo Chrome a opção não aparece)\n'
+  const aviso = '\n\nSe a opção não aparecer: o app já pode estar instalado (procure o ícone) '
+    + 'ou a aba é anônima (abra numa aba normal). Se nenhum for o caso, use '
+    + '"Diagnóstico de instalação" no Perfil.';
+  let msg;
+  if (_ehIOS()) {
+    const aparelho = _ehCelular() ? 'iPhone' : 'iPad';
+    msg = `Para instalar no ${aparelho}:\n\n`
+      + '1. Abra este link no SAFARI (pelo Chrome a opção pode não aparecer)\n'
       + '2. Toque em Compartilhar — o quadrado com a seta para cima\n'
       + '3. Role a lista e toque em "Adicionar à Tela de Início"\n'
       + '4. Toque em Adicionar\n\n'
-      + 'O ícone aparece junto dos outros apps.'
-    : 'Para instalar no Android:\n\n'
-      + '1. Abra o menu do navegador — os três pontinhos (⋮)\n'
-      + '2. Toque em "Adicionar à tela inicial" ou "Instalar app"\n'
+      + 'O ícone aparece junto dos outros apps.';
+  } else if (_ehAndroid()) {
+    msg = _ehFirefox()
+      ? 'Para instalar no Android (Firefox):\n\n'
+        + '1. Abra o menu — os três pontinhos (⋮)\n'
+        + '2. Toque em "Instalar"\n'
+        + '3. Confirme' + aviso
+      : 'Para instalar no Android:\n\n'
+        + '1. Abra o menu do navegador — os três pontinhos (⋮)\n'
+        + '2. Toque em "Adicionar à tela inicial" ou "Instalar app"\n'
+        + '3. Confirme\n\n'
+        + 'A opção NÃO APARECE no menu quando "Site para computador" está marcado '
+        + '— desmarque e recarregue.' + aviso;
+  } else if (_ehSafariMac()) {
+    msg = 'Para instalar no Mac (Safari 17 ou mais novo):\n\n'
+      + '1. No menu de cima, clique em Arquivo\n'
+      + '2. Clique em "Adicionar ao Dock"\n'
       + '3. Confirme\n\n'
-      + 'A opção NÃO APARECE no menu quando:\n\n'
-      + '• "Site para computador" está marcado no mesmo menu — desmarque e recarregue;\n'
-      + '• o app já está instalado — procure o ícone na tela inicial;\n'
-      + '• a aba é anônima — abra numa aba normal.\n\n'
-      + 'Se nenhum for o caso, use "Diagnóstico de instalação" no Perfil.');
+      + 'No Chrome ou Edge o botão instala direto.';
+  } else if (_ehFirefox()) {
+    msg = 'O Firefox no computador não instala aplicativos.\n\n'
+      + 'Abra este endereço no Chrome ou no Edge e use o botão "Instalar app" — '
+      + 'ou continue usando pelo navegador, funciona igual.';
+  } else if (_ehEdge()) {
+    msg = 'Para instalar no computador (Edge):\n\n'
+      + '1. Clique nos três pontinhos (⋯) no canto superior direito\n'
+      + '2. Aplicativos → "Instalar este site como um aplicativo"\n'
+      + '3. Confirme\n\n'
+      + 'Também vale o ícone de instalar na barra de endereço.' + aviso;
+  } else {
+    msg = 'Para instalar no computador (Chrome):\n\n'
+      + '1. Clique no ícone de instalar na barra de endereço (à direita), ou nos três pontinhos (⋮)\n'
+      + '2. "Transmitir, salvar e compartilhar" → "Instalar página como app"\n'
+      + '3. Confirme' + aviso;
+  }
+  alert(msg);
 }
 
 /* Mostra o que o NAVEGADOR DESTE APARELHO pensa da instalação. Existe
