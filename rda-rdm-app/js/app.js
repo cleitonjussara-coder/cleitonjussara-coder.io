@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 310;
+const APP_BUILD = 311;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2793,7 +2793,9 @@ function _agregaPeriodo(mes, ano, modo) {
      GASTO (rdmG/rdaG/gasto) que não conta Faturamento como despesa da
      pessoa (25/09/2026). */
   const ns = notas.filter(doPeriodo);
-  const rs = repasses.filter(doPeriodo).filter(_repasseEhRecebido);
+  /* recarga do cartão (CV) não é "recebido" da pessoa — vai pro cartão, não
+     pra conta dela (28/09/2026, mesmo ajuste do _saldoAcumuladoAte). */
+  const rs = repasses.filter(doPeriodo).filter(_repasseEhRecebido).filter(_repasseEhCarteira);
   const porTipo = (arr,t) => _soma(arr.filter(x => x.tipo === t && _naoEhFaturamento(x)));
   const rdmG = porTipo(ns,'RDM'), rdaG = porTipo(ns,'RDA');
   const rdmR = porTipo(rs,'RDM'), rdaR = porTipo(rs,'RDA');
@@ -2834,12 +2836,16 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
   const ePassado  = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) < targetKey);
   const eAtual    = o => !o.deleted && (tipo ? o.tipo === tipo : true) && ((o.ano * 12 + o.mes) === targetKey);
   /* notas: Faturamento (pagamento='empresa') não é gasto do colaborador.
-     repasses não tem campo pagamento, então o filtro não afeta eles. */
+     repasses não tem campo pagamento, então o filtro não afeta eles.
+     28/09/2026: recarga do cartão (CV) não é dinheiro que a pessoa recebeu
+     — vai direto pro cartão, não pra conta dela — então não entra como
+     "Recebido" aqui. Pra quem é RDM/RDA (destino sempre null) isso não
+     muda nada, _repasseEhCarteira já deixa passar. */
   const gastosPassados   = _soma(notas.filter(o => ePassado(o) && _naoEhFaturamento(o)));
-  const repassesPassados = _soma(repasses.filter(o => ePassado(o) && _repasseEhRecebido(o)));
+  const repassesPassados = _soma(repasses.filter(o => ePassado(o) && _repasseEhRecebido(o) && _repasseEhCarteira(o)));
   const pendenciaAnterior = repassesPassados - gastosPassados;
   const gastoMes   = _soma(notas.filter(o => eAtual(o) && _naoEhFaturamento(o)));
-  const repasseMes = _soma(repasses.filter(o => eAtual(o) && _repasseEhRecebido(o)));
+  const repasseMes = _soma(repasses.filter(o => eAtual(o) && _repasseEhRecebido(o) && _repasseEhCarteira(o)));
   const saldoMes   = repasseMes - gastoMes;
   const saldoLiquido = pendenciaAnterior + saldoMes;
   return { pendenciaAnterior, gastoMes, repasseMes, saldoMes, saldoLiquido };
