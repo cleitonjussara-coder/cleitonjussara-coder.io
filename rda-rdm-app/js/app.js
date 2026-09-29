@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 307;
+const APP_BUILD = 308;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4434,7 +4434,7 @@ function renderSaldo() {
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
         <div style="flex:1;min-width:0">
           <div class="rep-desc">${desc}</div>
-          <div style="font-size:13px;color:var(--text2);margin-top:2px">${label} · ${detail}</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:2px">${fmtDataBR(r.data)} · ${label} · ${detail}</div>
         </div>
         <span class="rep-val">${brl(r.valor)}</span>
         <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
