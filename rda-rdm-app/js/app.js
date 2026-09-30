@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 323;
+const APP_BUILD = 324;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5519,7 +5519,8 @@ async function iniciarQR() {
         zoomEl.oninput = () => track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
         zoomEl.parentElement.style.display = 'flex';
       } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
-      /* 30/09/2026: o texto "Leitor nativo do Android ativo" saiu — aparecia até no iOS e não serve ao usuário. */
+      /* 30/09/2026: só o texto "Leitor nativo do Android ativo" saiu (aparecia até no iOS); "Leitor: jsQR" continua. */
+      _detectorNativo().then(d => { const st = $('qr-motor'); if (st) st.textContent = d ? '' : 'Leitor: jsQR'; });
     } catch (_) {}
 
     const start = () => {
