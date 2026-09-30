@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 318;
+const APP_BUILD = 319;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5477,7 +5477,7 @@ async function iniciarQR() {
      28/09/2026, depois de ver o erro NotAllowedError no iPhone dele). */
   const btnOcr   = $('qr-btn-ocr');
   const btnRetry = $('qr-btn-retry');
-  if (btnOcr)   btnOcr.style.display = 'none';
+  if (btnOcr)   btnOcr.style.display = '';   // "Tirar foto" sempre visível (30/09/2026)
   if (btnRetry) btnRetry.style.display = 'none';
 
   // checa suporte do navegador
