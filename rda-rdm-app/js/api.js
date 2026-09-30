@@ -234,7 +234,7 @@ window.API = (() => {
     /* 20/09/2026: desativar/reativar e exclusão em duas confirmações */
     listTodos: () => req('GET', '/colaboradores', { query: { todos: '1' } }),
     ativo: (id, ativo) => req('PATCH', `/colaboradores/${id}/ativo`, { body: { ativo } }),
-    excluir: id => req('POST', `/colaboradores/${id}/excluir`, { body: {}, timeout: 120_000 }),
+    excluir: (id, confirmacao) => req('POST', `/colaboradores/${id}/excluir`, { body: { confirmacao }, timeout: 120_000 }),
     cancelarExclusao: id => req('DELETE', `/colaboradores/${id}/excluir`),
     /* 22/09/2026: gestor confirma (ou recusa) a entrada de cadastro novo */
     confirmar: (id, aceita = true) => req('POST', `/colaboradores/${id}/confirmar`, { body: { aceita } }),

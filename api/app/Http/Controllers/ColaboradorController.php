@@ -193,7 +193,8 @@ class ColaboradorController extends Controller
 
     /**
      * POST /colaboradores/{id}/excluir — apaga o colaborador e tudo dele na
-     * hora → {status:'excluido', …}. Só o gestor, nunca a si mesmo.
+     * hora → {status:'excluido', …}. Só o gestor, nunca a si mesmo, e com
+     * body {confirmacao:'EXCLUIR'}.
      * (30/09/2026: deixou de exigir a 2ª pessoa; o app pede confirmação.)
      */
     public function excluir(Request $r, string $id): JsonResponse
@@ -202,6 +203,10 @@ class ColaboradorController extends Controller
         abort_unless($u->role === 'gestor', 403, 'Só o gestor exclui colaborador');
         abort_if($id === $u->id, 422, 'Você não pode excluir a si mesmo');
         $alvo = Colaborador::findOrFail($id);
+        /* 30/09/2026: a confirmação é digitar EXCLUIR. O app pede, mas o
+           servidor confere também — chamada direta sem a palavra não apaga. */
+        $d = $r->validate(['confirmacao' => ['required', 'string']]);
+        abort_unless(mb_strtoupper(trim($d['confirmacao'])) === 'EXCLUIR', 422, 'Digite EXCLUIR para confirmar');
 
         /* executa */
         $contagem = DB::transaction(function () use ($alvo) {

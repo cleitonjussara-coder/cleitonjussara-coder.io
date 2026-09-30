@@ -709,7 +709,7 @@ window.Gestor = (() => {
             <label class="lbl" style="color:var(--danger)">Excluir de vez (limpeza do banco)</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               Apaga o colaborador e <b>tudo</b> dele: notas, anexos, repasses, KM e ponto. Não tem volta.
-              Só o gestor exclui. Pede uma confirmação antes; não pede e-mail nem senha.
+              Só o gestor exclui. Para confirmar, é preciso <b>digitar EXCLUIR</b>; não pede e-mail nem senha.
             </p>
             <button class="btn btn-danger-outline btn-full" id="g-excluir">🗑️ Excluir colaborador</button>
           </div>` : ''}`}
@@ -758,17 +758,19 @@ window.Gestor = (() => {
 
     const btnExcluir = ov.querySelector('#g-excluir');
     if (btnExcluir) btnExcluir.onclick = async () => {
-      if (!confirm(`EXCLUIR COLABORADOR
+      const resposta = window.prompt(`EXCLUIR COLABORADOR
 
 ${colab.nome || ''}
 ${colab.email}
 
 Serão apagados AGORA: todas as notas e anexos, repasses, KM e ponto. Não tem volta.
 
-Confirmar exclusão?`)) return;
+Digite EXCLUIR para confirmar.`, '');
+      if (resposta === null) return;
+      if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') { toast('Exclusão cancelada — a palavra não confere', 'err'); return; }
       setLoading(true);
       try {
-        const r = await sb.colaboradores.excluir(colab.id);
+        const r = await sb.colaboradores.excluir(colab.id, 'EXCLUIR');
         try { await DB.purgeNotasDeUsuario?.(colab.id); } catch (_) {}
         alert(`Colaborador excluído.
 Notas: ${r.notas ?? 0} · Repasses: ${r.repasses ?? 0} · KM: ${r.km ?? 0} · Ponto: ${r.pontos ?? 0}`);
