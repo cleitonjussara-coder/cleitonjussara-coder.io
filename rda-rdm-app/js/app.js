@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 317;
+const APP_BUILD = 318;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5459,12 +5459,18 @@ async function iniciarQR() {
     diag.id = 'qr-diag';
     diag.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:5;'
       + 'background:rgba(0,0,0,.78);color:#7CFC00;font-size:15.5px;font-weight:700;'
-      + 'padding:10px 12px;text-align:center;font-family:monospace;line-height:1.45;'
+      + 'padding:10px 64px 10px 12px;text-align:center;font-family:monospace;line-height:1.45;'
       + 'padding-top:calc(10px + env(safe-area-inset-top,0px));';
     $('qr-overlay').appendChild(diag);
   }
-  const setDiag = t => { diag.textContent = `[${APP_VERSION}·${APP_BUILD}] ` + t; };
-  setDiag('Abrindo câmera…');
+  /* O banner cobria o X que fecha o leitor (30/09/2026, pedido do Cleiton):
+     agora só aparece quando há ERRO. O medidor ao vivo segue rodando, mas
+     escondido — use setDiag(t, true) para mostrar. */
+  const setDiag = (t, visivel = true) => {
+    diag.textContent = `[${APP_VERSION}·${APP_BUILD}] ` + t;
+    diag.style.display = visivel ? 'block' : 'none';
+  };
+  setDiag('Abrindo câmera…', false);
   /* Atalhos de "Foto OCR" e "Tentar de novo" somem enquanto a câmera
      funciona e só aparecem se ela falhar — antes só dava pra chegar no
      OCR fechando o leitor com o X primeiro (pedido do Cleiton,
@@ -5536,7 +5542,7 @@ async function iniciarQR() {
       const tr = stream.getVideoTracks()[0] || {};
       const preto = !video.videoWidth;
       setDiag(`${video.videoWidth||0}x${video.videoHeight||0} · play=${!video.paused} · rs=${video.readyState} · cam=${tr.readyState||'?'}/${tr.enabled?'on':'off'}${tr.muted?'/MUTED':''}`
-        + (preto ? '  ⟵ sem imagem (toque na tela)' : ''));
+        + (preto ? '  ⟵ sem imagem (toque na tela)' : ''), false);
     }, 400);
   };
 
@@ -5589,7 +5595,7 @@ async function loopQR(ctx, video, canvas) {
     await _lerFrameQR(ctx, video, canvas);
   } catch (e) {
     const d = document.getElementById('qr-diag');
-    if (d) d.textContent = `[${APP_VERSION}·${APP_BUILD}] ERRO na leitura: ${e?.message || e}`;
+    if (d) { d.textContent = `[${APP_VERSION}·${APP_BUILD}] ERRO na leitura: ${e?.message || e}`; d.style.display = 'block'; }
     console.error('loopQR:', e);
   }
   if (qrStream) qrFrame = requestAnimationFrame(() => loopQR(ctx, video, canvas));
