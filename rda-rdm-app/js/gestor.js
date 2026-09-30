@@ -705,14 +705,14 @@ window.Gestor = (() => {
             </p>
             <button class="btn btn-outline btn-full" id="g-ativo">${inativo ? '↩️ Reativar colaborador' : '🚫 Desativar colaborador'}</button>
           </div>
-          <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+          ${eu.role === 'gestor' ? `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl" style="color:var(--danger)">Excluir de vez (limpeza do banco)</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               Apaga o colaborador e <b>tudo</b> dele: notas, anexos, repasses, KM e ponto. Não tem volta.
-              Pede uma confirmação antes; não pede e-mail nem senha.
+              Só o gestor exclui. Pede uma confirmação antes; não pede e-mail nem senha.
             </p>
             <button class="btn btn-danger-outline btn-full" id="g-excluir">🗑️ Excluir colaborador</button>
-          </div>`}
+          </div>` : ''}`}
         </div>
         <div class="modal-ft">
           <button class="btn btn-outline" id="g-cancel">Fechar</button>
