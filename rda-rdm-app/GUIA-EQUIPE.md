@@ -103,7 +103,7 @@ As fotos ficam no **servidor da empresa** (não no Google Drive). Fotos entram j
 - **Equipe**: resumo do mês, evolução do ano e um cartão por colaborador (🔍 busca por nome/e-mail). Tocar no cartão abre o **detalhe**: foto, atalhos (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências, RDM por categoria, gasto no ano, e as notas e repasses do mês.
 - **📗 Excel** e **📕 PDF** no topo da Equipe: exportação e **Relatório da Equipe** do mês.
 - **Arquivos** (Início → 📁): as notas de cada colaborador por mês, em miniatura, e o **ZIP** do mês ou do ano já nas pastas do modelo da empresa, com a Planilha CV dentro.
-- **✏️ no cartão**: papel/núcleo (admin), **Desativar** quem saiu (não entra mais; histórico fica) ou **Excluir de vez** (apaga tudo; exige duas pessoas — um gestor/admin pede, outro confirma).
+- **✏️ no cartão**: papel/núcleo (admin), **Desativar** quem saiu (não entra mais; histórico fica) ou **Excluir de vez** (apaga tudo, sem volta; o app pede uma confirmação).
 - **Admin — Perfil → Backup**: backup automático todo domingo (banco + fotos), download pelo app; erros do servidor chegam por e-mail.
 - Em **Minhas notas**, Painel, Saldo e Início o gestor/admin vê **só as próprias**; a equipe é vista na aba **Equipe**.
 

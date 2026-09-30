@@ -256,7 +256,7 @@
       <p>Em <b>Equipe → ✏️</b> no cartão da pessoa (gestor ou admin):</p>\r
       <ul>\r
         <li><b>Desativar colaborador</b> — a pessoa não entra mais no app e sai das listas; as notas e o histórico dela continuam no sistema. Os desativados ficam na seção <b>🚫 Desativados</b>, no fim da Equipe, de onde dá para <b>Reativar</b>.</li>\r
-        <li><b>Excluir de vez (limpeza do banco)</b> — apaga o colaborador e <b>tudo</b> dele (notas, anexos, repasses, KM, ponto). Não tem volta, por isso exige <b>duas pessoas</b>: um gestor/admin <b>pede</b> e <b>outro</b> gestor/admin abre o mesmo cartão e <b>confirma</b> — só um "Confirmar?" em cada etapa, sem digitar nada. Enquanto falta a 2ª confirmação, o cartão mostra <b>⏳ exclusão</b> e o pedido pode ser cancelado.</li>\r
+        <li><b>Excluir de vez (limpeza do banco)</b> — apaga o colaborador e <b>tudo</b> dele (notas, anexos, repasses, KM, ponto). Não tem volta: o app pede <b>uma confirmação</b> mostrando o nome e o e-mail da pessoa (sem digitar nada) e apaga na hora.</li>\r
       </ul>\r
       <p>Ninguém desativa nem exclui a si mesmo.</p>\r
     </div>\r

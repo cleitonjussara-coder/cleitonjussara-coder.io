@@ -21,8 +21,9 @@ use Illuminate\Validation\Rule;
  *   • desativar/reativar (gestor ou admin) — a pessoa não entra mais e some
  *     das listas, mas o histórico dela fica;
  *   • excluir de vez — apaga TUDO (notas, anexos, repasses, km, pontos,
- *     foto de perfil, tokens) e exige DUAS pessoas: um gestor/admin pede,
- *     OUTRO gestor/admin confirma. Ninguém exclui a si mesmo.
+ *     foto de perfil, tokens). Desde 30/09/2026 o gestor/admin exclui direto,
+ *     numa chamada só (a confirmação é na tela do app); antes exigia DUAS
+ *     pessoas. Ninguém exclui a si mesmo.
  */
 class ColaboradorController extends Controller
 {
@@ -191,10 +192,9 @@ class ColaboradorController extends Controller
     }
 
     /**
-     * POST /colaboradores/{id}/excluir
-     * 1ª chamada (gestor/admin): registra o pedido → {status:'aguardando'}.
-     * 2ª chamada por OUTRO gestor/admin: apaga tudo → {status:'excluido', …}.
-     * Quem pediu pode chamar de novo, mas não confirma o próprio pedido.
+     * POST /colaboradores/{id}/excluir — apaga o colaborador e tudo dele na
+     * hora → {status:'excluido', …}. Só gestor/admin, nunca a si mesmo.
+     * (30/09/2026: deixou de exigir a 2ª pessoa; o app pede confirmação.)
      */
     public function excluir(Request $r, string $id): JsonResponse
     {
@@ -202,20 +202,8 @@ class ColaboradorController extends Controller
         abort_unless($u->gerencia(), 403, 'Só gestor ou admin exclui colaborador');
         abort_if($id === $u->id, 422, 'Você não pode excluir a si mesmo');
         $alvo = Colaborador::findOrFail($id);
-        /* sem digitar e-mail (pedido do usuário 20/09): a proteção é a
-           2ª pessoa, não a digitação */
 
-        if (! $alvo->exclusao_pedida_por) {
-            $alvo->forceFill(['exclusao_pedida_por' => $u->id, 'exclusao_pedida_em' => now()])->save();
-            Log::info('exclusão de colaborador PEDIDA', ['alvo' => $alvo->email, 'por' => $u->email]);
-
-            return response()->json(['status' => 'aguardando', 'colaborador' => $this->comPedido($alvo->fresh())]);
-        }
-        if ($alvo->exclusao_pedida_por === $u->id) {
-            return response()->json(['status' => 'aguardando', 'colaborador' => $this->comPedido($alvo), 'mensagem' => 'Você já pediu. Outro gestor ou admin precisa confirmar.']);
-        }
-
-        /* segunda pessoa: executa */
+        /* executa */
         $contagem = DB::transaction(function () use ($alvo) {
             $notas = Nota::where('user_id', $alvo->id)->get();
             foreach ($notas as $n) {
@@ -239,7 +227,7 @@ class ColaboradorController extends Controller
         } catch (\Throwable $e) {
             Log::warning('exclusão: pasta de fotos não apagada: '.$e->getMessage());
         }
-        Log::warning('colaborador EXCLUÍDO', ['alvo' => $alvo->email, 'pedido_por' => $alvo->exclusao_pedida_por, 'confirmado_por' => $u->email] + $contagem);
+        Log::warning('colaborador EXCLUÍDO', ['alvo' => $alvo->email, 'por' => $u->email] + $contagem);
 
         return response()->json(['status' => 'excluido'] + $contagem);
     }

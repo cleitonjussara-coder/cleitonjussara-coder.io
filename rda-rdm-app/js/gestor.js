@@ -203,7 +203,6 @@ window.Gestor = (() => {
                 <div class="colab-email">${esc(m.email)}</div>
               </div>
               <span class="role-pill role-${m.role}">${m.role}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
-              ${m.exclusao_pedida_por ? `<span class="role-pill" style="background:#fde2e2;color:#9b1c1c" title="Exclusão pedida por ${esc(m.exclusao_pedida_por_nome||'')} — falta a 2ª confirmação">⏳ exclusão</span>` : ''}
               ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
               <span class="colab-seta">›</span>
@@ -242,7 +241,6 @@ window.Gestor = (() => {
                   <div class="colab-nome">${esc(m.nome||m.email)}</div>
                   <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + new Date(m.desativado_em).toLocaleDateString('pt-BR') : ''}</div>
                 </div>
-                ${m.exclusao_pedida_por ? `<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">⏳ exclusão</span>` : ''}
                 <button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>
               </div>
             </div>`).join('')}</div></details>`;
@@ -674,8 +672,6 @@ window.Gestor = (() => {
     const podeRegime = podeEditar;
     const papeis = ROLES;
     const inativo = colab.ativo === false;
-    const pedido = colab.exclusao_pedida_por;
-    const pediEu = pedido && pedido === eu.id;
     const ov = document.createElement('div');
     ov.className = 'modal-overlay open';
     ov.innerHTML = `
@@ -713,14 +709,9 @@ window.Gestor = (() => {
             <label class="lbl" style="color:var(--danger)">Excluir de vez (limpeza do banco)</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               Apaga o colaborador e <b>tudo</b> dele: notas, anexos, repasses, KM e ponto. Não tem volta.
-              Precisa de <b>duas pessoas</b>: um gestor/admin pede e <b>outro</b> gestor/admin confirma. Não pede e-mail nem senha.
+              Pede uma confirmação antes; não pede e-mail nem senha.
             </p>
-            ${pedido
-              ? `<p style="font-size:15px;color:#9b1c1c;font-weight:700;margin-bottom:8px">⏳ Exclusão pedida por ${esc(colab.exclusao_pedida_por_nome||'')}${colab.exclusao_pedida_em ? ' em ' + new Date(colab.exclusao_pedida_em).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}.
-                 ${pediEu ? 'Falta outro gestor ou admin confirmar.' : 'Você pode dar a 2ª confirmação.'}</p>
-                 ${pediEu ? '' : `<button class="btn btn-danger-outline btn-full" id="g-excluir" style="margin-bottom:8px">🗑️ Confirmar exclusão (2ª pessoa)</button>`}
-                 <button class="btn btn-outline btn-full" id="g-cancelar-exclusao">Cancelar o pedido</button>`
-              : `<button class="btn btn-danger-outline btn-full" id="g-excluir">🗑️ Pedir exclusão (1ª pessoa)</button>`}
+            <button class="btn btn-danger-outline btn-full" id="g-excluir">🗑️ Excluir colaborador</button>
           </div>`}
         </div>
         <div class="modal-ft">
@@ -767,27 +758,22 @@ window.Gestor = (() => {
 
     const btnExcluir = ov.querySelector('#g-excluir');
     if (btnExcluir) btnExcluir.onclick = async () => {
-      const etapa = pedido ? '2ª CONFIRMAÇÃO — isto APAGA TUDO agora' : '1ª de 2 confirmações';
-      if (!confirm(`EXCLUIR COLABORADOR (${etapa})\n\n${colab.nome || ''}\n${colab.email}\n\nSerão apagados: todas as notas e anexos, repasses, KM e ponto. Não tem volta.\n\nConfirmar?`)) return;
+      if (!confirm(`EXCLUIR COLABORADOR
+
+${colab.nome || ''}
+${colab.email}
+
+Serão apagados AGORA: todas as notas e anexos, repasses, KM e ponto. Não tem volta.
+
+Confirmar exclusão?`)) return;
       setLoading(true);
       try {
         const r = await sb.colaboradores.excluir(colab.id);
-        if (r.status === 'excluido') {
-          try { await DB.purgeNotasDeUsuario?.(colab.id); } catch (_) {}
-          alert(`Colaborador excluído.\nNotas: ${r.notas} · Repasses: ${r.repasses} · KM: ${r.km} · Ponto: ${r.pontos}`);
-        } else {
-          alert(r.mensagem || 'Pedido registrado. Agora OUTRO gestor ou admin precisa abrir este colaborador e confirmar.');
-        }
+        try { await DB.purgeNotasDeUsuario?.(colab.id); } catch (_) {}
+        alert(`Colaborador excluído.
+Notas: ${r.notas ?? 0} · Repasses: ${r.repasses ?? 0} · KM: ${r.km ?? 0} · Ponto: ${r.pontos ?? 0}`);
       } catch (e) { alert('Erro: ' + e.message); return; }
       finally { setLoading(false); }
-      close(); onSaved();
-    };
-
-    const btnCanc = ov.querySelector('#g-cancelar-exclusao');
-    if (btnCanc) btnCanc.onclick = async () => {
-      if (!confirm('Cancelar o pedido de exclusão?')) return;
-      try { await sb.colaboradores.cancelarExclusao(colab.id); }
-      catch (e) { alert('Erro: ' + e.message); return; }
       close(); onSaved();
     };
   }
