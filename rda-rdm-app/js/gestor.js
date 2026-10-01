@@ -285,11 +285,14 @@ window.Gestor = (() => {
   async function renderColaborador(el, sb, currentUser, id, mes, ano) {
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando…</p></div>';
     try {
-      const [colab, ns, rs, nsAno] = await Promise.all([
+      const [colab, ns, rs, nsAno, histNotas, histReps] = await Promise.all([
         sb.colaboradores.get(id).catch(() => null),
         sb.notas.list({ user_id: id, ano, mes, deleted: '0' }),
         sb.repasses.list({ user_id: id, ano, mes, deleted: '0' }),
         sb.notas.list({ user_id: id, ano, deleted: '0', fields: 'valor,mes,tipo,subtipo,pagamento' }).catch(() => []),
+        /* histórico completo para o saldo acumulado (01/10/2026) */
+        sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento' }).catch(() => null),
+        sb.repasses.list({ user_id: id, deleted: '0' }).catch(() => null),
       ]);
       if (!colab) { fechar(); return; }
       const notas = ns || [], reps = rs || [];
@@ -298,6 +301,9 @@ window.Gestor = (() => {
       window._repassesDaFicha = reps;
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
       const recebido = r => !r.kind || r.kind === 'received';
+      /* recarga do cartão (CV) não é dinheiro que a pessoa recebeu — vai para
+         o cartão. Mesma regra do app do colaborador (_repasseEhCarteira). */
+      const ehRecargaR = x => x.destino === 'recarga';
       /* O que a empresa paga DIRETO (pagamento='empresa') não é dívida com o
          colaborador — fica fora do Gasto/Saldo (26/09/2026), senão o saldo
          mostraria uma dívida que a empresa já quitou na hora. "Faturamento"
@@ -309,7 +315,19 @@ window.Gestor = (() => {
       const pagoEmpresaMes = soma(pagoEmpresa);
       const faturamentoMes = soma(notas);
       const g = t => soma(notasProprias.filter(n => n.tipo === t));
-      const r = t => soma(reps.filter(x => x.tipo === t && recebido(x)));
+      const r = t => soma(reps.filter(x => x.tipo === t && recebido(x) && !ehRecargaR(x)));
+      /* Saldo dos meses ANTERIORES ao aberto (01/10/2026): o que sobrou de
+         repasse — ou ficou devendo — passa para o mês seguinte, como no app
+         do colaborador (_saldoAcumuladoAte). Sem isto a ficha "zerava" na
+         virada do mês e o repasse parecia ter sumido. */
+      const chave = o => Number(o.ano) * 12 + Number(o.mes);
+      const kAberto = ano * 12 + mes;
+      const acumOk = Array.isArray(histNotas) && Array.isArray(histReps);
+      const anterior = t => !acumOk ? 0
+        : soma(histReps.filter(x => x.tipo === t && recebido(x) && !ehRecargaR(x) && chave(x) < kAberto))
+        - soma(histNotas.filter(n => n.tipo === t && n.pagamento !== 'empresa' && chave(n) < kAberto));
+      const antRDM = anterior('RDM'), antRDA = anterior('RDA');
+      const recebidos0 = reps.filter(x => recebido(x) && !ehRecargaR(x));
       const gasto = g('RDM') + g('RDA');
       const rec = r('RDM') + r('RDA');
       const saldo = rec - gasto;
@@ -330,13 +348,15 @@ window.Gestor = (() => {
       const totalAno = soma(nsAnoProprias);
 
       const podeEditar = currentUser.role === 'admin' || currentUser.role === 'gestor';
-      const bal = (t, ico, gasto, rec) => `
-        <div class="cdet-bal ${rec - gasto < 0 ? 'neg' : 'pos'}">
+      const bal = (t, ico, gasto, rec, ant) => `
+        <div class="cdet-bal ${ant + rec - gasto < 0 ? 'neg' : 'pos'}">
           <span class="cdet-bal-ico">${ico}</span>
           <span class="cdet-bal-tipo">${t}</span>
-          <span class="cdet-bal-val">${brl(rec - gasto)}</span>
-          <span class="cdet-bal-det">Gasto <b>${brl(gasto)}</b> · Recebido <b>${brl(rec)}</b></span>
+          <span class="cdet-bal-val" title="Saldo acumulado até ${MESES_LONGO[mes-1]}">${brl(ant + rec - gasto)}</span>
+          <span class="cdet-bal-det">Saldo acumulado${acumOk ? '' : ' (histórico indisponível — só o mês)'}<br>
+            Anterior <b>${brl(ant)}</b> · Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>
         </div>`;
+      const acumTotal = antRDM + antRDA + saldo;
 
       if (typeof _voltarRodape === 'function') _voltarRodape('Gestor.fechar()', '‹ Equipe');
       let html = `<div class="page-hd">
@@ -383,12 +403,13 @@ window.Gestor = (() => {
         <div class="cdet-kpis">
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">Recebido</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
-          <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">recebido − gasto</span></div>
+          <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">acumulado ${brl(acumTotal)}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
         </div>
 
-        <div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'))}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'))}</div>
+        ${acumOk && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
+        <div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM)}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA)}</div>
         ${pagoEmpresaMes ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaMes)}</b> <span style="color:var(--text2)">(já incluso no Faturamento acima, não entra no saldo)</span></div>` : ''}
 
         <div class="dash-card">
