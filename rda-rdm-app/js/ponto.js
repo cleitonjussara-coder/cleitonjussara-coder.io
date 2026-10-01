@@ -323,13 +323,19 @@ window.Ponto = (() => {
   }
 
   /* ── Feriados ───────────────────────────────────────────── */
-  function abrirFeriado() {
-    const d = prompt('Data do feriado (AAAA-MM-DD):', `${filAno}-${String(filMes).padStart(2, '0')}-`);
-    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d.trim())) { if (d) toast('Data inválida', 'err'); return; }
-    const nome = prompt('Nome do feriado:');
-    if (!nome || !nome.trim()) return;
+  async function abrirFeriado() {
+    const campos = await pedirCampos({
+      titulo: 'Novo feriado',
+      confirmar: 'Salvar',
+      campos: [
+        { id: 'data', rotulo: 'Data (AAAA-MM-DD)', valor: `${filAno}-${String(filMes).padStart(2, '0')}-`,
+          validar: t => (/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(t) && !isNaN(new Date(t + 'T00:00:00')) ? '' : 'Data inválida — use AAAA-MM-DD.') },
+        { id: 'nome', rotulo: 'Nome do feriado', validar: t => (t ? '' : 'Digite o nome do feriado.') },
+      ],
+    });
+    if (!campos) return;
     setLoading(true);
-    sb.ponto.feriadoUpsert(d.trim(), nome.trim()).then(() => { toast('Feriado salvo ✅'); return render(); })
+    sb.ponto.feriadoUpsert(campos.data, campos.nome).then(() => { toast('Feriado salvo ✅'); return render(); })
       .catch(e => toast(e.message, 'err')).finally(() => setLoading(false));
   }
   async function excluirFeriado(data) {

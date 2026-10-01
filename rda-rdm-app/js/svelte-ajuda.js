@@ -105,7 +105,7 @@
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>\r
         <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>\r
       </ul>\r
-      <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom).</p>\r
+      <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom). Abre uma janela do próprio app: digite ou cole a chave (pode ser com espaços) e toque em <b>Usar chave</b>. Se faltar algum dígito, a janela avisa sem fechar.</p>\r
       <p><b>📐 Foto sempre em pé (23/09/2026):</b> o celular costuma gravar a foto deitada e anotar a rotação num campo escondido do arquivo. A tela mostrava certo, mas o PDF, o ZIP e a planilha saíam de lado ou de cabeça para baixo. Agora o app <b>endireita a foto na hora de anexar</b> — o recorte, a leitura e o arquivo guardado já saem na posição certa. As fotos antigas foram endireitadas de uma vez no servidor.</p>\r
       <p class="ajuda-note">🌐 Quando aparece <b>"Valor conferido no SEFAZ"</b>, o valor veio do site oficial do estado — pode confiar. Sem essa marca, o valor veio da leitura da foto: confira.</p>\r
       <p>Nem todo estado permite essa conferência automática: <b>BA e GO</b> funcionam; <b>MG, SC e TO</b> exigem "não sou robô" ou não respondem, então nesses o valor vem sempre da foto. Os demais são conferidos conforme aparecem os primeiros cupons.</p>\r

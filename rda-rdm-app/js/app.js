@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 338;
+const APP_BUILD = 339;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -461,6 +461,156 @@ function toast(msg, tipo='ok') {
   el.className = `toast toast-${tipo} show`;
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ── Janela de texto do próprio app (no lugar do prompt()) ───────────────
+   O prompt() é do NAVEGADOR, e em navegador embutido (link aberto dentro do
+   WhatsApp/LinkedIn, MIUI…) ele aparece SEM o texto e SEM o campo — só
+   Cancelar/OK — e não dá para digitar nada (vídeo de 01/10/2026, botão
+   "Digitar a chave de 44 dígitos"). Esta janela é HTML do app e se comporta
+   igual em qualquer navegador.
+
+   pedirCampos({ titulo, dica, confirmar, campos:[{ id, rotulo, valor,
+     placeholder, inputmode, maxlength, validar(texto) → mensagem de erro | '' }] })
+   devolve Promise<{ [id]: texto } | null> (null = cancelou). O erro de
+   validação aparece DENTRO da janela, que continua aberta: a pessoa não
+   redigita os 44 dígitos. A janela segue o teclado (visualViewport) e leva a
+   classe modal-overlay para o verificador de versão não recarregar a página
+   com ela aberta. Chame sempre direto do toque (o foco só abre o teclado
+   dentro do gesto). */
+function pedirCampos({ titulo, dica = '', confirmar = 'OK', campos = [] }) {
+  return new Promise(resolve => {
+    document.getElementById('modal-pedir')?.remove();
+    const el = document.createElement('div');
+    el.id = 'modal-pedir';
+    el.className = 'modal-overlay';
+    el.style.cssText = 'z-index:99999;align-items:flex-end;padding:0;background:rgba(0,0,0,.6)';
+    const caixa = document.createElement('div');
+    caixa.style.cssText = 'background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;width:100%;max-width:480px;'
+      + 'border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));'
+      + 'max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box';
+    const h = document.createElement('div');
+    h.textContent = titulo;
+    h.style.cssText = 'font-size:19px;font-weight:700;margin:0 0 4px';
+    caixa.appendChild(h);
+    if (dica) {
+      const p = document.createElement('div');
+      p.textContent = dica;
+      p.style.cssText = 'font-size:14px;color:#b8d9c2;margin:0 0 12px;line-height:1.4';
+      caixa.appendChild(p);
+    }
+    const inputs = [];
+    campos.forEach(c => {
+      if (c.rotulo) {
+        const lab = document.createElement('div');
+        lab.textContent = c.rotulo;
+        lab.style.cssText = 'font-size:13px;color:#b8d9c2;margin:0 0 4px';
+        caixa.appendChild(lab);
+      }
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.inputMode = c.inputmode || 'text';
+      if (c.maxlength) inp.maxLength = c.maxlength;
+      inp.placeholder = c.placeholder || '';
+      inp.value = c.valor == null ? '' : String(c.valor);
+      inp.autocomplete = 'off';
+      inp.spellcheck = false;
+      inp.setAttribute('autocapitalize', 'off');
+      inp.style.cssText = 'width:100%;box-sizing:border-box;background:#062d16;color:#eef9f0;border:1px solid #b9e24a;'
+        + 'border-radius:8px;padding:11px 12px;font-size:16px;margin:0 0 10px';
+      inputs.push(inp);
+      caixa.appendChild(inp);
+    });
+    const erro = document.createElement('div');
+    erro.setAttribute('role', 'alert');
+    erro.style.cssText = 'color:#ffb4a8;font-size:14px;min-height:18px;margin:0 0 8px';
+    caixa.appendChild(erro);
+
+    const vv = window.visualViewport;
+    const ajustar = () => {
+      if (!vv) return;
+      el.style.top = vv.offsetTop + 'px';
+      el.style.bottom = 'auto';
+      el.style.height = vv.height + 'px';
+    };
+    const fechar = valor => {
+      vv?.removeEventListener('resize', ajustar);
+      vv?.removeEventListener('scroll', ajustar);
+      el.remove();
+      resolve(valor);
+    };
+    const enviar = () => {
+      const saida = {};
+      for (let i = 0; i < campos.length; i++) {
+        const texto = inputs[i].value.trim();
+        const msg = campos[i].validar ? campos[i].validar(texto) : '';
+        if (msg) { erro.textContent = msg; inputs[i].focus(); return; }
+        saida[campos[i].id] = texto;
+      }
+      fechar(saida);
+    };
+    const alterado = () => inputs.some((inp, i) => inp.value !== (campos[i].valor == null ? '' : String(campos[i].valor)));
+
+    const linha = document.createElement('div');
+    linha.style.cssText = 'display:flex;gap:8px';
+    const bCancelar = document.createElement('button');
+    bCancelar.type = 'button';
+    bCancelar.textContent = 'Cancelar';
+    bCancelar.style.cssText = 'flex:1;background:transparent;color:#eef9f0;border:1px solid #3d7a52;border-radius:8px;padding:12px;font-size:16px';
+    bCancelar.onclick = () => fechar(null);
+    const bOk = document.createElement('button');
+    bOk.type = 'button';
+    bOk.textContent = confirmar;
+    bOk.style.cssText = 'flex:1;background:#b9e24a;color:#083d1e;border:0;border-radius:8px;padding:12px;font-size:16px;font-weight:700';
+    bOk.onclick = enviar;
+    linha.append(bCancelar, bOk);
+    caixa.appendChild(linha);
+
+    caixa.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); fechar(null); return; }
+      if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      e.preventDefault();
+      const i = inputs.indexOf(e.target);
+      if (i >= 0 && i < inputs.length - 1) inputs[i + 1].focus(); else enviar();
+    });
+    inputs.forEach(inp => inp.addEventListener('input', () => { erro.textContent = ''; }));
+    /* tocar no fundo cancela, mas só se a pessoa ainda não digitou nada */
+    el.onclick = e => { if (e.target === el && !alterado()) fechar(null); };
+
+    el.appendChild(caixa);
+    document.body.appendChild(el);
+    vv?.addEventListener('resize', ajustar);
+    vv?.addEventListener('scroll', ajustar);
+    ajustar();
+    if (inputs[0]) { inputs[0].focus(); try { inputs[0].select(); } catch (_) {} }
+  });
+}
+
+/* um campo só — devolve o texto ou null se cancelou */
+async function pedirTexto({ titulo, dica, confirmar, valor, placeholder, inputmode, maxlength, validar }) {
+  const r = await pedirCampos({ titulo, dica, confirmar,
+    campos: [{ id: 't', valor, placeholder, inputmode, maxlength, validar }] });
+  return r ? r.t : null;
+}
+
+/* chave de acesso de 44 dígitos (NF-e/NFC-e): confere tamanho e dígito
+   verificador antes de fechar, igual ao SEFAZ.consultarChave. Devolve só os
+   dígitos ou null. */
+function _pedirChave44() {
+  return pedirTexto({
+    titulo: 'Chave de acesso',
+    dica: 'Digite ou cole os 44 dígitos da NF-e ou NFC-e. Pode colar com espaços.',
+    confirmar: 'Usar chave',
+    placeholder: '0000 0000 0000 0000 0000 …',
+    inputmode: 'numeric',
+    validar: t => {
+      const c = _digitos(t);
+      if (!c.length) return 'Cole ou digite a chave.';
+      if (c.length !== 44) return `Chave com ${c.length} dígitos — precisa ter 44.`;
+      if (window.SEFAZ?.dvValido && !SEFAZ.dvValido(c)) return 'Chave inválida (o dígito verificador não confere). Confira os números.';
+      return '';
+    },
+  }).then(t => (t == null ? null : _digitos(t)));
 }
 
 let _telaAtual = 'auth';
@@ -1922,6 +2072,18 @@ function _mesAnoDaData(data) {
   return [d.getMonth() + 1, d.getFullYear()];
 }
 
+/* "dd/mm/aaaa" → { iso, mes, ano } ou null (data que não existe, como 31/02, é recusada) */
+function _parseDataBR(t) {
+  const p = String(t || '').trim().split('/');
+  if (p.length !== 3) return null;
+  const [dd, mm, aaaa] = p;
+  if ([dd, mm, aaaa].some(x => !x || _digitos(x) !== x)) return null;
+  if (dd.length > 2 || mm.length > 2 || aaaa.length !== 4) return null;
+  const d = new Date(Number(aaaa), Number(mm) - 1, Number(dd));
+  if (d.getFullYear() !== Number(aaaa) || d.getMonth() !== Number(mm) - 1 || d.getDate() !== Number(dd)) return null;
+  return { iso: `${aaaa}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`, mes: Number(mm), ano: Number(aaaa) };
+}
+
 function _repasseDaEquipe(id) {
   const fontes = [window._repassesDaFicha, repassesEquipe, window._equipeCache?.repasses, repasses];
   for (const lista of fontes) {
@@ -1939,29 +2101,31 @@ async function editarRepasseDeOutro(id) {
   if (!r) { toast('Repasse não encontrado', 'err'); return; }
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
 
-  const valor = prompt(`Valor do repasse de ${quem} (R$):`, String(Number(r.valor) || 0));
-  if (valor === null) return;
-  const v = parseFloat(String(valor).replace(',', '.'));
-  if (!(v > 0)) { toast('Valor inválido', 'err'); return; }
-
-  const data = prompt('Data (dd/mm/aaaa):', fmtDataBR(r.data));
-  if (data === null) return;
-  const m = String(data).match(new RegExp('(\\d{2})\\/(\\d{2})\\/(\\d{4})'));
-  if (!m) { toast('Data inválida — use dd/mm/aaaa', 'err'); return; }
-  const iso = m[3] + '-' + m[2] + '-' + m[1];
-
-  const desc = prompt('Descrição:', r.descricao || '');
-  if (desc === null) return;
+  const campos = await pedirCampos({
+    titulo: 'Corrigir repasse',
+    dica: equipePorId[r.user_id]?.nome ? `Repasse de ${quem}.` : 'Corrija os dados deste repasse.',
+    confirmar: 'Salvar',
+    campos: [
+      { id: 'valor', rotulo: 'Valor (R$)', valor: String(Number(r.valor) || 0), inputmode: 'decimal',
+        validar: t => (parseFloat(t.replace(',', '.')) > 0 ? '' : 'Valor inválido.') },
+      { id: 'data', rotulo: 'Data (dd/mm/aaaa)', valor: fmtDataBR(r.data),
+        validar: t => (_parseDataBR(t) ? '' : 'Data inválida — use dd/mm/aaaa.') },
+      { id: 'desc', rotulo: 'Descrição', valor: r.descricao || '', placeholder: 'Opcional' },
+    ],
+  });
+  if (!campos) return;
+  const v = parseFloat(campos.valor.replace(',', '.'));
+  const dt = _parseDataBR(campos.data);
 
   setLoading(true);
   try {
     await sb.repasses.upsert({
       ...r,
       valor: v,
-      data: iso,
-      mes: Number(m[2]),
-      ano: Number(m[3]),
-      descricao: String(desc).trim() || null,
+      data: dt.iso,
+      mes: dt.mes,
+      ano: dt.ano,
+      descricao: campos.desc.trim() || null,
     });
     toast('Repasse corrigido ✅');
     await _recarregarEquipe();
@@ -5899,10 +6063,10 @@ function fecharBarcode() {
 }
 
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
-function iniciarChaveNFCe() {
-  const chave = prompt('Cole a chave de acesso de 44 dígitos (NF-e ou NFC-e):');
-  if (!chave || !chave.trim()) return;
-  onChaveNFCe(chave.trim());
+async function iniciarChaveNFCe() {
+  const chave = await _pedirChave44();
+  if (!chave) return;
+  onChaveNFCe(chave);
 }
 
 async function onChaveNFCe(raw) {
@@ -6910,12 +7074,9 @@ function _atualizarBotaoLerChave() {
 
 /* Chave digitada DENTRO do formulário aberto: preenche o que a chave carrega
    (CNPJ, UF, mês/ano, documento, número/série) sem abrir outra nota. */
-function digitarChaveNoFormulario() {
-  const raw = prompt('Digite ou cole a chave de acesso de 44 dígitos (NF-e ou NFC-e):');
-  if (!raw || !raw.trim()) return;
-  const c = _digitos(raw);
-  if (c.length !== 44) { toast(`Chave com ${c.length} dígitos — precisa ter 44`, 'err'); return; }
-  if (window.SEFAZ?.dvValido && !SEFAZ.dvValido(c)) { toast('Chave inválida (dígito verificador não confere) — confira os números', 'err'); return; }
+async function digitarChaveNoFormulario() {
+  const c = await _pedirChave44();     // já conferiu os 44 dígitos e o dígito verificador
+  if (!c) return;
   if (_notaDuplicadaChave(c, $('nf-id').value || null)) { toast('⚠️ Esta chave já está registrada em outra nota', 'err'); return; }
   const p = NFCE.parseChave44(c);
   $('nf-chave').value = c;
