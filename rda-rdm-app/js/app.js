@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 325;
+const APP_BUILD = 329;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1225,7 +1225,7 @@ function alternarSenha(id, btn) {
 
 /* Botões "Continuar com …" + o divisor "ou". Vazio se nenhum provedor
    estiver ativo, e o formulário fica igual ao de sempre. */
-function _botoesSociais() {
+function _botoesSociais(comOu = true) {
   const ativos = PROVEDORES_SOCIAIS.filter(p => p.ativo);
   if (!ativos.length) return '';
   return `
@@ -1235,7 +1235,7 @@ function _botoesSociais() {
         <span class="auth-social-ico">${p.icone}</span>Continuar com ${p.nome}
       </button>`).join('')}
     </div>
-    <div class="auth-ou"><span>ou</span></div>`;
+    ${comOu ? '<div class="auth-ou"><span>ou</span></div>' : ''}`;
 }
 
 /* Vai para o Google (pela API) e volta para o app já logado: a API troca o
@@ -1272,6 +1272,17 @@ function renderAuth(mode='login') {
       ${_mostrarModoLocal() ? `<button class="btn btn-outline btn-full auth-local"
               onclick="usarSemConta()">Usar sem conta (modo local)</button>` : ''}
       <p class="auth-versao">Versão ${APP_VERSION}</p>
+    </div>`;
+
+  /* Login e cadastro: "Instalar app" ocupa o lugar do Google no topo e o
+     Google desceu para o rodapé (pedido 01/10/2026). */
+  const rodapeGoogle = `
+    <div style="margin-top:8px;text-align:center">
+      <hr class="auth-hr">
+      ${_botoesSociais(false)}
+      ${_mostrarModoLocal() ? `<button class="btn btn-outline btn-full auth-local"
+              onclick="usarSemConta()">Usar sem conta (modo local)</button>` : ''}
+      ${mode === 'login' ? `<p class="auth-versao">Versão ${APP_VERSION}</p>` : ''}
     </div>`;
 
   if (mode === 'reset') {
@@ -1323,29 +1334,24 @@ function renderAuth(mode='login') {
 
   $('auth-body').innerHTML = mode==='login' ? `
     ${_bannerInstalarIOS()}
+    <div class="install-slot"></div>
     <h2 class="auth-title">Entrar</h2>
-    ${_botoesSociais()}
     <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha', 'current-password')}
     <button class="btn btn-primary btn-full" onclick="login()">Entrar</button>
+    <button class="btn btn-outline btn-full" style="margin-top:10px" onclick="renderAuth('reg')">Criar conta</button>
     <p class="auth-switch"><a onclick="renderAuth('reset')">Esqueci minha senha</a></p>
-    <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
-    ${rodape}
+    ${rodapeGoogle}
   ` : `
     ${_bannerInstalarIOS()}
     <h2 class="auth-title">${_convite ? 'Aceitar convite' : 'Criar conta'}</h2>
-    ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : _botoesSociais()}
+    ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : `<div class="install-slot"></div>`}
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${esc(_convite?.nome || '')}">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
     <button class="btn btn-primary btn-full" onclick="register()">${_convite ? 'Aceitar e criar conta' : 'Criar conta'}</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
-    <div style="margin-top:8px;text-align:center">
-      <hr class="auth-hr">
-      <div class="install-slot"></div>
-      ${_mostrarModoLocal() ? `<button class="btn btn-outline btn-full auth-local"
-              onclick="usarSemConta()">Usar sem conta (modo local)</button>` : ''}
-    </div>
+    ${_convite ? '' : rodapeGoogle}
   `;
   _pintarBotaoInstalar();
 }
