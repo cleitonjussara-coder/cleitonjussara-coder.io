@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 334;
+const APP_BUILD = 338;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5037,7 +5037,7 @@ async function enviarFotoPerfil(e) {
   if (window.Recorte) {
     const tit = $('crop-overlay')?.querySelector('.crop-tit');
     if (tit) tit.textContent = 'Enquadre o rosto';
-    try { escolhida = (await Recorte.abrir(file)) || file; } catch (_) { escolhida = file; }
+    try { escolhida = (await Recorte.abrir(file, { semTexto: true })) || file; } catch (_) { escolhida = file; }
     if (tit) tit.textContent = 'Enquadre a nota';
   }
   setLoading(true);
