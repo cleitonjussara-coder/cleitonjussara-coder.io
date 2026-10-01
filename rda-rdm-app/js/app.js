@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 324;
+const APP_BUILD = 325;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1009,19 +1009,64 @@ async function instalarApp() {
   }
 }
 
+/* iPhone/iPad: o Safari nunca oferece a instalação sozinho, então o app avisa
+   no topo do login/cadastro (o botão do rodapé ficava abaixo da dobra) e abre
+   um passo a passo em modal em vez de um alert() de texto. */
+const _SVG_COMPARTILHAR = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" '
+  + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-5px">'
+  + '<path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+
+function _bannerInstalarIOS() {
+  if (!_ehIOS() || _jaInstalado()) return '';
+  try { if (localStorage.getItem('pm_dica_ios') === '1') return ''; } catch (_) {}
+  return `<div class="ini-dica" id="dica-ios" style="margin-bottom:12px;position:relative;padding-right:34px">
+    <a onclick="comoInstalar()" style="color:inherit;text-decoration:none;display:block">
+      📲 <b>Instale o app no seu ${_ehCelular() ? 'iPhone' : 'iPad'}</b><br>
+      Toque em ${_SVG_COMPARTILHAR} Compartilhar e depois em <b>Adicionar à Tela de Início</b>.
+      <u>Ver passo a passo</u>
+    </a>
+    <button type="button" aria-label="Dispensar" onclick="dispensarDicaIOS()"
+      style="position:absolute;top:4px;right:6px;background:none;border:0;color:inherit;font-size:20px;line-height:1;padding:6px;opacity:.8">×</button>
+  </div>`;
+}
+
+function dispensarDicaIOS() {
+  try { localStorage.setItem('pm_dica_ios', '1'); } catch (_) {}
+  document.getElementById('dica-ios')?.remove();
+}
+
+function _modalInstalarIOS() {
+  document.getElementById('modal-ios')?.remove();
+  const passo = (n, t) => `<li style="display:flex;gap:10px;align-items:flex-start;margin:0 0 12px">
+      <span style="flex:none;width:26px;height:26px;border-radius:50%;background:#b9e24a;color:#083d1e;font-weight:700;display:flex;align-items:center;justify-content:center">${n}</span>
+      <span>${t}</span></li>`;
+  const el = document.createElement('div');
+  el.id = 'modal-ios';
+  el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  el.onclick = e => { if (e.target === el) el.remove(); };
+  el.innerHTML = `<div style="background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;width:100%;max-width:480px;
+      border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <h3 style="margin:0 0 4px;font-size:19px">📲 Instalar no ${_ehCelular() ? 'iPhone' : 'iPad'}</h3>
+    <p style="margin:0 0 14px;opacity:.85;font-size:14px">Leva 10 segundos. O ícone fica junto dos outros apps.</p>
+    <ol style="list-style:none;padding:0;margin:0;font-size:15px;line-height:1.4">
+      ${passo(1, 'Abra este endereço no <b>Safari</b> (no Chrome, Instagram ou WhatsApp a opção pode não aparecer).')}
+      ${passo(2, `Toque em <b>Compartilhar</b> ${_SVG_COMPARTILHAR} — o quadrado com a seta para cima, na barra de baixo. Se não estiver à vista, toque antes nos <b>três pontinhos (⋯)</b>.`)}
+      ${passo(3, 'Role a lista e toque em <b>Adicionar à Tela de Início</b>.')}
+      ${passo(4, 'Toque em <b>Adicionar</b>, no canto superior direito.')}
+    </ol>
+    <button class="btn btn-primary btn-full" style="margin-top:6px" onclick="document.getElementById('modal-ios').remove()">Entendi</button>
+  </div>`;
+  document.body.appendChild(el);
+}
+
 function comoInstalar() {
   const aviso = '\n\nSe a opção não aparecer: o app já pode estar instalado (procure o ícone) '
     + 'ou a aba é anônima (abra numa aba normal). Se nenhum for o caso, use '
     + '"Diagnóstico de instalação" no Perfil.';
   let msg;
   if (_ehIOS()) {
-    const aparelho = _ehCelular() ? 'iPhone' : 'iPad';
-    msg = `Para instalar no ${aparelho}:\n\n`
-      + '1. Abra este link no SAFARI (pelo Chrome a opção pode não aparecer)\n'
-      + '2. Toque em Compartilhar — o quadrado com a seta para cima\n'
-      + '3. Role a lista e toque em "Adicionar à Tela de Início"\n'
-      + '4. Toque em Adicionar\n\n'
-      + 'O ícone aparece junto dos outros apps.';
+    _modalInstalarIOS();
+    return;
   } else if (_ehAndroid()) {
     msg = _ehFirefox()
       ? 'Para instalar no Android (Firefox):\n\n'
@@ -1277,6 +1322,7 @@ function renderAuth(mode='login') {
   }
 
   $('auth-body').innerHTML = mode==='login' ? `
+    ${_bannerInstalarIOS()}
     <h2 class="auth-title">Entrar</h2>
     ${_botoesSociais()}
     <input class="inp" id="a-email" type="email" placeholder="E-mail" autocomplete="email">
@@ -1286,6 +1332,7 @@ function renderAuth(mode='login') {
     <p class="auth-switch">Não tem conta? <a onclick="renderAuth('reg')">Cadastrar</a></p>
     ${rodape}
   ` : `
+    ${_bannerInstalarIOS()}
     <h2 class="auth-title">${_convite ? 'Aceitar convite' : 'Criar conta'}</h2>
     ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : _botoesSociais()}
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${esc(_convite?.nome || '')}">
