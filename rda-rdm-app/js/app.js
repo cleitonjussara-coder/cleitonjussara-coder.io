@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 330;
+const APP_BUILD = 333;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4720,6 +4720,13 @@ function garantirNotasNaLista(lista) {
     if (ids.has(n.id)) return;
     notasEquipe.push({ ...n, user_nome: equipePorId[n.user_id]?.nome || null });
   });
+}
+
+function irParaMesAtualEquipe() {
+  const h = new Date();
+  filMes = h.getMonth() + 1; filAno = h.getFullYear();
+  renderEquipe();
+  _garantirAnoEmFoco();
 }
 
 function mudarMesEquipe(delta) {

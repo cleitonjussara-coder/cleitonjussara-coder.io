@@ -4,6 +4,7 @@
 ───────────────────────────────────────────────────────────── */
 window.Gestor = (() => {
   const MESES  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const MESES_LONGO = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const ROLES   = ['colaborador','gestor','admin','contabilidade'];   // contabilidade: só vê e baixa (21/09/2026)
   /* o que cada papel faz, em uma linha — é o que aparece no seletor da Equipe */
   const PAPEL_TXT = {
@@ -42,6 +43,15 @@ window.Gestor = (() => {
     if (vazio) vazio.style.display = (termos.length && !vistos) ? '' : 'none';
   }
   function fechar()   { _detalheId = null; _ctx?.onRebuild?.(); }
+
+  /* Setas da lista de repasses na ficha: delta -1/+1 muda o mês, 0 volta ao
+     mês atual. Reaproveita o seletor da Equipe (filMes/filAno), então o resto
+     da ficha acompanha. */
+  let _rolarParaRepasses = false;
+  function mesRepasses(delta) {
+    _rolarParaRepasses = true;
+    if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
+  }
   function reset()    { _detalheId = null; }
 
   /* ── Dashboard principal ──────────────────────────────── */
@@ -410,9 +420,36 @@ window.Gestor = (() => {
         html += `<div class="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
       }
 
-      html += `<div class="section-hd">💸 Repasses · ${reps.length}</div>`;
+      /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
+         navegação — o seletor lá do alto ficava fora de vista, e o repasse
+         lançado para outro mês parecia ter sumido. A conferência mês a mês
+         agora se faz sem sair daqui. */
+      const _hojeD = new Date();
+      const _ehMesAtual = mes === _hojeD.getMonth() + 1 && ano === _hojeD.getFullYear();
+      const recebidos = reps.filter(recebido);
+      const ehRecarga = x => x.destino === 'recarga';
+      const recRDM = soma(recebidos.filter(x => x.tipo === 'RDM' && !ehRecarga(x)));
+      const recRDA = soma(recebidos.filter(x => x.tipo === 'RDA' && !ehRecarga(x)));
+      const recCartao = soma(recebidos.filter(ehRecarga));
+      html += `<div class="section-hd" id="cdet-repasses" style="flex-wrap:wrap;gap:8px 12px">
+        <span>💸 Repasses · ${reps.length}</span>
+        <div class="mes-nav" style="margin-left:auto">
+          <button class="btn-mes-nav" title="Mês anterior" onclick="Gestor.mesRepasses(-1)">‹</button>
+          <span class="mes-label">${MESES_LONGO[mes-1]} ${ano}</span>
+          <button class="btn-mes-nav" title="Próximo mês" onclick="Gestor.mesRepasses(1)">›</button>
+          ${_ehMesAtual ? '' : '<button class="btn btn-sm btn-outline" onclick="Gestor.mesRepasses(0)">Mês atual</button>'}
+        </div>
+      </div>`;
+      if (reps.length) {
+        html += `<div class="cdet-rep-resumo" style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;margin:0 0 10px;padding:0 6px;color:#cfe8d6">
+          <span>Recebido em ${MESES_LONGO[mes-1]}:</span>
+          <span><b>RDM</b> ${brl(recRDM)}</span>
+          <span><b>RDA</b> ${brl(recRDA)}</span>
+          ${recCartao ? `<span>💳 <b>Recarga do cartão</b> ${brl(recCartao)}</span>` : ''}
+        </div>`;
+      }
       if (!reps.length) {
-        html += '<div class="empty-state" style="padding:24px 14px">Nenhum repasse neste mês.</div>';
+        html += `<div class="empty-state" style="padding:24px 14px">Nenhum repasse em ${MESES_LONGO[mes-1]} de ${ano}. Use ‹ › para ver outros meses.</div>`;
       } else {
         html += `<div class="colab-list">${reps.map(x => `
           <div class="rep-item cdet-rep">
@@ -420,7 +457,7 @@ window.Gestor = (() => {
             <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
             <div style="flex:1;min-width:0">
               <div class="rep-desc">${esc(x.descricao || (recebido(x) ? 'Repasse recebido' : 'Solicitação de repasse'))}</div>
-              <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : x.atendido_em ? 'pedido pago ✅' : 'pedido pendente'}</div>
+              <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : x.atendido_em ? 'pedido pago ✅' : 'pedido pendente'}${ehRecarga(x) ? ' · 💳 recarga do cartão' : ''}</div>
             </div>
             <span class="rep-val cdet-rep-val">${brl(x.valor)}</span>
             ${podeEditar ? `
@@ -432,6 +469,11 @@ window.Gestor = (() => {
       }
 
       el.innerHTML = html;
+      /* veio das setas da lista de repasses: volta para ela, não para o topo */
+      if (_rolarParaRepasses) {
+        _rolarParaRepasses = false;
+        el.querySelector('#cdet-repasses')?.scrollIntoView({ block: 'start' });
+      }
       const be = el.querySelector('#cdet-editar');
       if (be) be.onclick = () => showEditModal(colab, sb, () => _ctx?.onRebuild?.(), currentUser);
       if (typeof _carregarMiniaturas === 'function') _carregarMiniaturas(notas, 'eqthumb-').catch(() => {});
@@ -809,5 +851,5 @@ Notas: ${r.notas ?? 0} · Repasses: ${r.repasses ?? 0} · KM: ${r.km ?? 0} · Po
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses };
 })();
