@@ -103,7 +103,7 @@ class RepasseController extends Controller
             $hoje = \Illuminate\Support\Carbon::now('America/Sao_Paulo')->startOfDay();
             $dataInformada = \Illuminate\Support\Carbon::parse($d['data'])->startOfDay();
             if ($dataInformada->greaterThan($hoje)) {
-                if ($dataInformada->diffInDays($hoje) > 2) {
+                if ($hoje->diffInDays($dataInformada) > 2) {
                     abort(422, 'A data está no futuro (' . $d['data'] . '). O lançamento registra algo que já aconteceu — corrija a data.');
                 }
                 Log::warning('data no futuro trazida para hoje', [
@@ -150,6 +150,24 @@ class RepasseController extends Controller
         }
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
+            /* 01/10/2026: o gestor relatou repasse e recarga "sumindo". Causa
+               confirmada no código: o dono do registro podia gravar
+               deleted=true (ou mudar valor/tipo de lançamento) num REPASSE
+               RECEBIDO, numa RECARGA ou num PEDIDO JÁ PAGO — todos lançados ou
+               pagos pelo gestor. Quem paga é quem registra, então só gestor ou
+               admin cancela ou altera dinheiro registrado. O colaborador
+               segue podendo apagar/editar o PRÓPRIO pedido ainda não atendido. */
+            if (! $u->gerencia() && ($rep->kind === 'received' || ! $rep->kind || $rep->atendido_em || $rep->pedido_id)) {
+                $mudaValor = abs((float) $d['valor'] - (float) $rep->valor) > 0.004;
+                $mudaKind = ($d['kind'] ?? 'received') !== ($rep->kind ?: 'received');
+                $mudaRecarga = (($d['destino'] ?? null) === 'recarga') !== ($rep->destino === 'recarga');
+                if ($d['deleted'] || $mudaValor || $mudaKind || $mudaRecarga) {
+                    Log::warning('repasse registrado pelo gestor: alteração do colaborador recusada', [
+                        'id' => $id, 'user' => $u->email, 'apagar' => $d['deleted'],
+                    ]);
+                    abort(403, 'Repasse e recarga registrados pelo gestor só o gestor cancela ou altera. Fale com ele.');
+                }
+            }
             unset($d['created_at']);
             $rep->fill($d);
             $rep->updated_by = $u->id;

@@ -638,6 +638,13 @@ window.DB = (() => {
     return { ok, fail, fotosOk, fotosFail, erroFoto };
   }
 
+  /* Grava no aparelho a(s) linha(s) de repasse que o servidor acabou de
+     devolver (ex.: lançamento do gestor para outro colaborador, que vai
+     direto ao servidor). Sem isto o registro só chegava no próximo pull. */
+  async function mesclarRepassesRemotos(rows) {
+    return _mesclarRemotas('repasses', Array.isArray(rows) ? rows : [rows]);
+  }
+
   /* Mescla linhas vindas do servidor no store local. Devolve quantas entraram. */
   async function _mesclarRemotas(table, data) {
     let pulled = 0;
@@ -728,6 +735,13 @@ window.DB = (() => {
     if (!sb || !navigator.onLine || !userId) return 0;
     const since = await getMeta('last_sync', null);
     let pulled = 0;
+    /* 01/10/2026: a marca do próximo sync é tirada ANTES de pedir e vem da
+       hora do SERVIDOR, com 5 min de folga. Antes era o relógio do aparelho
+       lido DEPOIS do pull: o que o servidor gravasse nesse intervalo, ou num
+       celular adiantado, nunca mais era pedido — repasse e recarga "sumiam"
+       do aparelho (a mescla é idempotente, repetir a janela não faz mal). */
+    const _agoraSrv = (typeof API !== 'undefined' && API.horaServidorMs) ? API.horaServidorMs() : Date.now();
+    const marca = new Date(Math.min(_agoraSrv, Date.now()) - 5 * 60 * 1000).toISOString();
 
     if (!since) {
       /* primeiro sync deste aparelho: notas só do ano atual; repasses são
@@ -738,19 +752,23 @@ window.DB = (() => {
         pulled += await _mesclarRemotas('repasses', await sb.repasses.list({}));
       } catch (_) { return pulled; }   // sem last_sync gravado: tenta de novo no próximo
     } else {
+      let falhou = false;
       for (const table of ['notas', 'repasses']) {
         try {
           const data = await (table === 'notas' ? sb.notas : sb.repasses).list({ since });
           pulled += await _mesclarRemotas(table, data);
-        } catch (_) {}
+        } catch (_) { falhou = true; }
       }
       /* As lápides (25/09/2026): nota apagada em definitivo sai da tabela, e
          a consulta por updated_at nunca mais a mostra — sem isto, a cópia
          deste aparelho ficava para sempre, aparecendo em pendências. */
       try { await _limparApagadas(sb, since); } catch (_) {}
+      /* falhou alguma lista (timeout, 5xx, sinal ruim): NÃO avança a marca,
+         para tentar a mesma janela de novo no próximo sync. */
+      if (falhou) return pulled;
     }
 
-    await setMeta('last_sync', new Date().toISOString());
+    await setMeta('last_sync', marca);
     return pulled;
   }
 
@@ -836,7 +854,7 @@ window.DB = (() => {
     saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
     purgeNotaLocal, limparDaLixeira, purgeNotasDeUsuario,
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
-    saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse,
+    saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse, mesclarRepassesRemotos,
     upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
     garantirAno, anosSincronizados, getNotasEquipe,

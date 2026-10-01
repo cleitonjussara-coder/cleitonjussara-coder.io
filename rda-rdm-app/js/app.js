@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 329;
+const APP_BUILD = 330;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4560,7 +4560,7 @@ function renderSaldo() {
           <div style="font-size:13px;color:var(--text2);margin-top:2px">${fmtDataBR(r.data)} · ${label} · ${detail}</div>
         </div>
         <span class="rep-val">${brl(r.valor)}</span>
-        <button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>
+        ${_podeExcluirRepasse(r) ? `<button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>` : ''}
       </div>`;
   };
   const secaoTipo = (tipo, lbl) => {
@@ -7827,8 +7827,9 @@ async function _salvarRepasseInterno() {
   if (_repasseAlvo) {
     if (!sb || !navigator.onLine) { toast('Precisa de internet para lançar para outro colaborador', 'err'); return; }
     const quem = _repasseAlvo.nome || 'colaborador';
+    let salvo = null;
     try {
-      await sb.repasses.upsert({
+      salvo = await sb.repasses.upsert({
         id: crypto.randomUUID(),
         user_id: _repasseAlvo.id,
         ...payload,
@@ -7836,11 +7837,18 @@ async function _salvarRepasseInterno() {
       });
     } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); return; }
     fecharFormRepasse();
-    toast(`Repasse ${tipo} de ${brl(valor)} lançado para ${quem} ✅`);
+    /* 01/10/2026: o registro entra no aparelho do gestor NA HORA (antes só no
+       próximo pull) e a tela vai para o mês em que ele foi gravado — o mês
+       sai da data, então com outro mês aberto parecia que "sumiu". */
+    try { if (salvo?.id) await DB.mesclarRepassesRemotos(salvo); } catch (_) {}
+    if (mes !== filMes || ano !== filAno) { filMes = mes; filAno = ano; }
+    const _nomeMes = MESES[mes - 1] || mes;
+    toast(`Repasse ${tipo} de ${brl(valor)} lançado para ${quem} ✅ — em ${_nomeMes}/${ano}`);
     _repasseAlvo = null;
     /* 26/09/2026: sem isso, a notificação de "cartão baixo"/"devedor" que
        trouxe o gestor até aqui (recarga ou repasse lançado direto pro
        colaborador) ficava no sino mesmo depois de resolvida. */
+    await carregarDadosLocais();
     await atualizarNotificacoes();
     if (viewAtual === 'equipe') renderEquipe();
     return;
@@ -7861,6 +7869,14 @@ async function _salvarRepasseInterno() {
   }
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
+}
+
+/* 01/10/2026: repasse recebido, recarga e pedido já pago foram registrados
+   (ou pagos) pelo gestor — só gestor/admin cancela. O colaborador só apaga o
+   próprio pedido ainda não atendido. O servidor também recusa (403). */
+function _podeExcluirRepasse(r) {
+  if (_ehGestorOuAdmin()) return true;
+  return _repasseEhPedido(r) && !r.atendido_em;
 }
 
 async function excluirRepasse(id) {

@@ -64,6 +64,12 @@ window.API = (() => {
     return agora.getFullYear() + '-' + p(agora.getMonth() + 1) + '-' + p(agora.getDate());
   }
 
+  /* Instante atual segundo o servidor, em ms (ou do aparelho, se ninguém
+     falou com o servidor ainda). Usado como marca do sync incremental. */
+  function horaServidorMs() {
+    return _horaServidor ? _horaServidor.hora + (Date.now() - _horaServidor.lidoEm) : Date.now();
+  }
+
   async function req(method, path, { body, query, form, blob, timeout = 30_000 } = {}) {
     let url = BASE + path;
     if (query) {
@@ -387,5 +393,5 @@ window.API = (() => {
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
 })();

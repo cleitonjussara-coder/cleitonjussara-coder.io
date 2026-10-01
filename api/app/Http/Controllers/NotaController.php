@@ -140,7 +140,7 @@ class NotaController extends Controller
             $hoje = \Illuminate\Support\Carbon::now('America/Sao_Paulo')->startOfDay();
             $dataInformada = \Illuminate\Support\Carbon::parse($d['data'])->startOfDay();
             if ($dataInformada->greaterThan($hoje)) {
-                if ($dataInformada->diffInDays($hoje) > 2) {
+                if ($hoje->diffInDays($dataInformada) > 2) {
                     abort(422, 'A data está no futuro (' . $d['data'] . '). O lançamento registra algo que já aconteceu — corrija a data.');
                 }
                 Log::warning('data no futuro trazida para hoje', [
