@@ -391,7 +391,7 @@ window.Frota = (() => {
   async function excluir(id) {
     const r = registros.find(x => x.id === id);
     if (!r) return;
-    if (!confirm(`Excluir a leitura de ${kmFmt(r.odometro)} km (${fmtData(r.data)}) do veículo ${r.placa}?`)) return;
+    if (!(await pedirConfirmacao({ mensagem: `Excluir a leitura de ${kmFmt(r.odometro)} km (${fmtData(r.data)}) do veículo ${r.placa}?`, confirmar: 'Excluir', perigo: true }))) return;
     if (r._pendente) {                              // só estava no aparelho
       const f = await _fila(); await _salvarFila(f.filter(x => x.id !== id));
       toast('Registro descartado'); await render(); return;

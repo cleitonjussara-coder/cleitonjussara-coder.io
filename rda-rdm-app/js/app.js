@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 339;
+const APP_BUILD = 340;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -463,42 +463,111 @@ function toast(msg, tipo='ok') {
   _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-/* ── Janela de texto do próprio app (no lugar do prompt()) ───────────────
-   O prompt() é do NAVEGADOR, e em navegador embutido (link aberto dentro do
-   WhatsApp/LinkedIn, MIUI…) ele aparece SEM o texto e SEM o campo — só
-   Cancelar/OK — e não dá para digitar nada (vídeo de 01/10/2026, botão
-   "Digitar a chave de 44 dígitos"). Esta janela é HTML do app e se comporta
-   igual em qualquer navegador.
+/* ── Janelas do próprio app (no lugar de prompt/confirm/alert) ───────────
+   prompt(), confirm() e alert() são do NAVEGADOR, e em navegador embutido
+   (link aberto dentro do WhatsApp/LinkedIn, MIUI…) aparecem SEM o texto e SEM
+   o campo — só Cancelar/OK. Foi assim que "Digitar a chave de 44 dígitos"
+   ficou impossível de usar (vídeo de 01/10/2026), e o mesmo vale para
+   confirmar uma exclusão às cegas. Estas janelas são HTML do app e se
+   comportam igual em qualquer navegador. NUNCA escreva prompt/confirm/alert
+   (nem window.prompt…) em código novo.
 
-   pedirCampos({ titulo, dica, confirmar, campos:[{ id, rotulo, valor,
-     placeholder, inputmode, maxlength, validar(texto) → mensagem de erro | '' }] })
-   devolve Promise<{ [id]: texto } | null> (null = cancelou). O erro de
-   validação aparece DENTRO da janela, que continua aberta: a pessoa não
-   redigita os 44 dígitos. A janela segue o teclado (visualViewport) e leva a
-   classe modal-overlay para o verificador de versão não recarregar a página
-   com ela aberta. Chame sempre direto do toque (o foco só abre o teclado
-   dentro do gesto). */
-function pedirCampos({ titulo, dica = '', confirmar = 'OK', campos = [] }) {
+   • pedirCampos({ titulo, dica, confirmar, perigo, campos })  → Promise<{id:texto}|null>
+   • pedirTexto({ titulo, dica, rotulo, … })                   → Promise<texto|null>
+   • pedirPalavra({ titulo, mensagem, palavra })               → Promise<boolean>   (digitar EXCLUIR)
+   • pedirConfirmacao('Título' + quebra de linha + 'detalhes') → Promise<boolean>
+       (ou { titulo, mensagem, confirmar, cancelar, perigo })
+   • mostrarAviso('Título' + quebra de linha + 'detalhes')     → Promise<void>   ({ mono:true } p/ diagnóstico)
+
+   Quando a mensagem é uma string só, a PRIMEIRA LINHA vira o título. O erro de
+   validação dos campos aparece DENTRO da janela, que continua aberta (a pessoa
+   não redigita os 44 dígitos). A janela segue o teclado (visualViewport) e leva
+   a classe modal-overlay para o verificador de versão não recarregar a página
+   com ela aberta. Chame direto do toque: o foco só abre o teclado dentro do
+   gesto. Abrir uma janela cancela a anterior (a Promise dela resolve vazia). */
+const _NL = String.fromCharCode(10);
+
+function _janelaApp(resolve, vazio) {
+  const antigo = document.getElementById('modal-pedir');
+  if (antigo && antigo._cancelar) antigo._cancelar(); else if (antigo) antigo.remove();
+  const el = document.createElement('div');
+  el.id = 'modal-pedir';
+  el.className = 'modal-overlay';
+  el.style.cssText = 'z-index:99999;align-items:flex-end;padding:0;background:rgba(0,0,0,.6)';
+  const caixa = document.createElement('div');
+  caixa.style.cssText = 'background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;width:100%;max-width:480px;'
+    + 'border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));'
+    + 'max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;-webkit-user-select:text;user-select:text';
+  const vv = window.visualViewport;
+  const ajustar = () => {
+    if (!vv) return;
+    el.style.top = vv.offsetTop + 'px';
+    el.style.bottom = 'auto';
+    el.style.height = vv.height + 'px';
+  };
+  let fechado = false;
+  const fechar = valor => {
+    if (fechado) return;
+    fechado = true;
+    vv?.removeEventListener('resize', ajustar);
+    vv?.removeEventListener('scroll', ajustar);
+    el.remove();
+    resolve(valor);
+  };
+  el._cancelar = () => fechar(vazio);
+  const abrir = () => {
+    el.appendChild(caixa);
+    document.body.appendChild(el);
+    vv?.addEventListener('resize', ajustar);
+    vv?.addEventListener('scroll', ajustar);
+    ajustar();
+  };
+  return { el, caixa, fechar, abrir };
+}
+
+/* string única → primeira linha é o título, o resto é o corpo */
+function _partirMensagem(mensagem) {
+  const linhas = String(mensagem == null ? '' : mensagem).split(_NL);
+  const titulo = (linhas.shift() || '').trim();
+  return { titulo, corpo: linhas.join(_NL).trim() };
+}
+
+function _cabecalhoJanela(caixa, titulo, corpo, mono) {
+  const h = document.createElement('div');
+  h.textContent = titulo || '';
+  h.style.cssText = 'font-size:19px;font-weight:700;line-height:1.3;overflow-wrap:anywhere;margin:0 0 ' + (corpo ? '6px' : '14px');
+  caixa.appendChild(h);
+  if (corpo) {
+    const p = document.createElement('div');
+    p.textContent = corpo;
+    p.style.cssText = 'color:#b8d9c2;margin:0 0 14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;font-size:'
+      + (mono ? '13px;font-family:ui-monospace,Menlo,Consolas,monospace' : '15px');
+    caixa.appendChild(p);
+  }
+}
+
+function _botaoJanela(texto, primario, perigo) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = texto;
+  b.style.cssText = primario
+    ? 'flex:1;border:0;border-radius:8px;padding:12px;font-size:16px;font-weight:700;'
+      + (perigo ? 'background:#ffb4a8;color:#4a0f06' : 'background:#b9e24a;color:#083d1e')
+    : 'flex:1;background:transparent;color:#eef9f0;border:1px solid #3d7a52;border-radius:8px;padding:12px;font-size:16px';
+  return b;
+}
+
+/* "Título" + quebra de linha + detalhes, ou { titulo, mensagem } */
+function _textoDaJanela(arg, opts) {
+  const o = typeof arg === 'string' ? { mensagem: arg, ...opts } : { ...arg };
+  const partes = o.titulo ? { titulo: o.titulo, corpo: String(o.mensagem || '').trim() } : _partirMensagem(o.mensagem);
+  return { o, ...partes };
+}
+
+function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, campos = [] }) {
   return new Promise(resolve => {
-    document.getElementById('modal-pedir')?.remove();
-    const el = document.createElement('div');
-    el.id = 'modal-pedir';
-    el.className = 'modal-overlay';
-    el.style.cssText = 'z-index:99999;align-items:flex-end;padding:0;background:rgba(0,0,0,.6)';
-    const caixa = document.createElement('div');
-    caixa.style.cssText = 'background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;width:100%;max-width:480px;'
-      + 'border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));'
-      + 'max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box';
-    const h = document.createElement('div');
-    h.textContent = titulo;
-    h.style.cssText = 'font-size:19px;font-weight:700;margin:0 0 4px';
-    caixa.appendChild(h);
-    if (dica) {
-      const p = document.createElement('div');
-      p.textContent = dica;
-      p.style.cssText = 'font-size:14px;color:#b8d9c2;margin:0 0 12px;line-height:1.4';
-      caixa.appendChild(p);
-    }
+    const { el, caixa, fechar, abrir } = _janelaApp(resolve, null);
+    _cabecalhoJanela(caixa, titulo, dica, false);
     const inputs = [];
     campos.forEach(c => {
       if (c.rotulo) {
@@ -526,19 +595,6 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', campos = [] }) {
     erro.style.cssText = 'color:#ffb4a8;font-size:14px;min-height:18px;margin:0 0 8px';
     caixa.appendChild(erro);
 
-    const vv = window.visualViewport;
-    const ajustar = () => {
-      if (!vv) return;
-      el.style.top = vv.offsetTop + 'px';
-      el.style.bottom = 'auto';
-      el.style.height = vv.height + 'px';
-    };
-    const fechar = valor => {
-      vv?.removeEventListener('resize', ajustar);
-      vv?.removeEventListener('scroll', ajustar);
-      el.remove();
-      resolve(valor);
-    };
     const enviar = () => {
       const saida = {};
       for (let i = 0; i < campos.length; i++) {
@@ -553,15 +609,9 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', campos = [] }) {
 
     const linha = document.createElement('div');
     linha.style.cssText = 'display:flex;gap:8px';
-    const bCancelar = document.createElement('button');
-    bCancelar.type = 'button';
-    bCancelar.textContent = 'Cancelar';
-    bCancelar.style.cssText = 'flex:1;background:transparent;color:#eef9f0;border:1px solid #3d7a52;border-radius:8px;padding:12px;font-size:16px';
+    const bCancelar = _botaoJanela('Cancelar', false, false);
     bCancelar.onclick = () => fechar(null);
-    const bOk = document.createElement('button');
-    bOk.type = 'button';
-    bOk.textContent = confirmar;
-    bOk.style.cssText = 'flex:1;background:#b9e24a;color:#083d1e;border:0;border-radius:8px;padding:12px;font-size:16px;font-weight:700';
+    const bOk = _botaoJanela(confirmar, true, perigo);
     bOk.onclick = enviar;
     linha.append(bCancelar, bOk);
     caixa.appendChild(linha);
@@ -577,19 +627,15 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', campos = [] }) {
     /* tocar no fundo cancela, mas só se a pessoa ainda não digitou nada */
     el.onclick = e => { if (e.target === el && !alterado()) fechar(null); };
 
-    el.appendChild(caixa);
-    document.body.appendChild(el);
-    vv?.addEventListener('resize', ajustar);
-    vv?.addEventListener('scroll', ajustar);
-    ajustar();
+    abrir();
     if (inputs[0]) { inputs[0].focus(); try { inputs[0].select(); } catch (_) {} }
   });
 }
 
 /* um campo só — devolve o texto ou null se cancelou */
-async function pedirTexto({ titulo, dica, confirmar, valor, placeholder, inputmode, maxlength, validar }) {
-  const r = await pedirCampos({ titulo, dica, confirmar,
-    campos: [{ id: 't', valor, placeholder, inputmode, maxlength, validar }] });
+async function pedirTexto({ titulo, dica, confirmar, perigo, rotulo, valor, placeholder, inputmode, maxlength, validar }) {
+  const r = await pedirCampos({ titulo, dica, confirmar, perigo,
+    campos: [{ id: 't', rotulo, valor, placeholder, inputmode, maxlength, validar }] });
   return r ? r.t : null;
 }
 
@@ -611,6 +657,57 @@ function _pedirChave44() {
       return '';
     },
   }).then(t => (t == null ? null : _digitos(t)));
+}
+
+/* exclusão sem volta: a pessoa digita a palavra (EXCLUIR) para confirmar.
+   true = digitou certo; false = cancelou. */
+function pedirPalavra({ titulo, mensagem, palavra = 'EXCLUIR', confirmar = 'Excluir' }) {
+  return pedirCampos({
+    titulo, dica: mensagem, confirmar, perigo: true,
+    campos: [{ id: 'p', rotulo: `Digite ${palavra} para confirmar`, placeholder: palavra,
+      validar: t => (t.toUpperCase() === palavra ? '' : `Digite a palavra ${palavra} para confirmar.`) }],
+  }).then(r => !!r);
+}
+
+/* Sim/Não no lugar do confirm(). true = confirmou; false = cancelou, tocou
+   no fundo ou apertou Esc. Em ação destrutiva (perigo) o foco começa no Cancelar. */
+function pedirConfirmacao(arg, opts = {}) {
+  const { o, titulo, corpo } = _textoDaJanela(arg, opts);
+  return new Promise(resolve => {
+    const { el, caixa, fechar, abrir } = _janelaApp(resolve, false);
+    _cabecalhoJanela(caixa, titulo, corpo, false);
+    const linha = document.createElement('div');
+    linha.style.cssText = 'display:flex;gap:8px';
+    const bNao = _botaoJanela(o.cancelar || 'Cancelar', false, false);
+    const bSim = _botaoJanela(o.confirmar || 'OK', true, !!o.perigo);
+    bNao.onclick = () => fechar(false);
+    bSim.onclick = () => fechar(true);
+    linha.append(bNao, bSim);
+    caixa.appendChild(linha);
+    caixa.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); fechar(false); } });
+    el.onclick = e => { if (e.target === el) fechar(false); };
+    abrir();
+    (o.perigo ? bNao : bSim).focus();
+  });
+}
+
+/* Aviso no lugar do alert(); resolve quando a pessoa toca em OK. */
+function mostrarAviso(arg, opts = {}) {
+  const { o, titulo, corpo } = _textoDaJanela(arg, opts);
+  return new Promise(resolve => {
+    const { el, caixa, fechar, abrir } = _janelaApp(resolve, undefined);
+    _cabecalhoJanela(caixa, titulo, corpo, !!o.mono);
+    const linha = document.createElement('div');
+    linha.style.cssText = 'display:flex;gap:8px';
+    const bOk = _botaoJanela(o.botao || 'OK', true, false);
+    bOk.onclick = () => fechar();
+    linha.appendChild(bOk);
+    caixa.appendChild(linha);
+    caixa.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); fechar(); } });
+    el.onclick = e => { if (e.target === el) fechar(); };
+    abrir();
+    bOk.focus();
+  });
 }
 
 let _telaAtual = 'auth';
@@ -1251,7 +1348,7 @@ function comoInstalar() {
       + '2. "Transmitir, salvar e compartilhar" → "Instalar página como app"\n'
       + '3. Confirme' + aviso;
   }
-  alert(msg);
+  mostrarAviso(msg);
 }
 
 /* Mostra o que o NAVEGADOR DESTE APARELHO pensa da instalação. Existe
@@ -1315,7 +1412,7 @@ async function diagnosticoInstalacao() {
   L.push(`Versão do app: ${APP_VERSION} (publicação ${APP_BUILD})`);
   L.push(`Navegador: ${navigator.userAgent.slice(0, 110)}`);
 
-  alert(L.join('\n'));
+  mostrarAviso(L.join(_NL), { mono: true });
 }
 
 /* ── Auth ────────────────────────────────────────────────── */
@@ -1742,8 +1839,8 @@ async function testarDrive() {
    Só move arquivo — não apaga nada, e rodar de novo é inofensivo. */
 async function migrarPastasDrive() {
   if (!(await _garantirDrive())) return;
-  if (!confirm('Reorganizar as fotos já enviadas no padrão de pastas da empresa?\n\n'
-             + 'Os arquivos são movidos, nunca apagados. As pastas antigas ficam onde estão, vazias.')) return;
+  if (!(await pedirConfirmacao('Reorganizar as fotos já enviadas no padrão de pastas da empresa?\n\n'
+             + 'Os arquivos são movidos, nunca apagados. As pastas antigas ficam onde estão, vazias.'))) return;
 
   setLoading(true);
   try {
@@ -2023,9 +2120,9 @@ function abrirNotificacoes() {
 async function confirmarEntrada(id, aceita, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para confirmar', 'err'); return; }
   const quem = equipePorId[id]?.nome || 'o colaborador';
-  if (!confirm(aceita
-    ? `Liberar ${quem} para usar o app?`
-    : `Recusar a entrada de ${quem}?\n\nA conta é desativada na hora. Dá para reativar depois na Equipe.`)) return;
+  if (!(await pedirConfirmacao(aceita
+    ? { mensagem: `Liberar ${quem} para usar o app?`, confirmar: 'Liberar' }
+    : { mensagem: `Recusar a entrada de ${quem}?\n\nA conta é desativada na hora. Dá para reativar depois na Equipe.`, confirmar: 'Recusar', perigo: true }))) return;
   if (btn) btn.disabled = true;
   try {
     const c = await sb.colaboradores.confirmar(id, aceita);
@@ -2141,13 +2238,13 @@ async function excluirRepasseDeOutro(id) {
   if (!r) { toast('Repasse não encontrado', 'err'); return; }
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
   const nl = String.fromCharCode(10);
-  if (!confirm([
+  if (!(await pedirConfirmacao({ confirmar: 'Excluir', perigo: true, mensagem: [
     'Excluir este repasse de ' + quem + '?',
     '',
     brl(r.valor) + ' · ' + fmtDataBR(r.data) + (r.descricao ? ' · ' + r.descricao : ''),
     '',
     'O valor sai do saldo dele e some das planilhas.',
-  ].join(nl))) return;
+  ].join(nl) }))) return;
 
   setLoading(true);
   try {
@@ -2306,7 +2403,7 @@ async function _confirmarAtenderPedido(id, btn) {
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
   const valor = Number(document.getElementById('pedido-valor')?.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido', 'err'); return; }
-  if (!confirm(`Confirmar que ${brl(valor)} foi PAGO para ${quem}?\n\nO repasse entra no saldo dele e o pedido sai das pendências.`)) return;
+  if (!(await pedirConfirmacao({ mensagem: `Confirmar que ${brl(valor)} foi PAGO para ${quem}?\n\nO repasse entra no saldo dele e o pedido sai das pendências.`, confirmar: 'Confirmar pagamento' }))) return;
   if (btn) btn.disabled = true;
   try {
     await sb.repasses.atendido(id, valor);
@@ -2324,7 +2421,7 @@ async function _recusarPedido(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para recusar', 'err'); return; }
   const r = _repasseDaEquipe(id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
-  if (!confirm(`Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?\n\nO pedido some das pendências. Avise a pessoa por fora do app, se precisar.`)) return;
+  if (!(await pedirConfirmacao({ mensagem: `Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?\n\nO pedido some das pendências. Avise a pessoa por fora do app, se precisar.`, confirmar: 'Recusar', perigo: true }))) return;
   if (btn) btn.disabled = true;
   try {
     await sb.repasses.upsert({ ...r, deleted: true });
@@ -3910,7 +4007,7 @@ function _dupNaLixeira(n) {
 async function restaurarNota(id) {
   const arq = (await DB.getDeletedNotasUser(user.id).catch(() => [])).find(x => x.id === id);
   const d = arq ? _dupNaLixeira(arq) : null;
-  if (d && !confirm(`Já existe uma nota igual ativa:\n${_resumoNota(d.nota)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`)) return;
+  if (d && !(await pedirConfirmacao({ mensagem: `Já existe uma nota igual ativa:\n${_resumoNota(d.nota)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`, confirmar: 'Restaurar' }))) return;
   const n = await DB.restoreNota(id);
   if (!n) {
     toast('Lançamento não encontrado na lixeira', 'err');
@@ -3948,12 +4045,12 @@ async function apagarDefinitivo(id) {
 
   const resumo = [n.tipo, n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : null),
                   n.data ? fmtData(n.data) : null, brl(n.valor)].filter(Boolean).join(' · ');
-  const resposta = window.prompt(
-    'APAGAR EM DEFINITIVO\n\n' + resumo +
-    '\n\nA nota e o anexo saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.'
-    + '\n\nDigite EXCLUIR para confirmar.', '');
-  if (resposta === null) return;
-  if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') { toast('Exclusão cancelada', 'err'); return; }
+  const confirmouApagar = await pedirPalavra({
+    titulo: 'Apagar em definitivo',
+    mensagem: resumo + '\n\nA nota e o anexo saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.',
+    confirmar: 'Apagar',
+  });
+  if (!confirmouApagar) return;
 
   setLoading(true);
   try {
@@ -3982,7 +4079,7 @@ async function apagarDefinitivo(id) {
 
 /* Cópia órfã da lixeira (não existe no servidor): só limpa o aparelho. */
 async function limparDaLixeira(id) {
-  if (!confirm('Remover este item da lixeira deste aparelho? (ele já não existe no servidor)')) return;
+  if (!(await pedirConfirmacao({ mensagem: 'Remover este item da lixeira deste aparelho?\n\nEle já não existe no servidor.', confirmar: 'Remover', perigo: true }))) return;
   await DB.limparDaLixeira(id, true);
   await carregarDadosLocais();
   renderNotasApagadas();
@@ -4533,7 +4630,7 @@ async function removerNotaFantasma(id) {
     '',
     'Remover daqui?',
   ].join(nl);
-  if (!confirm(aviso)) return;
+  if (!(await pedirConfirmacao({ mensagem: aviso, confirmar: 'Remover', perigo: true }))) return;
   await DB.purgeNotaLocal(id);
   await carregarDadosLocais();
   document.getElementById('pend-overlay')?.remove();
@@ -4957,7 +5054,7 @@ const _urlCarrega = url => new Promise(res => {
 });
 
 async function diagnosticoFotos() {
-  if (!sb || DEMO_MODE) { alert('Disponível apenas com o servidor configurado.'); return; }
+  if (!sb || DEMO_MODE) { await mostrarAviso('Disponível apenas com o servidor configurado.'); return; }
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
   $('ocr-progress').textContent = 'Verificando anexos…';
@@ -4995,7 +5092,7 @@ async function diagnosticoFotos() {
     for (const n of semPath) if ((await DB.getFotoLocal(n.id).catch(()=>null))?.blob) pendentesLocais++;
 
     ov.style.display = 'none';
-    alert(
+    await mostrarAviso(
       `DIAGNÓSTICO DE ANEXOS\n\n` +
       `Minhas notas: ${minhas.length}\n` +
       `Com foto_path (deveriam ter arquivo no servidor): ${comPath.length}\n` +
@@ -5007,11 +5104,12 @@ async function diagnosticoFotos() {
       `\n\nComo ler:\n` +
       `• servidor:ok → arquivo existe e você consegue baixar\n` +
       `• servidor:ERRO → arquivo não está lá OU a leitura foi negada\n` +
-      `• local:não e servidor:ERRO → é este caso que deixa a nota sem imagem`
+      `• local:não e servidor:ERRO → é este caso que deixa a nota sem imagem`,
+      { mono: true }
     );
   } catch (e) {
     ov.style.display = 'none';
-    alert('Diagnóstico falhou: ' + e.message);
+    await mostrarAviso('Diagnóstico falhou: ' + e.message);
   }
 }
 
@@ -5021,9 +5119,9 @@ async function diagnosticoFotos() {
    já estiver no Drive, só atualiza (não duplica).
    Mostra um resumo FIXO (popup) com o diagnóstico de cada etapa. */
 async function enviarFotosEquipeDrive() {
-  if (!sb || DEMO_MODE) { alert('Disponível apenas com o servidor configurado.'); return; }
+  if (!sb || DEMO_MODE) { await mostrarAviso('Disponível apenas com o servidor configurado.'); return; }
   if (!(await _garantirDrive())) return;
-  if (!confirm('Enviar ao Drive as fotos de TODOS os colaboradores (todos os meses)?\nPode levar um tempo conforme a quantidade.')) return;
+  if (!(await pedirConfirmacao('Enviar ao Drive as fotos de TODOS os colaboradores (todos os meses)?\nPode levar um tempo conforme a quantidade.'))) return;
 
   const ov = $('ocr-overlay');
   const setProg = txt => { if (ov) ov.style.display = 'flex'; const p = $('ocr-progress'); if (p) p.textContent = txt; };
@@ -5046,7 +5144,7 @@ async function enviarFotosEquipeDrive() {
 
     if (!comFoto.length) {
       if (ov) ov.style.display = 'none';
-      alert(`Nenhuma foto para enviar.\n\nNotas que este perfil consegue ler: ${totalNotas}\nCom foto no servidor: 0\n\n`
+      await mostrarAviso(`Nenhuma foto para enviar.\n\nNotas que este perfil consegue ler: ${totalNotas}\nCom foto no servidor: 0\n\n`
         + `Se você sabe que há fotos: ou elas ainda não foram sincronizadas ao servidor, `
         + `ou as permissões não deixam este perfil ver as notas dos outros colaboradores.`);
       return;
@@ -5104,7 +5202,7 @@ async function enviarFotosEquipeDrive() {
     }
 
     if (ov) ov.style.display = 'none';
-    alert(idxAviso
+    await mostrarAviso(idxAviso
       + `Consolidação concluída.\n\n`
       + `Notas com foto: ${comFoto.length}\n`
       + `✅ Enviadas ao Drive: ${ok}\n`
@@ -5119,7 +5217,7 @@ async function enviarFotosEquipeDrive() {
           : ''));
   } catch (e) {
     if (ov) ov.style.display = 'none';
-    alert('Envio ao Drive falhou: ' + e.message);
+    await mostrarAviso('Envio ao Drive falhou: ' + e.message);
   }
 }
 
@@ -5215,7 +5313,7 @@ async function enviarFotoPerfil(e) {
   finally { setLoading(false); e.target.value = ''; }
 }
 async function removerFotoPerfil() {
-  if (!confirm('Remover a foto do perfil?')) return;
+  if (!(await pedirConfirmacao({ mensagem: 'Remover a foto do perfil?', confirmar: 'Remover', perigo: true }))) return;
   setLoading(true);
   try { user = await sb.auth.removerFotoPerfil(); renderPerfil(); }
   catch (err) { toast(err.message, 'err'); } finally { setLoading(false); }
@@ -5417,7 +5515,7 @@ async function enviarBackupDriveAgora() {
   finally { setLoading(false); _mostrarBackupDrive(); }
 }
 async function desconectarDriveBackup() {
-  if (!confirm('Desligar a cópia do backup no Google Drive? Os arquivos já enviados continuam lá.')) return;
+  if (!(await pedirConfirmacao({ mensagem: 'Desligar a cópia do backup no Google Drive?\n\nOs arquivos já enviados continuam lá.', confirmar: 'Desligar', perigo: true }))) return;
   try { await sb.backup.driveDesconectar(); toast('Drive desconectado do backup'); }
   catch (e) { toast(e.message || 'erro', 'err'); }
   _mostrarBackupDrive();
@@ -5637,7 +5735,8 @@ async function atualizarBanco() {
     const st = await sb.admin.status();
     const pend = st?.migracoes_pendentes || [];
     if (!pend.length) { toast('Banco já está atualizado'); return; }
-    if (!confirm(`${pend.length} atualização(ões) pendente(s):\n\n${pend.join('\n')}\n\nAplicar agora? Baixe um backup antes, se ainda não baixou.`)) return;
+    setLoading(false);   // a janela de confirmação não pode ficar atrás da tela de carregando
+    if (!(await pedirConfirmacao({ mensagem: `${pend.length} atualização(ões) pendente(s):\n\n${pend.join('\n')}\n\nAplicar agora? Baixe um backup antes, se ainda não baixou.`, confirmar: 'Aplicar' }))) return;
     setLoading(true, 'Atualizando…');
     const r = await sb.admin.migrar();
     if (!r?.ok) throw new Error(r?.saida || 'falha');
@@ -7204,8 +7303,12 @@ function _avisarDuplicataAposLeitura() {
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
   if (!d) return false;
-  const abrir = confirm(`⚠️ Parece registro duplicado (${_MOTIVO_DUP[d.motivo]}):\n\n${_resumoNota(d.nota)}\n\nAbrir a nota que já existe? (Cancelar = continuar este lançamento)`);
-  if (abrir) { fecharFormNota(); editarNota(d.nota.id); }
+  /* não bloqueia mais (a janela do app é assíncrona): o aviso aparece por cima do
+     formulário já preenchido; "Abrir a nota" leva à que existe, "Continuar" segue */
+  pedirConfirmacao({
+    mensagem: `⚠️ Parece registro duplicado (${_MOTIVO_DUP[d.motivo]}):\n\n${_resumoNota(d.nota)}\n\nAbrir a nota que já existe? Se continuar, este lançamento segue normalmente.`,
+    confirmar: 'Abrir a nota', cancelar: 'Continuar este',
+  }).then(abrir => { if (abrir) { fecharFormNota(); editarNota(d.nota.id); } });
   return true;
 }
 
@@ -7239,7 +7342,7 @@ async function _salvarNotaInterno() {
   const futuro = _dataNoFuturo(data);
   if (futuro) {
     const nl = String.fromCharCode(10);
-    alert([
+    await mostrarAviso([
       futuro,
       '',
       'A nota registra um gasto que já aconteceu — não dá para lançar com data adiante de hoje.',
@@ -7267,7 +7370,7 @@ async function _salvarNotaInterno() {
     const nl = String.fromCharCode(10);
     const ehCpf = _soDigitos(proibido).length === 11;
     const semCpfNoPerfil = ehCpf && !_cpfDoDono(donoDaNota);
-    alert([
+    await mostrarAviso([
       'Esta nota está no CPF/CNPJ ' + _formatarDoc(proibido) + ', que não é o da empresa.',
       '',
       'A nota precisa sair SEM consumidor identificado ou no CNPJ ' + _formatarDoc(CNPJ_EMPRESA) + '.',
@@ -7344,10 +7447,11 @@ async function _salvarNotaInterno() {
         igual.data ? fmtData(igual.data) : null,
         brl(igual.valor),
       ].filter(Boolean).join(' · ');
-      const seguir = confirm(
-        `Esta nota parece já ter sido lançada (${_MOTIVO_DUP[dup.motivo]}):\n\n` + resumo +
-        '\n\nLançar assim mesmo? (nada será apagado)'
-      );
+      const seguir = await pedirConfirmacao({
+        mensagem: `Esta nota parece já ter sido lançada (${_MOTIVO_DUP[dup.motivo]}):\n\n` + resumo +
+          '\n\nLançar assim mesmo? (nada será apagado)',
+        confirmar: 'Lançar assim mesmo',
+      });
       if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
     }
   }
@@ -7516,7 +7620,9 @@ async function _aplicarGrupoNota(id, tipo, subtipo, btn) {
   }
 }
 
-function confirmarExclusaoNota(id) {
+/* Uma janela só: o que será excluído + digitar EXCLUIR (eram um confirm e um
+   prompt em sequência). Devolve Promise<boolean>. */
+async function confirmarExclusaoNota(id) {
   const n = _notaPorId(id);
   if (!n) {
     toast('Nota não encontrada', 'err');
@@ -7528,28 +7634,18 @@ function confirmarExclusaoNota(id) {
     n.data ? fmtData(n.data) : null,
     Number.isFinite(Number(n.valor)) ? brl(Number(n.valor)) : null,
   ].filter(Boolean).join(' · ');
-  const confirmacao = window.confirm(
-    'Deseja realmente excluir esta nota do aplicativo e do backup remoto?'
-    + (detalhes ? `\n\n${detalhes}` : '')
-  );
-  if (!confirmacao) {
-    toast('Exclusão cancelada', 'err');
-    return false;
-  }
-  const mensagem = 'Esta ação remove a nota do aplicativo e do backup remoto.\n\n'
-    + (detalhes ? `${detalhes}\n\n` : '')
-    + 'Digite EXCLUIR para confirmar.';
-  const resposta = window.prompt(mensagem, '');
-  if (resposta === null) return false;
-  if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') {
-    toast('Exclusão cancelada', 'err');
-    return false;
-  }
-  return true;
+  const ok = await pedirPalavra({
+    titulo: 'Excluir esta nota?',
+    mensagem: (detalhes ? `${detalhes}\n\n` : '')
+      + 'Esta ação remove a nota do aplicativo e do backup remoto.',
+    confirmar: 'Excluir',
+  });
+  if (!ok) toast('Exclusão cancelada', 'err');
+  return ok;
 }
 
 async function excluirNota(id) {
-  if (!confirmarExclusaoNota(id)) return;
+  if (!(await confirmarExclusaoNota(id))) return;
   await DB.softDeleteNota(id);
   await syncBadge(false);
   await carregarDadosLocais();
@@ -8048,7 +8144,7 @@ function _podeExcluirRepasse(r) {
 }
 
 async function excluirRepasse(id) {
-  if (!confirm('Excluir este repasse?')) return;
+  if (!(await pedirConfirmacao({ mensagem: 'Excluir este repasse?', confirmar: 'Excluir', perigo: true }))) return;
   await DB.softDeleteRepasse(id);
   await syncBadge(false);
   await carregarDadosLocais();

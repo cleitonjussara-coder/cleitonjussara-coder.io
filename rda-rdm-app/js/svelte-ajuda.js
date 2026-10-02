@@ -139,7 +139,7 @@
 \r
     <div class="ajuda-sec">\r
       <h4>🗑️ Lixeira</h4>\r
-      <p>Apagar uma nota pede que você digite <b>EXCLUIR</b>; ela vai para a <b>Lixeira</b> (em Minhas notas → 🗑️), de onde dá para <b>Restaurar</b> ou <b>Apagar definitivo</b> (só o dono ou o admin; some do servidor com o anexo).</p>\r
+      <p>Apagar uma nota abre uma janela do app (painel verde na parte de baixo da tela) que mostra o que será excluído e pede que você digite <b>EXCLUIR</b>; ela vai para a <b>Lixeira</b> (em Minhas notas → 🗑️), de onde dá para <b>Restaurar</b> ou <b>Apagar definitivo</b> (só o dono ou o admin; some do servidor com o anexo).</p>\r
       <ul>\r
         <li>⚠️ <b>"Já existe uma nota igual ativa"</b> — a lixeira avisa quando restaurar criaria uma nota repetida; confirme só se tiver certeza.</li>\r
         <li>📱 <b>"Só neste aparelho"</b> — é uma cópia antiga que já não existe no servidor (foi apagada em definitivo por outro aparelho). Não dá para restaurar; use <b>Limpar daqui</b>.</li>\r

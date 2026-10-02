@@ -799,11 +799,11 @@ window.Gestor = (() => {
          confirma antes, dos dois lados. */
       const quem = colab.nome || colab.email;
       if (role !== colab.role) {
-        if (role === 'admin' && !confirm(`Tornar ${quem} ADMINISTRADOR?\n\nÉ o papel técnico de quem mantém o app: passa a editar qualquer perfil, mudar papéis e apagar lançamento em definitivo.`)) return;
-        if (colab.role === 'admin' && !confirm(`Tirar o ADMINISTRADOR de ${quem}?\n\nEle deixa de manter o sistema e passa a ${PAPEL_TXT[role] ? PAPEL_TXT[role].split(' — ')[0].toLowerCase() : role}. Dá para devolver o papel depois.`)) return;
+        if (role === 'admin' && !(await pedirConfirmacao({ mensagem: `Tornar ${quem} ADMINISTRADOR?\n\nÉ o papel técnico de quem mantém o app: passa a editar qualquer perfil, mudar papéis e apagar lançamento em definitivo.`, confirmar: 'Tornar administrador', perigo: true }))) return;
+        if (colab.role === 'admin' && !(await pedirConfirmacao({ mensagem: `Tirar o ADMINISTRADOR de ${quem}?\n\nEle deixa de manter o sistema e passa a ${PAPEL_TXT[role] ? PAPEL_TXT[role].split(' — ')[0].toLowerCase() : role}. Dá para devolver o papel depois.`, confirmar: 'Tirar administrador', perigo: true }))) return;
       }
       try { await sb.colaboradores.update(colab.id, dados); }
-      catch (e) { alert('Erro: ' + e.message); return; }
+      catch (e) { await mostrarAviso('Erro: ' + e.message); return; }
       close(); onSaved();
     };
 
@@ -812,33 +812,30 @@ window.Gestor = (() => {
       const msg = inativo
         ? `Reativar ${colab.nome || colab.email}? A pessoa volta a entrar no app.`
         : `Desativar ${colab.nome || colab.email}?\n\nEla não consegue mais entrar e sai das listas. Nada é apagado.`;
-      if (!confirm(msg)) return;
+      if (!(await pedirConfirmacao({ mensagem: msg, confirmar: inativo ? 'Reativar' : 'Desativar', perigo: !inativo }))) return;
       try { await sb.colaboradores.ativo(colab.id, inativo); }
-      catch (e) { alert('Erro: ' + e.message); return; }
+      catch (e) { await mostrarAviso('Erro: ' + e.message); return; }
       toast(inativo ? 'Colaborador reativado' : 'Colaborador desativado');
       close(); onSaved();
     };
 
     const btnExcluir = ov.querySelector('#g-excluir');
     if (btnExcluir) btnExcluir.onclick = async () => {
-      const resposta = window.prompt(`EXCLUIR COLABORADOR
-
-${colab.nome || ''}
-${colab.email}
-
-Serão apagados AGORA: todas as notas e anexos, repasses, KM e ponto. Não tem volta.
-
-Digite EXCLUIR para confirmar.`, '');
-      if (resposta === null) return;
-      if (String(resposta).trim().toUpperCase() !== 'EXCLUIR') { toast('Exclusão cancelada — a palavra não confere', 'err'); return; }
+      const confirmouExcluir = await pedirPalavra({
+        titulo: 'Excluir colaborador',
+        mensagem: `${colab.nome || ''}\n${colab.email}\n\nSerão apagados AGORA: todas as notas e anexos, repasses, KM e ponto. Não tem volta.`,
+        confirmar: 'Excluir colaborador',
+      });
+      if (!confirmouExcluir) return;
       setLoading(true);
+      let resumoExcluido = null;
       try {
         const r = await sb.colaboradores.excluir(colab.id, 'EXCLUIR');
         try { await DB.purgeNotasDeUsuario?.(colab.id); } catch (_) {}
-        alert(`Colaborador excluído.
-Notas: ${r.notas ?? 0} · Repasses: ${r.repasses ?? 0} · KM: ${r.km ?? 0} · Ponto: ${r.pontos ?? 0}`);
-      } catch (e) { alert('Erro: ' + e.message); return; }
+        resumoExcluido = `Colaborador excluído.\nNotas: ${r.notas ?? 0} · Repasses: ${r.repasses ?? 0} · KM: ${r.km ?? 0} · Ponto: ${r.pontos ?? 0}`;
+      } catch (e) { setLoading(false); await mostrarAviso('Erro: ' + e.message); return; }
       finally { setLoading(false); }
+      await mostrarAviso(resumoExcluido);
       close(); onSaved();
     };
   }

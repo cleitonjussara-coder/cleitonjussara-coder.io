@@ -258,7 +258,7 @@ window.Ponto = (() => {
   async function bater() {
     const h = await _hojeInfo();
     if (!h.prox) { toast('As quatro marcações de hoje já foram feitas', 'err'); return; }
-    if (!confirm(`${h.prox.prox} agora (${agoraHM()})?`)) return;
+    if (!(await pedirConfirmacao({ mensagem: `${h.prox.prox} agora (${agoraHM()})?`, confirmar: 'Registrar' }))) return;
     const item = { marcacao: h.prox.k, hora: new Date().toISOString() };
     if (h.prox.k === 'entrada' && navigator.geolocation) {
       try {
@@ -316,7 +316,7 @@ window.Ponto = (() => {
   }
   async function excluir(id) {
     const d = dias.find(x => x.id === id);
-    if (!d || !confirm(`Excluir o ponto de ${fmtData(d.data)}${d.user_nome ? ' de ' + d.user_nome : ''}?`)) return;
+    if (!d || !(await pedirConfirmacao({ mensagem: `Excluir o ponto de ${fmtData(d.data)}${d.user_nome ? ' de ' + d.user_nome : ''}?`, confirmar: 'Excluir', perigo: true }))) return;
     setLoading(true);
     try { await sb.ponto.delete(id); toast('Excluído'); await render(); }
     catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
@@ -339,7 +339,7 @@ window.Ponto = (() => {
       .catch(e => toast(e.message, 'err')).finally(() => setLoading(false));
   }
   async function excluirFeriado(data) {
-    if (!confirm(`Remover o feriado de ${fmtData(data)}?`)) return;
+    if (!(await pedirConfirmacao({ mensagem: `Remover o feriado de ${fmtData(data)}?`, confirmar: 'Remover', perigo: true }))) return;
     setLoading(true);
     try { await sb.ponto.feriadoDelete(data); await render(); } catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
   }
