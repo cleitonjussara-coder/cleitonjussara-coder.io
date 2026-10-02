@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=341">
+  <link rel="manifest" href="manifest.json?v=342">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -500,10 +500,10 @@ select.inp{cursor:pointer}
 /* ─────────────────────────────────────────────
    SALDO
 ──────────────────────────────────────────────*/
-.saldo-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 14px 12px}
+.saldo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:4px 14px 12px}
 .saldo-card{
   background:var(--surface);border-radius:var(--radius);
-  padding:14px;box-shadow:var(--shadow);
+  padding:14px;box-shadow:var(--shadow);min-width:0;overflow-wrap:anywhere;
 }
 .saldo-card.neg{border-top:3px solid var(--danger)}
 .saldo-card:not(.neg){border-top:3px solid var(--primary)}
@@ -515,6 +515,7 @@ select.inp{cursor:pointer}
 .sub-row{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:var(--text2);margin-bottom:2px;
          line-height:1.25;overflow-wrap:break-word}
 .sub-row span:last-child{flex-shrink:0}
+.sub-row span:first-child{min-width:0;overflow-wrap:anywhere}
 
 /* ─────────────────────────────────────────────
    DASHBOARD GESTÃO
@@ -632,7 +633,7 @@ select.inp{cursor:pointer}
 .db-hero-lbl{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;opacity:.75}
 .db-hero-val{font-size:30px;font-weight:800;letter-spacing:-.5px;line-height:1.1;margin-top:2px}
 .db-hero-val.neg{color:#FFC9C9}
-.db-hero-meta{display:flex;gap:14px;font-size:13.5px;opacity:.85}
+.db-hero-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13.5px;opacity:.85}
 .db-hero-meta b{font-weight:800}
 .db-consumo{height:7px;border-radius:4px;background:rgba(255,255,255,.22);overflow:hidden}
 .db-consumo-fill{height:100%;border-radius:4px;background:#fff;transition:width .5s ease}
@@ -648,8 +649,11 @@ select.inp{cursor:pointer}
 .db-hero .dl{background:rgba(255,255,255,.2);color:#fff}
 
 /* KPIs */
-.db-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.db-kpi{background:var(--surface);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);
+/* 02/10/2026: minmax(0,1fr) + min-width:0. Com 1fr puro a coluna nunca encolhia abaixo do texto sem
+   quebra de linha ("Gasto R$ 4.971,42 · Recebido R$ 10.261,15"), crescia além da tela e o cartão da
+   direita saía cortado (Saldo de RDA). Agora as duas colunas dividem a tela e o texto quebra. */
+.db-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.db-kpi{background:var(--surface);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);min-width:0;
         display:flex;flex-direction:column;gap:2px;border-left:4px solid var(--border);
         text-align:left;font-family:inherit;cursor:pointer;transition:transform .15s ease}
 .db-kpi:active{transform:scale(.97)}
@@ -657,13 +661,13 @@ select.inp{cursor:pointer}
 .db-kpi.rda{border-left-color:var(--primary)}
 .db-kpi.media{border-left-color:#3b82f6}
 .db-kpi.maior{border-left-color:#8b5cf6}
-.db-kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
-.db-kpi-title{flex:1;min-width:0;font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text2);
+.db-kpi-top{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:4px 6px}
+.db-kpi-title{flex:1 1 96px;min-width:0;font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text2);
               letter-spacing:.4px;line-height:1.2}
 .db-kpi-top .dl{flex-shrink:0}
 .db-kpi-val{font-size:19px;font-weight:800;color:var(--primary-d);margin:1px 0}
 .db-kpi-val.neg{color:var(--danger)}
-.db-kpi-sub{font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.db-kpi-sub{font-size:12.5px;color:var(--text2);overflow-wrap:anywhere;line-height:1.3}
 
 /* gráfico */
 .db-legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -1194,15 +1198,15 @@ body{font-size:18.5px}
 .cdet-nome{font-size:26px;font-weight:900;line-height:1.15;margin-top:4px}
 .cdet-email{font-size:15.5px;color:rgba(234,247,238,.8)}
 .cdet-pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:4px}
-.cdet-acoes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.cdet-acao{display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 4px 10px;border-radius:14px;font:inherit;cursor:pointer;
+.cdet-acoes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cdet-acao{display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 4px 10px;min-width:0;overflow-wrap:anywhere;border-radius:14px;font:inherit;cursor:pointer;
   background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35)}
 .cdet-acao:active{transform:scale(.96)}
 .cdet-acao-ico{font-size:35.5px;line-height:1}
 .cdet-acao-lbl{font-size:15.5px;font-weight:800;line-height:1.1;text-align:center}
 .cdet-acao-sub{font-size:13px;color:rgba(234,247,238,.75)}
-.cdet-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.cdet-kpi{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;
+.cdet-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cdet-kpi{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;min-width:0;overflow-wrap:anywhere;
   background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35)}
 .cdet-kpi-ico{font-size:31px;line-height:1;margin-bottom:4px}
 .cdet-kpi-lbl{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:rgba(234,247,238,.8)}
@@ -1210,8 +1214,8 @@ body{font-size:18.5px}
 .cdet-kpi.neg .cdet-kpi-val{color:#ffb4a8}
 .cdet-kpi.warn .cdet-kpi-val{color:#ffd166}
 .cdet-kpi-sub{font-size:14px;color:rgba(234,247,238,.75)}
-.cdet-bals{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.cdet-bal{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;background:var(--surface);border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35);color:#eef9f0}
+.cdet-bals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cdet-bal{display:flex;flex-direction:column;gap:2px;padding:12px 14px;min-width:0;overflow-wrap:anywhere;border-radius:14px;background:var(--surface);border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35);color:#eef9f0}
 .cdet-bal-ico{font-size:29px;line-height:1}
 .cdet-bal-tipo{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:#c9ea62}
 .cdet-bal-val{font-size:24px;font-weight:900;color:#fff}
@@ -1226,7 +1230,7 @@ body{font-size:18.5px}
 .cdet-rep-ico{font-size:27px;line-height:1}
 .cdet-rep-sub{font-size:15px;color:var(--text2);margin-top:2px}
 .cdet-rep-val{font-size:19px;font-weight:900}
-@media (min-width:640px){.cdet-kpis{grid-template-columns:repeat(4,1fr)}}
+@media (min-width:640px){.cdet-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
 /* ── Arquivos no servidor (19/09/2026) ─────────────────────── */
 .arq-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .arq-hd .mes-label{color:#fff}
@@ -1772,7 +1776,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=341" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=342" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2396,32 +2400,32 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=341"></script>
-<script defer src="js/db.js?v=341"></script>
-<script defer src="js/nfce.js?v=341"></script>
-<script defer src="js/sefaz.js?v=341"></script>
-<script defer src="js/brasilapi.js?v=341"></script>
-<script defer src="js/ocr.js?v=341"></script>
-<script defer src="js/recorte.js?v=341"></script>
-<script defer src="js/excel.js?v=341"></script>
-<script defer src="js/gestor.js?v=341"></script>
-<script defer src="js/frota.js?v=341"></script>
-<script defer src="js/ponto.js?v=341"></script>
-<script defer src="js/gdrive.js?v=341"></script>
+<script defer src="js/api.js?v=342"></script>
+<script defer src="js/db.js?v=342"></script>
+<script defer src="js/nfce.js?v=342"></script>
+<script defer src="js/sefaz.js?v=342"></script>
+<script defer src="js/brasilapi.js?v=342"></script>
+<script defer src="js/ocr.js?v=342"></script>
+<script defer src="js/recorte.js?v=342"></script>
+<script defer src="js/excel.js?v=342"></script>
+<script defer src="js/gestor.js?v=342"></script>
+<script defer src="js/frota.js?v=342"></script>
+<script defer src="js/ponto.js?v=342"></script>
+<script defer src="js/gdrive.js?v=342"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=341"></script>
+<script defer src="js/svelte-ajuda.js?v=342"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=341"></script>
+<script defer src="js/svelte-historico.js?v=342"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=341"></script>
+<script defer src="js/svelte-arquivos.js?v=342"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=341"></script>
-<script defer src="js/app.js?v=341"></script>
+<script defer src="js/svelte-perfil.js?v=342"></script>
+<script defer src="js/app.js?v=342"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=341').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=342').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
