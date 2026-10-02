@@ -111,8 +111,14 @@ if [[ "$ALVO" == "api" || "$ALVO" == "tudo" ]]; then
   # .htaccess/.user.ini do web root vêm do repositório (api/public)
   scp "${SSH_OPTS[@]}" -q api/public/.htaccess "$HOST:$WEB_API/.htaccess" || true
   scp "${SSH_OPTS[@]}" -q api/public/.user.ini "$HOST:$WEB_API/.user.ini" || true
-  api_igual app/Http/Controllers/AdminController.php || sftp_api
-  if ! api_igual app/Http/Controllers/AdminController.php; then
+  # Confere os 3 arquivos MAIS RECENTES da API (os que acabaram de mudar). Comparar um arquivo
+  # fixo (AdminController) passava mesmo quando nada novo chegava: com o SSH sem shell o tar não
+  # extrai nada e o arquivo fixo, que não mudou, parecia "igual" — o PDF novo ficou de fora do
+  # teste em 01/10/2026 e o script dizia "✔ arquivos da API no servidor".
+  RECENTES=$(cd api && find app routes config -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -3 | cut -d' ' -f2-)
+  conferir_api() { local f; for f in $RECENTES; do api_igual "$f" || return 1; done; return 0; }
+  conferir_api || sftp_api
+  if ! conferir_api; then
     echo "  ✗ o servidor NÃO recebeu os arquivos da API"; exit 1
   fi
   echo "  ✔ arquivos da API no servidor"

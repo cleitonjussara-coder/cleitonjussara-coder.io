@@ -19,11 +19,62 @@ window.Gestor = (() => {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const fmtData = d => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
 
+  /* ── Saldo ACUMULADO (01/10/2026: "sempre somar os saldos acumulativos dos meses anteriores")
+     Uma regra só para toda a Equipe, igual à do app do colaborador
+     (_saldoAcumuladoAte) e à da ficha: saldo = repasses recebidos − gastos de
+     TODOS os meses até o mês em foco, por tipo (RDM e RDA separados).
+       gasto    → sem Faturamento (pagamento='empresa'): quem pagou foi a empresa;
+       recebido → sem pedido pendente e sem recarga do cartão (CV): recarga vai
+                  para o cartão, não é dinheiro que a pessoa recebeu (28/09/2026).
+     O histórico vem do SERVIDOR (todos os anos) — o IndexedDB do aparelho só
+     tem o ano atual das notas e daria crédito fantasma. */
+  const _chaveAM = o => Number(o.ano) * 12 + Number(o.mes);
+  const _contaRecebido = r => !r.deleted && (!r.kind || r.kind === 'received') && r.destino !== 'recarga';
+  const _contaGasto = n => !n.deleted && n.pagamento !== 'empresa';
+  /* centavos: somas de float deixavam -0,00000000000004 no saldo de quem está quitado e pintavam o cartão de vermelho */
+  const _r2 = v => { const x = Math.round((Number(v) + Number.EPSILON) * 100) / 100; return x === 0 ? 0 : x; };
+
+  /* notas e repasses de TODOS os anos (opcionalmente de um só colaborador);
+     null se não deu (offline ou erro) — quem chama avisa que o saldo é só do mês. */
+  async function _historico(sb, extra = {}) {
+    try {
+      const [notas, repasses] = await Promise.all([
+        sb.notas.list({ ...extra, deleted: '0', fields: 'user_id,tipo,valor,mes,ano,deleted,pagamento' }),
+        sb.repasses.list({ ...extra, deleted: '0' }),
+      ]);
+      return Array.isArray(notas) && Array.isArray(repasses) ? { notas, repasses } : null;
+    } catch (_) { return null; }
+  }
+
+  /* saldo ANTERIOR ao mês (mes/ano) de cada colaborador: Map user_id → { RDM, RDA } */
+  function saldoAnteriorPorUsuario(notas, repasses, mes, ano) {
+    const k = ano * 12 + mes;
+    const mapa = new Map();
+    const slot = id => { let s = mapa.get(id); if (!s) { s = { RDM: 0, RDA: 0 }; mapa.set(id, s); } return s; };
+    for (const r of repasses) {
+      if (r.user_id && (r.tipo === 'RDM' || r.tipo === 'RDA') && _contaRecebido(r) && _chaveAM(r) < k) slot(r.user_id)[r.tipo] += Number(r.valor || 0);
+    }
+    for (const n of notas) {
+      if (n.user_id && (n.tipo === 'RDM' || n.tipo === 'RDA') && _contaGasto(n) && _chaveAM(n) < k) slot(n.user_id)[n.tipo] -= Number(n.valor || 0);
+    }
+    for (const v of mapa.values()) { v.RDM = _r2(v.RDM); v.RDA = _r2(v.RDA); }
+    return mapa;
+  }
+
+  /* O que um colaborador trazia ao abrir o ANO (saldo até dezembro do ano anterior);
+     null se o histórico não carregou. Usado pelo Excel anual. */
+  async function aberturaAnual(sb, userId, ano) {
+    const h = await _historico(sb, { user_id: userId });
+    if (!h) return null;
+    return saldoAnteriorPorUsuario(h.notas, h.repasses, 1, ano).get(userId) || { RDM: 0, RDA: 0 };
+  }
+
   /* Detalhe de um colaborador: id aberto e o contexto do último render, para
      abrir/fechar sem o app.js precisar saber de nada além de re-renderizar. */
   let _detalheId = null;
   let _ctx = null;
   let _cvEquipe = null;   // { collabs, mes, ano, comLancAno, comLancMes } do último dashboard, para o seletor de colaboradores
+  let _anoFicha = null;   // ano da ficha aberta (as setas da ficha mudam o ano sem passar por renderDashboard)
   function abrir(id)  { _detalheId = id;   _ctx?.onRebuild?.(); }
   /* Busca (20/09/2026): filtra os cartões na hora, sem ir ao servidor;
      abre a seção de desativados se algum deles bater. */
@@ -69,29 +120,26 @@ window.Gestor = (() => {
       const collabs = todos.filter(c => c.ativo !== false);
       const inativos = todos.filter(c => c.ativo === false);
 
-      // busca o ANO inteiro (p/ a evolução); o mês é filtrado no cliente
-      const [notasAno, repAno] = await Promise.all([
+      /* o ANO inteiro (evolução e mês, com fotos e quem lançou) + o HISTÓRICO de todos os anos só
+         com o que o saldo precisa: dele sai o saldo dos meses anteriores de cada colaborador.
+         Se o histórico não carregar, a lista segue com o ano e avisa que o saldo é só do mês. */
+      const [notasAno, repAno, hist] = await Promise.all([
         sb.notas.list({ ano, fields: 'user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted,pagamento,created_by' }),
         sb.repasses.list({ ano }),
+        _historico(sb),
       ]);
+      const acumOk = !!hist;
+      const antPorUser = acumOk ? saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano) : new Map();
       const nsAno = (notasAno || []).filter(n => !n.deleted);
       /* só o que foi RECEBIDO conta como repasse; pedido pendente (kind='requested') não é dinheiro na mão */
       const rsAno = (repAno   || []).filter(r => !r.deleted && (!r.kind || r.kind === 'received'));
       const ns = nsAno.filter(n => n.mes === mes);
       const rs = rsAno.filter(r => r.mes === mes);
+      /* quem carrega saldo de meses anteriores entra nos relatórios do mês mesmo sem lançar nada nele */
+      const comSaldoAnterior = [...antPorUser].filter(([, v]) => Math.abs(v.RDM) > 0.004 || Math.abs(v.RDA) > 0.004).map(([id]) => id);
       /* para o modal "CV da equipe": quem entra na lista e quem movimentou no ano */
-      _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id)) };
+      _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id).concat(comSaldoAnterior)) };
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
-
-      // KPIs do mês
-      const gRDA = soma(ns.filter(n => n.tipo === 'RDA'));
-      const gRDM = soma(ns.filter(n => n.tipo === 'RDM'));
-      const gasto = gRDA + gRDM;
-      const recebido = soma(rs);
-      const saldo = recebido - gasto;
-      const pend = ns.filter(n => Number(n.valor || 0) <= 0).length;
-      const semFoto = ns.filter(n => !n.foto_path).length;
-      const ativos = new Set(ns.map(n => n.user_id)).size;
 
       // Evolução: gasto por mês no ano
       const evo = [];
@@ -191,10 +239,18 @@ window.Gestor = (() => {
           const mnsPagoEmpresa = mns.filter(n=>n.pagamento==='empresa');
           const pagoEmpresaM = mnsPagoEmpresa.reduce((a,n)=>a+Number(n.valor||0),0);
           const faturamentoM = mns.reduce((a,n)=>a+Number(n.valor||0),0);
+          /* Recebido = repasse que conta no saldo: recarga do cartão (CV) fica de fora,
+             como no app do colaborador e na ficha (28/09/2026) */
+          const mrsConta = mrs.filter(_contaRecebido);
+          const recargaM = mrs.filter(r => r.destino === 'recarga').reduce((a,r)=>a+Number(r.valor||0),0);
           const rdmG = mnsProprias.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
-          const rdmR = mrs.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
+          const rdmR = mrsConta.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
           const rdaG = mnsProprias.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
-          const rdaR = mrs.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
+          const rdaR = mrsConta.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
+          /* saldo ACUMULADO: o que sobrou (ou faltou) dos meses anteriores + recebido − gasto do mês */
+          const ant = antPorUser.get(m.id) || { RDM: 0, RDA: 0 };
+          const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
+          const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
 
           const canEdit = currentUser.role==='admin' || currentUser.role==='gestor';
           const semFotoM  = mns.filter(n => !n.foto_path).length;
@@ -218,19 +274,22 @@ window.Gestor = (() => {
               <span class="colab-seta">›</span>
             </div>
             <div class="colab-bal">
-              <div class="bal-box ${rdmR-rdmG<0?'neg':'pos'}">
-                <span class="bal-type">RDM</span>
-                <span class="bal-val">${brl(rdmR-rdmG)}</span>
+              <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
+                <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
+                <span class="bal-val">${brl(rdmAcum)}</span>
+                ${acumOk ? `<span class="bal-detail">Anterior ${brl(ant.RDM)}</span>` : ''}
                 <span class="bal-detail">Gasto ${brl(rdmG)}</span>
                 <span class="bal-detail">Recebido ${brl(rdmR)}</span>
               </div>
-              <div class="bal-box ${rdaR-rdaG<0?'neg':'pos'}">
-                <span class="bal-type">RDA</span>
-                <span class="bal-val">${brl(rdaR-rdaG)}</span>
+              <div class="bal-box ${rdaAcum<0?'neg':'pos'}">
+                <span class="bal-type">RDA${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
+                <span class="bal-val">${brl(rdaAcum)}</span>
+                ${acumOk ? `<span class="bal-detail">Anterior ${brl(ant.RDA)}</span>` : ''}
                 <span class="bal-detail">Gasto ${brl(rdaG)}</span>
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>
+            ${recargaM ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(vai para o cartão, não entra no saldo)</span></div>` : ''}
             ${mns.length ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
             ${pagoEmpresaM ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
             <div class="colab-resumo">${resumo}</div>
@@ -283,6 +342,7 @@ window.Gestor = (() => {
      Notas e repasses do mês, com o mesmo cartão da aba Notas (app.js:
      cardNotaHTML) — miniatura, ver anexo, editar, excluir — e os saldos. */
   async function renderColaborador(el, sb, currentUser, id, mes, ano) {
+    _anoFicha = ano;
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando…</p></div>';
     try {
       const [colab, ns, rs, nsAno, histNotas, histReps] = await Promise.all([
@@ -403,7 +463,7 @@ window.Gestor = (() => {
         <div class="cdet-kpis">
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">Recebido</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
-          <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">acumulado ${brl(acumTotal)}</span></div>
+          <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
         </div>
@@ -506,23 +566,35 @@ window.Gestor = (() => {
 
   async function renderForExcel(sb, currentUser, mes, ano) {
     const collabs = await sb.colaboradores.list();
-    const [notas, repasses] = await Promise.all([
-      sb.notas.list({ ano, mes, fields: 'user_id,tipo,subtipo,valor,data,cnpj,razao_social,mes,ano,deleted' }),
-      sb.repasses.list({ ano, mes }),
-    ]);
-    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(r=>!r.deleted), mes, ano };
+    /* histórico completo: o mês sai dele e o saldo ANTERIOR de cada colaborador também
+       (01/10/2026). Sem histórico (offline/erro), cai no mês só — `anterior` fica null. */
+    const hist = await _historico(sb);
+    let notas, repasses;
+    if (hist) {
+      const doMes = o => Number(o.ano) === ano && Number(o.mes) === mes;
+      notas = hist.notas.filter(doMes);
+      repasses = hist.repasses.filter(doMes);
+    } else {
+      [notas, repasses] = await Promise.all([
+        sb.notas.list({ ano, mes, fields: 'user_id,tipo,subtipo,valor,data,cnpj,razao_social,mes,ano,deleted,pagamento' }),
+        sb.repasses.list({ ano, mes }),
+      ]);
+    }
+    const anterior = hist ? Object.fromEntries(saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano)) : null;
+    /* "Repasse" na planilha = só o que conta no saldo: sem pedido pendente e sem recarga do cartão */
+    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior };
   }
 
   async function exportEquipeExcel(sb, currentUser, mes, ano, ids = []) {
     setLoading(true, 'Gerando a planilha da equipe…');
     try {
-      let { collabs, notas, repasses, mes: m, ano: a } = await renderForExcel(sb, currentUser, mes, ano);
+      let { collabs, notas, repasses, mes: m, ano: a, anterior } = await renderForExcel(sb, currentUser, mes, ano);
       if (ids.length) {   // só os marcados no seletor (21/09/2026)
         const sel = new Set(ids);
         collabs = collabs.filter(c => sel.has(c.id)); notas = notas.filter(n => sel.has(n.user_id)); repasses = repasses.filter(r => sel.has(r.user_id));
       }
-      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome);
-      toast('Planilha gerada 📗');
+      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome, anterior);
+      toast(anterior ? 'Planilha gerada 📗' : 'Planilha gerada 📗 — sem o saldo dos meses anteriores (histórico indisponível)');
     } catch (e) { toast('Erro ao exportar: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }
@@ -606,7 +678,7 @@ window.Gestor = (() => {
     const { mes, ano, comLancMes } = _cvEquipe;
     abrirSelecaoColabs({
       titulo: `Excel da equipe · ${MESES[mes - 1]} ${ano}`,
-      dica: `Resumo do mês (gasto, repasse e saldo RDM/RDA por pessoa). Quem não lançou nada em ${MESES[mes - 1]} começa desmarcado.`,
+      dica: `Resumo do mês (saldo anterior, gasto, repasse e saldo acumulado RDM/RDA por pessoa). Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
       comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
       botoes: [{ label: '📗 Gerar Excel', modo: 'xlsx', primario: true }],
       onGerar: ids => window.exportExcelEquipe(ids),
@@ -617,7 +689,7 @@ window.Gestor = (() => {
     const { mes, ano, comLancMes } = _cvEquipe;
     abrirSelecaoColabs({
       titulo: `Relatório da equipe (PDF) · ${MESES[mes - 1]} ${ano}`,
-      dica: `Resumo do mês, quadro por colaborador e as notas e repasses de cada um. Quem não lançou nada em ${MESES[mes - 1]} começa desmarcado.`,
+      dica: `Resumo do mês, quadro por colaborador (com o saldo acumulado dos meses anteriores) e as notas e repasses de cada um. Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
       comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
       botoes: [{ label: '📕 Gerar PDF', modo: 'pdf', primario: true }],
       onGerar: ids => window.baixarRelatorioEquipe(ids),
@@ -712,12 +784,17 @@ window.Gestor = (() => {
   async function excelAnualColab(id) {
     const colab = _cvEquipe?.collabs.find(c => c.id === id) || (typeof equipePorId !== "undefined" ? equipePorId[id] : null);
     if (!colab) { toast('Colaborador não encontrado', 'err'); return; }
-    const ano = _cvEquipe?.ano || new Date().getFullYear();
+    const ano = _anoFicha || _cvEquipe?.ano || new Date().getFullYear();
     const ns = (typeof notasEquipe !== "undefined" ? notasEquipe : []).filter(n => n.user_id === id && !n.deleted);   // let global do app.js: visível aqui, mas não em window.*
     const rs = (typeof repassesEquipe !== "undefined" ? repassesEquipe : []).filter(r => r.user_id === id && !r.deleted);
     if (!ns.length && !rs.length) { toast(`Sem lançamentos de ${colab.nome || colab.email} neste aparelho`, 'err'); return; }
     setLoading(true, 'Gerando o Excel anual…');
-    try { await Excel.exportarAnual(ano, ns, rs, colab); toast('Planilha gerada 📗'); }
+    try {
+      /* saldo que o colaborador trazia de anos anteriores (histórico completo no servidor) */
+      const abertura = _ctx?.sb ? await aberturaAnual(_ctx.sb, id, ano).catch(() => null) : null;
+      await Excel.exportarAnual(ano, ns, rs, colab, abertura);
+      toast(abertura ? 'Planilha gerada 📗' : 'Planilha gerada 📗 — sem o saldo de anos anteriores (histórico indisponível)');
+    }
     catch (e) { toast('Planilha: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }
@@ -869,5 +946,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, saldoAnteriorPorUsuario, aberturaAnual };
 })();

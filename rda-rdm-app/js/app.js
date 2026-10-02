@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 340;
+const APP_BUILD = 341;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -8163,7 +8163,15 @@ async function exportCSV() {
 }
 async function exportExcel() {
   setLoading(true, 'Gerando a planilha…');
-  try { await Excel.exportarAnual(filAno, notas, repasses, user); }
+  try {
+    /* "sempre somar os saldos acumulados dos meses anteriores" (01/10/2026): janeiro parte do que
+       sobrou ate dezembro do ano anterior. O saldo vem do servidor (todos os anos): o aparelho so
+       tem as notas do ano atual e daria credito fantasma. */
+    const abertura = (sb && navigator.onLine && window.Gestor?.aberturaAnual)
+      ? await Gestor.aberturaAnual(sb, user.id, filAno).catch(() => null) : null;
+    await Excel.exportarAnual(filAno, notas, repasses, user, abertura);
+    if (!abertura) toast('Planilha gerada — sem o saldo de anos anteriores (histórico indisponível)');
+  }
   catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
 }
 

@@ -31,40 +31,52 @@ class RelatorioEquipePdf
         $reps = Repasse::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
             ->orderBy('data')->get()->groupBy('user_id');
 
+        $antPorUser = $this->saldoAnterior($ano, $mes, $ids);
+
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
         $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
         /* 23/09/2026: só entra no relatório o repasse que o colaborador confirmou */
         $recebido = fn ($r) => (! $r->kind || $r->kind === 'received') && $r->confirmado_em;
+        /* o que CONTA no saldo: recarga do cartão (CV) vai para o cartão, não é dinheiro
+           que a pessoa recebeu (regra de 28/09/2026, igual ao app e à ficha do gestor) */
+        $conta = fn ($r) => $recebido($r) && $r->destino !== 'recarga';
         $periodo = self::MESES[$mes].' / '.$ano;
         $geradoEm = now(PontoCalculo::TZ)->format('d/m/Y H:i');
 
         /* ── linhas do quadro ─────────────────────────────────── */
         $linhas = [];
-        $tot = ['notas' => 0, 'rdm' => 0.0, 'rda' => 0.0, 'gasto' => 0.0, 'rec' => 0.0, 'semFoto' => 0, 'semValor' => 0, 'pend' => 0];
+        $tot = ['notas' => 0, 'rdm' => 0.0, 'rda' => 0.0, 'gasto' => 0.0, 'ant' => 0.0, 'rec' => 0.0, 'saldo' => 0.0, 'semFoto' => 0, 'semValor' => 0, 'pend' => 0];
         foreach ($colabs as $c) {
             $ns = $notas->get($c->id, collect());
             $rs = $reps->get($c->id, collect());
-            if ($ns->isEmpty() && $rs->isEmpty()) {
-                continue;   // quem não movimentou no mês não entra no quadro
+            /* o saldo é por TIPO (RDM e RDA independentes, como na lista da Equipe e na ficha): quem tem
+               +500 num e −500 no outro NÃO está zerado — entra no quadro mesmo somando 0 */
+            $antT = $antPorUser[$c->id] ?? ['RDM' => 0.0, 'RDA' => 0.0];
+            $antRdm = round($antT['RDM'], 2);
+            $antRda = round($antT['RDA'], 2);
+            $ant = round($antRdm + $antRda, 2);
+            if ($ns->isEmpty() && $rs->isEmpty() && abs($antRdm) < 0.005 && abs($antRda) < 0.005) {
+                continue;   // quem não movimentou no mês E não carrega saldo de meses anteriores não entra no quadro
             }
             $rdm = (float) $ns->where('tipo', 'RDM')->sum('valor');
             $rda = (float) $ns->where('tipo', 'RDA')->sum('valor');
-            $rec = (float) $rs->filter($recebido)->sum('valor');
+            $rec = (float) $rs->filter($conta)->sum('valor');
             $l = [
                 'c' => $c, 'ns' => $ns, 'rs' => $rs,
                 'notas' => $ns->count(), 'rdm' => $rdm, 'rda' => $rda, 'gasto' => $rdm + $rda, 'rec' => $rec,
+                'ant' => $ant, 'antRdm' => $antRdm, 'antRda' => $antRda, 'saldo' => round($ant + $rec - ($rdm + $rda), 2),
                 'semFoto' => $ns->filter(fn ($n) => ! $n->foto_path)->count(),
                 'semValor' => $ns->filter(fn ($n) => (float) $n->valor <= 0)->count(),
                 'pend' => $rs->reject($recebido)->filter(fn ($r) => ! $r->atendido_em)->count(),   // pedido já pago não é pendência (21/09/2026)
             ];
-            foreach (['notas', 'rdm', 'rda', 'gasto', 'rec', 'semFoto', 'semValor', 'pend'] as $k) {
-                $tot[$k] += $l[$k];
+            foreach (['notas', 'rdm', 'rda', 'gasto', 'ant', 'rec', 'saldo', 'semFoto', 'semValor', 'pend'] as $campo) {
+                $tot[$campo] += $l[$campo];
             }
             $linhas[] = $l;
         }
-        $saldoTot = $tot['rec'] - $tot['gasto'];
+        $saldoTot = round($tot['saldo'], 2);
 
         $h = [];
         /* ── página 1: resumo + quadro ─────────────────────────── */
@@ -73,30 +85,32 @@ class RelatorioEquipePdf
             .'<table class="kpis"><tr>'
             .'<td><span class="lbl">Gasto no mês</span><span class="val">'.$brl($tot['gasto']).'</span><span class="sub">RDA '.$brl($tot['rda']).' · RDM '.$brl($tot['rdm']).'</span></td>'
             .'<td><span class="lbl">Recebido</span><span class="val">'.$brl($tot['rec']).'</span><span class="sub">'.($tot['pend'] ? $tot['pend'].' pedido(s) pendente(s)' : 'repasses do mês').'</span></td>'
-            .'<td><span class="lbl">Saldo</span><span class="val '.($saldoTot < 0 ? 'vermelho' : '').'">'.$brl($saldoTot).'</span><span class="sub">recebido − gasto</span></td>'
+            .'<td><span class="lbl">Saldo acumulado</span><span class="val '.($saldoTot < 0 ? 'vermelho' : '').'">'.$brl($saldoTot).'</span><span class="sub">anterior '.$brl($tot['ant']).' + recebido − gasto</span></td>'
             .'<td><span class="lbl">Notas</span><span class="val">'.$tot['notas'].'</span><span class="sub">'.count($linhas).' colaborador(es) · '.$tot['semFoto'].' sem foto · '.$tot['semValor'].' sem valor</span></td>'
             .'</tr></table>';
 
-        $q .= '<table class="quadro"><tr><th class="esq">Colaborador</th><th>Notas</th><th>RDM (R$)</th><th>RDA (R$)</th><th>Gasto (R$)</th><th>Recebido (R$)</th><th>Saldo (R$)</th><th>Sem foto</th><th>Sem valor</th><th>Pedidos pend.</th></tr>';
+        $q .= '<table class="quadro"><tr><th class="esq">Colaborador</th><th>Notas</th><th>RDM (R$)</th><th>RDA (R$)</th><th>Gasto (R$)</th><th>Saldo anterior (R$)</th><th>Recebido (R$)</th><th>Saldo acumulado (R$)</th><th>Sem foto</th><th>Sem valor</th><th>Pedidos pend.</th></tr>';
         if (! $linhas) {
-            $q .= '<tr><td colspan="10" class="vazio">Nenhum lançamento em '.$e($periodo).'.</td></tr>';
+            $q .= '<tr><td colspan="11" class="vazio">Nenhum lançamento em '.$e($periodo).'.</td></tr>';
         }
         foreach ($linhas as $l) {
-            $s = $l['rec'] - $l['gasto'];
-            $q .= '<tr><td class="esq"><b>'.$e($l['c']->nome ?: $l['c']->email).'</b>'.($l['c']->ativo === false ? ' <span class="cinza">(desativado)</span>' : '').'<br><span class="cinza">'.$e($l['c']->email).' · '.$e($l['c']->role).'</span></td>'
+            $s = $l['saldo'];
+            $q .= '<tr><td class="esq"><b>'.$e($l['c']->nome ?: $l['c']->email).'</b>'.($l['c']->ativo === false ? ' <span class="cinza">(desativado)</span>' : '').($l['ns']->isEmpty() && $l['rs']->isEmpty() ? ' <span class="cinza">(sem lançamento no mês)</span>' : '').'<br><span class="cinza">'.$e($l['c']->email).' · '.$e($l['c']->role).'</span></td>'
                 .'<td>'.$l['notas'].'</td><td class="num">'.$brl($l['rdm']).'</td><td class="num">'.$brl($l['rda']).'</td><td class="num"><b>'.$brl($l['gasto']).'</b></td>'
+                .'<td class="num '.($l['ant'] < 0 ? 'vermelho' : '').'">'.$brl($l['ant']).'</td>'
                 .'<td class="num">'.$brl($l['rec']).'</td><td class="num '.($s < 0 ? 'vermelho' : 'verde').'"><b>'.$brl($s).'</b></td>'
                 .'<td class="'.($l['semFoto'] ? 'alerta' : '').'">'.$l['semFoto'].'</td><td class="'.($l['semValor'] ? 'alerta' : '').'">'.$l['semValor'].'</td><td class="'.($l['pend'] ? 'alerta' : '').'">'.$l['pend'].'</td></tr>';
         }
         $q .= '<tr class="tot"><td class="esq">TOTAL</td><td>'.$tot['notas'].'</td><td class="num">'.$brl($tot['rdm']).'</td><td class="num">'.$brl($tot['rda']).'</td><td class="num">'.$brl($tot['gasto']).'</td>'
+            .'<td class="num">'.$brl($tot['ant']).'</td>'
             .'<td class="num">'.$brl($tot['rec']).'</td><td class="num '.($saldoTot < 0 ? 'vermelho' : 'verde').'">'.$brl($saldoTot).'</td><td>'.$tot['semFoto'].'</td><td>'.$tot['semValor'].'</td><td>'.$tot['pend'].'</td></tr></table>';
         $h[] = '<div class="pagina">'.$q.'</div>';
 
         /* ── um bloco por colaborador: notas + repasses ────────── */
         foreach ($linhas as $l) {
             $c = $l['c'];
-            $s = $l['rec'] - $l['gasto'];
-            $b = '<div class="bloco"><div class="faixa2">'.$e(mb_strtoupper($c->nome ?: $c->email)).'<span class="dir">Gasto '.$brl($l['gasto']).' · Recebido '.$brl($l['rec']).' · Saldo <span class="'.($s < 0 ? 'vermelho' : '').'">'.$brl($s).'</span></span></div>';
+            $s = $l['saldo'];
+            $b = '<div class="bloco"><div class="faixa2">'.$e(mb_strtoupper($c->nome ?: $c->email)).'<span class="dir">Anterior RDM '.$brl($l['antRdm']).' · RDA '.$brl($l['antRda']).' · Gasto '.$brl($l['gasto']).' · Recebido '.$brl($l['rec']).' · Saldo acumulado <span class="'.($s < 0 ? 'vermelho' : '').'">'.$brl($s).'</span></span></div>';
             $b .= '<table class="notas"><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="esq">Fornecedor</th><th>CNPJ</th><th>Nº</th><th>Valor (R$)</th><th>Anexo</th></tr>';
             if ($l['ns']->isEmpty()) {
                 $b .= '<tr><td colspan="8" class="vazio">Nenhuma nota no mês.</td></tr>';
@@ -112,7 +126,7 @@ class RelatorioEquipePdf
                 $b .= '<table class="notas reps"><tr><th>Data</th><th>Tipo</th><th class="esq">Repasse</th><th>Situação</th><th>Valor (R$)</th></tr>';
                 foreach ($l['rs'] as $r) {
                     $b .= '<tr><td>'.$dt($r->data).'</td><td><span class="tipo '.$e($r->tipo).'">'.$e($r->tipo).'</span></td><td class="esq">'.$e($r->descricao ?: ($recebido($r) ? 'Repasse recebido' : 'Solicitação de repasse')).'</td>'
-                        .'<td>'.($recebido($r) ? 'recebido' : '<span class="alerta">pedido pendente</span>').'</td><td class="num">'.$brl($r->valor).'</td></tr>';
+                        .'<td>'.($recebido($r) ? ($r->destino === 'recarga' ? 'recarga do cartão (fora do saldo)' : 'recebido') : '<span class="alerta">pedido pendente</span>').'</td><td class="num">'.$brl($r->valor).'</td></tr>';
                 }
                 $b .= '<tr class="tot"><td colspan="4" class="esq">TOTAL RECEBIDO</td><td class="num">'.$brl($l['rec']).'</td></tr></table>';
             }
@@ -152,5 +166,53 @@ class RelatorioEquipePdf
         $d->loadHtml($html);
         $d->render();
         file_put_contents($arquivo, $d->output());
+    }
+
+    /**
+     * Saldo ANTERIOR ao mês ($ano, $mes), por colaborador e por TIPO:
+     * user_id => ['RDM' => saldo, 'RDA' => saldo].
+     *
+     * 01/10/2026 — "sempre somar os saldos acumulados dos meses anteriores": o
+     * saldo de cada colaborador é o que sobrou (ou faltou) de TODOS os meses
+     * anteriores + recebido − gasto do mês, RDM e RDA independentes. Mesma conta
+     * de _saldoAcumuladoAte (app.js) e da ficha do gestor: gasto sem Faturamento
+     * (pagamento=empresa), recebido sem pedido pendente e sem recarga do cartão
+     * (CV). Duas somas agrupadas (todos os anos), em vez de carregar notas antigas
+     * na memória.
+     *
+     * @param string[]|null $ids
+     * @return array<string, array{RDM: float, RDA: float}>
+     */
+    public function saldoAnterior(int $ano, int $mes, ?array $ids = null): array
+    {
+        $k = $ano * 12 + $mes;
+        $gasto = Nota::query()->where('deleted', false)->whereNotNull('user_id')
+            ->whereRaw('(ano * 12 + mes) < ?', [$k])
+            ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
+            ->when($ids, fn ($q) => $q->whereIn('user_id', $ids))
+            ->selectRaw('user_id, tipo, SUM(valor) AS v')->groupBy('user_id', 'tipo')->get();
+        $recebido = Repasse::query()->where('deleted', false)
+            ->whereRaw('(ano * 12 + mes) < ?', [$k])
+            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', 'received'))
+            ->whereNotNull('confirmado_em')
+            ->where(fn ($q) => $q->whereNull('destino')->orWhere('destino', '!=', 'recarga'))
+            ->when($ids, fn ($q) => $q->whereIn('user_id', $ids))
+            ->selectRaw('user_id, tipo, SUM(valor) AS v')->groupBy('user_id', 'tipo')->get();
+
+        $saldo = [];
+        foreach ($recebido as $r) {
+            if ($r->tipo === 'RDM' || $r->tipo === 'RDA') {
+                $saldo[$r->user_id] ??= ['RDM' => 0.0, 'RDA' => 0.0];
+                $saldo[$r->user_id][$r->tipo] += (float) $r->v;
+            }
+        }
+        foreach ($gasto as $n) {
+            if ($n->tipo === 'RDM' || $n->tipo === 'RDA') {
+                $saldo[$n->user_id] ??= ['RDM' => 0.0, 'RDA' => 0.0];
+                $saldo[$n->user_id][$n->tipo] -= (float) $n->v;
+            }
+        }
+
+        return $saldo;
     }
 }

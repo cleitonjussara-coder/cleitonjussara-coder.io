@@ -748,8 +748,20 @@ window.DB = (() => {
          poucos e vêm inteiros */
       try {
         await setMeta(ANOS_KEY, []);
-        pulled += await garantirAno(sb, userId, new Date().getFullYear());
-        pulled += await _mesclarRemotas('repasses', await sb.repasses.list({}));
+        const anoAtual = new Date().getFullYear();
+        pulled += await garantirAno(sb, userId, anoAtual);
+        const reps = await sb.repasses.list({});
+        pulled += await _mesclarRemotas('repasses', reps);
+        /* "sempre somar os saldos dos meses anteriores" (01/10/2026): o saldo acumulado precisa das
+           NOTAS de todo ano em que ha repasse. Sem isto, num aparelho novo em janeiro o credito dos
+           repasses do ano passado ficava sem os gastos do ano passado (so o ano atual vinha) e o
+           saldo aparecia inflado. Como o sistema e de 2026, hoje isso e um ano so. */
+        const anosComRepasse = [...new Set((reps || []).map(r => Number(r.ano)).filter(a => a >= 2000 && a < anoAtual))];
+        for (const a of anosComRepasse) pulled += await garantirAno(sb, userId, a);
+        /* e as notas PRÓPRIAS de anos anteriores mesmo sem repasse naquele ano (quem gastou e ainda não
+           recebeu nada): sem elas o saldo anterior do Painel saía maior que o da Equipe e do PDF */
+        const minhasAntigas = ((await sb.notas.list({ user_id: userId })) || []).filter(n => Number(n.ano) < anoAtual);
+        pulled += await _mesclarRemotas('notas', minhasAntigas);
       } catch (_) { return pulled; }   // sem last_sync gravado: tenta de novo no próximo
     } else {
       let falhou = false;

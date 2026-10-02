@@ -8,6 +8,7 @@ window.Excel = (() => {
   const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const brl  = v => Number(v||0).toFixed(2);
   const cur  = v => parseFloat(Number(v||0).toFixed(2));
+  const brlTxt = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const COR = {
     verde       : '2D6A4F',
@@ -81,7 +82,7 @@ window.Excel = (() => {
   }
 
   /* ── RESUMO Gerencial ───────────────────────────────── */
-  function buildResumo(notas, repasses, ano, colab) {
+  function buildResumo(notas, repasses, ano, colab, abertura) {
     const ws = {};
     ws['!cols'] = [{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:16},{wch:16}];
     ws['!merges'] = [];
@@ -96,14 +97,22 @@ window.Excel = (() => {
     // Subtítulo
     merge(ws, r, 0, r, 8);
     ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Colaborador: ${colab.nome||''}    Núcleo: ${colab.nucleo||''}    Ano: ${ano}`);
-    r++; r++; // pula linha
+    r++;
+    /* "sempre somar os saldos acumulados dos meses anteriores" (01/10/2026): janeiro parte do que
+       sobrou (ou faltou) ate dezembro do ano anterior, em vez de zero. */
+    const abRDM = abertura ? Number(abertura.RDM) || 0 : 0, abRDA = abertura ? Number(abertura.RDA) || 0 : 0;
+    merge(ws, r, 0, r, 8);
+    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(abertura
+      ? `Saldo trazido de anos anteriores: RDM ${brlTxt(abRDM)} · RDA ${brlTxt(abRDA)} (já somado em Pend. Anterior e Saldo Acum.)`
+      : 'Saldo de anos anteriores não incluído (histórico indisponível).');
+    r++;
 
     // Cabeçalho
     hdrRow(ws, r, ['Mês','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo','Pend. Anterior','Saldo Acum.']);
     r++;
 
     let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0;
-    let acumRDM=0, acumRDA=0;
+    let acumRDM=abRDM, acumRDA=abRDA;
     for (let m = 1; m <= 12; m++) {
       const ns = notas.filter(n => n.mes===m && n.ano===ano && !n.deleted);
       const rs = repasses.filter(r => r.mes===m && r.ano===ano && !r.deleted);
@@ -115,7 +124,7 @@ window.Excel = (() => {
       const sRDM = rdmR-rdmG, sRDA = rdaR-rdaG;
 
       const pendAnterior = acumRDM + acumRDA;  // antes de adicionar este mês
-      acumRDM += sRDM; acumRDA += sRDA;
+      acumRDM = cur(acumRDM + sRDM); acumRDA = cur(acumRDA + sRDA);
       const saldoAcum = acumRDM + acumRDA;
 
       ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[m-1]);
@@ -131,7 +140,7 @@ window.Excel = (() => {
     }
 
     r++; // linha em branco
-    const sTDMr = tRDMr-tRDMg, sTDAr = tRDAr-tRDAg;
+    const sTDMr = tRDMr-tRDMg, sTDAr = tRDAr-tRDAg;   // soma das colunas do ano; o ACUMULADO (abertura + ano) fica em Pend. Anterior + Saldo Acum.
     ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL', s:{ font:{...FONT_TOT,color:{rgb:COR.branco}}, fill:FILL_HDR, border:BORDER_THIN, alignment:ALIGN_C } };
     ws[XLSX.utils.encode_cell({r,c:1})] = totCell(tRDMg);
     ws[XLSX.utils.encode_cell({r,c:2})] = totCell(tRDMr);
@@ -139,7 +148,7 @@ window.Excel = (() => {
     ws[XLSX.utils.encode_cell({r,c:4})] = totCell(tRDAg);
     ws[XLSX.utils.encode_cell({r,c:5})] = totCell(tRDAr);
     ws[XLSX.utils.encode_cell({r,c:6})] = sTDAr < 0 ? totNeg(sTDAr) : totCell(sTDAr);
-    ws[XLSX.utils.encode_cell({r,c:7})] = { t:'s', v:'', s:{ border:BORDER_THIN } };
+    ws[XLSX.utils.encode_cell({r,c:7})] = abertura ? ((abRDM+abRDA) < 0 ? totNeg(abRDM+abRDA) : totCell(abRDM+abRDA)) : { t:'s', v:'', s:{ border:BORDER_THIN } };
     ws[XLSX.utils.encode_cell({r,c:8})] = (acumRDM+acumRDA) < 0 ? totNeg(acumRDM+acumRDA) : totCell(acumRDM+acumRDA);
     r += 2;
 
@@ -154,7 +163,7 @@ window.Excel = (() => {
   }
 
   /* ── RDM Detalhado ──────────────────────────────────── */
-  function buildRDM(notas, repasses, ano) {
+  function buildRDM(notas, repasses, ano, abertura) {
     const ws = {};
     ws['!cols'] = [{wch:8},{wch:16},{wch:14},{wch:12},{wch:14},{wch:4},{wch:14},{wch:14}];
     ws['!merges'] = [];
@@ -164,17 +173,21 @@ window.Excel = (() => {
     ws[XLSX.utils.encode_cell({r, c:0})] = titCell(`RDM DETALHADO — ${ano}`);
     r += 2;
 
-    hdrRow(ws, r, ['Mês','Abastecimento','Hospedagem','Outros','Total Gasto','','Repasses','Saldo']);
+    hdrRow(ws, r, ['Mês','Abastecimento','Hospedagem','Outros','Total Gasto','','Repasses','Saldo Acum.']);
     r++;
 
-    const subs = ['Abastecimento','Hospedagem','Outros'];
+    /* saldo ACUMULADO (01/10/2026): parte do que veio de anos anteriores e soma mes a mes */
+    let acum = abertura ? Number(abertura.RDM) || 0 : 0;
     for (let m = 1; m <= 12; m++) {
       const ns = notas.filter(n => n.mes===m && n.ano===ano && n.tipo==='RDM' && !n.deleted);
       const rs = repasses.filter(r => r.mes===m && r.ano===ano && r.tipo==='RDM' && !r.deleted);
-      const vals = subs.map(s => ns.filter(n=>n.subtipo===s).reduce((a,n)=>a+cur(n.valor),0));
+      /* 'Outros' pega tudo que nao e Abastecimento nem Hospedagem - senao a nota sem subtipo sumia do total e do saldo */
+      const ehSub = (n, sb) => sb === 'Outros' ? (n.subtipo !== 'Abastecimento' && n.subtipo !== 'Hospedagem') : n.subtipo === sb;
+      const vals = ['Abastecimento','Hospedagem','Outros'].map(sb => ns.filter(n=>ehSub(n, sb)).reduce((a,n)=>a+cur(n.valor),0));
       const tot  = vals.reduce((a,v)=>a+v, 0);
       const rep  = rs.reduce((a,r)=>a+cur(r.valor), 0);
-      const saldo= rep-tot;
+      acum = cur(acum + rep - tot);
+      const saldo = acum;
       ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[m-1]);
       for (let i=0;i<3;i++) ws[XLSX.utils.encode_cell({r,c:1+i})] = numCell(vals[i]);
       ws[XLSX.utils.encode_cell({r,c:4})] = numCell(tot);
@@ -270,23 +283,24 @@ window.Excel = (() => {
   }
 
   /* ── Equipe (dashboard gestor) ───────────────────────── */
-  function buildEquipe(notas, repasses, collabs, mes, ano) {
+  function buildEquipe(notas, repasses, collabs, mes, ano, anterior) {
     const ws = {};
-    ws['!cols'] = [{wch:16},{wch:24},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
+    ws['!cols'] = [{wch:16},{wch:24},{wch:14},{wch:14},{wch:14},{wch:16},{wch:14},{wch:14},{wch:14},{wch:16}];
     ws['!merges'] = [];
     let r = 0;
 
-    merge(ws, r, 0, r, 7);
+    merge(ws, r, 0, r, 9);
     ws[XLSX.utils.encode_cell({r, c:0})] = titCell(`PETERMANN — RELATÓRIO DA EQUIPE`);
     r++;
-    merge(ws, r, 0, r, 7);
-    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Mês: ${MESES[mes-1]}/${ano}      Gerado em ${new Date().toLocaleDateString('pt-BR')}`);
+    merge(ws, r, 0, r, 9);
+    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Mês: ${MESES[mes-1]}/${ano}      Gerado em ${new Date().toLocaleDateString('pt-BR')}      `
+      + (anterior ? 'Saldo Acum. = Anterior (todos os meses antes deste) + Repasse − Gasto' : 'Saldo anterior NÃO incluído (histórico indisponível): saldo só do mês'));
     r += 2;
 
-    hdrRow(ws, r, ['Núcleo','Colaborador','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo']);
+    hdrRow(ws, r, ['Núcleo','Colaborador','RDM Anterior','RDM Gasto','RDM Repasse','RDM Saldo Acum.','RDA Anterior','RDA Gasto','RDA Repasse','RDA Saldo Acum.']);
     r++;
 
-    let tRDMg=0,tRDMr=0,tRDAg=0,tRDAr=0, any=false;
+    let tRDMa=0,tRDMg=0,tRDMr=0,tRDAa=0,tRDAg=0,tRDAr=0;
     const nucs = {};
     collabs.forEach(c => { (nucs[c.nucleo] = nucs[c.nucleo]||[]).push(c); });
 
@@ -295,37 +309,41 @@ window.Excel = (() => {
       sorted.forEach(c => {
         const cns = notas.filter(n=>n.user_id===c.id);
         const crs = repasses.filter(r=>r.user_id===c.id);
+        const ant = (anterior && anterior[c.id]) || { RDM: 0, RDA: 0 };
         const rdmG = cns.filter(n=>n.tipo==='RDM').reduce((s,n)=>s+Number(n.valor||0),0);
         const rdmR = crs.filter(r=>r.tipo==='RDM').reduce((s,r)=>s+Number(r.valor||0),0);
         const rdaG = cns.filter(n=>n.tipo==='RDA').reduce((s,n)=>s+Number(n.valor||0),0);
         const rdaR = crs.filter(r=>r.tipo==='RDA').reduce((s,r)=>s+Number(r.valor||0),0);
-        tRDMg+=rdmG; tRDMr+=rdmR; tRDAg+=rdaG; tRDAr+=rdaR;
-        if (rdmG||rdmR||rdaG||rdaR) any=true;
-        const sRDM=rdmR-rdmG, sRDA=rdaR-rdaG;
+        tRDMa+=ant.RDM; tRDMg+=rdmG; tRDMr+=rdmR; tRDAa+=ant.RDA; tRDAg+=rdaG; tRDAr+=rdaR;
+        const sRDM=cur(ant.RDM+rdmR-rdmG), sRDA=cur(ant.RDA+rdaR-rdaG);
         ws[XLSX.utils.encode_cell({r,c:0})] = strCell(nucleo);
         ws[XLSX.utils.encode_cell({r,c:1})] = strCell(c.nome||c.email);
-        ws[XLSX.utils.encode_cell({r,c:2})] = numCell(rdmG);
-        ws[XLSX.utils.encode_cell({r,c:3})] = numCell(rdmR);
-        ws[XLSX.utils.encode_cell({r,c:4})] = sRDM<0?numNeg(sRDM):numCell(sRDM);
-        ws[XLSX.utils.encode_cell({r,c:5})] = numCell(rdaG);
-        ws[XLSX.utils.encode_cell({r,c:6})] = numCell(rdaR);
-        ws[XLSX.utils.encode_cell({r,c:7})] = sRDA<0?numNeg(sRDA):numCell(sRDA);
+        ws[XLSX.utils.encode_cell({r,c:2})] = ant.RDM<0?numNeg(ant.RDM):numCell(ant.RDM);
+        ws[XLSX.utils.encode_cell({r,c:3})] = numCell(rdmG);
+        ws[XLSX.utils.encode_cell({r,c:4})] = numCell(rdmR);
+        ws[XLSX.utils.encode_cell({r,c:5})] = sRDM<0?numNeg(sRDM):numCell(sRDM);
+        ws[XLSX.utils.encode_cell({r,c:6})] = ant.RDA<0?numNeg(ant.RDA):numCell(ant.RDA);
+        ws[XLSX.utils.encode_cell({r,c:7})] = numCell(rdaG);
+        ws[XLSX.utils.encode_cell({r,c:8})] = numCell(rdaR);
+        ws[XLSX.utils.encode_cell({r,c:9})] = sRDA<0?numNeg(sRDA):numCell(sRDA);
         r++;
       });
     }
 
     r++;
-    const sTRDM=tRDMr-tRDMg, sTRDA=tRDAr-tRDAg;
+    const sTRDM=cur(tRDMa+tRDMr-tRDMg), sTRDA=cur(tRDAa+tRDAr-tRDAg);
     merge(ws, r, 0, r, 1);
     ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL GERAL', s:{ font:{...FONT_TOT,color:{rgb:COR.branco}}, fill:FILL_HDR, border:BORDER_THIN, alignment:ALIGN_C } };
-    ws[XLSX.utils.encode_cell({r,c:2})] = totCell(tRDMg);
-    ws[XLSX.utils.encode_cell({r,c:3})] = totCell(tRDMr);
-    ws[XLSX.utils.encode_cell({r,c:4})] = sTRDM<0?totNeg(sTRDM):totCell(sTRDM);
-    ws[XLSX.utils.encode_cell({r,c:5})] = totCell(tRDAg);
-    ws[XLSX.utils.encode_cell({r,c:6})] = totCell(tRDAr);
-    ws[XLSX.utils.encode_cell({r,c:7})] = sTRDA<0?totNeg(sTRDA):totCell(sTRDA);
+    ws[XLSX.utils.encode_cell({r,c:2})] = tRDMa<0?totNeg(tRDMa):totCell(tRDMa);
+    ws[XLSX.utils.encode_cell({r,c:3})] = totCell(tRDMg);
+    ws[XLSX.utils.encode_cell({r,c:4})] = totCell(tRDMr);
+    ws[XLSX.utils.encode_cell({r,c:5})] = sTRDM<0?totNeg(sTRDM):totCell(sTRDM);
+    ws[XLSX.utils.encode_cell({r,c:6})] = tRDAa<0?totNeg(tRDAa):totCell(tRDAa);
+    ws[XLSX.utils.encode_cell({r,c:7})] = totCell(tRDAg);
+    ws[XLSX.utils.encode_cell({r,c:8})] = totCell(tRDAr);
+    ws[XLSX.utils.encode_cell({r,c:9})] = sTRDA<0?totNeg(sTRDA):totCell(sTRDA);
 
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:7}});
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:9}});
     return ws;
   }
 
@@ -334,11 +352,22 @@ window.Excel = (() => {
      não é gasto DO colaborador — sai de toda planilha/CSV individual. */
   const _semFaturamento = notas => notas.filter(n => n.pagamento !== 'empresa');
 
-  function exportarAnual(ano, notas, repasses, colab) {
+  /* Repasse que CONTA no saldo (01/10/2026): sem apagado, sem pedido pendente
+     (o pedido atendido continua na lista ao lado do recebido que o gestor cria
+     ao pagar - somar os dois contava o repasse em dobro) e sem recarga do cartao
+     (CV). Mesma definicao do app (_repasseEhRecebido + _repasseEhCarteira). */
+  const _PEDIDO = ['requested', 'request', 'pedido', 'solicitado'];
+  const _soRecebidos = repasses => repasses.filter(r => !r.deleted
+    && !_PEDIDO.includes(String(r.kind || '').toLowerCase()) && r.destino !== 'recarga');
+
+  /* abertura = { RDM, RDA } - saldo que o colaborador trazia de anos anteriores (null se o
+     historico nao carregou). Janeiro e o saldo acumulado partem dele (01/10/2026). */
+  function exportarAnual(ano, notas, repasses, colab, abertura) {
     notas = _semFaturamento(notas);
+    repasses = _soRecebidos(repasses);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildResumo(notas,repasses,ano,colab), 'RESUMO');
-    XLSX.utils.book_append_sheet(wb, buildRDM(notas,repasses,ano),          'RDM Detalhado');
+    XLSX.utils.book_append_sheet(wb, buildResumo(notas,repasses,ano,colab,abertura), 'RESUMO');
+    XLSX.utils.book_append_sheet(wb, buildRDM(notas,repasses,ano,abertura), 'RDM Detalhado');
     XLSX.utils.book_append_sheet(wb, buildRDA(notas,repasses,ano),          'RDA Detalhado');
     XLSX.utils.book_append_sheet(wb, buildRepasses(repasses,ano),           'Repasses');
     const nome = (colab.nome||'colab').replace(/\s+/g,'_');
@@ -346,10 +375,11 @@ window.Excel = (() => {
   }
 
   /* ── Exportar Equipe (gestor) ─────────────────────────── */
-  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
+  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome, anterior) {
     notas = _semFaturamento(notas);
+    repasses = _soRecebidos(repasses);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano), 'EQUIPE');
+    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano,anterior), 'EQUIPE');
     const nome = (gestorNome||'equipe').replace(/\s+/g,'_');
     XLSX.writeFile(wb, `Petermann_${nome}_Equipe_${MESES[mes-1]}${ano}.xlsx`);
   }
@@ -366,7 +396,7 @@ window.Excel = (() => {
       .sort((a,b)=>a.data.localeCompare(b.data))
       .forEach(n => rows.push([n.tipo, n.subtipo||'', n.data,
         n.cnpj||'', n.razao_social||'', brl(n.valor), n.metodo_captura||'']));
-    const rs = repasses.filter(r=>r.mes===mes && r.ano===ano && !r.deleted);
+    const rs = _soRecebidos(repasses).filter(r=>r.mes===mes && r.ano===ano);
     if (rs.length) {
       rows.push(['']); rows.push(['── REPASSES ──']);
       rs.forEach(r => rows.push([r.tipo,'repasse',r.data,'',r.descricao||'',brl(r.valor),'']));
