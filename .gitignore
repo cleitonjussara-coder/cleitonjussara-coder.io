@@ -1,4 +1,5 @@
-.claude
+.claude/*
+!.claude/skills/
 files.zip
 .nojekyll
 .DS_Store
