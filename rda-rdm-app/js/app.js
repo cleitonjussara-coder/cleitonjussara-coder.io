@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 347;
+const APP_BUILD = 348;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6375,6 +6375,13 @@ async function _comprimirImagem(blob, ext) {
    2) jsQR como reserva
    3) TILING: divide a foto em pedaços com sobreposição e AMPLIA cada um,
       procurando o QR em cada parte — um QR minúsculo vira grande o bastante. */
+/* Várias leituras na mesma imagem (QR + código de barras de produto/DANFE): prefere a que carrega a nota (link ou chave de 44/50 dígitos). */
+function _melhorCodigo(codes) {
+  const vals = (codes || []).map(c => c && c.rawValue).filter(Boolean);
+  const ehChave = v => /^https?:\/\//i.test(v) || /(?<!\d)(\d{44}|\d{50})(?!\d)/.test(String(v).replace(/\s/g, ''));
+  return vals.find(ehChave) || vals[0] || null;
+}
+
 async function _qrStringFromBlob(blob) {
   // prepara o detector nativo (se houver)
   let detector = null;
@@ -6383,7 +6390,8 @@ async function _qrStringFromBlob(blob) {
       let fmts = [];
       try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (_) {}
       if (!fmts.length || fmts.includes('qr_code')) {
-        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        /* DANFE (NF-e) traz a chave de 44 dígitos também em código de barras (Code 128): lê junto com o QR quando o aparelho sabe */
+        detector = new window.BarcodeDetector({ formats: ['qr_code', ...(fmts.includes('code_128') ? ['code_128'] : [])] });
       }
     }
   } catch (_) {}
@@ -6398,7 +6406,7 @@ async function _qrStringFromBlob(blob) {
         const bmp = await createImageBitmap(blob);
         const codes = await detector.detect(bmp);
         bmp.close && bmp.close();
-        if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue;
+        { const v = _melhorCodigo(codes); if (v) return v; }
       } catch (_) {}
     }
     return null;
@@ -6410,7 +6418,7 @@ async function _qrStringFromBlob(blob) {
   // roda os dois leitores no que estiver desenhado no canvas
   const lerCanvas = async (binarizar) => {
     if (detector) {
-      try { const codes = await detector.detect(c); if (codes && codes.length && codes[0].rawValue) return codes[0].rawValue; } catch (_) {}
+      try { const codes = await detector.detect(c); { const v = _melhorCodigo(codes); if (v) return v; } } catch (_) {}
     }
     if (typeof jsQR !== 'undefined') {
       try {
@@ -7072,7 +7080,11 @@ async function _lerQRdaImagem(file) {
     _salvarUrlQR(p.chave, data);   // guarda o link real da consulta
     if (/^https?:\/\//i.test(data)) p.qr_url = data;
   }
-  if (!(p?.chave) && _ehUrlNfse(data)) return { qr_url: data, documento: 'nfse' };
+  if (!(p?.chave) && _ehUrlNfse(data)) {
+    /* QR da NFS-e nacional = link da consulta pública COM a chave de 50 dígitos (…?tpc=1&chave=3170…): dela saem CNPJ, UF e número */
+    const k = NFCE.parseChaveNfse50(String(data).match(/(?<!\d)\d{50}(?!\d)/)?.[0] || '');   // sem tirar os não-dígitos antes: o "tpc=1" da URL viraria um 51º dígito
+    return { qr_url: data, documento: 'nfse', ...(k ? { chaveNfse: k.chave } : {}) };
+  }
   return p;
 }
 
@@ -7098,7 +7110,8 @@ async function lerChaveDaFotoAnexada() {
     _docEscolhidoManual = false;
     _atualizarDocumentoAuto();
     _atualizarLinkConsulta();
-    toast('QR de NFS-e lido — link da nota guardado 🧰');
+    if (qr.chaveNfse) _usarChaveNfse(qr.chaveNfse);   // CNPJ, UF e número saem da chave do QR
+    else toast('QR de NFS-e lido — link da nota guardado 🧰');
   } else {
     toast('Não achei QR nesta foto. Use uma foto mais nítida do QR Code.', 'err');
   }
@@ -7160,6 +7173,8 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido
     let chave = (qr?.chave && qr.chave.length === 44) ? qr.chave : _digitos($('nf-chave').value);
     if (chave.length !== 44 && _digitos(ocr.chave).length === 44) chave = _digitos(ocr.chave);
+    /* chave lida por OCR/foto com um dígito trocado inventaria CNPJ/UF/mês falsos: só vale se o dígito verificador conferir */
+    if (chave.length === 44 && window.SEFAZ?.dvValido && !SEFAZ.dvValido(chave)) chave = '';
     if (chave.length !== 44) chave = '';
     const daChave = chave ? NFCE.parseChave44(chave) : null;
 
@@ -7182,7 +7197,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       $('nf-data').value = dataFinal; preencheu.push('data');
     } else {
       // NFS-e nacional (chave de 50 dígitos lida no arquivo): a chave dá CNPJ, UF, número e o link do portal
-      const daNfse = ocr.chaveNfse ? NFCE.parseChaveNfse50(ocr.chaveNfse) : null;
+      const daNfse = NFCE.parseChaveNfse50(qr?.chaveNfse || ocr.chaveNfse || '');   // QR primeiro (não erra dígito), depois o texto
       if (daNfse) {
         if (!$('nf-qr-url').value) $('nf-qr-url').value = daNfse.qr_url;
         if (daNfse.cnpj) { $('nf-cnpj').value = BrasilAPI.formatar(daNfse.cnpj); buscarRazaoSocial(daNfse.cnpj); }
