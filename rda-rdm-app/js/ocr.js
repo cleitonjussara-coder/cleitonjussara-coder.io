@@ -103,11 +103,14 @@ window.OCR = (() => {
     const numPats = [
       /N[úu]mero\s+da\s+NFS-?e[:\s]*([0-9.]{1,14})/i,
       /NFS-?e\s*n[º°o.]?\s*[:\s]*([0-9.]{1,14})/i,
-      /N[º°]\s*[:.]?\s*([0-9]{1,3}(?:\.[0-9]{3}){1,2}|[0-9]{3,9})\b/i,
+      /(?<!Lei\s)N[º°]\s*[:.]?\s*([0-9]{1,3}(?:\.[0-9]{3}){1,2}|[0-9]{3,9})\b/i,   // "Lei n° 12.741/2012" (tributos, rodapé de DANFSe/cupom) não é número de nota
       /N[úu]mero\s*[:.]?\s*([0-9]{3,9})\b/i,
       /NFC-?e\s*n[º°o.]?\s*[:\s]*([0-9]{3,9})\b/i,
     ];
-    for (const p of numPats) {
+    /* Chave de NFS-e nacional (50 dígitos) impressa: o número da nota está nela (posições 24-36) e vale mais que qualquer "nº" solto. */
+    const k50 = oneLine.match(/(?<!\d)(\d{50})(?!\d)/);
+    if (k50 && /^[12]$/.test(k50[1].slice(8, 9))) { const n = String(parseInt(k50[1].slice(23, 36), 10)); if (n !== 'NaN' && n !== '0') r.numero = n; }
+    for (const p of r.numero ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }
     }

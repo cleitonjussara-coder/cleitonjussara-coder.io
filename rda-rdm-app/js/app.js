@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 345;
+const APP_BUILD = 346;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -642,22 +642,28 @@ async function pedirTexto({ titulo, dica, confirmar, perigo, rotulo, valor, plac
 /* chave de acesso de 44 dígitos (NF-e/NFC-e): confere tamanho e dígito
    verificador antes de fechar, igual ao SEFAZ.consultarChave. Devolve só os
    dígitos ou null. */
-function _pedirChave44() {
+function _pedirChave44({ nfse = false } = {}) {
   return pedirTexto({
     titulo: 'Chave de acesso',
-    dica: 'Digite ou cole os 44 dígitos da NF-e ou NFC-e. Pode colar com espaços.',
+    dica: nfse ? 'Digite ou cole os 44 dígitos da NF-e/NFC-e ou os 50 da NFS-e. Pode colar com espaços.'
+               : 'Digite ou cole os 44 dígitos da NF-e ou NFC-e. Pode colar com espaços.',
     confirmar: 'Usar chave',
     placeholder: '0000 0000 0000 0000 0000 …',
     inputmode: 'numeric',
     validar: t => {
       const c = _digitos(t);
       if (!c.length) return 'Cole ou digite a chave.';
-      if (c.length !== 44) return `Chave com ${c.length} dígitos — precisa ter 44.`;
+      if (nfse && c.length === 50) return _chaveNfseValida(c) ? '' : 'Chave de NFS-e inválida. Confira os números.';
+      if (c.length !== 44) return `Chave com ${c.length} dígitos — precisa ter ${nfse ? '44 (NF-e/NFC-e) ou 50 (NFS-e)' : 44}.`;
       if (window.SEFAZ?.dvValido && !SEFAZ.dvValido(c)) return 'Chave inválida (o dígito verificador não confere). Confira os números.';
       return '';
     },
   }).then(t => (t == null ? null : _digitos(t)));
 }
+
+/* NFS-e nacional (DANFSe v2), 50 dígitos: o parser é o NFCE.parseChaveNfse50 (estrutura, sem dígito verificador).
+   A chave não cabe em chave_nfce (44): a nota guarda o link da consulta pública (qr_url), que a carrega. */
+const _chaveNfseValida = c => !!NFCE.parseChaveNfse50(c);
 
 /* exclusão sem volta: a pessoa digita a palavra (EXCLUIR) para confirmar.
    true = digitou certo; false = cancelou. */
@@ -6220,8 +6226,17 @@ function fecharBarcode() {
 
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
 async function iniciarChaveNFCe() {
-  const chave = await _pedirChave44();
+  const chave = await _pedirChave44({ nfse: true });
   if (!chave) return;
+  if (chave.length === 50) {   // NFS-e nacional: sem SEFAZ, a chave só dá CNPJ/UF/número e o link do portal
+    const p = NFCE.parseChaveNfse50(chave);
+    abrirSeletorTipoLancamento({
+      cnpj: p.cnpj, uf: p.uf, numero: p.numero, mes: p.mes, ano: p.ano, data: hoje(),
+      qr_url: p.qr_url, documento: 'nfse', metodo_captura: 'chave_nfse', _manual: true,
+    });
+    toast('NFS-e identificada pela chave — agora o arquivo da nota');
+    return;
+  }
   onChaveNFCe(chave);
 }
 
@@ -7254,8 +7269,9 @@ function _atualizarBotaoLerChave() {
 /* Chave digitada DENTRO do formulário aberto: preenche o que a chave carrega
    (CNPJ, UF, mês/ano, documento, número/série) sem abrir outra nota. */
 async function digitarChaveNoFormulario() {
-  const c = await _pedirChave44();     // já conferiu os 44 dígitos e o dígito verificador
+  const c = await _pedirChave44({ nfse: true });     // 44 já conferidos com o dígito verificador; 50 = NFS-e
   if (!c) return;
+  if (c.length === 50) { _usarChaveNfse(c); return; }
   if (_notaDuplicadaChave(c, $('nf-id').value || null)) { toast('⚠️ Esta chave já está registrada em outra nota', 'err'); return; }
   const p = NFCE.parseChave44(c);
   $('nf-chave').value = c;
@@ -7265,6 +7281,22 @@ async function digitarChaveNoFormulario() {
   if (p?.cnpj) { $('nf-cnpj').value = BrasilAPI.formatar(p.cnpj); if (!$('nf-razao').value) buscarRazaoSocial(p.cnpj); }
   _atualizarLinkConsulta();   // mostra a chave, classifica o documento, número/série
   toast('Chave inserida 🔑 — confira o valor e a data');
+}
+
+/* NFS-e: chave de 50 dígitos. Não vai para chave_nfce (44); fica no link da consulta pública (qr_url). */
+function _usarChaveNfse(c) {
+  const p = NFCE.parseChaveNfse50(c);
+  const url = p.qr_url;
+  const outra = notas.find(n => n.id !== ($('nf-id').value || null) && !n.deleted && n.qr_url === url);
+  if (outra) { toast('⚠️ Esta NFS-e já está registrada em outra nota', 'err'); return; }
+  $('nf-qr-url').value = url;
+  if (p.uf && !$('nf-uf').value) $('nf-uf').value = p.uf;
+  if (p.cnpj) { $('nf-cnpj').value = BrasilAPI.formatar(p.cnpj); if (!$('nf-razao').value) buscarRazaoSocial(p.cnpj); }
+  if (p.numero && !$('nf-numero').value) $('nf-numero').value = p.numero;
+  _docEscolhidoManual = false;
+  _atualizarDocumentoAuto();
+  _atualizarLinkConsulta();
+  toast('Chave da NFS-e inserida 🧰 — confira o valor e a data');
 }
 
 /* nota (não deletada) do usuário com a MESMA chave NFC-e já registrada;

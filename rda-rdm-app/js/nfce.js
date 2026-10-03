@@ -51,6 +51,28 @@ window.NFCE = (() => {
     };
   }
 
+  /* Chave de 50 dígitos da NFS-e nacional (DANFSe v2) → CNPJ, UF, número, mês/ano.
+     Layout: cLocEmi(7) ambiente(1) tpInsc(1) inscrição(14) nNFSe(13) AAMM(4) cNum(9) DV(1).
+     Conferido com a Udi Star (03/10/2026). Não confere DV: o cálculo não é público
+     o bastante para arriscar recusar uma chave boa. Devolve null se não fizer sentido. */
+  function parseChaveNfse50(raw) {
+    const c = digits(raw);
+    if (c.length !== 50) return null;
+    const tpInsc = c.slice(8, 9);
+    const ano = 2000 + parseInt(c.slice(36, 38), 10);
+    const mes = parseInt(c.slice(38, 40), 10);
+    if (!UF_MAP[c.slice(0, 2)] || (tpInsc !== '1' && tpInsc !== '2')) return null;
+    if (mes < 1 || mes > 12 || ano < 2023 || ano > new Date().getFullYear() + 1) return null;
+    return {
+      chave : c,
+      uf    : UF_MAP[c.slice(0, 2)],
+      cnpj  : tpInsc === '2' ? c.slice(9, 23) : '',
+      numero: String(parseInt(c.slice(23, 36), 10)),
+      ano, mes,
+      qr_url: 'https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=' + c,
+    };
+  }
+
   /*
    * URL do QR da NFCe → { ...camposChave, valor }
    *
@@ -197,5 +219,5 @@ window.NFCE = (() => {
     return null;
   }
 
-  return { parseChave44, parseQRUrl, fromScan, digits };
+  return { parseChave44, parseChaveNfse50, parseQRUrl, fromScan, digits };
 })();
