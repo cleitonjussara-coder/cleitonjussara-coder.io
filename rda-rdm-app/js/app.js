@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 342;
+const APP_BUILD = 344;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3988,8 +3988,65 @@ function _passaFiltroNota(n) {
   return true;
 }
 
+/* "⚠️ falhou ›": mostra o MOTIVO (antes o app só dizia que falhou) e o que fazer. A nota continua guardada no
+   aparelho; nada aqui apaga nada. */
+function _explicarFalhaSync(d) {
+  const erros = [d?.nota_erro, ...((d?.itens || []).map(i => i.last_error))].filter(Boolean);
+  const bruto = [...new Set(erros)].join(' · ');
+  const t = bruto.toLowerCase();
+  const tentativas = Math.max(0, ...((d?.itens || []).map(i => i.attempts || 0)));
+  let corpo, acao = 'fechar';
+  if (d?.anexo_bytes === 0 || /vazio|\(0 kb\)/.test(t)) {
+    corpo = 'O anexo desta nota está vazio (0 KB) e o servidor não aceita nota sem anexo.\n\n'
+      + 'O celular costuma entregar o arquivo assim quando ele está só na nuvem (iCloud, Google Drive, WhatsApp) e ainda não baixou. '
+      + 'Abra a nota, anexe o arquivo de novo — antes, abra-o no celular até ele aparecer inteiro, ou tire uma foto — e salve.';
+    acao = 'editar';
+  } else if (/no m[aá]ximo \d+ kb|erro 413|too large|muito grande/.test(t)) {
+    corpo = 'O arquivo é grande demais: o limite é 20 MB.\n\nAbra a nota e anexe um arquivo menor (uma foto da DANFE costuma bastar).';
+    acao = 'editar';
+  } else if (/contabilidade|só consulta/.test(t)) {
+    corpo = 'Esta conta é de Contador, que só consulta e baixa relatórios — não lança nem altera notas.\n\nEntre com a conta que lançou esta nota; ela sobe sozinha.';
+  } else if (/sem permiss/.test(t)) {
+    corpo = 'Esta nota pertence a outra conta deste celular.\n\nEntre com a conta que a lançou; ela sobe sozinha.';
+  } else if (/s[oó] gestor ou admin/.test(t)) {
+    corpo = 'Esta nota é de Faturamento, e só gestor ou admin lança.\n\nEntre com uma conta de gestor ou admin; ela sobe sozinha.';
+  } else if (/unauthenticated|sess[ãa]o|expirou/.test(t)) {
+    corpo = 'Sua sessão expirou.\n\nSaia e entre de novo; a nota continua guardada e sobe sozinha.';
+  } else if (/demorou|timeout|failed to fetch|load failed|network|sem conex|server error|service unavailable|gateway|erro 5\d\d/.test(t)) {
+    corpo = 'O servidor ou o sinal ficou instável e o envio não conseguiu terminar. O app tenta de novo sozinho; se quiser, toque em "Tentar de novo".';
+    acao = 'tentar';
+  } else if (/anexo obrigat/.test(t)) {
+    corpo = 'O anexo desta nota ainda não chegou ao servidor (sinal fraco ou arquivo com problema).\n\nO app tenta de novo. Se continuar assim, abra a nota e anexe o arquivo de novo.';
+    acao = 'tentar';
+  } else if (bruto) {
+    corpo = 'O servidor recusou esta nota: ' + bruto + '\n\nConfira os dados e salve de novo.';
+    acao = 'editar';
+  } else {
+    corpo = 'O app ainda não registrou o motivo. Toque em "Tentar de novo".';
+    acao = 'tentar';
+  }
+  corpo += '\n\nA nota continua guardada neste celular.\nTentativas: ' + tentativas + (bruto ? '\nDetalhe técnico: ' + bruto : '');
+  return { titulo: 'Esta nota ainda não foi enviada', corpo, acao };
+}
+
+async function detalharFalhaSync(id) {
+  let d = null;
+  try { d = await DB.getFalhaSync(id); } catch (_) {}
+  const f = _explicarFalhaSync(d);
+  if (f.acao === 'fechar') { await mostrarAviso({ titulo: f.titulo, mensagem: f.corpo }); return; }
+  const ok = await pedirConfirmacao({
+    titulo: f.titulo, mensagem: f.corpo,
+    confirmar: f.acao === 'editar' ? 'Abrir a nota' : 'Tentar de novo', cancelar: 'Fechar',
+  });
+  if (!ok) return;
+  if (f.acao === 'editar') { editarNota(id); return; }
+  await DB.tentarDeNovo(id);
+  toast('Tentando enviar de novo…');
+  if (sb && user && navigator.onLine) { await DB.sync(sb, user.id).catch(() => {}); await carregarDadosLocais(); if (viewAtual === 'notas') renderNotas(); }
+}
+
 function _statusNota(n) {
-  if (n?.sync_status === 'failed') return '<span class="sync-pill failed" title="Falha na sincronização">⚠️ falhou</span>';
+  if (n?.sync_status === 'failed') return `<button type="button" class="sync-pill failed" title="Toque para ver o motivo" onclick="event.stopPropagation();detalharFalhaSync('${n.id}')">⚠️ falhou ›</button>`;
   if (n?.sync_status === 'pending' || n?.synced === false) return '<span class="sync-pill pending" title="Pendente de sincronização">⏳ pendente</span>';
   return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
@@ -5967,7 +6024,7 @@ async function _lerFrameQR(ctx, video, canvas) {
       // aceita pela chave/cnpj OU por qualquer sequência de 44 dígitos no conteúdo
       let parsed = NFCE.fromScan(code.data);
       if (!(parsed?.chave || parsed?.cnpj)) {
-        const m = code.data.replace(/\D/g, '').match(/\d{44}/);
+        const m = _ehUrlNfse(code.data) ? null : code.data.replace(/\D/g, '').match(/\d{44}/);
         if (m) parsed = NFCE.parseChave44(m[0]);
       }
       if (parsed?.chave || parsed?.cnpj) {
@@ -6292,7 +6349,7 @@ async function _comprimirImagem(blob, ext) {
     c.height = Math.max(1, Math.round(img.height * escala));
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     const menor = await new Promise(r => c.toBlob(r, 'image/jpeg', _FOTO_QUALIDADE));
-    if (!menor || menor.size >= blob.size) return { blob, ext };   // nunca piora
+    if (!menor || !menor.size || menor.size >= blob.size) return { blob, ext };   // nunca piora
     return { blob: menor, ext: 'jpg' };                            // reencodado
   } catch (_) { return { blob, ext }; }
 }
@@ -6397,9 +6454,30 @@ function _lerQRDeImagem(blob) {
   return _qrStringFromBlob(blob);
 }
 
+/* Anexo VAZIO (0 KB) ou que o app não consegue ler (03/10/2026): o iPhone entrega isso quando o arquivo está só na
+   nuvem (iCloud, Google Drive, WhatsApp) e ainda não baixou. A nota era gravada assim mesmo e o envio falhava para
+   sempre (o servidor não aceita nota sem anexo), sem a pessoa saber por quê. Agora barra na hora de anexar e de salvar. */
+async function _anexoUtilizavel(file, input) {
+  if (!file) return false;
+  let vazio = file.size === 0;
+  if (!vazio && typeof file.slice === 'function' && typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer === 'function') {
+    try { await file.slice(0, 16).arrayBuffer(); }
+    catch (err) { vazio = /NotReadable|NotFound/i.test(String(err?.name || '')); }   // outro erro (iOS antigo etc.) não barra
+  }
+  if (!vazio) return true;
+  if (input) { try { input.value = ''; } catch (_) {} }
+  await mostrarAviso({
+    titulo: 'Esse arquivo veio vazio',
+    mensagem: 'O celular entregou o arquivo com 0 KB (ou não deixou o app lê-lo). Isso acontece quando ele está só na nuvem — iCloud, Google Drive ou WhatsApp — e ainda não foi baixado.\n\n'
+      + 'Abra o arquivo no celular até ele aparecer inteiro, ou tire uma foto dele, e anexe de novo.',
+  });
+  return false;
+}
+
 async function onFotoNota(e) {
   const file = e.target.files[0];
   if (!file) return;
+  if (!(await _anexoUtilizavel(file, e.target))) return;
 
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
@@ -6414,7 +6492,7 @@ async function onFotoNota(e) {
     if (qrTxt) {
       let parsed = NFCE.fromScan(qrTxt);
       if (!(parsed?.chave)) {
-        const m = qrTxt.replace(/\D/g, '').match(/\d{44}/);
+        const m = _ehUrlNfse(qrTxt) ? null : qrTxt.replace(/\D/g, '').match(/\d{44}/);
         if (m) parsed = NFCE.parseChave44(m[0]);
       }
       if (parsed?.chave) {
@@ -6842,6 +6920,7 @@ async function buscarRazaoSocial(raw) {
 async function onFotoNotaChange(e) {
   let file = e.target.files[0];
   if (!file) return;
+  if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }   // o formulário estava escondido esperando o arquivo
   /* 23/09/2026: endireita ANTES de tudo — recorte, OCR, anexo e miniatura
      passam a trabalhar com a foto na posição certa. */
   try { file = await _normalizarOrientacao(file); } catch (_) {}
@@ -6863,6 +6942,7 @@ async function onFotoNotaChange(e) {
 async function onArquivoNotaChange(e) {
   let file = e.target.files[0];
   if (!file) return;
+  if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
@@ -6970,7 +7050,7 @@ async function _lerQRdaImagem(file) {
   if (!data) return null;
   let p = NFCE.fromScan(data);
   if (!(p?.chave)) {
-    const m = String(data).replace(/\D/g, '').match(/\d{44}/);
+    const m = _ehUrlNfse(data) ? null : String(data).replace(/\D/g, '').match(/\d{44}/);
     if (m) p = NFCE.parseChave44(m[0]);
   }
   if (p?.chave) {
@@ -7395,6 +7475,8 @@ async function _salvarNotaInterno() {
     _pedirAnexoObrigatorio();
     return;
   }
+  /* anexo vazio/ilegível (iPhone com o arquivo só na nuvem): não grava a nota com ele */
+  if (fotoBlob && !(await _anexoUtilizavel(fotoBlob, null))) { _pedirAnexoObrigatorio(); return; }
 
   // TRAVA anti-duplicata (local): mesma chave já registrada por MIM bloqueia
   if (_notaDuplicadaChave($('nf-chave').value, $('nf-id').value || null)) {

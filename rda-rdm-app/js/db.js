@@ -10,6 +10,11 @@ window.DB = (() => {
   const MAX_SYNC_ATTEMPTS = 5;
   const SYNC_RETRY_MS = 2_000;
   let _db = null;
+  /* Quem está logado NESTE aparelho agora. A fila de envio é compartilhada por todas as contas que já entraram
+     no mesmo navegador; cada item leva o carimbo de quem o criou (queued_by) e só sobe com a sessão DELE.
+     Antes, trocar de conta empurrava a fila da outra conta com o token da nova — 403 sem fim, ou, pior,
+     lançamento gravado no nome errado (03/10/2026). */
+  let _sessaoUid = null;
 
   /* ── Abertura / migração ─────────────────────────────── */
   function open() {
@@ -128,6 +133,16 @@ window.DB = (() => {
       created_at: entry.created_at || existingItem?.created_at || now,
       updated_at: entry.updated_at || now,
       last_error: entry.last_error || existingItem?.last_error || null,
+      queued_by: entry.queued_by || _sessaoUid || existingItem?.queued_by || null,
+    };
+
+    const _alinharCarimbo = async (itemId, quem) => {
+      if (!quem || (entry.entity !== 'nota' && entry.entity !== 'foto')) return;
+      for (const i of existingItems) {
+        if (i.entity_id === entry.entity_id && i.id !== itemId && (i.entity === 'nota' || i.entity === 'foto') && i.queued_by !== quem) {
+          await _put('sync_queue', { ...i, queued_by: quem });
+        }
+      }
     };
 
     if (existingItem) {
@@ -141,20 +156,48 @@ window.DB = (() => {
         payload: entry.payload ?? existingItem.payload ?? null,
         next_attempt_at: entry.next_attempt_at || (existingItem.status === 'running' ? existingItem.next_attempt_at : now),
         last_error: entry.last_error ?? existingItem.last_error ?? null,
+        queued_by: item.queued_by,
         updated_at: now,
       };
       await _put('sync_queue', merged);
+      await _alinharCarimbo(existingItem.id, merged.queued_by);
       return merged;
     }
 
     await _put('sync_queue', item);
+    await _alinharCarimbo(item.id, item.queued_by);
     return item;
   };
 
   const _retryDelayMs = attempts => Math.min(60_000, SYNC_RETRY_MS * 2 ** Math.max(0, attempts - 1));
 
+  /* Erro de CLIENTE (o servidor entendeu e RECUSOU: 403/404/409/413/422…): repetir de minuto em minuto não
+     adianta — só muda se a pessoa mexer na nota ou entrar com a conta certa. Depois de 3 tentativas o app
+     espera 30 min entre uma e outra (e o "Tentar de novo" da nota zera isso). Falha de rede ou 5xx segue com a
+     espera curta de sempre. (03/10/2026: uma nota com anexo vazio foi reenviada de minuto em minuto por horas.) */
+  const STATUS_RECUSADO = [400, 403, 404, 409, 413, 422];
+  const ESPERA_RECUSADO_MS = 30 * 60_000;
+  const _esperaDoErro = (e, attempts) =>
+    (STATUS_RECUSADO.includes(e?.status) && attempts >= 3) ? ESPERA_RECUSADO_MS : _retryDelayMs(attempts);
+
+  /* O item da fila é desta sessão? Item novo leva o carimbo queued_by. Item ANTIGO (sem carimbo) vale para o
+     dono do registro — ou para quem não tem dono (Faturamento sem colaborador). */
+  async function _itemEhDaSessao(item, meuId) {
+    if (!meuId) return true;
+    if (item.queued_by) return item.queued_by === meuId;
+    const reg = item.entity === 'foto' ? await _get('notas', item.entity_id) : item.payload;
+    if (!reg) return true;                                  // sem registro: a limpeza que já existe decide
+    const dono = reg.user_id;
+    if (dono === undefined || dono === meuId) return true;
+    if (reg.created_by === meuId || reg.updated_by === meuId) return true;   // gestor/admin lançou ou editou para OUTRO colaborador
+    if (dono === null) return !reg.created_by && !reg.updated_by;            // Faturamento sem colaborador: só quem lançou
+    return false;
+  }
+
   async function getSyncQueueSummary() {
-    const queueItems = await _getAll('sync_queue');
+    const todos = await _getAll('sync_queue');
+    const queueItems = [];
+    for (const item of todos) { if (await _itemEhDaSessao(item, _sessaoUid)) queueItems.push(item); }
     const now = Date.now();
     const pendingItems = queueItems.filter(item => item.status !== 'running');
     const failedItems = queueItems.filter(item => item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS);
@@ -174,12 +217,39 @@ window.DB = (() => {
     };
   }
 
+  /* Por que um registro não subiu (tela da nota): o erro guardado no registro e o de cada item da fila.
+     Só leitura. */
+  async function getFalhaSync(entityId) {
+    const nota = await _get('notas', entityId).catch(() => null);
+    const itens = (await _getAll('sync_queue')).filter(i => i.entity_id === entityId);
+    const foto = await getFotoLocal(entityId).catch(() => null);
+    return {
+      nota_erro: nota?.sync_error || null,
+      anexo_bytes: foto?.blob ? (foto.blob.size ?? null) : null,
+      itens: itens.map(i => ({ entity: i.entity, status: i.status, attempts: i.attempts || 0, last_error: i.last_error || null, updated_at: i.updated_at || null, queued_by: i.queued_by || null })),
+    };
+  }
+
+  /* "Tentar de novo": zera as tentativas e a espera dos itens deste registro — sem apagar nada. */
+  async function tentarDeNovo(entityId) {
+    const now = new Date().toISOString();
+    let n = 0;
+    for (const i of (await _getAll('sync_queue')).filter(x => x.entity_id === entityId)) {
+      await _put('sync_queue', { ...i, attempts: 0, status: 'pending', next_attempt_at: now, last_error: null, updated_at: now });
+      n++;
+    }
+    const nota = await _get('notas', entityId).catch(() => null);
+    if (nota && nota.sync_status === 'failed') await _put('notas', { ...nota, synced: false, sync_status: 'pending', sync_error: null });
+    return n;
+  }
+
   /* ── Meta (last_sync, etc.) ──────────────────────────── */
   const getMeta = async (k, def = null) => { const r = await _get('meta', k); return r ? r.v : def; };
   const setMeta = (k, v) => _put('meta', { k, v });
 
   /* ── NOTAS ───────────────────────────────────────────── */
   async function saveNota(nota, userId) {
+    if (userId) _sessaoUid = userId;
     const now = new Date().toISOString();
     const fotoLocal = nota.foto_local || null;
     const id = nota.id || crypto.randomUUID();
@@ -415,6 +485,7 @@ window.DB = (() => {
 
   /* ── REPASSES ────────────────────────────────────────── */
   async function saveRepasse(rep, userId) {
+    if (userId) _sessaoUid = userId;
     const now = new Date().toISOString();
     const id = rep.id || crypto.randomUUID();
     const obj = {
@@ -517,7 +588,7 @@ window.DB = (() => {
         delete payload.synced;
         delete payload.sync_status;
         delete payload.sync_error;
-        await _queueOp({ entity: 'nota', entity_id: n.id, action: 'upsert', payload });
+        await _queueOp({ entity: 'nota', entity_id: n.id, action: 'upsert', payload, queued_by: n.created_by || n.user_id || _sessaoUid });
       }
     }
     const existingRep = new Set(queueItems.filter(i => i.entity === 'repass').map(i => i.entity_id));
@@ -527,23 +598,24 @@ window.DB = (() => {
         delete payload.synced;
         delete payload.sync_status;
         delete payload.sync_error;
-        await _queueOp({ entity: 'repass', entity_id: r.id, action: 'upsert', payload });
+        await _queueOp({ entity: 'repass', entity_id: r.id, action: 'upsert', payload, queued_by: r.created_by || r.user_id || _sessaoUid });
       }
     }
     const existingFoto = new Set(queueItems.filter(i => i.entity === 'foto').map(i => i.entity_id));
     for (const f of allFotos) {
       if (!existingFoto.has(f.nota_id)) {
-        await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f });
+        const dono = allN.find(x => x.id === f.nota_id);
+        await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f, queued_by: dono?.created_by || dono?.user_id || _sessaoUid });
       }
     }
   }
 
-  async function pushPending(sb) {
+  async function pushPending(sb, userId) {
     if (!sb || !navigator.onLine) return { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null };
     await _ensureQueueFromExisting();
     const queueItems = await _getAll('sync_queue');
     const now = Date.now();
-    const dueItems = queueItems.filter(item => {
+    let dueItems = queueItems.filter(item => {
       const isDue = !item.next_attempt_at || new Date(item.next_attempt_at).getTime() <= now;
       if (item.status === 'running') {
         const updatedAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
@@ -551,6 +623,13 @@ window.DB = (() => {
       }
       return isDue;
     });
+    /* só o que ESTA conta pôs na fila: o resto espera a conta certa entrar (nada é apagado nem marcado como falha) */
+    const meuId = userId || _sessaoUid;
+    if (meuId) {
+      const meus = [];
+      for (const item of dueItems) { if (await _itemEhDaSessao(item, meuId)) meus.push(item); }
+      dueItems = meus;
+    }
     /* Anexos ANTES dos registros, e na ordem em que entraram na fila. A API
        só aceita nota NOVA se o arquivo dela já estiver no disco (anexo
        obrigatório vale no servidor também), e o POST da foto aceita nota que
@@ -565,6 +644,8 @@ window.DB = (() => {
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
 
     for (const item of dueItems) {
+      /* trocou de conta no meio do ciclo (upload longo): o que falta é da conta antiga e espera ela voltar */
+      if (meuId && _sessaoUid && _sessaoUid !== meuId) break;
       const now = new Date().toISOString();
       await _put('sync_queue', { ...item, status: 'running', updated_at: now });
       try {
@@ -584,10 +665,21 @@ window.DB = (() => {
              não existe, o arquivo fica esperando e o upsert da nota (logo em
              seguida) o encontra pelo id — por isso vai o user_id junto. */
           const blob = payload.blob instanceof Blob ? payload.blob : new Blob([payload.blob], { type: mime });
+          /* 03/10/2026: o iPhone entrega arquivo de 0 bytes quando ele está só na nuvem (iCloud/WhatsApp). Mandar
+             isso só gera 422 sem fim; recusa aqui com o motivo, que a nota passa a mostrar. */
+          if (!blob.size) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
           const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id, nota.user_id === null);
           await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
           await delFotoLocal(item.entity_id);
           await _del('sync_queue', item.id);
+          /* o anexo chegou: a nota que esperava por ele (422 "Anexo obrigatório") não precisa esperar a espera dela */
+          for (const q of await _getAll('sync_queue')) {
+            if (q.entity === 'nota' && q.entity_id === item.entity_id) {
+              await _put('sync_queue', { ...q, attempts: 0, status: 'pending', next_attempt_at: now, updated_at: now });
+              const nl = await _get('notas', item.entity_id);
+              if (nl && nl.sync_status === 'failed') await _put('notas', { ...nl, synced: false, sync_status: 'pending', sync_error: null });
+            }
+          }
           fotosOk++;
           continue;
         }
@@ -618,8 +710,15 @@ window.DB = (() => {
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
         const attempts = (item.attempts || 0) + 1;
-        const nextAttemptAt = new Date(Date.now() + _retryDelayMs(attempts)).toISOString();
-        const nextStatus = attempts >= MAX_SYNC_ATTEMPTS ? 'failed' : 'pending';
+        /* nota recusada por "Anexo obrigatório" enquanto o anexo ainda está na fila tentando subir (sinal fraco) é
+           dependência passageira, não recusa: segue com a espera curta de sempre */
+        const irmaFoto = item.entity === 'nota' && /anexo obrigat/i.test(message)
+          ? (await _getAll('sync_queue')).find(q => q.entity === 'foto' && q.entity_id === item.entity_id && q.status !== 'failed') : null;
+        const recusado = !irmaFoto && STATUS_RECUSADO.includes(e?.status);
+        const nextAttemptAt = new Date(Date.now() + (recusado ? _esperaDoErro(e, attempts) : _retryDelayMs(attempts))).toISOString();
+        /* recusa do servidor (422/403…) vira "falhou" já na 3ª tentativa: a pessoa precisa ver o aviso logo, não só
+           depois de 1 hora de espera de 30 min entre as tentativas */
+        const nextStatus = (attempts >= MAX_SYNC_ATTEMPTS || (recusado && attempts >= 3)) ? 'failed' : 'pending';
         const updatedItem = { ...item, attempts, next_attempt_at: nextAttemptAt, status: nextStatus, last_error: message, updated_at: now };
         await _put('sync_queue', updatedItem);
         if (item.entity === 'foto') {
@@ -834,11 +933,12 @@ window.DB = (() => {
   }
 
   async function sync(sb, userId) {
+    if (userId) _sessaoUid = userId;
     if (_running) return null;
     _running = true;
     try {
       try { await repararQrUrls(userId); } catch (_) {}
-      const push   = await pushPending(sb);
+      const push   = await pushPending(sb, userId);
       const pulled = await pullIncremental(sb, userId);
       let recuperadas = 0;
       try { recuperadas = await repararFotosOrfas(sb, userId); } catch (_) {}
@@ -865,7 +965,7 @@ window.DB = (() => {
     open,
     saveNota, getNotasUser, softDeleteNota, getDeletedNotasUser, restoreNota,
     purgeNotaLocal, limparDaLixeira, purgeNotasDeUsuario,
-    saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas,
+    saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas, getFalhaSync, tentarDeNovo,
     saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse, mesclarRepassesRemotos,
     upsertFromDrive,
     sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
