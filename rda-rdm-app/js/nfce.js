@@ -71,7 +71,9 @@ window.NFCE = (() => {
            || u.searchParams.get('chaveAcesso')
            || u.searchParams.get('chamada')
            || null;
-      if (chave) { const cc = digits(chave); chave = cc.length >= 44 ? cc.slice(0,44) : null; }
+      /* 03/10/2026: a chave da NFS-e nacional tem 50 dígitos. Cortar em 44 gerava uma
+         "chave" falsa (CNPJ, UF e mês inventados) — só vale a de exatamente 44. */
+      if (chave) { const cc = digits(chave); chave = cc.length === 44 ? cc : null; }
 
       /* Consumidor da nota (24/09/2026): quando a venda identifica quem
          comprou, o QR carrega o cDest — CPF (11) ou CNPJ (14). Não havendo,
@@ -160,7 +162,8 @@ window.NFCE = (() => {
     }
 
     // último recurso: procura 44 dígitos seguidos em qualquer parte da URL
-    if (!chave) {
+    // (não em link de NFS-e: lá os dígitos são de uma chave de 50 e o corte inventa outra)
+    if (!chave && !/nfse/i.test(String(url))) {
       const m = String(url).replace(/[^\d]/g, '').match(/\d{44}/);
       if (m) chave = m[0];
     }
@@ -186,6 +189,7 @@ window.NFCE = (() => {
     }
     const raw = digits(text);
     if (raw.length === 44) return parseChave44(raw);
+    if (raw.length === 50) return null;   // chave de NFS-e nacional: não é NF-e/NFC-e
     // pode ser URL sem protocolo
     if (text.includes('nfce') || text.includes('sefaz')) {
       return parseQRUrl('https://' + text);

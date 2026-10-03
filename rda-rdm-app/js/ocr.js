@@ -14,7 +14,7 @@ window.OCR = (() => {
   let _loading = false;
 
   const _d = s => String(s||'').replace(/\D/g,'');
-  const _pf = v => { const n = parseFloat(String(v||'').replace(',','.')); return isNaN(n)?null:n; };
+  const _pf = v => { const n = parseFloat(String(v||'').replace(/\.(?=\d{3}(?!\d))/g,'').replace(',','.')); return isNaN(n)?null:n; };
 
   /* ── Pré-processamento de imagem (canvas) ────────────── */
   function preprocessImage(blob, maxW = 1200) {
@@ -137,8 +137,12 @@ window.OCR = (() => {
       /\b(\d{2}\s?\d{3}\s?\d{3}\s?[/1]\s?\d{4}\s?[-]?\s?\d{2})\b/,
     ];
     for (const p of cnpjPats) {
-      const m = oneLine.match(p);
-      if (m) { const c = _d(m[1]||m[0]); if(c.length===14){r.cnpj=c;break;} }
+      const g = new RegExp(p.source, p.flags.replace('g','') + 'g');
+      for (const m of oneLine.matchAll(g)) {
+        const c = _d(m[1]||m[0]);
+        if (c.length===14) { r.cnpj=c; break; }
+      }
+      if (r.cnpj) break;
     }
 
     // 3. Razão Social
@@ -147,7 +151,7 @@ window.OCR = (() => {
       const rsM = l.match(/(?:RAZ[AÃ]O\s*SOCIAL|NOME\s*(?:FANTASIA)?)[:\s]+(.{4,60})/i);
       if (rsM) { r.razao_social = rsM[1].trim(); break; }
       if (i > 0 && _d(lines[i-1]).length === 14 && l.length > 4 && l.length < 60
-          && !/\d{10,}/.test(l) && l.toUpperCase() === l) {
+          && !/\d{10,}/.test(l) && !/N[ÚU]MERO|CHAVE|DATA|COMPET|S[ÉE]RIE/.test(l) && l.toUpperCase() === l) {
         r.razao_social = l;
         break;
       }
@@ -155,10 +159,11 @@ window.OCR = (() => {
 
     // 4. Valor — cascata
     const valorPats = [
-      /(?:TOTAL\s*(?:GERAL|DA\s*NOTA|A\s*PAGAR)?|VALOR\s*TOTAL|A\s*PAGAR)\s*[R$:\s]*([0-9]{1,7}[.,][0-9]{2})/i,
-      /(?:DINHEIRO|PIX|CART[AÃ]O|D[ÉE]BITO|CR[ÉE]DITO)\s*[R$:\s]*([0-9]{1,7}[.,][0-9]{2})/i,
-      /TOTAL[^\d]{0,10}([0-9]{1,7}[.,][0-9]{2})/i,
-      /R\$\s*([0-9]{1,7}[.,][0-9]{2})/,
+      /VALOR\s+DA\s+OPERA\S*\s*\/?\s*SERVI\S*[\s\S]{0,160}?R\$\s*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,   // NFS-e: o valor do serviço
+      /(?:TOTAL\s*(?:GERAL|DA\s*NOTA|A\s*PAGAR)?|VALOR\s*TOTAL|A\s*PAGAR)\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
+      /(?:DINHEIRO|PIX|CART[AÃ]O|D[ÉE]BITO|CR[ÉE]DITO)\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
+      /TOTAL[^\d]{0,10}(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
+      /R\$\s*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/,
       /\b([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b/,
     ];
     for (const p of valorPats) {
