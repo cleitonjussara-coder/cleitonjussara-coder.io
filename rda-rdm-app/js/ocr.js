@@ -108,8 +108,16 @@ window.OCR = (() => {
       /NFC-?e\s*n[º°o.]?\s*[:\s]*([0-9]{3,9})\b/i,
     ];
     /* Chave de NFS-e nacional (50 dígitos) impressa: o número da nota está nela (posições 24-36) e vale mais que qualquer "nº" solto. */
-    const k50 = oneLine.match(/(?<!\d)(\d{50})(?!\d)/);
-    if (k50 && /^[12]$/.test(k50[1].slice(8, 9))) { const n = String(parseInt(k50[1].slice(23, 36), 10)); if (n !== 'NaN' && n !== '0') r.numero = n; }
+    /* O OCR costuma separar os dígitos em grupos ("3170 2062 …"): aceita 50 dígitos com espaço simples entre eles e confere a estrutura. */
+    const k50 = (() => {
+      for (const m of oneLine.matchAll(/(?<!\d)((?:\d ?){49}\d)(?!\d)/g)) {
+        const c = m[1].replace(/\D/g, '');
+        const uf = c.slice(0, 2), mes = +c.slice(38, 40);
+        if (c.length === 50 && /^[12]$/.test(c.slice(8, 9)) && /^(1[1-7]|2[1-9]|3[1-3]|35|4[1-3]|5[0-3])$/.test(uf) && mes >= 1 && mes <= 12) return [m[0], c];
+      }
+      return null;
+    })();
+    if (k50) { r.chaveNfse = k50[1]; const n = String(parseInt(k50[1].slice(23, 36), 10)); if (n !== 'NaN' && n !== '0') r.numero = n; }
     for (const p of r.numero ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }
@@ -132,6 +140,9 @@ window.OCR = (() => {
         r.uf    = UF_MAP_44[r.chave.slice(0,2)] || null;
       }
     }
+
+    /* chave de NFS-e (50) com espaços: os 44 primeiros dígitos NÃO são chave de NF-e (inventariam CNPJ/UF/mês falsos) */
+    if (r.chaveNfse) { r.chave = null; r.uf = null; r.data = null; }
 
     // 2. CNPJ
     const cnpjPats = [

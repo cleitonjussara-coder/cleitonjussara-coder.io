@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 346;
+const APP_BUILD = 347;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7181,6 +7181,16 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (ocr.data && ocr.data.slice(0,7) === dataFinal.slice(0,7)) dataFinal = ocr.data;
       $('nf-data').value = dataFinal; preencheu.push('data');
     } else {
+      // NFS-e nacional (chave de 50 dígitos lida no arquivo): a chave dá CNPJ, UF, número e o link do portal
+      const daNfse = ocr.chaveNfse ? NFCE.parseChaveNfse50(ocr.chaveNfse) : null;
+      if (daNfse) {
+        if (!$('nf-qr-url').value) $('nf-qr-url').value = daNfse.qr_url;
+        if (daNfse.cnpj) { $('nf-cnpj').value = BrasilAPI.formatar(daNfse.cnpj); buscarRazaoSocial(daNfse.cnpj); }
+        if (daNfse.uf && !$('nf-uf').value) $('nf-uf').value = daNfse.uf;
+        if (!$('nf-numero').value) _preencherNumeroSerie(daNfse.numero, ocr.serie);
+        _docEscolhidoManual = false; _atualizarDocumentoAuto(); _atualizarLinkConsulta();
+        preencheu.push('chave da NFS-e');
+      }
       // sem chave: tudo vem do OCR (menos confiável) — só preenche campos vazios
       if (ocr.cnpj && !$('nf-cnpj').value) {
         $('nf-cnpj').value = BrasilAPI.formatar(ocr.cnpj); preencheu.push('CNPJ'); buscarRazaoSocial(ocr.cnpj);
