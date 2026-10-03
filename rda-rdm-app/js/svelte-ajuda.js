@@ -166,7 +166,8 @@
 \r
     <div class="ajuda-sec ajuda-gestor">\r
       <h4>📁 Arquivos no servidor (no lugar do Drive)</h4>\r
-      <p>Em <b>Início → Arquivos</b>, toque no colaborador e depois no mês: as notas aparecem em miniatura, agrupadas como na pasta modelo (<b>RDA ALIMENTAÇÃO</b>, <b>RDM · ABASTECIMENTO / HOSPEDAGENS / OUTROS</b>). Toque na miniatura para ver a foto inteira.</p>\r
+      <p>Em <b>Início → Arquivos</b>, toque no colaborador e depois no mês: as notas aparecem em miniatura, agrupadas como na pasta modelo (<b>RDA ALIMENTAÇÃO</b>, <b>RDM · ABASTECIMENTO / HOSPEDAGENS / OUTROS</b>). Toque na miniatura para ver a foto inteira.</p>
+      <p class="ajuda-gestor"><b>Todos de uma vez (gestor, admin e contador):</b> na primeira tela de Arquivos, o quadro <b>Baixar de todos de uma vez</b> tem <b>Notas de todos (ZIP)</b> — uma pasta por colaborador, do ano inteiro ou de um mês à escolha — e <b>Planilhas de todos (ZIP)</b>, com a planilha de cada um no modelo do seu regime.</p>\r
       <p><b>⬇️ Baixar ZIP</b> monta, na hora, a pasta do mês (ou do ano) já com os nomes do modelo — <i>Colaborador/Ano/RDM DESPESAS CORPORATIVAS/ABASTECIMENTO/09 set/2026-09-03 POSTO X R$120,00.jpg</i> — e a <b>Planilha CV</b> do ano dentro. Notas sem anexo entram numa lista <i>SEM ANEXO.txt</i>. Não depende do Google Drive.</p>\r
     </div>\r
 \r

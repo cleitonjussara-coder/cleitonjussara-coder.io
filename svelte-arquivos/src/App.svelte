@@ -7,8 +7,9 @@
   let {
     nivel, dados, ano,
     onMudarAno, onAbrirColab, onAbrirMes, onVoltarMeses, onVoltarColabs,
-    onVer, onBaixarZip, onTentarDeNovo,
+    onVer, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, meses = [],
   } = $props();
+  let mesEquipe = $state('');
 </script>
 
 {#snippet cabecalho(titulo, sub)}
@@ -43,6 +44,18 @@
   <div class="db-container">
     {@render cabecalho('📁 Arquivos no servidor', dados.cabecalhoSub)}
     <div class="ini-dica">Toque no colaborador para ver os meses; de cada mês dá para baixar um ZIP já nas pastas do modelo da empresa (com a Planilha CV dentro). Não depende do Google Drive.</div>
+    {#if dados.colaboradores.length}
+      <div class="db-card arq-todos">
+        <div class="arq-colab-nome">📦 Baixar de todos de uma vez</div>
+        <select bind:value={mesEquipe} style="width:100%;min-height:44px;margin:8px 0">
+          <option value="">Ano {ano} inteiro</option>
+          {#each meses as nome, i}<option value={i + 1}>{nome}</option>{/each}
+        </select>
+        <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarEquipe(mesEquipe ? Number(mesEquipe) : null)}>⬇️ Notas de todos (ZIP)</button>
+        <button class="btn btn-outline btn-full" style="min-height:50px;margin-top:8px" onclick={onBaixarPlanilhas}>📊 Planilhas de todos (ZIP)</button>
+        <div class="ini-dica" style="margin-top:8px">As planilhas são do ano inteiro; RDM/RDA leva uns 20 s por pessoa.</div>
+      </div>
+    {/if}
     {#if !dados.colaboradores.length}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhum colaborador.</div>
     {/if}

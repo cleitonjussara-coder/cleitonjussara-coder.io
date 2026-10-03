@@ -98,6 +98,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::get('/arquivos/resumo', [ArquivosController::class, 'resumo']);
     Route::get('/arquivos/notas', [ArquivosController::class, 'notas']);
     Route::get('/arquivos/zip', [ArquivosController::class, 'zip']);
+    Route::get('/arquivos/zip-equipe', [ArquivosController::class, 'zipEquipe']);   // todas as notas da equipe, de uma vez (03/10/2026)
     Route::get('/backup/banco', [BackupController::class, 'banco']);
     Route::get('/backup/lista', [BackupController::class, 'lista']);
     Route::get('/backup/completo', [BackupController::class, 'completo']);

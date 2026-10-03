@@ -185,6 +185,83 @@ class ArquivosController extends Controller
             ->deleteFileAfterSend(true);
     }
 
+    /**
+     * ZIP da EQUIPE inteira (03/10/2026, pedido da contabilidade): as notas de
+     * todos os colaboradores de uma vez, cada um na sua pasta, na mesma árvore
+     * do ZIP individual. Sem planilhas aqui — elas têm rota própria
+     * (/relatorio/cv-equipe?modo=zip) e levam ~20 s por pessoa no modelo
+     * RDM/RDA; juntar as duas coisas estouraria o tempo de uma requisição.
+     * Só gestor, admin e contabilidade.
+     */
+    public function zipEquipe(Request $r): BinaryFileResponse
+    {
+        $u = $r->user();
+        abort_unless($u->veTudo(), 403, 'Só gestor, admin ou contabilidade baixam as notas da equipe');
+        $d = $r->validate([
+            'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+        $ano = (int) ($d['ano'] ?? now()->year);
+        $mes = isset($d['mes']) ? (int) $d['mes'] : null;
+
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(600);
+
+        $q = Nota::query()->where('deleted', false)->where('ano', $ano)->whereNotNull('user_id');
+        if ($mes) {
+            $q->where('mes', $mes);
+        }
+        $porColab = $q->orderBy('data')->get()->groupBy('user_id');
+        abort_if($porColab->isEmpty(), 404, 'Nenhuma nota nesse período');
+
+        $tmp = tempnam(sys_get_temp_dir(), 'arq_').'.zip';
+        $zip = new ZipArchive;
+        abort_unless($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
+
+        $raiz = rtrim($this->fotos->disk()->path(''), '/\\');
+        $usados = [];
+        $resumo = '';
+        foreach (Colaborador::query()->whereIn('id', $porColab->keys())->orderBy('nome')->get() as $c) {
+            $semAnexo = [];
+            $qtd = 0;
+            $total = 0.0;
+            foreach ($porColab[$c->id] as $n) {
+                $qtd++;
+                $total += (float) $n->valor;
+                if (! $this->fotos->existe($n->foto_path)) {
+                    $semAnexo[] = $n;
+
+                    continue;
+                }
+                $ext = strtolower(pathinfo($n->foto_path, PATHINFO_EXTENSION));
+                $destino = PastaModelo::pastaDaNota($c, $n).'/'.PastaModelo::nomeArquivo($n, $ext);
+                $base = $destino;
+                for ($i = 2; isset($usados[$destino]); $i++) {
+                    $destino = preg_replace('/\.([a-z0-9]+)$/', " ($i).$1", $base);
+                }
+                $usados[$destino] = true;
+                $zip->addFile($raiz.'/'.$n->foto_path, $destino);
+                $zip->setCompressionName($destino, ZipArchive::CM_STORE);
+            }
+            $pasta = PastaModelo::nomeColaborador($c).'/'.$ano;
+            if ($semAnexo) {
+                $txt = 'Notas sem anexo no servidor ('.count($semAnexo)."):\n";
+                foreach ($semAnexo as $n) {
+                    $txt .= sprintf("%s  %-40s  R$ %s  [%s]\n", $n->data?->format('Y-m-d') ?: 'sem-data', mb_substr((string) $n->razao_social, 0, 40), number_format((float) $n->valor, 2, ',', '.'), PastaModelo::grupoCurto($n));
+                }
+                $zip->addFromString("{$pasta}/SEM ANEXO.txt", $txt);
+            }
+            $resumo .= sprintf("%-40s %4d nota(s)  R$ %s  (%d sem anexo)\n", PastaModelo::nomeColaborador($c), $qtd, number_format($total, 2, ',', '.'), count($semAnexo));
+        }
+        $zip->addFromString('LEIAME.txt', 'Notas da equipe — '.($mes ? sprintf('%02d/%d', $mes, $ano) : (string) $ano)."\n\n".$resumo."\nUma pasta por colaborador (Ano / Grupo / Categoria / mês). As planilhas baixam à parte, no botão \"Planilhas de todos\".\n");
+        $zip->close();
+
+        $periodo = $mes ? sprintf('%d-%02d', $ano, $mes) : (string) $ano;
+
+        return response()->download($tmp, "Notas_Equipe_{$periodo}.zip", ['Content-Type' => 'application/zip'])
+            ->deleteFileAfterSend(true);
+    }
+
     private function alvo(Colaborador $u, ?string $userId): Colaborador
     {
         $id = $userId ?: $u->id;

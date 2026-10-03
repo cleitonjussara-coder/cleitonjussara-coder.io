@@ -378,6 +378,7 @@ window.API = (() => {
   const arquivos = {
     resumo: ano => req('GET', '/arquivos/resumo', { query: { ano } }),
     notas: (userId, ano, mes) => req('GET', '/arquivos/notas', { query: { user_id: userId || undefined, ano, mes: mes || undefined } }),
+    zipEquipe: (ano, mes) => req('GET', '/arquivos/zip-equipe', { query: { ano, mes: mes || undefined }, blob: true, timeout: 600_000 }),
     zip: (userId, ano, mes) => req('GET', '/arquivos/zip', { query: { user_id: userId || undefined, ano, mes: mes || undefined }, blob: true, timeout: 300_000 }),
   };
 

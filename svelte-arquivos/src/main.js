@@ -49,6 +49,7 @@ function mostrar(nivel, dados) {
       onMudarAno: mudarAno, onAbrirColab: abrirColab, onAbrirMes: abrirMes,
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
       onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
+      onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, meses: dep.MESES_LONGO.slice(1),
     },
   });
   dep.carregarAvatares?.();
@@ -188,6 +189,39 @@ async function baixarZip(m) {
     dep.toast(`ZIP pronto (${(blob.size / 1024 / 1024).toFixed(1)} MB) ✅`);
   } catch (e) {
     dep.toast('Não foi possível montar o ZIP: ' + (e.message || 'erro'), 'err');
+  } finally { dep.setLoading(false); }
+}
+
+function _salvarBlob(blob, nome) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/* 03/10/2026 (pedido da contabilidade): tudo da equipe numa tacada. */
+async function baixarEquipe(m) {
+  if (!navigator.onLine) { dep.toast('Precisa de internet', 'err'); return; }
+  dep.setLoading(true, m ? `Montando o ZIP da equipe — ${dep.MESES_LONGO[m]}…` : `Montando o ZIP da equipe — ${ano} (pode levar alguns minutos)…`);
+  try {
+    const blob = await dep.sb.arquivos.zipEquipe(ano, m);
+    _salvarBlob(blob, `Notas_Equipe_${ano}${m ? '-' + String(m).padStart(2, '0') : ''}.zip`);
+    dep.toast(`ZIP da equipe pronto (${(blob.size / 1024 / 1024).toFixed(1)} MB) ✅`);
+  } catch (e) {
+    dep.toast('Não foi possível montar o ZIP da equipe: ' + (e.message || 'erro'), 'err');
+  } finally { dep.setLoading(false); }
+}
+
+async function baixarPlanilhas() {
+  if (!navigator.onLine) { dep.toast('Precisa de internet', 'err'); return; }
+  dep.setLoading(true, `Gerando as planilhas de ${ano}… CV uns 5 s, RDM/RDA uns 20 s por pessoa`);
+  try {
+    const blob = await dep.sb.relatorio.cvEquipe(ano, null, 'zip');
+    _salvarBlob(blob, `Planilhas_Equipe_${ano}.zip`);
+    dep.toast(`Planilhas prontas (${(blob.size / 1024 / 1024).toFixed(1)} MB) ✅`);
+  } catch (e) {
+    dep.toast('Não foi possível gerar as planilhas: ' + (e.message || 'erro'), 'err');
   } finally { dep.setLoading(false); }
 }
 
