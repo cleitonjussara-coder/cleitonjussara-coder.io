@@ -34,7 +34,7 @@ Barra invertida some em `sed`/heredoc/`python` (namespace `\App\Models` vira `Ap
 ## 4. Antes de publicar a API
 
 1. `php vendor/bin/phpunit` verde.
-2. Migração nova? Aplique primeiro na homologação (`publicar.sh teste api` roda `migrate` sozinho); em produção o admin roda pelo app (Perfil → Atualizar estrutura do banco). Registre em `rda-rdm-app/migrations/` se mexer no schema.
+2. Migração nova? Siga a skill `migrar-banco` (homologação primeiro; em produção o admin roda pelo app em Perfil → Atualizar estrutura do banco).
 3. `publicar.sh producao app` NÃO leva a API: depois de um build que toca `api/`, rode `publicar.sh producao api` e confira os checksums contra `~/api-petermann`. Use a skill `publicar`.
 
 ## 5. Relatório
