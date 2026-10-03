@@ -15,7 +15,7 @@ Simula a equipe da próxima safra usando o app ao mesmo tempo. **Só roda na hom
    (mesmas opções de cifra do `publicar.sh`)
 4. Rodar:
    `node scripts/carga/teste-carga.mjs`
-   Opções: `--n 80 --notas 6 --janela 30 --planilhas 2 --url <api de teste>`
+   Opções: `--n 80 --notas 6 --janela 30 --planilhas 2 --simultaneas 25 --url <api de teste>`. **Use `--simultaneas 25`**: sem isso, 80 conexões do mesmo IP tomam 429 do nginx da Locaweb (limite por IP, ~50), e o teste mede o limite e não o servidor.
 5. O relatório fica em `scripts/carga/resultado-<data>.md`.
 6. **Limpar** (apaga usuários, notas e anexos de teste):
    ```

@@ -6,7 +6,7 @@
  *
  *   node scripts/carga/teste-carga.mjs --tokens carga-tokens.json \
  *        [--url https://api.pmservicosagronomicos.com.br/teste/api] \
- *        [--n 80] [--notas 6] [--janela 30] [--planilhas 2]
+ *        [--n 80] [--notas 6] [--janela 30] [--planilhas 2] [--simultaneas 25]
  *
  * Fases:
  *   1 abertura   — todos abrem o app: /me, /notas, /repasses
@@ -29,6 +29,7 @@ const N = +arg('n', 80);
 const NOTAS = +arg('notas', 6);
 const JANELA = +arg('janela', 30) * 1000;
 const PLANILHAS = +arg('planilhas', 2);
+const SIMULT = +arg('simultaneas', 0);   // 0 = sem limite; o nginx da Locaweb devolve 429 acima de ~50 requisições simultâneas do MESMO IP
 const ARQ_TOKENS = arg('tokens', join(aqui, 'carga-tokens.json'));
 
 const host = new URL(URL_API).hostname;
@@ -54,8 +55,13 @@ const reg = (fase, rotulo, ms, status) => {
   (f[rotulo] ??= []).push({ ms, status });
 };
 
+let emVoo = 0; const fila = [];
+async function vaga() { if (!SIMULT) return; while (emVoo >= SIMULT) await new Promise(r => fila.push(r)); emVoo++; }
+function solta() { if (!SIMULT) return; emVoo--; fila.shift()?.(); }
+
 async function chamar(rotulo, t, metodo, caminho, corpo, extra = {}) {
   const fase = faseAtual;
+  await vaga();
   const ini = performance.now();
   let status = 0;
   try {
@@ -70,6 +76,7 @@ async function chamar(rotulo, t, metodo, caminho, corpo, extra = {}) {
   } catch (e) {
     status = e.name === 'TimeoutError' ? -1 : -2;   // -1 estourou o tempo, -2 falha de rede
   }
+  solta();
   reg(fase, rotulo, performance.now() - ini, status);
   return status;
 }
