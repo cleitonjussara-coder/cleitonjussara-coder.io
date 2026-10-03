@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/verificar-sintaxe.js",
+            "timeout": 20,
+            "statusMessage": "Conferindo sintaxe..."
+          }
+        ]
+      }
+    ]
+  }
+}
