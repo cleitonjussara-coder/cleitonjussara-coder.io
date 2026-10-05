@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 348;
+const APP_BUILD = 349;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2260,6 +2260,38 @@ async function excluirRepasseDeOutro(id) {
   } catch (e) {
     toast('Não deu: ' + (e.message || 'erro'), 'err');
   } finally { setLoading(false); }
+}
+
+/* Exclusão em lote (05/10/2026): uma confirmação para todos, depois um upsert
+   deleted:true por repasse (o mesmo caminho da exclusão individual). Devolve
+   true se excluiu algo — quem chamou limpa a seleção. */
+async function excluirRepassesDeOutro(ids) {
+  if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin exclui o repasse de outra pessoa', 'err'); return false; }
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para excluir', 'err'); return false; }
+  const lista = (ids || []).map(_repasseDaEquipe).filter(Boolean);
+  if (!lista.length) { toast('Repasses não encontrados', 'err'); return false; }
+  const total = lista.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  const nomes = [...new Set(lista.map(r => equipePorId[r.user_id]?.nome || 'o colaborador'))];
+  const nl = String.fromCharCode(10);
+  if (!(await pedirConfirmacao({ confirmar: 'Excluir ' + lista.length, perigo: true, mensagem: [
+    'Excluir ' + lista.length + ' repasse' + (lista.length > 1 ? 's' : '') + ' de ' + nomes.join(', ') + '?',
+    '',
+    'Soma: ' + brl(total),
+    '',
+    'Os valores saem do saldo e somem das planilhas.',
+  ].join(nl) }))) return false;
+
+  setLoading(true);
+  let ok = 0, falhou = 0;
+  try {
+    for (const r of lista) {
+      try { await sb.repasses.upsert({ ...r, deleted: true }); ok++; }
+      catch (_) { falhou++; }
+    }
+    toast(falhou ? ok + ' excluído' + (ok === 1 ? '' : 's') + ', ' + falhou + ' não deu' : (ok === 1 ? 'Repasse excluído' : ok + ' repasses excluídos'), falhou ? 'err' : undefined);
+    await _recarregarEquipe();
+  } finally { setLoading(false); }
+  return ok > 0;
 }
 
 /* redesenha a ficha do colaborador com os dados novos do servidor */

@@ -105,6 +105,47 @@ window.Gestor = (() => {
   }
   function reset()    { _detalheId = null; }
 
+  /* Exclusão em lote dos repasses da ficha (05/10/2026): "Selecionar" mostra
+     uma caixinha em cada linha; "todos" marca só o que está na tela (o mês
+     aberto). A confirmação e a exclusão em si ficam em excluirRepassesDeOutro. */
+  const _selRep = new Set();
+  function _selBarra() {
+    const lista = document.getElementById('cdet-replista');
+    const barra = document.getElementById('cdet-selbar');
+    if (!lista || !barra) return null;
+    return { lista, barra, chks: [...lista.querySelectorAll('.rep-chk')] };
+  }
+  function _selAtualizar() {
+    const s = _selBarra(); if (!s) return;
+    const n = _selRep.size;
+    s.barra.querySelector('.sel-qtd').textContent = n ? `${n} selecionado${n > 1 ? 's' : ''}` : 'Nenhum selecionado';
+    const bx = s.barra.querySelector('.sel-excluir');
+    bx.disabled = !n;
+    bx.textContent = n ? `🗑 Excluir ${n}` : '🗑 Excluir';
+    s.chks.forEach(c => { c.checked = _selRep.has(c.value); c.closest('.cdet-rep')?.classList.toggle('sel', c.checked); });
+  }
+  function selecionarRepasses(ligar) {
+    const s = _selBarra(); if (!s) return;
+    _selRep.clear();
+    s.lista.classList.toggle('rep-sel-on', !!ligar);
+    s.barra.style.display = ligar ? 'flex' : 'none';
+    document.getElementById('cdet-selbtn')?.classList.toggle('on', !!ligar);
+    _selAtualizar();
+  }
+  function marcarRepasse(id, on) { on ? _selRep.add(id) : _selRep.delete(id); _selAtualizar(); }
+  function marcarTodosRepasses(on) {
+    const s = _selBarra(); if (!s) return;
+    _selRep.clear();
+    if (on) s.chks.forEach(c => _selRep.add(c.value));
+    _selAtualizar();
+  }
+  async function excluirSelecionados() {
+    const ids = [..._selRep];
+    if (!ids.length) return;
+    const feito = await excluirRepassesDeOutro(ids);
+    if (feito) _selRep.clear();   // a ficha foi redesenhada; sem isso a seleção velha voltaria
+  }
+
   /* ── Dashboard principal ──────────────────────────────── */
   async function renderDashboard(el, sb, currentUser, onRebuild, options = {}) {
     const mes = options.mes || new Date().getMonth() + 1;
@@ -514,6 +555,7 @@ window.Gestor = (() => {
       const recCartao = soma(recebidos.filter(ehRecarga));
       html += `<div class="section-hd" id="cdet-repasses" style="flex-wrap:wrap;gap:8px 12px">
         <span>💸 Repasses · ${reps.length}</span>
+        ${podeEditar && reps.length ? `<button class="btn btn-sm btn-outline" id="cdet-selbtn" onclick="Gestor.selecionarRepasses(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}
         <div class="mes-nav" style="margin-left:auto">
           <button class="btn-mes-nav" title="Mês anterior" onclick="Gestor.mesRepasses(-1)">‹</button>
           <span class="mes-label">${MESES_LONGO[mes-1]} ${ano}</span>
@@ -532,8 +574,16 @@ window.Gestor = (() => {
       if (!reps.length) {
         html += `<div class="empty-state" style="padding:24px 14px">Nenhum repasse em ${MESES_LONGO[mes-1]} de ${ano}. Use ‹ › para ver outros meses.</div>`;
       } else {
-        html += `<div class="colab-list">${reps.map(x => `
-          <div class="rep-item cdet-rep">
+        if (podeEditar) html += `<div id="cdet-selbar" class="cdet-selbar" style="display:none">
+          <span class="sel-qtd"></span>
+          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(true)">marcar todos (${reps.length})</a>
+          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(false)">limpar</a>
+          <button class="btn btn-sm btn-danger-outline sel-excluir" onclick="Gestor.excluirSelecionados()" disabled>🗑 Excluir</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.selecionarRepasses(false)">Cancelar</button>
+        </div>`;
+        html += `<div class="colab-list" id="cdet-replista">${reps.map(x => `
+          <div class="rep-item cdet-rep" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
+            ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${x.id}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
             <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
             <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
             <div style="flex:1;min-width:0">
@@ -550,6 +600,7 @@ window.Gestor = (() => {
       }
 
       el.innerHTML = html;
+      _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
@@ -946,5 +997,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, saldoAnteriorPorUsuario, aberturaAnual };
+  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
