@@ -534,12 +534,14 @@ window.Gestor = (() => {
         </div>
       </div>`;
 
-      html += `<div class="section-hd">🧾 Notas · ${notas.length}</div>`;
+      const _podeSelNotas = podeEditar && notas.length && typeof selNotasBarraHTML === 'function';
+      html += `<div class="section-hd" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
       if (!notas.length) {
         html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
       } else if (typeof cardNotaHTML === 'function') {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
-        html += `<div class="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
+        if (_podeSelNotas) html += selNotasBarraHTML();
+        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
@@ -601,6 +603,7 @@ window.Gestor = (() => {
 
       el.innerHTML = html;
       _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
+      if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;

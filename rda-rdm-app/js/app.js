@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 349;
+const APP_BUILD = 350;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4539,6 +4539,7 @@ function renderDashEquipe() {
 function renderNotas() {
   _recalcularDuplicatas(notas);
   const el = $('app-content');
+  _selNotas.clear();   // lista nova: volta ao modo normal, sem seleção
   const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO;
   const noPeriodo  = n => semPeriodo || (n.ano === filAno && (filtroNotasAno || n.mes === filMes));
   const ns = notas
@@ -4582,6 +4583,9 @@ function renderNotas() {
         ? 'Limpar filtro' : '+ Lançar'}</button>
     </div>`;
   } else {
+    html += `<div style="display:flex;justify-content:flex-end;padding:0 14px 8px">
+      <button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>
+    </div>${selNotasBarraHTML()}`;
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => { html += cardNotaHTML(n); });
     html += `</div>`;
@@ -4750,6 +4754,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   const pendSync = _statusNota(n);
   return `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
+        <input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">
         ${n.foto_path||n.foto_local ? `
         <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
                 title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
@@ -4876,6 +4881,7 @@ function filtrarTipo(btn) {
   document.querySelectorAll('.nota-card').forEach(c =>
     c.style.display = (f==='all' || c.dataset.tipo===f) ? '' : 'none'
   );
+  _selNotasAtualizar();   // o que o filtro escondeu sai da seleção — nunca se exclui o que não se vê
 }
 
 /* ── VIEW: SALDO ─────────────────────────────────────────── */
@@ -7825,6 +7831,117 @@ async function excluirNota(id) {
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
   toast('Nota enviada para a lixeira');
+}
+
+/* ── Exclusão de várias notas de uma vez (05/10/2026) ────────
+   "Selecionar" mostra uma caixinha em cada cartão da lista (Notas e ficha do
+   colaborador). "Marcar todas" vale só para o que está na tela: o filtro
+   RDA/RDM esconde cartões, e escondido não entra na seleção. Cada nota vai
+   para a lixeira pelo mesmo caminho da exclusão individual (softDeleteNota). */
+const _selNotas = new Set();
+
+function selNotasBarraHTML() {
+  return `<div id="nota-selbar" class="cdet-selbar" style="display:none">
+    <span class="sel-qtd"></span>
+    <a href="#" onclick="event.preventDefault();marcarTodasNotas(true)">marcar todas</a>
+    <a href="#" onclick="event.preventDefault();marcarTodasNotas(false)">limpar</a>
+    <button class="btn btn-sm btn-danger-outline sel-excluir" onclick="excluirNotasSelecionadas()" disabled>🗑 Excluir</button>
+    <button class="btn btn-sm btn-outline" onclick="selecionarNotas(false)">Cancelar</button>
+  </div>`;
+}
+
+function _selNotasChks() { return [...document.querySelectorAll('#notas-list .nota-chk')]; }
+function _selNotasVisiveis() { return _selNotasChks().filter(c => c.closest('.nota-card').style.display !== 'none'); }
+
+function _selNotasAtualizar() {
+  const barra = $('nota-selbar');
+  if (!barra) return;
+  const vis = new Set(_selNotasVisiveis().map(c => c.value));
+  [..._selNotas].forEach(id => { if (!vis.has(id)) _selNotas.delete(id); });
+  const n = _selNotas.size;
+  barra.querySelector('.sel-qtd').textContent = n ? `${n} selecionada${n > 1 ? 's' : ''}` : 'Nenhuma selecionada';
+  const bx = barra.querySelector('.sel-excluir');
+  bx.disabled = !n;
+  bx.textContent = n ? `🗑 Excluir ${n}` : '🗑 Excluir';
+  _selNotasChks().forEach(c => {
+    c.checked = _selNotas.has(c.value);
+    c.closest('.nota-card').classList.toggle('sel', c.checked);
+  });
+}
+
+function selecionarNotas(ligar) {
+  const lista = $('notas-list'), barra = $('nota-selbar');
+  if (!lista || !barra) return;
+  _selNotas.clear();
+  lista.classList.toggle('nota-sel-on', !!ligar);
+  barra.style.display = ligar ? 'flex' : 'none';
+  $('nota-selbtn')?.classList.toggle('on', !!ligar);
+  /* com a seleção ligada, tocar no cartão marca/desmarca (botões e links seguem normais) */
+  lista.onclick = ligar ? e => {
+    if (e.target.closest('button,a,input')) return;
+    const c = e.target.closest('.nota-card')?.querySelector('.nota-chk');
+    if (c) marcarNota(c.value, !c.checked);
+  } : null;
+  _selNotasAtualizar();
+}
+
+function marcarNota(id, on) { on ? _selNotas.add(id) : _selNotas.delete(id); _selNotasAtualizar(); }
+
+function marcarTodasNotas(on) {
+  _selNotas.clear();
+  if (on) _selNotasVisiveis().forEach(c => _selNotas.add(c.value));
+  _selNotasAtualizar();
+}
+
+async function excluirNotasSelecionadas() {
+  const vis = new Set(_selNotasVisiveis().map(c => c.value));
+  const lista = [..._selNotas].filter(id => vis.has(id)).map(_notaPorId).filter(Boolean);
+  if (!lista.length) { toast('Nenhuma nota selecionada', 'err'); return false; }
+  if (lista.some(_ehNotaDeOutroUsuario) && !_ehGestorOuAdmin()) {
+    toast('Só gestor ou admin exclui a nota de outra pessoa', 'err'); return false;
+  }
+  const soma = lista.reduce((s, n) => s + (Number(n.valor) || 0), 0);
+  const donos = [...new Set(lista.map(n => _ehNotaDeOutroUsuario(n) ? (equipePorId[n.user_id]?.nome || 'outro colaborador') : (n.user_id ? 'você' : 'sem colaborador')))];
+  const ok = await pedirPalavra({
+    titulo: `Excluir ${lista.length} nota${lista.length > 1 ? 's' : ''}?`,
+    mensagem: `Notas de ${donos.join(', ')}.\n\nSoma: ${brl(soma)}\n\nElas vão para a lixeira (Notas → 🗑 Apagados) e saem do saldo e das planilhas.`,
+    confirmar: `Excluir ${lista.length}`,
+  });
+  if (!ok) { toast('Exclusão cancelada', 'err'); return false; }
+
+  /* a exclusão é local + fila de sincronização: só funciona para nota que está
+     neste aparelho (a de colaborador entra pelo pull da equipe) */
+  const locais = new Set([
+    ...(await DB.getNotasUser(user.id, true).catch(() => [])),
+    ...(await DB.getNotasEquipe(user.id).catch(() => [])),
+  ].map(n => n.id));
+
+  setLoading(true);
+  let feitas = 0, falhou = 0;
+  try {
+    for (const n of lista) {
+      if (!locais.has(n.id)) { falhou++; continue; }
+      try { await DB.softDeleteNota(n.id); feitas++; } catch (_) { falhou++; }
+    }
+    await syncBadge(false);
+    /* a ficha do colaborador lê do servidor: sem enviar antes, a nota reapareceria */
+    if (feitas && sb && navigator.onLine) {
+      if ((await DB.sync(sb, user.id).catch(() => undefined)) === null) {
+        await new Promise(r => setTimeout(r, 2500));   // já havia uma sincronização rodando
+        await DB.sync(sb, user.id).catch(() => {});
+      }
+    }
+    await carregarDadosLocais();
+    if (viewAtual === 'equipe') renderEquipe();
+    else if (viewAtual === 'lixeira') renderNotasApagadas();
+    else renderNotas();
+    syncToDrive().catch(() => {});
+  } finally { setLoading(false); }
+  _selNotas.clear();
+  toast(falhou
+    ? `${feitas} nota${feitas === 1 ? '' : 's'} na lixeira, ${falhou} não deu para excluir neste aparelho`
+    : (feitas === 1 ? 'Nota enviada para a lixeira' : `${feitas} notas enviadas para a lixeira`), falhou ? 'err' : undefined);
+  return feitas > 0;
 }
 
 async function verFoto(id) {

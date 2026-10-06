@@ -46,7 +46,7 @@
         <div class="ajuda-sec ajuda-gestor">
       <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
       <ul>
-        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
+        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. <b>Várias de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b> (vale também em <b>Minhas notas</b>), marque as notas — tocar no cartão marca — ou use <b>marcar todas</b>, que pega só o que está na tela (se um filtro RDA/RDM estiver ligado, o que ele esconde fica de fora), e toque em <b>🗑 Excluir</b>: o app mostra a soma e pede para digitar <b>EXCLUIR</b>; as notas vão para a lixeira e podem ser restauradas.O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
         <li><b>Repasse</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora. <b>Vários de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b>, marque os repasses (ou <b>marcar todos</b>, que vale para o mês aberto) e toque em <b>🗑 Excluir</b>; o app mostra a soma e pede uma confirmação antes de apagar.</li>
       </ul>
       <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>
