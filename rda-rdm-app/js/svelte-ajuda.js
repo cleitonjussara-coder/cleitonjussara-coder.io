@@ -46,7 +46,7 @@
         <div class="ajuda-sec ajuda-gestor">
       <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
       <ul>
-        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. <b>Várias de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b> (vale também em <b>Minhas notas</b>), marque as notas — tocar no cartão marca — ou use <b>marcar todas</b>, que pega só o que está na tela (se um filtro RDA/RDM estiver ligado, o que ele esconde fica de fora), e toque em <b>🗑 Excluir</b>: o app mostra a soma e pede para digitar <b>EXCLUIR</b>; as notas vão para a lixeira e podem ser restauradas.O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
+        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. <b>Várias de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b> (vale também em <b>Minhas notas</b>), marque as notas — tocar no cartão marca — ou use <b>marcar todas</b>, que pega só o que está na tela (se um filtro RDA/RDM estiver ligado, o que ele esconde fica de fora), e toque em <b>🗑 Excluir</b>: o app mostra a soma e pede para digitar <b>EXCLUIR</b>; as notas vão para a lixeira e podem ser restauradas. O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
         <li><b>Repasse</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora. <b>Vários de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b>, marque os repasses (ou <b>marcar todos</b>, que vale para o mês aberto) e toque em <b>🗑 Excluir</b>; o app mostra a soma e pede uma confirmação antes de apagar.</li>
       </ul>
       <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>
@@ -140,6 +140,7 @@
     <div class="ajuda-sec">
       <h4>🗑️ Lixeira</h4>
       <p>Apagar uma nota abre uma janela do app (painel verde na parte de baixo da tela) que mostra o que será excluído e pede que você digite <b>EXCLUIR</b>; ela vai para a <b>Lixeira</b> (em Minhas notas → 🗑️), de onde dá para <b>Restaurar</b> ou <b>Apagar definitivo</b> (só o dono ou o admin; some do servidor com o anexo).</p>
+      <p><b>Vários de uma vez (05/10/2026):</b> na Lixeira, toque em <b>☑️ Selecionar</b>, marque os lançamentos (tocar no cartão marca; <b>marcar todas</b> pega a lista inteira) e escolha <b>♻️ Restaurar</b> ou <b>🗑 Apagar definitivo</b>. O app mostra a soma e pede confirmação; para apagar de vez é preciso digitar <b>EXCLUIR</b>, e quem não for o dono nem admin não apaga o que não é seu (esses ficam na lixeira). Os "só neste aparelho" não têm caixinha — continuam com o <b>Limpar daqui</b>.</p>
       <ul>
         <li>⚠️ <b>"Já existe uma nota igual ativa"</b> — a lixeira avisa quando restaurar criaria uma nota repetida; confirme só se tiver certeza.</li>
         <li>📱 <b>"Só neste aparelho"</b> — é uma cópia antiga que já não existe no servidor (foi apagada em definitivo por outro aparelho). Não dá para restaurar; use <b>Limpar daqui</b>.</li>

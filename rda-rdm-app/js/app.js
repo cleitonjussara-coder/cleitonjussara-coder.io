@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 350;
+const APP_BUILD = 351;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4228,10 +4228,14 @@ async function renderNotasApagadas() {
       <button class="btn btn-primary" onclick="switchView('notas')">Voltar para as notas</button>
     </div>`;
   } else {
+    html += `<div style="display:flex;justify-content:flex-end;padding:0 14px 8px">
+      <button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>
+    </div>${selNotasBarraHTML('lixeira')}`;
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => {
       html += `
       <div class="nota-card" data-tipo="${n.tipo}">
+        ${n._orfa ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar este lançamento">`}
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
@@ -4263,6 +4267,7 @@ async function renderNotasApagadas() {
     html += `</div>`;
   }
 
+  _selNotas.clear();
   el.innerHTML = html;
 }
 
@@ -7840,12 +7845,17 @@ async function excluirNota(id) {
    para a lixeira pelo mesmo caminho da exclusão individual (softDeleteNota). */
 const _selNotas = new Set();
 
-function selNotasBarraHTML() {
+function selNotasBarraHTML(modo = 'notas') {
+  /* data-rotulo: _selNotasAtualizar acrescenta o número ("🗑 Excluir 3") */
+  const acoes = modo === 'lixeira'
+    ? `<button class="btn btn-sm btn-primary sel-acao" data-rotulo="♻️ Restaurar" onclick="restaurarNotasSelecionadas()" disabled>♻️ Restaurar</button>
+    <button class="btn btn-sm btn-danger-outline sel-acao" data-rotulo="🗑 Apagar definitivo" onclick="apagarDefinitivoSelecionadas()" disabled>🗑 Apagar definitivo</button>`
+    : `<button class="btn btn-sm btn-danger-outline sel-acao" data-rotulo="🗑 Excluir" onclick="excluirNotasSelecionadas()" disabled>🗑 Excluir</button>`;
   return `<div id="nota-selbar" class="cdet-selbar" style="display:none">
     <span class="sel-qtd"></span>
     <a href="#" onclick="event.preventDefault();marcarTodasNotas(true)">marcar todas</a>
     <a href="#" onclick="event.preventDefault();marcarTodasNotas(false)">limpar</a>
-    <button class="btn btn-sm btn-danger-outline sel-excluir" onclick="excluirNotasSelecionadas()" disabled>🗑 Excluir</button>
+    ${acoes}
     <button class="btn btn-sm btn-outline" onclick="selecionarNotas(false)">Cancelar</button>
   </div>`;
 }
@@ -7860,9 +7870,10 @@ function _selNotasAtualizar() {
   [..._selNotas].forEach(id => { if (!vis.has(id)) _selNotas.delete(id); });
   const n = _selNotas.size;
   barra.querySelector('.sel-qtd').textContent = n ? `${n} selecionada${n > 1 ? 's' : ''}` : 'Nenhuma selecionada';
-  const bx = barra.querySelector('.sel-excluir');
-  bx.disabled = !n;
-  bx.textContent = n ? `🗑 Excluir ${n}` : '🗑 Excluir';
+  barra.querySelectorAll('.sel-acao').forEach(b => {
+    b.disabled = !n;
+    b.textContent = n ? `${b.dataset.rotulo} ${n}` : b.dataset.rotulo;
+  });
   _selNotasChks().forEach(c => {
     c.checked = _selNotas.has(c.value);
     c.closest('.nota-card').classList.toggle('sel', c.checked);
@@ -7941,6 +7952,84 @@ async function excluirNotasSelecionadas() {
   toast(falhou
     ? `${feitas} nota${feitas === 1 ? '' : 's'} na lixeira, ${falhou} não deu para excluir neste aparelho`
     : (feitas === 1 ? 'Nota enviada para a lixeira' : `${feitas} notas enviadas para a lixeira`), falhou ? 'err' : undefined);
+  return feitas > 0;
+}
+
+/* Lixeira em lote (05/10/2026): os itens marcados (e visíveis) voltam para as
+   notas ou saem do sistema de vez. Cópia "só neste aparelho" (_orfa) não tem
+   caixinha — continua com o "Limpar daqui" de cada cartão. */
+async function _lixeiraSelecionados() {
+  const vis = new Set(_selNotasVisiveis().map(c => c.value));
+  const arq = new Map((await DB.getDeletedNotasUser(user.id).catch(() => [])).map(n => [n.id, n]));
+  return [..._selNotas].filter(id => vis.has(id)).map(id => arq.get(id)).filter(Boolean);
+}
+
+function _somaNotas(lista) { return lista.reduce((s, n) => s + (Number(n.valor) || 0), 0); }
+
+async function restaurarNotasSelecionadas() {
+  const lista = await _lixeiraSelecionados();
+  if (!lista.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
+  const dups = lista.filter(n => _dupNaLixeira(n)).length;
+  const ok = await pedirConfirmacao({
+    titulo: `Restaurar ${lista.length} lançamento${lista.length > 1 ? 's' : ''}?`,
+    mensagem: `Soma: ${brl(_somaNotas(lista))}\n\nEles voltam para as notas, no saldo e nas planilhas.`
+      + (dups ? `\n\n⚠️ ${dups} já ${dups > 1 ? 'têm' : 'tem'} uma nota igual ativa: restaurar vai duplicar.` : ''),
+    confirmar: `Restaurar ${lista.length}`,
+  });
+  if (!ok) return false;
+
+  setLoading(true);
+  let feitas = 0, falhou = 0;
+  try {
+    for (const n of lista) {
+      try { (await DB.restoreNota(n.id)) ? feitas++ : falhou++; } catch (_) { falhou++; }
+    }
+    await carregarDadosLocais();
+    renderNotasApagadas();
+    syncToDrive().catch(() => {});
+    if (sb && navigator.onLine) DB.sync(sb, user.id).catch(() => {});
+  } finally { setLoading(false); }
+  toast(falhou
+    ? `${feitas} restaurado${feitas === 1 ? '' : 's'}, ${falhou} não deu`
+    : (feitas === 1 ? 'Lançamento restaurado' : `${feitas} lançamentos restaurados`), falhou ? 'err' : undefined);
+  return feitas > 0;
+}
+
+async function apagarDefinitivoSelecionadas() {
+  const marcadas = await _lixeiraSelecionados();
+  if (!marcadas.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
+  const lista = marcadas.filter(_podeApagarDefinitivo);
+  if (!lista.length) { toast('Só o dono da nota ou o admin pode apagar em definitivo', 'err'); return false; }
+  /* sem internet apagaria só aqui e o servidor traria a nota de volta */
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para apagar em definitivo', 'err'); return false; }
+  const semPermissao = marcadas.length - lista.length;
+  const ok = await pedirPalavra({
+    titulo: `Apagar ${lista.length} em definitivo`,
+    mensagem: `Soma: ${brl(_somaNotas(lista))}\n\nAs notas e os anexos saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.`
+      + (semPermissao ? `\n\n${semPermissao} sem permissão para isso ${semPermissao > 1 ? 'ficam' : 'fica'} na lixeira.` : ''),
+    confirmar: `Apagar ${lista.length}`,
+  });
+  if (!ok) return false;
+
+  setLoading(true);
+  let feitas = 0, falhou = 0;
+  try {
+    for (const n of lista) {
+      try {
+        await sb.notas.delete(n.id);     // linha + anexo no servidor; só depois some daqui
+        await DB.purgeNotaLocal(n.id);
+        feitas++;
+      } catch (e) {
+        if (e?.status === 404) { await DB.purgeNotaLocal(n.id); feitas++; }   // já não existia no servidor
+        else falhou++;
+      }
+    }
+    await carregarDadosLocais();
+    renderNotasApagadas();
+  } finally { setLoading(false); }
+  toast(falhou
+    ? `${feitas} apagado${feitas === 1 ? '' : 's'} em definitivo, ${falhou} não deu`
+    : (feitas === 1 ? 'Lançamento apagado em definitivo' : `${feitas} lançamentos apagados em definitivo`), falhou ? 'err' : undefined);
   return feitas > 0;
 }
 
