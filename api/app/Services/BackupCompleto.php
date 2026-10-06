@@ -7,7 +7,8 @@ use RuntimeException;
 use ZipArchive;
 
 /**
- * Backup completo = banco (cópia íntegra por VACUUM INTO) + todas as fotos,
+ * Backup completo = banco (cópia íntegra por VACUUM INTO; no MySQL, um
+ * database.sqlite montado pela CopiaBanco) + todas as fotos,
  * num único .zip em storage/app/backups (fora do public_html).
  *
  * Quem chama:
@@ -37,9 +38,6 @@ class BackupCompleto
     /** Gera o zip e devolve ['arquivo' => caminho, 'fotos' => n, 'bytes' => tamanho]. */
     public function gerar(?string $destino = null): array
     {
-        if (DB::connection()->getDriverName() !== 'sqlite') {
-            throw new RuntimeException('Backup completo só para SQLite');
-        }
         @ini_set('memory_limit', '512M');
         @set_time_limit(600);
 
@@ -86,6 +84,19 @@ class BackupCompleto
     public function copiarBanco(string $destino): void
     {
         @unlink($destino);
+        /* Banco MySQL (06/10/2026): o backup continua sendo um database.sqlite,
+           montado com a mesma cópia da virada. Abre em qualquer lugar e serve
+           para voltar ao SQLite se precisar. */
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            $con = CopiaBanco::conexaoArquivo('backup_arquivo', $destino);
+            try {
+                app(CopiaBanco::class)->copiar((string) config('database.default'), $con);
+            } finally {
+                DB::purge($con);
+            }
+
+            return;
+        }
         $origem = (string) DB::connection()->getDatabaseName();
         try {
             DB::statement('VACUUM INTO '.DB::connection()->getPdo()->quote($destino));

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Services\BackupCompleto;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -94,14 +93,13 @@ class BackupController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    /** GET /backup/banco — gestor/admin, só SQLite. */
+    /** GET /backup/banco — gestor/admin. No MySQL também sai um .sqlite (CopiaBanco). */
     public function banco(Request $r): BinaryFileResponse
     {
         abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin baixa o backup');
-        abort_unless(DB::connection()->getDriverName() === 'sqlite', 400, 'Backup por aqui só para SQLite');
 
         $tmp = storage_path('app/backup-'.now()->format('Ymd-His').'.sqlite');
-        $this->completo->copiarBanco($tmp);   // VACUUM INTO ou SQLite3::backup (Locaweb tem SQLite 3.26)
+        $this->completo->copiarBanco($tmp);   // VACUUM INTO, SQLite3::backup (Locaweb tem SQLite 3.26) ou cópia do MySQL
 
         return response()
             ->download($tmp, 'petermann-'.now()->format('Y-m-d').'.sqlite', ['Content-Type' => 'application/vnd.sqlite3'])
