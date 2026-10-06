@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=352">
+  <link rel="manifest" href="manifest.json?v=353">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1138,6 +1138,43 @@ body{font-size:18.5px}
 #auth-screen .inp::placeholder{color:#7a8a80}
 #auth-screen .auth-logo img{box-shadow:0 10px 26px rgba(0,0,0,.45)}
 
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT "MILHARAL" (06/10/2026): a arte enviada pelo Cleiton (milharal
+   ao pôr do sol, moldura circular verde e o logotipo de blocos) vira o
+   fundo do login e, escurecida, o fundo de todas as telas do app. A marca
+   d'água antiga sai do login porque a própria arte já traz o logotipo.
+═══════════════════════════════════════════════════════════ */
+#auth-screen{
+  background:
+    linear-gradient(180deg,rgba(4,31,15,.15) 0%,rgba(4,31,15,.25) 45%,rgba(4,31,15,.88) 100%),
+    url(fundo.jpg?v=1) center 30% / cover no-repeat,#041f0f}
+#auth-screen::before{display:none}
+#auth-screen .auth-wrap{
+  margin:auto auto 0;
+  background:rgba(6,45,22,.42);border:1px solid rgba(185,226,74,.3);border-radius:18px;
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+  box-shadow:0 14px 34px rgba(0,0,0,.45)}
+#auth-screen .auth-logo-text{text-shadow:0 2px 6px rgba(0,0,0,.6)}
+@media (min-width:900px){
+  #auth-screen{background:#041f0f}
+  #auth-screen .auth-wrap{margin:0;border:0;border-radius:0;background:transparent;
+    -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
+  /* coluna da marca = a arte inteira; o texto fica no pé, sobre um degradê */
+  #auth-screen .auth-logo{justify-content:flex-end;padding-bottom:64px;
+    background:
+      linear-gradient(180deg,transparent 55%,rgba(4,31,15,.92) 100%),
+      url(fundo.jpg?v=1) center 32% / cover no-repeat;
+    border-right:1px solid rgba(185,226,74,.3)}
+  #auth-screen .auth-logo img{display:none}
+  #auth-screen .auth-tag{color:#eef9f0;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+  #auth-screen #auth-body{background:rgba(6,45,22,.55)}
+}
+/* telas do app: a mesma arte, bem escurecida, para o conteúdo continuar legível */
+#app-content{
+  background:
+    linear-gradient(180deg,rgba(4,31,15,.72) 0%,rgba(4,31,15,.88) 100%),
+    url(fundo.jpg?v=1) center 30% / cover no-repeat,#041f0f}
+
 
 /* ─────────────────────────────────────────────
    QR OVERLAY
@@ -1798,7 +1835,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=352" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=353" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2422,32 +2459,32 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=352"></script>
-<script defer src="js/db.js?v=352"></script>
-<script defer src="js/nfce.js?v=352"></script>
-<script defer src="js/sefaz.js?v=352"></script>
-<script defer src="js/brasilapi.js?v=352"></script>
-<script defer src="js/ocr.js?v=352"></script>
-<script defer src="js/recorte.js?v=352"></script>
-<script defer src="js/excel.js?v=352"></script>
-<script defer src="js/gestor.js?v=352"></script>
-<script defer src="js/frota.js?v=352"></script>
-<script defer src="js/ponto.js?v=352"></script>
-<script defer src="js/gdrive.js?v=352"></script>
+<script defer src="js/api.js?v=353"></script>
+<script defer src="js/db.js?v=353"></script>
+<script defer src="js/nfce.js?v=353"></script>
+<script defer src="js/sefaz.js?v=353"></script>
+<script defer src="js/brasilapi.js?v=353"></script>
+<script defer src="js/ocr.js?v=353"></script>
+<script defer src="js/recorte.js?v=353"></script>
+<script defer src="js/excel.js?v=353"></script>
+<script defer src="js/gestor.js?v=353"></script>
+<script defer src="js/frota.js?v=353"></script>
+<script defer src="js/ponto.js?v=353"></script>
+<script defer src="js/gdrive.js?v=353"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=352"></script>
+<script defer src="js/svelte-ajuda.js?v=353"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=352"></script>
+<script defer src="js/svelte-historico.js?v=353"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=352"></script>
+<script defer src="js/svelte-arquivos.js?v=353"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=352"></script>
-<script defer src="js/app.js?v=352"></script>
+<script defer src="js/svelte-perfil.js?v=353"></script>
+<script defer src="js/app.js?v=353"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=352').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=353').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
