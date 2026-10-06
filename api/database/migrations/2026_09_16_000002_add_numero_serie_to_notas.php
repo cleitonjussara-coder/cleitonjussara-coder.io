@@ -19,9 +19,13 @@ return new class extends Migration
             $table->string('serie', 5)->nullable()->after('numero');
         });
 
+        /* ltrim(x, '0') só existe no SQLite; o MySQL (06/10/2026) usa TRIM(LEADING …). */
+        $semZeros = DB::connection()->getDriverName() === 'sqlite'
+            ? fn (string $x) => "ltrim($x, '0')"
+            : fn (string $x) => "trim(leading '0' from $x)";
         DB::table('notas')->whereNull('numero')->whereRaw('length(chave_nfce) = 44')->update([
-            'numero' => DB::raw("ltrim(substr(chave_nfce, 26, 9), '0')"),
-            'serie' => DB::raw("ltrim(substr(chave_nfce, 23, 3), '0')"),
+            'numero' => DB::raw($semZeros('substr(chave_nfce, 26, 9)')),
+            'serie' => DB::raw($semZeros('substr(chave_nfce, 23, 3)')),
         ]);
     }
 
