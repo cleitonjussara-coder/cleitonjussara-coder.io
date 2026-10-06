@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 351;
+const APP_BUILD = 352;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3845,6 +3845,11 @@ function renderHome() {
           <div class="db-hero-lbl">Saldo Acumulado · ${esc(rotuloAcumulado)}</div>
           <div class="db-hero-val ${totalAcumulado < 0 ? 'neg' : ''}">${brl(totalAcumulado)}</div>
         </div>
+      </div>
+      <!-- 05/10/2026 (pedido do Cleiton): o total vem aberto em RDM e RDA — a mesma conta dos dois quadros de baixo -->
+      <div class="db-hero-split">
+        <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDM</span><b class="${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</b></div>
+        <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDA</span><b class="${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</b></div>
       </div>
       <div class="db-hero-meta">
         <span>Recebido <b>${brl(A.recebido)}</b></span>
