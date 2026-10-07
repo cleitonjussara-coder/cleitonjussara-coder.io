@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=353">
+  <link rel="manifest" href="manifest.json?v=354">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1352,7 +1352,23 @@ body{font-size:18.5px}
            width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--primary);
            border-radius:50%;animation:spin 1s linear infinite;display:none}
 .foto-area{position:relative}
-#f-foto-nota{position:absolute;inset:0;opacity:0;cursor:pointer}
+/* 06/10/2026: a foto da nota passou a abrir a câmera DENTRO do app
+   (abrirCameraNota). O input fica só de reserva, escondido. */
+#f-foto-nota{display:none}
+/* Câmera interna da nota: no Android, abrir a câmera do sistema mandava o
+   app para segundo plano e o celular o fechava (voltava reiniciado). */
+#cam-nota-overlay{position:fixed;inset:0;z-index:105;background:#000;display:none;
+  flex-direction:column;align-items:center;justify-content:flex-end}
+#cam-nota-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam-nota-barra{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));width:100%;
+  background:linear-gradient(to top,rgba(0,0,0,.75),rgba(0,0,0,0))}
+.cam-nota-dica{color:#fff;font-size:16px;text-align:center;text-shadow:0 1px 3px #000}
+.cam-nota-disparo{width:76px;height:76px;border-radius:50%;border:5px solid #fff;
+  background:#b9e24a;cursor:pointer}
+.cam-nota-disparo:active{transform:scale(.92)}
+.cam-nota-disparo:disabled{opacity:.5}
+.cam-nota-alt{background:rgba(255,255,255,.92);color:#222;border:none}
 .foto-btn-wrap{
   border:2px dashed var(--border);border-radius:var(--radius-sm);
   padding:14px;text-align:center;cursor:pointer;
@@ -1835,7 +1851,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=353" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=354" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -1965,6 +1981,18 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
             onclick="iniciarQR()">🔄 Já liberei — tentar de novo</button>
   </div>
   <button class="btn-overlay-close" onclick="fecharQR();fecharBarcode()">✕</button>
+</div>
+
+<!-- ═══════════ CÂMERA DA NOTA (dentro do app) ═══════════ -->
+<div id="cam-nota-overlay">
+  <video id="cam-nota-video" playsinline muted autoplay></video>
+  <div class="cam-nota-barra">
+    <p class="cam-nota-dica" id="cam-nota-dica">Enquadre a nota inteira e toque no botão</p>
+    <button type="button" class="cam-nota-disparo" id="cam-nota-disparo" aria-label="Tirar foto"
+            onclick="dispararCameraNota()"></button>
+    <button type="button" class="btn btn-sm cam-nota-alt" onclick="cameraNotaDoSistema()">Usar a câmera do celular</button>
+  </div>
+  <button class="btn-overlay-close" onclick="fecharCameraNota(true)">✕</button>
 </div>
 
 <!-- ═══════════ OCR OVERLAY ═══════════ -->
@@ -2178,7 +2206,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <div class="foto-area">
         <input type="file" id="f-foto-nota" accept="image/*" capture="environment"
                onchange="onFotoNotaChange(event)">
-        <div class="foto-btn-wrap" onclick="$('f-foto-nota').click()">
+        <div class="foto-btn-wrap" onclick="abrirCameraNota()">
           <span id="btn-foto-label">📷 Tirar foto</span>
           <span style="font-size:13px;color:var(--text2)">Abre a câmera — leio o valor e a empresa da foto</span>
           <div id="foto-preview"></div>
@@ -2459,32 +2487,32 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=353"></script>
-<script defer src="js/db.js?v=353"></script>
-<script defer src="js/nfce.js?v=353"></script>
-<script defer src="js/sefaz.js?v=353"></script>
-<script defer src="js/brasilapi.js?v=353"></script>
-<script defer src="js/ocr.js?v=353"></script>
-<script defer src="js/recorte.js?v=353"></script>
-<script defer src="js/excel.js?v=353"></script>
-<script defer src="js/gestor.js?v=353"></script>
-<script defer src="js/frota.js?v=353"></script>
-<script defer src="js/ponto.js?v=353"></script>
-<script defer src="js/gdrive.js?v=353"></script>
+<script defer src="js/api.js?v=354"></script>
+<script defer src="js/db.js?v=354"></script>
+<script defer src="js/nfce.js?v=354"></script>
+<script defer src="js/sefaz.js?v=354"></script>
+<script defer src="js/brasilapi.js?v=354"></script>
+<script defer src="js/ocr.js?v=354"></script>
+<script defer src="js/recorte.js?v=354"></script>
+<script defer src="js/excel.js?v=354"></script>
+<script defer src="js/gestor.js?v=354"></script>
+<script defer src="js/frota.js?v=354"></script>
+<script defer src="js/ponto.js?v=354"></script>
+<script defer src="js/gdrive.js?v=354"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=353"></script>
+<script defer src="js/svelte-ajuda.js?v=354"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=353"></script>
+<script defer src="js/svelte-historico.js?v=354"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=353"></script>
+<script defer src="js/svelte-arquivos.js?v=354"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=353"></script>
-<script defer src="js/app.js?v=353"></script>
+<script defer src="js/svelte-perfil.js?v=354"></script>
+<script defer src="js/app.js?v=354"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=353').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=354').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

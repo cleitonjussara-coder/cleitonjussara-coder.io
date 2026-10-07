@@ -101,7 +101,7 @@
       <ul>
         <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📷 Nota pelo QR Code</b>. Aponte a câmera para o QR do cupom; leu, o app avisa.</li>
         <li><b>2.</b> A aba já é a que você abriu — o app pula essa pergunta. Se o fornecedor for conhecido e parecer da <i>outra</i> aba (posto costuma ser RDM · Abastecimento, restaurante RDA), aparece um aviso em laranja com o botão <b>Trocar</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026).</li>
-        <li><b>3.</b> Toque em <b>Tirar foto</b> e fotografe o cupom inteiro (ou <b>Anexar arquivo</b>). O anexo é obrigatório — sem ele a nota não salva.</li>
+        <li><b>3.</b> Toque em <b>Tirar foto</b>: a câmera abre dentro do próprio app; enquadre o cupom inteiro e toque no botão verde (ou use <b>Anexar arquivo</b>). Se a câmera do app não abrir, toque em <b>Usar a câmera do celular</b>. O anexo é obrigatório — sem ele a nota não salva.</li>
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
         <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>
       </ul>

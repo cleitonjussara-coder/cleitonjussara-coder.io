@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 353;
+const APP_BUILD = 354;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6735,12 +6735,104 @@ function lancarManualComAnexo(modo) {
        a câmera, o formulário aparece do mesmo jeito (evento cancel). */
     _formEsperandoLeitura = true;
     $('nota-form-overlay').style.display = 'none';
-    const inp = $(modo === 'foto' ? 'f-foto-nota' : 'f-arq-nota');
+    if (modo === 'foto') { abrirCameraNota(_mostrarFormAposLeitura); return; }
+    const inp = $('f-arq-nota');
     inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
     inp?.click();
   } else {
     _pedirFotoPasso2();
   }
+}
+/* ── Câmera da nota DENTRO do app (06/10/2026) ──────────────
+   Relato do campo: na RDA, depois de ler o QR, ao tirar a foto da nota o
+   app fechava e reiniciava. Era a câmera do SISTEMA (input capture): ela
+   joga o app para segundo plano e o Android, sem memória, mata a página;
+   ao voltar, o app recarrega e a nota em andamento se perde. Aqui a foto é
+   tirada pelo próprio app (mesma câmera do leitor de QR), sem sair dele.
+   Sem getUserMedia ou com erro, cai na câmera do sistema como antes. */
+let _camNotaStream = null;
+let _camNotaAoCancelar = null;
+async function abrirCameraNota(aoCancelar) {
+  _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
+  if (!navigator.mediaDevices?.getUserMedia) { cameraNotaDoSistema(); return; }
+  const ov = $('cam-nota-overlay');
+  const video = $('cam-nota-video');
+  const btn = $('cam-nota-disparo');
+  ov.style.display = 'flex';
+  if (btn) btn.disabled = true;
+  try {
+    _camNotaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+    }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
+    if (ov.style.display !== 'flex') { _pararCameraNota(); return; }   // fechou enquanto abria
+    video.srcObject = _camNotaStream;
+    await video.play().catch(() => {});
+    if (btn) btn.disabled = false;
+  } catch (e) {
+    console.warn('câmera interna da nota:', e);
+    cameraNotaDoSistema();
+  }
+}
+function _pararCameraNota() {
+  _camNotaStream?.getTracks().forEach(t => t.stop());
+  _camNotaStream = null;
+  const video = $('cam-nota-video');
+  if (video) video.srcObject = null;
+  const ov = $('cam-nota-overlay');
+  if (ov) ov.style.display = 'none';
+}
+function fecharCameraNota(cancelou) {
+  _pararCameraNota();
+  const cb = _camNotaAoCancelar;
+  _camNotaAoCancelar = null;
+  if (cancelou && cb) cb();
+}
+/* Reserva: abre a câmera do sistema (o comportamento antigo). */
+function cameraNotaDoSistema() {
+  const cb = _camNotaAoCancelar;
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  const inp = $('f-foto-nota');
+  if (cb) inp?.addEventListener('cancel', cb, { once: true });
+  inp?.click();
+}
+async function dispararCameraNota() {
+  const video = $('cam-nota-video');
+  const btn = $('cam-nota-disparo');
+  const track = _camNotaStream?.getVideoTracks()[0];
+  if (!track || !video?.videoWidth) return;
+  if (btn) btn.disabled = true;
+  let blob = null;
+  /* Foto na resolução cheia do sensor quando o navegador deixa (Chrome no
+     Android); senão, o quadro do vídeo. */
+  try {
+    if (typeof ImageCapture !== 'undefined') {
+      blob = await Promise.race([
+        new ImageCapture(track).takePhoto(),
+        new Promise(r => setTimeout(() => r(null), 5000)),   // celular que trava no takePhoto
+      ]);
+    }
+  } catch (_) { blob = null; }
+  if (blob && blob.type !== 'image/jpeg') {   // anexo da nota é sempre .jpg
+    try {
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      c.getContext('2d').drawImage(bmp, 0, 0);
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    } catch (_) { blob = null; }
+  }
+  if (!blob) {
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  }
+  if (!blob) { if (btn) btn.disabled = false; toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  const file = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  await onFotoNotaChange({ target: { files: [file], value: '' } });
 }
 function _mostrarFormAposLeitura() {
   if (!_formEsperandoLeitura) return;
