@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 354;
+const APP_BUILD = 355;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6398,6 +6398,120 @@ async function _normalizarOrientacao(blob) {
   } catch (_) { return blob; }
 }
 
+/* ── Nota sempre em pé e reta (08/10/2026) ─────────────────
+   Pedido do Cleiton: padronizar a foto da nota na horizontal (linhas do
+   texto retas) e garantir que nunca fique de lado ou de cabeça para baixo.
+   O EXIF só existe na foto da câmera do sistema; a câmera de dentro do app
+   (build 354) não grava rotação nenhuma, e o app fica travado em retrato —
+   celular deitado ou de ponta-cabeça virava foto de lado/invertida.
+   1) QR Code da nota: os três "olhos" dizem exatamente onde é o topo do
+      QR, que é impresso em pé na nota. Dá o giro certo e a inclinação.
+   2) Sem QR: lê o texto nas posições possíveis e fica com a que o OCR
+      entende (de cabeça para baixo o OCR não reconhece quase nada).
+   Na dúvida, a foto fica como veio. */
+async function _anguloDoQR(img) {
+  try { await _ensureJsQR(); } catch (_) {}
+  if (typeof jsQR === 'undefined') return null;
+  const c = document.createElement('canvas');
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  const tentar = (sx, sy, sw, sh, maxLado) => {
+    const esc = Math.min(maxLado / Math.max(sw, sh), 4);
+    c.width = Math.max(1, Math.round(sw * esc)); c.height = Math.max(1, Math.round(sh * esc));
+    cx.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    try {
+      const d = cx.getImageData(0, 0, c.width, c.height);
+      const code = jsQR(d.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+      const L = code?.location;
+      if (!L) return null;
+      // topo do QR = do olho de cima-esquerda ao de cima-direita
+      return Math.atan2(L.topRightCorner.y - L.topLeftCorner.y, L.topRightCorner.x - L.topLeftCorner.x) * 180 / Math.PI;
+    } catch (_) { return null; }
+  };
+  const W = img.width, H = img.height;
+  for (const m of [1400, 2000]) { const a = tentar(0, 0, W, H, m); if (a !== null) return a; }
+  for (const n of [2, 3]) {                       // QR pequeno: procura por partes
+    const tw = W / n, th = H / n, ov = 0.25;
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) {
+      const sx = Math.max(0, (k - ov) * tw), sy = Math.max(0, (r - ov) * th);
+      const a = tentar(sx, sy, Math.min(W - sx, tw * (1 + 2 * ov)), Math.min(H - sy, th * (1 + 2 * ov)), 1300);
+      if (a !== null) return a;
+    }
+  }
+  return null;
+}
+
+/* Desenha a imagem girada `graus` (sentido horário), com fundo branco
+   nos cantos quando o giro não é múltiplo de 90. */
+function _girarImagem(img, graus, maxLado = 0) {
+  const W = img.width, H = img.height;
+  const esc = maxLado ? Math.min(1, maxLado / Math.max(W, H)) : 1;
+  const rad = graus * Math.PI / 180;
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+  const c = document.createElement('canvas');
+  c.width  = Math.max(1, Math.round((W * cos + H * sin) * esc));
+  c.height = Math.max(1, Math.round((W * sin + H * cos) * esc));
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+  cx.translate(c.width / 2, c.height / 2);
+  cx.rotate(rad);
+  cx.drawImage(img, -W * esc / 2, -H * esc / 2, W * esc, H * esc);
+  return c;
+}
+
+/* Quanto girar (horário) para a nota ficar em pé. 0 = já está. */
+async function _giroParaEmPe(img) {
+  const ang = await _anguloDoQR(img);
+  if (ang !== null) {
+    let g = -ang;                                   // desfaz o giro do QR
+    g = ((g % 360) + 540) % 360 - 180;              // -180..180
+    const quarto = Math.round(g / 90) * 90;
+    const resto = g - quarto;
+    // inclinação pequena (2° a 20°) também é corrigida: linhas retas
+    return Math.abs(resto) >= 2 && Math.abs(resto) <= 20 ? g : quarto;
+  }
+  if (!window.OCR?.pontuarLeitura) return 0;
+  const deitada = img.width > img.height * 1.1;    // nota é em pé; deitada = quase certo de lado
+  const giros = deitada ? [0, 90, 270, 180] : [0, 180];
+  let melhor = 0, notaMelhor = -1, nota0 = 0;
+  for (const g of giros) {
+    const c = _girarImagem(img, g, 1000);
+    const b = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+    let s;
+    try { s = b ? await OCR.pontuarLeitura(b) : 0; } catch (_) { s = 0; }
+    if (g === 0) nota0 = s;
+    if (s > notaMelhor) { notaMelhor = s; melhor = g; }
+    /* leitura farta = é esta a posição (no teste: em pé ~265, nas erradas
+       ~40–50); poupa as outras leituras, que custam segundos no celular */
+    if (s >= 150) return g;
+  }
+  // só gira com folga clara sobre a posição original (evita girar à toa)
+  return (melhor !== 0 && notaMelhor >= 15 && notaMelhor > nota0 * 1.5) ? melhor : 0;
+}
+
+async function _endireitarComAviso(blob) {
+  const ov = $('ocr-overlay');
+  const aberto = ov && ov.style.display === 'flex';
+  if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Endireitando a foto…'; }
+  try { return await _endireitarNota(blob); }
+  finally { if (ov && !aberto) ov.style.display = 'none'; }
+}
+
+async function _endireitarNota(blob) {
+  try {
+    if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return blob;
+    const img = await _blobToImg(blob);
+    const g = await _giroParaEmPe(img);
+    if (!g) return blob;
+    const c = _girarImagem(img, g);
+    const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    if (!out || !out.size) return blob;
+    return new File([out], (blob.name || 'nota.jpg').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) {
+    console.warn('endireitar nota:', e);
+    return blob;
+  }
+}
+
 async function _comprimirImagem(blob, ext) {
   /* endireita antes de qualquer coisa: o recorte, o OCR e o arquivo salvo
      passam a ver a foto na posição certa */
@@ -6546,9 +6660,11 @@ async function _anexoUtilizavel(file, input) {
 }
 
 async function onFotoNota(e) {
-  const file = e.target.files[0];
+  let file = e.target.files[0];
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) return;
+  try { file = await _normalizarOrientacao(file); } catch (_) {}
+  file = await _endireitarComAviso(file);   // 08/10/2026
 
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
@@ -7087,6 +7203,7 @@ async function onFotoNotaChange(e) {
   /* 23/09/2026: endireita ANTES de tudo — recorte, OCR, anexo e miniatura
      passam a trabalhar com a foto na posição certa. */
   try { file = await _normalizarOrientacao(file); } catch (_) {}
+  file = await _endireitarComAviso(file);   // 08/10/2026: nunca de lado nem de cabeça para baixo
   _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
   fotoOriginal = file;
@@ -7107,6 +7224,7 @@ async function onArquivoNotaChange(e) {
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
+  if (_ehImagemExt(_extDoArquivo(file))) file = await _endireitarComAviso(file);   // 08/10/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
   fotoOriginal = file;
