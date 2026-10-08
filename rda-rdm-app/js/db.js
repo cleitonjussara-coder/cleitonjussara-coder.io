@@ -104,8 +104,16 @@ window.DB = (() => {
   const _normalizeRecord = (item, fallbackStatus = 'synced') => {
     if (!item) return item;
     const status = item.sync_status || (item.synced === false ? 'pending' : fallbackStatus);
+    /* 08/10/2026: nota guardada antes da migração de 16/09 (que preencheu número
+       e série pela chave só no servidor, sem mexer no updated_at) chegava aqui
+       sem número — completa na leitura, a partir da própria chave. */
+    const ch = String(item.chave_nfce || '').replace(/\D/g, '');
+    const daChave = ch.length === 44 && !String(item.numero || '').trim()
+      ? { numero: ch.slice(25, 34).replace(/^0+/, '') || '0', serie: item.serie || ch.slice(22, 25).replace(/^0+/, '') || '0' }
+      : null;
     return {
       ...item,
+      ...(daChave || {}),
       synced: typeof item.synced === 'boolean' ? item.synced : status !== 'synced',
       sync_status: status,
       sync_error: item.sync_error || null,
