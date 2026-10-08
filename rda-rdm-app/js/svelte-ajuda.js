@@ -103,7 +103,7 @@
         <li><b>2.</b> A aba já é a que você abriu — o app pula essa pergunta. Se o fornecedor for conhecido e parecer da <i>outra</i> aba (posto costuma ser RDM · Abastecimento, restaurante RDA), aparece um aviso em laranja com o botão <b>Trocar</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026).</li>
         <li><b>3.</b> Toque em <b>Tirar foto</b>: a câmera abre dentro do próprio app; enquadre o cupom inteiro e toque no botão verde (ou use <b>Anexar arquivo</b>). Se a câmera do app não abrir, toque em <b>Usar a câmera do celular</b>. Pode fotografar com o celular em qualquer posição: o app <b>endireita a nota sozinho</b> (pelo QR Code ou pelo texto), e ela nunca fica de lado nem de cabeça para baixo. O anexo é obrigatório — sem ele a nota não salva.</li>
         <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
-        <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data, valor, número, série e tipo de documento. Confira o <b>valor</b> e toque em <b>Salvar</b>.</li>
+        <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data e valor. Confira o <b>valor</b> e toque em <b>Salvar</b>. Tipo de documento, número e série o app tira da chave e grava sozinho, sem mostrar na tela.</li>
       </ul>
       <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom ou da NF-e; a NFS-e, nota de serviço, tem 50). Abre uma janela do próprio app: digite ou cole a chave (pode ser com espaços) e toque em <b>Usar chave</b>. Se faltar algum dígito, a janela avisa sem fechar.</p>
       <p><b>📐 Foto sempre em pé (23/09/2026):</b> o celular costuma gravar a foto deitada e anotar a rotação num campo escondido do arquivo. A tela mostrava certo, mas o PDF, o ZIP e a planilha saíam de lado ou de cabeça para baixo. Agora o app <b>endireita a foto na hora de anexar</b> — o recorte, a leitura e o arquivo guardado já saem na posição certa. As fotos antigas foram endireitadas de uma vez no servidor.</p>
@@ -126,7 +126,7 @@
       <ul>
         <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Outros). Define a aba da planilha e a pasta nos arquivos.</li>
         <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo). Com chave, o app escolhe sozinho.</li>
-        <li><b>Número e série</b>: vêm da chave ou da leitura da foto; podem ser corrigidos.</li>
+        <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>
         <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>
       </ul>
     </div>

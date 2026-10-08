@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 355;
+const APP_BUILD = 356;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -400,6 +400,21 @@ function _preencherNumeroSerie(numero, serie, sobrescrever = false) {
   const n = $('nf-numero'), s = $('nf-serie');
   if (n && numero && (sobrescrever || !n.value)) n.value = String(numero);
   if (s && serie  != null && serie !== '' && (sobrescrever || !s.value)) s.value = String(serie);
+  _ajustarBlocoDocumento();
+}
+/* 08/10/2026 (pedido do Cleiton): Documento, Número e Série somem da tela
+   quando o app já sabe os três pela chave/QR — não há o que a pessoa
+   conferir ali, e a tela fica mais curta. Os valores continuam nos campos
+   escondidos e são gravados (aviso de nota repetida, cartão, relatórios).
+   Sem chave (recibo, NFS-e municipal, DANFE sem chave lida) o bloco
+   aparece, porque aí só a pessoa sabe o tipo e o número. */
+function _ajustarBlocoDocumento() {
+  const bloco = $('nf-doc-bloco');
+  if (!bloco) return;
+  const ext = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : '');
+  const identificado = !!(_docPelaChave($('nf-chave')?.value, ext) || _ehUrlNfse($('nf-qr-url')?.value));
+  const temNumero = !!String($('nf-numero')?.value || '').trim();
+  bloco.style.display = identificado && temNumero ? 'none' : '';
 }
 function _atualizarNumeroSerieAuto() {
   const ns = _numeroSerieDaChave($('nf-chave').value);
@@ -421,6 +436,7 @@ function _ajustarRotulosDoDocumento() {
 }
 
 function _atualizarDocumentoAuto() {
+  _ajustarBlocoDocumento();
   const sel = $('nf-documento');
   if (!sel || _docEscolhidoManual) return;
   const salva = _notaPorId($('nf-id').value);
@@ -6983,6 +6999,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento : '';
   $('nf-numero').value   = dados.numero   || '';
   $('nf-serie').value    = dados.serie    || '';
+  _ajustarBlocoDocumento();
   $('nf-uf').value       = dados.uf       || '';
   $('nf-tipo').value     = dados.tipo     || 'RDA';
   $('nf-subtipo').value  = dados.subtipo  || 'Abastecimento';
