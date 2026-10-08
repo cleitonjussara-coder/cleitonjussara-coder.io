@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 356;
+const APP_BUILD = 357;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4647,7 +4647,12 @@ function _motivosDaNota(n) {
   if (!(Number(n.valor) > 0)) motivos.push('sem valor');
   const digitos = _soDigitos(n.cnpj);
   if (digitos.length !== 14) motivos.push('sem CNPJ');
-  if (!_ehRecibo(n) && !String(n.numero || '').trim()) motivos.push('sem nº da nota');
+  /* 08/10/2026: o número também vale quando sai da chave de 44 dígitos — é o
+     mesmo que o cartão mostra. A migração de 16/09 preencheu o número das notas
+     antigas no servidor sem mexer no updated_at, então o celular que já tinha
+     a nota guardada nunca recebeu o número e cobrava "sem nº" que o computador
+     (sincronizado depois) não cobrava. */
+  if (!_ehRecibo(n) && !String(n.numero || '').trim() && !_numeroSerieDaChave(n.chave_nfce)) motivos.push('sem nº da nota');
   if (_dataNoFuturo(n.data)) motivos.push('data no futuro');
   if (_dupMapa.has(n.id)) motivos.push('possível duplicata');
 
