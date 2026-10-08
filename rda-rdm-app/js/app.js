@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 359;
+const APP_BUILD = 360;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -218,7 +218,7 @@ async function resolverLinkConsulta(chaveRaw, qrUrlDaNota) {
 
   // sem QR: página de NFC-e da UF (chave colada pelo usuário) ou portal nacional
   const d = window.SEFAZ?.destinoConsulta ? SEFAZ.destinoConsulta(chave) : null;
-  if (d?.url) return { url: d.url, exato: false, colarChave: d.colarChave, uf: d.uf };
+  if (d?.url) return { url: d.url, exato: false, colarChave: d.colarChave, preenchida: d.preenchida, uf: d.uf };
   const fallback = window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null;
   return fallback ? { url: fallback, exato: false } : null;
 }
@@ -241,9 +241,12 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
     if (w) w.location.href = r.url; else window.open(r.url, '_blank');
     if (r.exato) return;
     if (r.colarChave) {
-      toast((await copiou)
-        ? `Chave copiada — cole no campo "Chave de acesso" da SEFAZ-${r.uf} e resolva o captcha`
-        : `Abrindo a consulta da SEFAZ-${r.uf} — digite a chave e resolva o captcha`);
+      const ok = await copiou;
+      toast(r.preenchida
+        ? `Abrindo a consulta da SEFAZ-${r.uf} com a chave preenchida — é só pesquisar`
+        : ok
+          ? `Chave copiada — cole no campo "Chave de acesso" da SEFAZ-${r.uf} e resolva o captcha`
+          : `Abrindo a consulta da SEFAZ-${r.uf} — digite a chave e resolva o captcha`);
     } else {
       toast('Nota não foi lida por QR — abrindo o portal nacional com a chave (pede captcha)');
     }
