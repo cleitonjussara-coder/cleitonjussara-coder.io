@@ -220,9 +220,32 @@ window.OCR = (() => {
     return { text, ...parsed };
   }
 
+  /* Pontua quanto texto LEGÍVEL há na imagem (08/10/2026): soma as letras
+     e números das palavras que o Tesseract leu com confiança. A mesma foto
+     de cabeça para baixo ou de lado dá quase zero — é assim que o app
+     descobre a posição certa de uma nota sem QR Code. */
+  async function pontuarLeitura(blob) {
+    await init();
+    const processed = await preprocessImage(blob, 1000);
+    const { data } = await worker.recognize(processed, {}, { text: true, blocks: true });
+    let palavras = Array.isArray(data?.words) ? data.words : null;
+    if (!palavras && Array.isArray(data?.blocks)) {            // v6+: palavras dentro dos blocos
+      palavras = [];
+      for (const b of data.blocks) for (const p of b.paragraphs || []) for (const l of p.lines || []) palavras.push(...(l.words || []));
+    }
+    if (palavras) {
+      let s = 0;
+      for (const w of palavras) {
+        if ((w.confidence || 0) >= 60) s += (String(w.text || '').match(/[0-9A-Za-zÀ-ÿ]/g) || []).length;
+      }
+      return s;
+    }
+    return ((data?.confidence || 0) / 100) * String(data?.text || '').replace(/[^0-9A-Za-zÀ-ÿ]/g, '').length;
+  }
+
   async function terminate() {
     if (worker) { await worker.terminate(); worker = null; ready = false; }
   }
 
-  return { init, processar, parseFiscalText, terminate };
+  return { init, processar, parseFiscalText, pontuarLeitura, terminate };
 })();
