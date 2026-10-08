@@ -42,6 +42,17 @@ window.SEFAZ = (() => {
 
   const PORTAL_NACIONAL = 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx';
 
+  /* Página de consulta de NFC-e (modelo 65) da própria UF, por cUF.
+     O portal nacional acima só tem NF-e modelo 55: cupom de MG aberto
+     lá não aparecia (relatado em 07/10/2026). Estas páginas pedem a chave
+     num campo + captcha e não aceitam a chave pela URL, por isso o app
+     copia a chave para a área de transferência antes de abrir.
+     Só entram UFs conferidas uma a uma:
+       31 MG — campo "Chave de acesso" + reCAPTCHA (conferido 07/10/2026) */
+  const CONSULTA_NFCE_UF = {
+    '31': 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/consultaarg.xhtml',
+  };
+
   function digits(s) { return String(s||'').replace(/\D/g,''); }
 
   /* ── Dados que a própria chave carrega ──────────────────────
@@ -95,5 +106,15 @@ window.SEFAZ = (() => {
     return `${PORTAL_NACIONAL}?tipoConsulta=resumo&nfe=${c}`;
   }
 
-  return { consultarChave, linkConsulta, dvValido, UF_MAP };
+  /* NFC-e (modelo 65) de UF com página conferida → essa página (a chave vai
+     colada pelo usuário). Qualquer outro caso → portal nacional. */
+  function destinoConsulta(chave) {
+    const c = digits(chave);
+    if (c.length !== 44) return null;
+    const pagUf = c.slice(20, 22) === '65' ? CONSULTA_NFCE_UF[c.slice(0, 2)] : null;
+    if (pagUf) return { url: pagUf, colarChave: true, uf: UF_MAP[c.slice(0, 2)] || '' };
+    return { url: linkConsulta(c), colarChave: false, uf: UF_MAP[c.slice(0, 2)] || '' };
+  }
+
+  return { consultarChave, linkConsulta, destinoConsulta, dvValido, UF_MAP, CONSULTA_NFCE_UF };
 })();

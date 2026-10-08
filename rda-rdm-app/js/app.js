@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 358;
+const APP_BUILD = 359;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -216,6 +216,9 @@ async function resolverLinkConsulta(chaveRaw, qrUrlDaNota) {
   try { raw = await DB.getMeta('qr_' + chave); } catch (_) {}
   if (raw) return { url: _qrUrlSegura(raw), exato: true };
 
+  // sem QR: página de NFC-e da UF (chave colada pelo usuário) ou portal nacional
+  const d = window.SEFAZ?.destinoConsulta ? SEFAZ.destinoConsulta(chave) : null;
+  if (d?.url) return { url: d.url, exato: false, colarChave: d.colarChave, uf: d.uf };
   const fallback = window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null;
   return fallback ? { url: fallback, exato: false } : null;
 }
@@ -224,11 +227,26 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
   // NFS-e: não tem chave de 44, mas o QR dela é um link direto para a nota
   if (_digitos(chaveRaw).length !== 44 && /^https?:\/\//i.test(qrUrlDaNota || '')) { window.open(qrUrlDaNota, '_blank'); return; }
   if (_digitos(chaveRaw).length !== 44) { toast('Esta nota não tem chave nem QR para consulta', 'err'); return; }
+  // Sem QR e com página da UF que pede a chave num campo: copia a chave já,
+  // ainda dentro do toque (o navegador só libera a área de transferência aqui).
+  const semQr = !/^https?:\/\//i.test(qrUrlDaNota || '');
+  const destUf = semQr && window.SEFAZ?.destinoConsulta ? SEFAZ.destinoConsulta(chaveRaw) : null;
+  let copiou = Promise.resolve(false);
+  if (destUf?.colarChave && navigator.clipboard?.writeText) {
+    copiou = navigator.clipboard.writeText(_digitos(chaveRaw)).then(() => true, () => false);
+  }
   const w = window.open('', '_blank');           // abre já, evita bloqueio de popup
-  resolverLinkConsulta(chaveRaw, qrUrlDaNota).then(r => {
+  resolverLinkConsulta(chaveRaw, qrUrlDaNota).then(async r => {
     if (!r) { if (w) w.close(); toast('Não foi possível montar o link de consulta', 'err'); return; }
     if (w) w.location.href = r.url; else window.open(r.url, '_blank');
-    if (!r.exato) toast('Nota não foi lida por QR — abrindo o portal nacional com a chave (pede captcha)');
+    if (r.exato) return;
+    if (r.colarChave) {
+      toast((await copiou)
+        ? `Chave copiada — cole no campo "Chave de acesso" da SEFAZ-${r.uf} e resolva o captcha`
+        : `Abrindo a consulta da SEFAZ-${r.uf} — digite a chave e resolva o captcha`);
+    } else {
+      toast('Nota não foi lida por QR — abrindo o portal nacional com a chave (pede captcha)');
+    }
   });
 }
 
