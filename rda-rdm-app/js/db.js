@@ -838,6 +838,28 @@ window.DB = (() => {
     return new Set(fila.map(i => i.entity_id).filter(Boolean));
   }
 
+  /* 08/10/2026: uma vez por aparelho, pede de novo as notas inteiras de cada
+     ano guardado aqui. O celular do Cleiton cobrava "sem nº" de uma nota da
+     equipe (JOSPINA, 16/06) que o servidor corrigiu em 25/09: a versão nova
+     caiu na janela que a marca antiga do sync perdia (corrigida em 01/10) e
+     nunca mais foi pedida. A mescla só troca o que o servidor tem de igual ou
+     mais novo, então repetir é seguro. Se falhar, tenta no próximo sync. */
+  const REVISAO_KEY = 'revisao_completa';
+  const REVISAO_VERSAO = 1;
+  async function _revisaoCompleta(sb) {
+    if (Number(await getMeta(REVISAO_KEY, 0)) >= REVISAO_VERSAO) return 0;
+    const locais = await _getAll('notas');
+    const anos = new Set([new Date().getFullYear()]);
+    for (const n of locais) {
+      const a = Number(n.ano) || parseInt(String(n.data || '').slice(0, 4), 10);
+      if (a >= 2000 && a <= 2100) anos.add(a);
+    }
+    let n = 0;
+    for (const ano of anos) n += await _mesclarRemotas('notas', await sb.notas.list({ ano }));
+    await setMeta(REVISAO_KEY, REVISAO_VERSAO);
+    return n;
+  }
+
   async function pullIncremental(sb, userId) {
     if (!sb || !navigator.onLine || !userId) return 0;
     const since = await getMeta('last_sync', null);
@@ -885,6 +907,7 @@ window.DB = (() => {
       /* falhou alguma lista (timeout, 5xx, sinal ruim): NÃO avança a marca,
          para tentar a mesma janela de novo no próximo sync. */
       if (falhou) return pulled;
+      try { pulled += await _revisaoCompleta(sb); } catch (_) {}
     }
 
     await setMeta('last_sync', marca);
