@@ -6476,7 +6476,7 @@ async function _giroParaEmPe(img) {
   for (const g of giros) {
     const c = _girarImagem(img, g, 1000);
     const b = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
-    let s = 0;
+    let s;
     try { s = b ? await OCR.pontuarLeitura(b) : 0; } catch (_) { s = 0; }
     if (g === 0) nota0 = s;
     if (s > notaMelhor) { notaMelhor = s; melhor = g; }
