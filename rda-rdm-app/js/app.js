@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 360;
+const APP_BUILD = 361;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2055,6 +2055,20 @@ function _notificacoes() {
         sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
       }));
   }
+  /* 07/10/2026: colaborador registrou o recebimento de repasse/recarga —
+     o gestor é avisado (dispensável com "OK, vi"). */
+  if (_ehGestorOuAdmin()) {
+    const lim14 = Date.now() - 14 * 86400_000;
+    repassesEquipe
+      .filter(r => !r.deleted && !_repasseEhPedido(r) && !r.pedido_id && r.user_id !== user.id
+        && r.created_by === r.user_id && !vistos.has(r.id)
+        && new Date(r.created_at || r.data).getTime() > lim14)
+      .forEach(r => out.push({
+        id: r.id, tipo: 'recebido', rep: r,
+        titulo: `${equipePorId[r.user_id]?.nome || 'Colaborador'} registrou ${r.destino === 'recarga' ? 'recarga do cartão' : 'repasse'} recebido de ${brl(r.valor)} (${r.tipo})`,
+        sub: `${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''}`,
+      }));
+  }
   /* Cadastro novo aguardando liberação (22/09/2026). Não é dispensável: some
      quando o gestor confirma ou recusa. */
   if (_ehGestorOuAdmin()) {
@@ -2129,7 +2143,7 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
@@ -3116,14 +3130,14 @@ function renderInicio() {
         <span class="pnl-conteudo">
           <span class="pnl-ico">👛</span>
           <span class="pnl-tit">Repasse</span>
-          <span class="pnl-sub">o que você pagou do bolso · e o que já recebeu</span>
+          <span class="pnl-sub">registrar o que recebeu · ou pedir ao gestor</span>
         </span>
       </button>
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse('requested', null, null, 'recarga')">
+      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'recarga')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">💳</span>
           <span class="pnl-tit">Recarga do cartão</span>
-          <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'pedir recarga ao gestor'}</span>
+          <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'registrar ou pedir recarga'}</span>
         </span>
       </button>
 ` : `
@@ -5047,7 +5061,7 @@ function renderSaldo() {
       <div class="saldo-label">💳 Saldo do cartão ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? '<span class="dl dl-ruim" style="margin-left:6px">Acabando</span>' : ''}</div>
       <div class="saldo-val">${brl(saldoCartao || 0)}</div>
       <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
-      ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Peça a recarga pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
+      ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Quando a recarga cair, registre pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
     <div class="saldo-card">
       <div class="saldo-label">💳 Gasto no cartão · ${MESES[filMes-1]}</div>
@@ -5109,8 +5123,8 @@ function renderSaldo() {
   <div class="section-hd">
     <span>Repasses</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-      ${_ehGestorOuAdmin() ? `<button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received')">+ Registrar recebido</button>` : ''}
-      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested')">Solicitar repasse</button>
+      ${_ehGestorOuAdmin() ? '' : `<button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received', null, null, ${_usaCartao() ? "'carteira'" : 'null'})">+ Registrar recebido</button>`}
+      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested', null, null, ${_usaCartao() ? "'carteira'" : 'null'})">Solicitar repasse</button>
     </div>
   </div>
   <div class="rep-list">${repHtml}</div>`;
@@ -8374,13 +8388,13 @@ function _repassePlaceholder(modo) {
 function _repasseHelpText(modo) {
   if (_repasseDestino === 'recarga') return modo === 'requested'
     ? 'O gestor recebe o pedido e faz a transferência para o cartão. O valor entra no saldo do cartão quando ele marcar como pago.'
-    : 'Registra uma recarga que já entrou no cartão; soma ao saldo do cartão.';
+    : 'Registra a recarga que já entrou no cartão; soma ao saldo do cartão. O gestor é avisado.';
   if (_ehCV()) return modo === 'requested'
     ? 'O gestor recebe a notificação (e o e-mail). Quando marcar como pago, o repasse recebido é registrado para você e abate deste valor.'
-    : 'Registra um repasse que já caiu na sua conta; abate dos repasses registrados.';
+    : 'Registra o repasse que já caiu na sua conta; abate dos repasses registrados. O gestor é avisado.';
   return modo === 'requested'
     ? 'Este pedido envia um e-mail ao gestor automaticamente e fica marcado como solicitação pendente.'
-    : 'Este registro entra no saldo como repasse recebido e não gera e-mail.';
+    : 'Este registro entra no saldo como repasse recebido na hora. O gestor é avisado.';
 }
 
 function _atualizarUiRepasse() {
@@ -8403,7 +8417,7 @@ function _atualizarUiRepasse() {
     btnReceived.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'received'));
     /* 25/09/2026: colaborador não se autodeclara "já recebi" mais — só
        gestor/admin registra um repasse como recebido. Some a opção inteira. */
-    btnReceived.style.display = _ehGestorOuAdmin() ? '' : 'none';
+    btnReceived.style.display = '';
   }
   if (btnRequest) btnRequest.setAttribute('aria-pressed', String(_modoEscolhido && _repasseModo === 'requested'));
   const txt = (id, valor) => { const e = $(id); if (e) e.textContent = valor; };
@@ -8660,16 +8674,12 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
     /* para outro só existe "recebido": o passo 1 nem entra no caminho
        (o form abre direto no passo 2 — ver _repassePassoMin). */
   }
-  /* 26/09/2026, pedido do Cleiton: "registrar recebido" some daqui pra
-     TODO MUNDO, incluindo gestor/admin — quem registra recebido pra si ou
-     pra equipe faz pela Equipe ("Lançar repasse"/"Lançar recarga" no
-     colaborador), não por este atalho do Início. Aqui só sobra pedir. Quem
-     lança para outro colaborador nem passa por aqui de qualquer forma
-     (_repasseAlvo pula direto pro passo 2). */
+  /* 07/10/2026: passo 1 mostra os dois caminhos — registrar o que já caiu
+     (vale na hora, gestor é avisado) ou solicitar ao gestor. */
   {
     const rm = $('rep-mode-received'), rq = $('rep-mode-request');
-    if (rm) rm.style.display = 'none';
-    if (rq) rq.style.gridColumn = '1 / -1';
+    if (rm) rm.style.display = '';
+    if (rq) { rq.style.display = ''; rq.style.gridColumn = ''; }
   }
   $('rep-overlay').style.display = 'flex';
 }
@@ -8764,7 +8774,7 @@ async function _salvarRepasseInterno() {
   if (kind === 'requested') {
     toast(`Pedido de repasse ${tipo} de ${brl(valor)} registrado — o e-mail ao gestor sai automaticamente.`);
   } else {
-    toast(`Repasse recebido ${tipo} de ${brl(valor)} registrado.`);
+    toast(`Recebimento ${tipo} de ${brl(valor)} registrado — o gestor foi avisado.`);
   }
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
@@ -8775,6 +8785,8 @@ async function _salvarRepasseInterno() {
    próprio pedido ainda não atendido. O servidor também recusa (403). */
 function _podeExcluirRepasse(r) {
   if (_ehGestorOuAdmin()) return true;
+  /* 07/10/2026: o que o colaborador registrou ele mesmo, ele corrige */
+  if (!_repasseEhPedido(r) && r.created_by === user?.id && !r.pedido_id) return true;
   return _repasseEhPedido(r) && !r.atendido_em;
 }
 

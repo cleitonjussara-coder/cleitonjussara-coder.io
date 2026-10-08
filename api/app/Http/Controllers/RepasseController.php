@@ -135,19 +135,11 @@ class RepasseController extends Controller
         }
         $rep = Repasse::find($id);
         $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
-        /* 25/09/2026: o colaborador não se autodeclara "já recebi" mais — só
-           gestor/admin faz um repasse NASCER (ou virar) "recebido", para si ou
-           para outro. Em vez de recusar (o que travaria pra sempre um item da
-           fila offline gravado antes desta regra existir), rebaixa pra pedido
-           — o colaborador continua podendo solicitar; quem atende é sempre o
-           gestor, pelo endpoint /atendido. Um repasse que JÁ ERA recebido
-           continua podendo ser editado (descrição, data) por quem é dono dele,
-           sem reabrir essa porta. Apagar (deleted=true, ex.: recusa) também
-           passa direto, não é "receber" dinheiro. */
+        /* 07/10/2026: o colaborador volta a registrar o PRÓPRIO recebimento
+           (repasse e recarga do cartão), direto, sem pedido — o gestor só é
+           avisado (push abaixo). A regra de 25/09 que rebaixava para pedido
+           saiu. Lançar para OUTRO continua só de gestor/admin (aborts acima). */
         $jaEraRecebido = $rep && $rep->kind === 'received';
-        if ($d['kind'] === 'received' && ! $jaEraRecebido && ! $d['deleted'] && ! $u->gerencia()) {
-            $d['kind'] = 'requested';
-        }
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             /* 01/10/2026: o gestor relatou repasse e recarga "sumindo". Causa
@@ -157,7 +149,9 @@ class RepasseController extends Controller
                pagos pelo gestor. Quem paga é quem registra, então só gestor ou
                admin cancela ou altera dinheiro registrado. O colaborador
                segue podendo apagar/editar o PRÓPRIO pedido ainda não atendido. */
-            if (! $u->gerencia() && ($rep->kind === 'received' || ! $rep->kind || $rep->atendido_em || $rep->pedido_id)) {
+            /* o que o PRÓPRIO colaborador registrou (07/10/2026) ele corrige e apaga */
+            $registroDoDono = $rep->created_by === $u->id && ! $rep->pedido_id && ! $rep->atendido_em;
+            if (! $u->gerencia() && ! $registroDoDono && ($rep->kind === 'received' || ! $rep->kind || $rep->atendido_em || $rep->pedido_id)) {
                 $mudaValor = abs((float) $d['valor'] - (float) $rep->valor) > 0.004;
                 $mudaKind = ($d['kind'] ?? 'received') !== ($rep->kind ?: 'received');
                 $mudaRecarga = (($d['destino'] ?? null) === 'recarga') !== ($rep->destino === 'recarga');
@@ -200,6 +194,18 @@ class RepasseController extends Controller
                 $dono . ' pediu ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
                 '/',
                 'pedido-' . $rep->id
+            );
+        }
+
+        /* 07/10/2026: colaborador registrou o próprio recebimento → avisa o gestor. */
+        if ($novo && $rep->kind === 'received' && ! $rep->deleted && ! $rep->pedido_id
+            && $rep->user_id === $u->id && ! $u->gerencia()) {
+            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
+            $this->push->avisarGestores(
+                'Recebimento registrado',
+                ($rep->dono?->nome ?: 'Um colaborador') . ' registrou ' . $oque . ' recebido de ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
+                '/',
+                'recebido-' . $rep->id
             );
         }
 

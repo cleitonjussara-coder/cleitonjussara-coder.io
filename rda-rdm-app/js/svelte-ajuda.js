@@ -1,304 +1,304 @@
 (function(){var e=Array.isArray,t=Array.prototype.indexOf,n=Array.prototype.includes,r=Array.from,i=Object.defineProperty,a=Object.getOwnPropertyDescriptor,o=Object.prototype,s=Array.prototype,c=Object.getPrototypeOf,l=Object.isExtensible,u=()=>{};function d(e){for(var t=0;t<e.length;t++)e[t]()}function f(){var e,t;return{promise:new Promise((n,r)=>{e=n,t=r}),resolve:e,reject:t}}var p=1024,m=2048,h=4096,g=8192,_=16384,ee=32768,v=1<<25,te=65536,ne=1<<19,re=1<<20,ie=1<<21,ae=1<<22,oe=1<<23,se=Symbol(`$state`),ce=Symbol(`component`),le=Symbol(`legacy props`),ue=Symbol(`attributes`),de=Symbol(`class`),fe=Symbol(`style`),pe=Symbol(`text`),y=new class extends Error{name=`StaleReactionError`;message="The reaction that called `getAbortSignal()` was re-run or destroyed"};globalThis.document?.contentType;var b=Symbol(`uninitialized`),me=`http://www.w3.org/2000/svg`,he=`http://www.w3.org/1998/Math/MathML`;function ge(){console.warn(`https://svelte.dev/e/derived_inert`)}function _e(){console.warn(`https://svelte.dev/e/svelte_boundary_reset_noop`)}function ve(e){return e===this.v}function ye(e,t){return e==e?e!==t||typeof e==`object`&&!!e||typeof e==`function`:t==t}function be(e){return!ye(e,this.v)}function xe(){throw Error(`https://svelte.dev/e/async_derived_orphan`)}function Se(){throw Error(`https://svelte.dev/e/effect_update_depth_exceeded`)}function Ce(e){throw Error(`https://svelte.dev/e/props_invalid_value`)}function we(){throw Error(`https://svelte.dev/e/state_descriptors_fixed`)}function Te(){throw Error(`https://svelte.dev/e/state_prototype_fixed`)}function Ee(){throw Error(`https://svelte.dev/e/state_unsafe_mutation`)}function De(){throw Error(`https://svelte.dev/e/svelte_boundary_reset_onerror`)}var x=null;function S(e){x=e}function Oe(e,t=!1,n){x={p:x,i:!1,c:null,e:null,s:e,x:null,r:U,l:null}}function ke(e){var t=x,n=t.e;if(n!==null){t.e=null;for(var r of n)Mt(r)}return e!==void 0&&(t.x=e),t.i=!0,x=t.p,Ae(e)}function Ae(e={}){return i(e,ce,{value:!0}),e}function je(){return!0}var C=[];function Me(){var e=C;C=[],d(e)}function Ne(e){if(C.length===0&&!$e){var t=C;queueMicrotask(()=>{t===C&&Me()})}C.push(e)}var Pe=~(m|h|p);function w(e,t){e.f=e.f&Pe|t}function Fe(e){e.f&512||e.deps===null?w(e,p):w(e,h)}function Ie(e,t,n){e.f&2048?t.add(e):e.f&4096&&n.add(e),w(e,p)}function Le(e){var t=B,n=U;H(null),W(null);try{return e()}finally{H(t),W(n)}}function Re(e,t,n,r){let i=je()?He:Ge;var a=e.filter(e=>!e.settled),o=t.map(i);if(n.length===0&&a.length===0){r(o);return}var s=U,c=ze(),l=a.length===1?a[0].promise:a.length>1?Promise.all(a.map(e=>e.promise)):null;function u(e){if(!(s.f&16384)){c();try{r([...o,...e])}catch(e){I(e,s)}Be()}}var d=Ve();if(n.length===0){l.then(()=>u([])).finally(d);return}function f(){Promise.all(n.map(e=>We(e))).then(u).catch(e=>I(e,s)).finally(d)}l?l.then(()=>{c(),f(),Be()}):f()}function ze(){var e=U,t=B,n=x,r=E;return function(i=!0){W(e),H(t),S(n),i&&!(e.f&16384)&&(r?.activate(),r?.apply())}}function Be(e=!0){W(null),H(null),S(null),e&&E?.deactivate()}function Ve(){var e=U,t=e.b,n=E,r=!!t?.is_rendered();return t?.update_pending_count(1,n),n.increment(r,e),()=>{t?.update_pending_count(-1,n),n.decrement(r,e)}}function He(e){var t=2|m;return U!==null&&(U.f|=ne),{ctx:x,deps:null,effects:null,equals:ve,f:t,fn:e,reactions:null,rv:0,v:b,wv:0,parent:U,ac:null}}var Ue=Symbol(`obsolete`);function We(e,t,n){let r=U;r===null&&xe();var i=void 0,a=pt(b),o=!B,s=new Set;return Ft(()=>{var t=U,n=f();i=n.promise;try{Promise.resolve(e()).then(n.resolve,e=>{e!==y&&n.reject(e)}).finally(Be)}catch(e){n.reject(e),Be()}var c=E;if(o){if(t.f&32768)var l=Ve();if(r.b?.is_rendered())c.async_deriveds.get(t)?.reject(Ue);else for(let e of s.values())e.reject(Ue);s.add(n),c.async_deriveds.set(t,n)}let u=(e,t=void 0)=>{l?.(),s.delete(n),t!==Ue&&(c.activate(),t?(a.f|=oe,ht(a,t)):(a.f&8388608&&(a.f^=oe),ht(a,e)),c.deactivate())};n.promise.then(u,e=>u(null,e||`unknown`))}),jt(()=>{for(let e of s)e.reject(Ue)}),new Promise(e=>{function t(n){function r(){n===i?e(a):t(i)}n.then(r,r)}t(i)})}function Ge(e){let t=He(e);return t.equals=be,t}function Ke(e){var t=e.effects;if(t!==null){e.effects=null;for(var n=0;n<t.length;n+=1)R(t[n])}}function qe(e){var t,n=U,r=e.parent;if(!z&&r!==null&&e.v!==b&&r.f&24576)return ge(),e.v;W(r);try{Ke(e),t=an(e)}finally{W(n)}return t}function Je(e){var t=qe(e);if(!e.equals(t)&&(e.wv=tn(),(!E?.is_fork||e.deps===null)&&(E===null?e.v=t:(E.capture(e,t,!0),Ze?.capture(e,t,!0)),e.deps===null))){w(e,p);return}z||(D===null?Fe(e):(At()||E?.is_fork)&&D.set(e,t))}function Ye(e){if(e.effects!==null)for(let t of e.effects)(t.teardown||t.ac)&&(t.teardown?.(),t.ac!==null&&Le(()=>{t.ac.abort(y),t.ac=null}),t.fn!==null&&(t.teardown=u),cn(t,0),Vt(t))}function Xe(e){if(e.effects!==null)for(let t of e.effects)t.teardown&&t.fn!==null&&Z(t)}var T=null,E=null,Ze=null,D=null,Qe=null,$e=!1,et=!1,tt=null,nt=null,rt=0,it=1,at=class e{id=it++;#e=!1;linked=!0;#t=null;#n=null;async_deriveds=new Map;current=new Map;previous=new Map;#r=new Set;#i=new Set;#a=0;#o=new Map;#s=null;#c=[];#l=[];#u=new Set;#d=new Set;#f=new Map;#p=new Set;is_fork=!1;#m=!1;constructor(){T===null?T=this:(T.#n=this,this.#t=T),T=this}#h(){if(this.is_fork)return!0;for(let n of this.#o.keys()){for(var e=n,t=!1;e.parent!==null;){if(this.#f.has(e)){t=!0;break}e=e.parent}if(!t)return!0}return!1}skip_effect(e){this.#f.has(e)||this.#f.set(e,{d:[],m:[]}),this.#p.delete(e)}unskip_effect(e,t=e=>this.schedule(e)){var n=this.#f.get(e);if(n){this.#f.delete(e);for(var r of n.d)w(r,m),t(r);for(r of n.m)w(r,h),t(r)}this.#p.add(e)}#g(){var e=[];for(let i of this.#c)if(!(i.f&16384||!(i.f&6144))){for(var t=i,n=!1;t.parent!==null;){t=t.parent;var r=t.f;if(r&96){if(!(r&1024)){n=!0;break}t.f^=p}}n||e.push(t)}return this.#c=[],e}#_(){this.#e=!0;for(let e of this.#u)this.#d.delete(e),w(e,m),this.schedule(e);for(let e of this.#d)w(e,h),this.schedule(e);this.apply();for(var t=tt=[],n=[],r=nt=[];this.#c.length>0;){rt++>1e3&&(this.#S(),ot());for(let e of this.#g())try{this.#v(e,t,n)}catch(t){throw ut(e),this.#h()||this.discard(),t}}if(E=null,r.length>0){var i=e.ensure();for(let e of r)i.schedule(e)}if(tt=null,nt=null,this.#h()){this.#x(n),this.#x(t);for(let[e,t]of this.#f)lt(e,t);r.length>0&&E.#_();return}let a=this.#y();if(a){this.#x(n),this.#x(t),a.#b(this);return}this.#u.clear(),this.#d.clear();for(let e of this.#r)e(this);this.#r.clear(),Ze=this,st(n),st(t),Ze=null,this.#s?.resolve();var o=E;if(this.#a===0&&(this.#c.length===0||o!==null)&&this.#S(),this.#c.length>0){if(o!==null){for(let e of this.#c)o.#c.push(e);this.#c=[]}else o=this}o!==null&&(k.clear(),o.#_())}#v(e,t,n){e.f^=p;for(var r=e.first;r!==null;){var i=r.f,a=!!(i&96);if(!(a&&i&1024||i&8192||this.#f.has(r))&&r.fn!==null){a?r.f^=p:i&4?t.push(r):nn(r)&&(i&16&&this.#d.add(r),Z(r));var o=r.first;if(o!==null){r=o;continue}}for(;r!==null;){var s=r.next;if(s!==null){r=s;break}r=r.parent}}}#y(){for(var e=this.#t;e!==null;){if(!e.is_fork){for(let[t,[,n]]of this.current)if(e.current.has(t)&&!n)return e}e=e.#t}return null}#b(e){for(let[t,n]of e.current)!this.previous.has(t)&&e.previous.has(t)&&this.previous.set(t,e.previous.get(t)),this.current.set(t,n);for(let[t,n]of e.async_deriveds){let e=this.async_deriveds.get(t);e&&n.promise.then(e.resolve).catch(e.reject)}e.async_deriveds.clear(),this.transfer_effects(e.#u,e.#d);let t=e=>{var n=e.reactions;if(n!==null&&!(e.f&2&&!(e.f&6144)))for(let e of n){var r=e.f;if(r&2)t(e);else{var i=e;r&4194320&&!this.async_deriveds.has(i)&&(this.#d.delete(i),w(i,m),this.schedule(i))}}};for(let e of this.current.keys())t(e);this.oncommit(()=>e.discard()),e.#S(),E=this,this.#_()}#x(e){for(var t=0;t<e.length;t+=1)Ie(e[t],this.#u,this.#d)}capture(e,t,n=!1){e.v!==b&&!this.previous.has(e)&&this.previous.set(e,e.v),e.f&8388608||(this.current.set(e,[t,n]),D?.set(e,t)),this.is_fork||(e.v=t)}activate(){E=this}deactivate(){E=null,D=null}flush(){try{et=!0,E=this,this.#_()}finally{rt=0,Qe=null,tt=null,nt=null,et=!1,E=null,D=null,k.clear()}}discard(){for(let e of this.#i)e(this);this.#i.clear();for(let e of this.async_deriveds.values())e.reject(Ue);this.#S(),this.#s?.resolve()}register_created_effect(e){this.#l.push(e)}increment(e,t){if(this.#a+=1,e){let e=this.#o.get(t)??0;this.#o.set(t,e+1)}}decrement(e,t){if(--this.#a,e){let e=this.#o.get(t)??0;e===1?this.#o.delete(t):this.#o.set(t,e-1)}this.#m||(this.#m=!0,Ne(()=>{this.#m=!1,this.linked&&this.flush()}))}transfer_effects(e,t){for(let t of e)this.#u.add(t);for(let e of t)this.#d.add(e);e.clear(),t.clear()}oncommit(e){this.#r.add(e)}ondiscard(e){this.#i.add(e)}settled(){return(this.#s??=f()).promise}static ensure(){if(E===null){let t=E=new e;!et&&Ne(()=>{t.#e||t.flush()})}return E}apply(){D=null}schedule(e){if(Qe=e,e.b?.is_pending&&e.f&16777228&&!(e.f&32768)){e.b.defer_effect(e);return}this.#c.push(e)}#S(){if(this.linked){var e=this.#t,t=this.#n;e===null||(e.#n=t),t===null?T=e:t.#t=e,this.linked=!1}}};function ot(){try{Se()}catch(e){I(e,Qe)}}var O=null;function st(e){var t=e.length;if(t!==0){for(var n=0;n<t;){var r=e[n++];if(!(r.f&24576)&&nn(r)&&(O=new Set,Z(r),r.deps===null&&r.first===null&&r.nodes===null&&r.teardown===null&&r.ac===null&&Wt(r),O?.size>0)){k.clear();for(let e of O){if(e.f&24576)continue;let t=[e],n=e.parent;for(;n!==null;)O.has(n)&&(O.delete(n),t.push(n)),n=n.parent;for(let e=t.length-1;e>=0;e--){let n=t[e];n.f&24576||Z(n)}}O.clear()}}O=null}}function ct(e){E.schedule(e)}function lt(e,t){if(!(e.f&32&&e.f&1024)){e.f&2048?t.d.push(e):e.f&4096&&t.m.push(e),w(e,p);for(var n=e.first;n!==null;)lt(n,t),n=n.next}}function ut(e){w(e,p);for(var t=e.first;t!==null;)ut(t),t=t.next}var dt=new Set,k=new Map,ft=!1;function pt(e,t){return{f:0,v:e,reactions:null,equals:ve,rv:0,wv:0}}function A(e,t){let n=pt(e,t);return Zt(n),n}function j(e,t,n=!1){return B!==null&&(!V||B.f&131072)&&je()&&B.f&4325394&&(G===null||!G.has(e))&&Ee(),ht(e,n?P(t):t,nt)}var M=null,mt=0;function ht(e,t,n=null){if(!e.equals(t)){z?k.set(e,t):k.has(e)||k.set(e,e.v);var r=at.ensure();if(r.capture(e,t),e.f&2){let t=e;e.f&2048&&qe(t),D===null&&Fe(t)}e.wv=tn(),M=null,mt=0,_t(e,m,n),M=null,je()&&U!==null&&U.f&1024&&!(U.f&96)&&(J===null?Qt([e]):J.push(e)),!r.is_fork&&dt.size>0&&!ft&&gt()}return t}function gt(){ft=!1;for(let e of dt){e.f&1024&&w(e,h);let t;try{t=nn(e)}catch{t=!0}t&&Z(e)}dt.clear()}function N(e){j(e,e.v+1)}function _t(e,t,n){var r=e.reactions;if(r!==null){var i=je(),a=r.length;if(mt+=a,mt>1e5&&M===null&&(M=new Set),M!==null){if(M.has(e))return;M.add(e)}for(var o=0;o<a;o++){var s=r[o],c=s.f;if(i||s!==U){var l=(c&m)===0;if(l&&w(s,t),c&131072)dt.add(s);else if(c&2){var u=s;D?.delete(u),_t(u,h,n)}else if(l){var d=s;c&16&&O!==null&&O.add(d),n===null?ct(d):n.push(d)}}}}}function P(t){if(typeof t!=`object`||!t||se in t||ce in t)return t;let n=c(t);if(n!==o&&n!==s)return t;var r=new Map,i=e(t),l=A(0),u=null,d=X,f=e=>{if(X===d)return e();var t=B,n=X;H(null),en(d);var r=e();return H(t),en(n),r};return i&&r.set(`length`,A(t.length,u)),new Proxy(t,{defineProperty(e,t,n){(!(`value`in n)||n.configurable===!1||n.enumerable===!1||n.writable===!1)&&we();var i=r.get(t);return i===void 0?f(()=>{var e=A(n.value,u);return r.set(t,e),e}):j(i,n.value,!0),!0},deleteProperty(e,t){var n=r.get(t);if(n===void 0){if(t in e){let e=f(()=>A(b,u));r.set(t,e),N(l)}}else j(n,b),N(l);return!0},get(e,n,i){if(n===se)return t;var o=r.get(n),s=n in e;if(o===void 0&&(!s||a(e,n)?.writable)&&(o=f(()=>A(P(s?e[n]:b),u)),r.set(n,o)),o!==void 0){var c=Q(o);return c===b?void 0:c}return Reflect.get(e,n,i)},getOwnPropertyDescriptor(e,t){this.has?.(e,t);var n=Reflect.getOwnPropertyDescriptor(e,t),i=r.get(t);if(i!==void 0){var a=Q(i);if(a===b)return;if(n&&`value`in n)n.value=a;else return{enumerable:!0,configurable:!0,value:a,writable:!0}}return n},has(e,t){if(t===se)return!0;var n=r.get(t),i=n!==void 0&&n.v!==b||Reflect.has(e,t);return(n!==void 0||U!==null&&(!i||a(e,t)?.writable))&&(n===void 0&&(n=f(()=>A(i?P(e[t]):b,u)),r.set(t,n)),Q(n)===b)?!1:i},set(e,t,n,o){var s=r.get(t),c=t in e;if(i&&t===`length`)for(var d=n;d<s.v;d+=1){var p=r.get(d+``);p===void 0?d in e&&(p=f(()=>A(b,u)),r.set(d+``,p)):j(p,b)}if(s===void 0)(!c||a(e,t)?.writable)&&(s=f(()=>A(void 0,u)),j(s,P(n)),r.set(t,s));else{c=s.v!==b;var m=f(()=>P(n));j(s,m)}var h=Reflect.getOwnPropertyDescriptor(e,t);if(h?.set&&h.set.call(o,n),!c){if(i&&typeof t==`string`){var g=r.get(`length`),_=Number(t);Number.isInteger(_)&&_>=g.v&&j(g,_+1)}N(l)}return!0},ownKeys(e){Q(l);var t=Reflect.ownKeys(e).filter(e=>{var t=r.get(e);return t===void 0||t.v!==b});for(var[n,i]of r)i.v!==b&&!(n in e)&&t.push(n);return t},setPrototypeOf(){Te()}})}var vt,yt,bt,xt;function St(){if(vt===void 0){vt=window,yt=/Firefox/.test(navigator.userAgent);var e=Element.prototype,t=Node.prototype,n=Text.prototype;bt=a(t,`firstChild`).get,xt=a(t,`nextSibling`).get,l(e)&&(e[de]=void 0,e[ue]=null,e[fe]=void 0,e.__e=void 0),l(n)&&(n[pe]=void 0)}}function Ct(e=``){return document.createTextNode(e)}function F(e){return bt.call(e)}function wt(e){return xt.call(e)}function Tt(e,t){return F(e)}function Et(e,t=1,n=!1){let r=e;for(;t--;)r=wt(r);return r}function Dt(e,t,n){return t==null||t===`http://www.w3.org/1999/xhtml`?n?document.createElement(e,{is:n}):document.createElement(e):n?document.createElementNS(t,e,{is:n}):document.createElementNS(t,e)}function Ot(e){var t=U;if(t===null)return B.f|=oe,e;if(!(t.f&32768)&&!(t.f&4))throw e;I(e,t)}function I(e,t){if(!(t!==null&&t.f&16384)){for(;t!==null;){if(t.f&128&&!(t.f&33570816)){if(!(t.f&32768))throw e;try{t.b.error(e);return}catch(t){e=t}}t=t.parent}throw e}}function kt(e,t){var n=t.last;n===null?t.last=t.first=e:(n.next=e,e.prev=n,t.last=e)}function L(e,t){var n=U;n!==null&&n.f&8192&&(e|=g);var r={ctx:x,deps:null,nodes:null,f:e|m|512,first:null,fn:t,last:null,next:null,parent:n,b:n&&n.b,prev:null,teardown:null,wv:0,ac:null};E?.register_created_effect(r);var i=r;if(e&4)tt===null?at.ensure().schedule(r):tt.push(r);else if(t!==null){try{Z(r)}catch(e){throw R(r),e}i.deps===null&&i.teardown===null&&i.nodes===null&&i.first===i.last&&!(i.f&524288)&&(i=i.first,e&16&&e&65536&&i!==null&&(i.f|=te))}if(i!==null&&(i.parent=n,n!==null&&kt(i,n),B!==null&&B.f&2&&!(e&64))){var a=B;(a.effects??=[]).push(i)}return r}function At(){return B!==null&&!V}function jt(e){let t=L(8,null);return w(t,p),t.teardown=e,t}function Mt(e){return L(4|re,e)}function Nt(e){at.ensure();let t=L(64|ne,e);return(e={})=>new Promise(n=>{e.outro?Gt(t,()=>{R(t),n(void 0)}):(R(t),n(void 0))})}function Pt(e){return L(4,e)}function Ft(e){return L(ae|ne,e)}function It(e,t=0){return L(8|t,e)}function Lt(e,t=[],n=[],r=[]){Re(r,t,n,t=>{L(8,()=>{e(...t.map(Q))})})}function Rt(e,t=0){return L(16|t,e)}function zt(e){return L(32|ne,e)}function Bt(e){var t=e.teardown;if(t!==null){let n=z,r=B;Xt(!0),H(null);try{t.call(null)}catch(t){I(t,e.parent)}finally{Xt(n),H(r)}}}function Vt(e,t=!1){var n=e.first;for(e.first=e.last=null;n!==null;){let e=n.ac;e!==null&&Le(()=>{e.abort(y)});var r=n.next;n.f&64?n.parent=null:R(n,t),n=r}}function Ht(e){for(var t=e.first;t!==null;){var n=t.next;t.f&32||R(t),t=n}}function R(e,t=!0){var n=!1;(t||e.f&262144)&&e.nodes!==null&&e.nodes.end!==null&&(Ut(e.nodes.start,e.nodes.end),n=!0),e.f|=v,Vt(e,t&&!n),cn(e,0);var r=e.nodes&&e.nodes.t;if(r!==null)for(let e of r)e.stop();Bt(e),e.f^=v,e.f|=_;var i=e.parent;i!==null&&i.first!==null&&Wt(e),e.next=e.prev=e.teardown=e.ctx=e.deps=e.fn=e.nodes=e.ac=e.b=null}function Ut(e,t){for(;e!==null;){var n=e===t?null:wt(e);e.remove(),e=n}}function Wt(e){var t=e.parent,n=e.prev,r=e.next;n!==null&&(n.next=r),r!==null&&(r.prev=n),t!==null&&(t.first===e&&(t.first=r),t.last===e&&(t.last=n))}function Gt(e,t,n=!0){var r=[];e.f|=256,Kt(e,r,!0);var i=()=>{n&&R(e),t&&t()},a=r.length;if(a>0){var o=()=>--a||i();for(var s of r)s.out(o)}else i()}function Kt(e,t,n){if(!(e.f&8192)){e.f^=g;var r=e.nodes&&e.nodes.t;if(r!==null)for(let e of r)(e.is_global||n)&&t.push(e);for(var i=e.first;i!==null;){var a=i.next;if(!(i.f&64)){var o=!!(i.f&65536)||!!(i.f&32)&&!!(e.f&16);Kt(i,t,o?n:!1)}i=a}}}function qt(e,t){if(e.nodes)for(var n=e.nodes.start,r=e.nodes.end;n!==null;){var i=n===r?null:wt(n);t.append(n),n=i}}var Jt=null,Yt=!1,z=!1;function Xt(e){z=e}var B=null,V=!1;function H(e){B=e}var U=null;function W(e){U=e}var G=null;function Zt(e){B!==null&&(B.f&2097152||B.f&2)&&(G??=new Set).add(e)}var K=null,q=0,J=null;function Qt(e){J=e}var $t=1,Y=0,X=Y;function en(e){X=e}function tn(){return++$t}function nn(e){var t=e.f;if(t&2048)return!0;if(t&4096){for(var n=e.deps,r=n.length,i=0;i<r;i++){var a=n[i];if(nn(a)&&Je(a),a.wv>e.wv)return!0}t&512&&D===null&&w(e,p)}return!1}function rn(e,t,n=!0){var r=e.reactions;if(r!==null&&!(G!==null&&G.has(e)))for(var i=0;i<r.length;i++){var a=r[i];a.f&2?rn(a,t,!1):t===a&&(n?w(a,m):a.f&1024&&w(a,h),ct(a))}}function an(e){var t=K,n=q,r=J,i=B,a=G,o=x,s=V,c=X,l=e.f;K=null,q=0,J=null,B=l&96?null:e,G=null,S(e.ctx),V=!1,X=++Y,e.ac!==null&&(Le(()=>{e.ac.abort(y)}),e.ac=null);try{e.f|=ie;var u=e.fn,d=u();e.f|=ee;var f=on(e);if(je()&&J!==null&&!V&&f!==null&&!(e.f&6146))for(var p=0;p<J.length;p++)rn(J[p],e);if(i!==null&&i!==e){if(Y++,i.deps!==null)for(let e=0;e<n;e+=1)i.deps[e].rv=Y;if(t!==null)for(let e of t)e.rv=Y;J!==null&&(r===null?r=J:r.push(...J))}return e.f&8388608&&(e.f^=oe),d}catch(t){return on(e),Ot(t)}finally{e.f^=ie,K=t,q=n,J=r,B=i,G=a,S(o),V=s,X=c}}function on(e){var t=e.deps,n=E?.is_fork;if(K!==null){var r;if(n||cn(e,q),t!==null&&q>0)for(t.length=q+K.length,r=0;r<K.length;r++)t[q+r]=K[r];else e.deps=t=K;if(At()&&e.f&512)for(r=q;r<t.length;r++)(t[r].reactions??=[]).push(e)}else!n&&t!==null&&q<t.length&&(cn(e,q),t.length=q);return t}function sn(e,r){let i=r.reactions;if(i!==null){var a=t.call(i,e);if(a!==-1){var o=i.length-1;o===0?i=r.reactions=null:(i[a]=i[o],i.pop())}}if(i===null&&r.f&2&&(K===null||!n.call(K,r))){var s=r;s.f&512&&(s.f^=512),s.v!==b&&Fe(s),s.ac!==null&&Le(()=>{s.ac.abort(y),s.ac=null,w(s,m)}),Ye(s),cn(s,0)}}function cn(e,t){var n=e.deps;if(n!==null)for(var r=t;r<n.length;r++)sn(e,n[r])}function Z(e){var t=e.f;if(!(t&16384)){w(e,p);var n=U,r=Yt;U=e,Yt=!(t&96);try{t&16777232?Ht(e):Vt(e),Bt(e);var i=an(e);e.teardown=typeof i==`function`?i:null,e.wv=$t}finally{Yt=r,U=n}}}function Q(e){var t=!!(e.f&2);if(Jt?.add(e),B!==null&&!V&&!(U!==null&&U.f&16384)&&(G===null||!G.has(e))){var r=B.deps;if(B.f&2097152)e.rv<Y&&(e.rv=Y,K===null&&r!==null&&r[q]===e?q++:K===null?K=[e]:K.push(e));else{B.deps??=[],n.call(B.deps,e)||B.deps.push(e);var i=e.reactions;i===null?e.reactions=[B]:n.call(i,B)||i.push(B)}}if(z&&k.has(e))return k.get(e);if(t){var a=e;if(z){var o=a.v;return(!(a.f&1024)&&a.reactions!==null||un(a))&&(o=qe(a)),k.set(a,o),o}var s=!(a.f&512)&&!V&&B!==null&&(Yt||!!(B.f&512)),c=(a.f&ee)===0;nn(a)&&(s&&(a.f|=512),Je(a)),s&&!c&&(Xe(a),ln(a))}if(D?.has(e))return D.get(e);if(e.f&8388608)throw e.v;return e.v}function ln(e){if(e.f|=512,e.deps!==null)for(let t of e.deps)(t.reactions??=[]).push(e),t.f&2&&!(t.f&512)&&(Xe(t),ln(t))}function un(e){if(e.v===b)return!0;if(e.deps===null)return!1;for(let t of e.deps)if(k.has(t)||t.f&2&&un(t))return!0;return!1}function dn(e){var t=V;try{return V=!0,e()}finally{V=t}}[...`allowfullscreen.async.autofocus.autoplay.checked.controls.default.disabled.formnovalidate.indeterminate.inert.ismap.loop.multiple.muted.nomodule.novalidate.open.playsinline.readonly.required.reversed.seamless.selected.webkitdirectory.defer.disablepictureinpicture.disableremoteplayback`.split(`.`)];var fn=[`touchstart`,`touchmove`];function pn(e){return fn.includes(e)}var $=Symbol(`events`),mn=new Set,hn=new Set;function gn(e,t,n){(t[$]??={})[e]=n}function _n(e){for(var t=0;t<e.length;t++)mn.add(e[t]);for(var n of hn)n(e)}var vn=null,yn=!1;function bn(e){var t=this,n=t.ownerDocument,r=e.type,a=e.composedPath?.()||[],o=a[0]||e.target;vn=e,yn||(yn=!0,setTimeout(()=>{yn=!1,vn=null}));var s=0,c=vn===e&&e[$];if(c){var l=a.indexOf(c);if(l!==-1&&(t===document||t===window)){e[$]=t;return}var u=a.indexOf(t);if(u===-1)return;l<=u&&(s=l)}if(o=a[s]||e.target,o!==t){i(e,`currentTarget`,{configurable:!0,get(){return o||n}});var d=B,f=U;H(null),W(null);try{for(var p,m=[];o!==null&&o!==t;){try{var h=o[$]?.[r];h!=null&&(!o.disabled||e.target===o)&&h.call(o,e)}catch(e){p?m.push(e):p=e}if(e.cancelBubble)break;s++,o=s<a.length?a[s]:null}if(p){for(let e of m)queueMicrotask(()=>{throw e});throw p}}finally{e[$]=t,delete e.currentTarget,H(d),W(f)}}}var xn=globalThis?.window?.trustedTypes&&globalThis.window.trustedTypes.createPolicy(`svelte-trusted-html`,{createHTML:e=>e});function Sn(e){return xn?.createHTML(e)??e}function Cn(e){var t=Dt(`template`);return t.innerHTML=Sn(e.replaceAll(`<!>`,`<!---->`)),t.content}function wn(e,t){var n=U;n.nodes===null&&(n.nodes={start:e,end:t,a:null,t:null})}function Tn(e,t){var n=!!(t&1),r=!!(t&2),i,a=!e.startsWith(`<!>`);return()=>{i===void 0&&(i=Cn(a?e:`<!>`+e),n||(i=F(i)));var t=r||yt?document.importNode(i,!0):i.cloneNode(!0);if(n){var o=F(t),s=t.lastChild;wn(o,s)}else wn(t,t);return t}}function En(e,t){e!==null&&e.before(t)}function Dn(e){let t=0,n=pt(0),r;return()=>{At()&&(Q(n),It(()=>(t===0&&(r=dn(()=>e(()=>N(n)))),t+=1,()=>{Ne(()=>{--t,t===0&&(r?.(),r=void 0,N(n))})})))}}var On=te|ne;function kn(e,t,n,r){new An(e,t,n,r)}var An=class{parent;is_pending=!1;transform_error;#e;#t;#n;#r;#i=null;#a=null;#o=null;#s=null;#c=0;#l=0;#u=!1;#d=new Set;#f=new Set;#p=null;#m=Dn(()=>(this.#p=pt(this.#c),()=>{this.#p=null}));constructor(e,t,n,r){this.#e=e,this.#t=t,this.#n=e=>{var t=U;t.b=this,t.f|=128,n(e)},this.parent=U.b,this.transform_error=r??this.parent?.transform_error??(e=>e),this.#r=Rt(()=>{this.#g()},On)}#h(e){var t=!1,n=!1;let r=()=>{if(t){_e();return}t=!0,n&&De(),this.#o!==null&&Gt(this.#o,()=>{this.#o=null}),this.#v(()=>{this.#g()})};return{reset:r,invoke_onerror:()=>{try{n=!0,this.#t.onerror?.(e,r),n=!1}catch(e){I(e,this.#r&&this.#r.parent)}}}}#g(){try{if(this.is_pending=this.has_pending_snippet(),this.#l=0,this.#c=0,this.#i=zt(()=>{this.#n(this.#e)}),this.#l>0){var e=this.#s=document.createDocumentFragment();qt(this.#i,e);let t=this.#t.pending;this.#a=zt(()=>t(this.#e))}else this.#_(E)}catch(e){this.error(e)}}#_(e){this.is_pending=!1,e.transfer_effects(this.#d,this.#f)}defer_effect(e){Ie(e,this.#d,this.#f)}is_rendered(){return!this.is_pending&&(!this.parent||this.parent.is_rendered())}has_pending_snippet(){return!!this.#t.pending}#v(e){var t=U,n=B,r=x;W(this.#r),H(this.#r),S(this.#r.ctx);try{return at.ensure(),e()}finally{W(t),H(n),S(r)}}#y(e,t){if(!this.has_pending_snippet()){this.parent&&this.parent.#y(e,t);return}this.#l+=e,this.#l===0&&(this.#_(t),this.#a&&Gt(this.#a,()=>{this.#a=null}),this.#s&&=(this.#e.before(this.#s),null))}update_pending_count(e,t){this.#y(e,t),this.#c+=e,!(!this.#p||this.#u)&&(this.#u=!0,Ne(()=>{this.#u=!1,this.#p&&ht(this.#p,this.#c)}))}get_effect_pending(){return this.#m(),Q(this.#p)}error(e){if(!this.#t.onerror&&!this.#t.failed)throw e;E?.is_fork?(this.#i&&E.skip_effect(this.#i),this.#a&&E.skip_effect(this.#a),this.#o&&E.skip_effect(this.#o),E.oncommit(()=>{this.#b(e)})):this.#b(e)}#b(e){this.#i&&=(R(this.#i),null),this.#a&&=(R(this.#a),null),this.#o&&=(R(this.#o),null);let t=this.#t.failed,n=e=>{let{reset:n,invoke_onerror:r}=this.#h(e);r(),t&&(this.#o=this.#v(()=>{try{return zt(()=>{var r=U;r.b=this,r.f|=128,t(this.#e,()=>e,()=>n)})}catch(e){return I(e,this.#r.parent),null}}))};Ne(()=>{var t;try{t=this.transform_error(e)}catch(e){I(e,this.#r&&this.#r.parent);return}typeof t==`object`&&t&&typeof t.then==`function`?t.then(n,e=>I(e,this.#r&&this.#r.parent)):n(t)})}};function jn(e,t){return Nn(e,t)}var Mn=new Map;function Nn(e,{target:t,anchor:n,props:i={},events:a,context:o,intro:s=!0,transformError:c}){St();var l=void 0,u=Nt(()=>{var s=n??t.appendChild(Ct());kn(s,{pending:()=>{}},t=>{Oe({});var n=x;o&&(n.c=o),a&&(i.$$events=a),l=e(t,i)||Ae(),ke()},c);var u=new Set,d=e=>{for(var n=0;n<e.length;n++){var r=e[n];if(!u.has(r)){u.add(r);var i=pn(r);for(let e of[t,document]){var a=Mn.get(e);a===void 0&&(a=new Map,Mn.set(e,a));var o=a.get(r);o===void 0?(e.addEventListener(r,bn,{passive:i}),a.set(r,1)):a.set(r,o+1)}}}};return d(r(mn)),hn.add(d),()=>{for(var e of u)for(let n of[t,document]){var r=Mn.get(n),i=r.get(e);--i==0?(n.removeEventListener(e,bn),r.delete(e),r.size===0&&Mn.delete(n)):r.set(e,i)}hn.delete(d),s!==n&&s.parentNode?.removeChild(s)}});return Pn.set(l,u),l}var Pn=new WeakMap;function Fn(e,t){let n=Pn.get(e);return n?(Pn.delete(e),n(t)):Promise.resolve()}function In(e,t,n=!1,r=!1,i=!1,a=!1){var o=e,s=``;if(n)var c=e;Lt(()=>{var e=U;if(s!==(s=t()??``)){if(n){e.nodes=null,c.innerHTML=s,s!==``&&wn(F(c),c.lastChild);return}if(e.nodes!==null&&(Ut(e.nodes.start,e.nodes.end),e.nodes=null),s!==``){var a=Dt(r?`svg`:i?`math`:`template`,r?me:i?he:void 0);a.innerHTML=s;var l=r||i?a:a.content;if(wn(F(l),l.lastChild),r||i)for(;F(l);)o.before(F(l));else o.before(l)}}})}function Ln(e,t){Pt(()=>{e=U?.parent?.nodes?.start??e;var n=e.getRootNode(),r=n.host?n:n.head??n.ownerDocument.head;if(!r.querySelector(`#`+t.hash)){let e=Dt(`style`);e.id=t.hash,e.textContent=t.code,r.appendChild(e)}})}var Rn=[...` 	
-\r\f\xA0\v﻿`];function zn(e,t,n){var r=e==null?``:``+e;if(t&&(r=r?r+` `+t:t),n){for(var i of Object.keys(n))if(n[i])r=r?r+` `+i:i;else if(r.length)for(var a=i.length,o=0;(o=r.indexOf(i,o))>=0;){var s=o+a;(o===0||Rn.includes(r[o-1]))&&(s===r.length||Rn.includes(r[s]))?r=(o===0?``:r.substring(0,o))+r.substring(s+1):o=s}}return r===``?null:r}function Bn(e,t,n,r,i,a){var o=e[de];if(o!==n||o===void 0){var s=zn(n,r,a);s==null?e.removeAttribute(`class`):t?e.className=s:e.setAttribute(`class`,s),e[de]=n}else if(a&&i!==a)for(var c in a){var l=!!a[c];(i==null||l!==!!i[c])&&e.classList.toggle(c,l)}return a}var Vn=!1;function Hn(e){var t=Vn;try{return Vn=!1,[e(),Vn]}finally{Vn=t}}function Un(e,t,n,r){var i=!0,o=!!(n&8),s=!!(n&16),c=r,l=!0,u=void 0,d=()=>s&&i?(u??=He(r),Q(u)):(l&&(l=!1,c=s?dn(r):r),c);let f;if(o){var p=se in e||le in e;f=a(e,t)?.set??(p&&t in e?n=>e[t]=n:void 0)}var m,h=!1;o?[m,h]=Hn(()=>e[t]):m=e[t],m===void 0&&r!==void 0&&(m=d(),f&&(i&&Ce(t),f(m)));var g=i?()=>{var n=e[t];return n===void 0?d():(l=!0,n)}:()=>{var n=e[t];return n!==void 0&&(c=void 0),n===void 0?c:n};if(i&&!(n&4))return g;if(f){var _=e.$$legacy;return(function(e,t){return arguments.length>0?((!i||!t||_||h)&&f(t?g():e),e):g()})}var ee=!1,v=(n&1?He:Ge)(()=>(ee=!1,g()));o&&Q(v);var te=U;return(function(e,t){if(arguments.length>0){let n=t?Q(v):i&&o?P(e):e;return j(v,n),ee=!0,c!==void 0&&(c=n),e}return z&&ee||te.f&16384?v.v:Q(v)})}typeof window<`u`&&((window.__svelte??={}).v??=new Set).add(`5`);var Wn=`
-    <div class="ajuda-sec">
-      <h4>⚠️ "Nota para corrigir" no Início (24/09/2026)</h4>
-      <p>Quando falta alguma coisa em um lançamento, o Início mostra a faixa amarela dizendo <b>qual nota</b> e <b>o que falta nela</b> — por exemplo: "1 nota para corrigir: POSTO SYAGRI · 22/09/2026 — sem CNPJ · sem nº da nota".</p>
-      <p><b>Nota que já foi apagada do sistema (25/09/2026):</b> se um lançamento da lista já não existe mais no servidor — alguém apagou em definitivo e este aparelho ficou com a cópia guardada — ele aparece com a marca <b>"já não existe no servidor"</b> e, no lugar de Corrigir, o botão <b>🧹 Remover daqui</b>. Ele limpa <b>só a cópia deste aparelho</b>, e pede confirmação antes: nada some sozinho. Lançamento que ainda está esperando para subir nunca é oferecido para remover.</p>
-      <p><b>Toque na faixa</b> e abre a lista, uma linha por nota, com as etiquetas do que falta, o botão <b>📎 Ver</b> — que mostra o anexo, para você conferir antes de mexer — e o <b>Corrigir</b>, que abre a nota no formulário.</p>
-      <p class="ajuda-gestor"><b>Gestor e admin (24/09/2026):</b> a lista traz também as notas <b>da equipe</b>, cada uma com o nome de quem lançou (👤). É por ela que dá para ver o anexo e corrigir sem precisar abrir a Equipe e procurar a pessoa.</p>
-      <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>
-      <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>📅 A data nunca pode ser no futuro (24/09/2026)</h4>
-      <p>O lançamento registra um gasto que <b>já aconteceu</b>: <b>hoje</b> e qualquer dia passado valem; <b>amanhã em diante, não</b>. Ao salvar com data adiante de hoje, o app avisa e não grava, na nota e no repasse.</p>
-      <p>Se algum lançamento antigo estiver com data no futuro, ele aparece nas <b>pendências do Início</b> como "<b>N com data no futuro</b>" — foi assim que descobrimos uma nota que tinha sido gravada em 2045, por causa de uma chave de NFS-e lida como se fosse de NF-e.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🧾 Em nome de quem a nota tem que sair</h4>
-      <p>Na hora de pedir o cupom, o caixa pergunta se quer CPF na nota. A regra da empresa (24/09/2026):</p>
-      <ul>
-        <li>✅ <b>Sem consumidor identificado</b> — é o caso mais comum e está certo.</li>
-        <li>✅ <b>No CNPJ da empresa</b>: 17.117.768/0001-42.</li>
-        <li>✅ <b>No SEU CPF</b>, desde que ele esteja cadastrado no Perfil — é a exceção de 24/09/2026, para casos como <b>recarga de celular</b> em linha que está no seu nome.</li>
-        <li>🚫 <b>No CPF ou CNPJ de outra pessoa</b> — o app <b>não deixa lançar</b>. Peça outra nota no caixa.</li>
-      </ul>
-      <p>O app confere isso sozinho: quando a venda identifica o consumidor, o <b>QR Code da nota carrega esse CPF/CNPJ</b>, e é ele que o app lê. A checagem acontece <b>antes</b> de pedir a foto, para você não fotografar uma nota que não serve.</p>
-      <p><b>Para a exceção funcionar</b>, cadastre o seu CPF em <b>Perfil → Seu CPF</b>. Enquanto ele estiver em branco, nota no seu CPF continua sendo barrada — e a mensagem lembra disso.</p>
-      <p><b>Recibo:</b> quando não há como emitir nota — situação a evitar ao máximo —, o recibo vale, de preferência <b>no nome da empresa, com carimbo e o CNPJ do estabelecimento</b>.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-cv">
-      <h4>💳 Cartão corporativo (C.V.) — recarga e repasse</h4>
-      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b> ou <b>👛 Nota de repasse</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>
-      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Repasse e recarga também não perguntam aba nenhuma. Desde 25/09/2026 o <b>Resumo do mês</b>, lá embaixo, segue essa mesma divisão: as <b>quatro categorias</b> no lugar de RDA e RDM, e um <b>único</b> quadro de <b>👛 Repasse a receber</b> — no cartão o que a empresa deve é um valor só.</p>
-      <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>
-      <ul>
-        <li><b>👛 Repasse</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>
-        <li><b>💳 Recarga do cartão</b> — pedir ao gestor a transferência para o cartão pré-pago. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>
-      </ul>
-      <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>
-      <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>
-    </div>
-
-        <div class="ajuda-sec ajuda-gestor">
-      <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>
-      <ul>
-        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. <b>Várias de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b> (vale também em <b>Minhas notas</b>), marque as notas — tocar no cartão marca — ou use <b>marcar todas</b>, que pega só o que está na tela (se um filtro RDA/RDM estiver ligado, o que ele esconde fica de fora), e toque em <b>🗑 Excluir</b>: o app mostra a soma e pede para digitar <b>EXCLUIR</b>; as notas vão para a lixeira e podem ser restauradas. O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>
-        <li><b>Repasse</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora. <b>Vários de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b>, marque os repasses (ou <b>marcar todos</b>, que vale para o mês aberto) e toque em <b>🗑 Excluir</b>; o app mostra a soma e pede uma confirmação antes de apagar.</li>
-      </ul>
-      <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🔔 Notificação no celular (24/09/2026)</h4>
-      <p>Dá para receber os avisos no celular mesmo com o app fechado — e é isso que faz aparecer <b>o número no ícone do app</b>, como nos outros aplicativos. Quem liga é você, uma vez em cada aparelho: <b>Perfil → 🔔 Ligar notificações neste aparelho</b>. O celular vai pedir autorização; sem ela nada chega.</p>
-      <p>O que toca o aviso:</p>
-      <ul>
-        <li>💸 <b>Pedido de repasse ou recarga</b> — para quem gerencia, assim que a pessoa pede.</li>
-        <li>✅ <b>Repasse ou recarga pago</b> — para quem recebe, quando o gestor marca como pago.</li>
-        <li>🙋 <b>Cadastro novo aguardando liberação</b> — para quem gerencia.</li>
-        <li>💳 <b>Cartão abaixo de R$ 300</b> — para quem gerencia, uma vez por dia.</li>
-      </ul>
-      <p>No Perfil dá para <b>enviar um teste</b> e para <b>desligar</b> só naquele aparelho. Tocando no aviso, o app abre.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>
-      <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente, quando o sinal volta e <b>de 3 em 3 minutos</b> (era 20, mudou em 25/09/2026), se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e você pode tocar nele na hora que quiser. Se não tocar, tudo bem: <b>assim que você fechar o lançamento o app se atualiza sozinho</b>, em até meio minuto. O número da versão fica no <b>Perfil</b>.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🏠 Tela Início — por onde tudo começa</h4>
-      <p>Ao entrar, o app abre no <b>Início</b>. O <b>botão grande 🧾 do topo</b> — que desde 25/09/2026 mostra direto o que ele faz (<b>“Postar nota de C.V. e repasse”</b>, <b>“Lançar nota de RDM e RDA”</b>…, conforme o seu regime) — reúne tudo de despesas. Dentro dele a tela continua se chamando <b>Petermann – Despesas</b>. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>
-      <ul>
-        <li>🍽️ <b>RDA — Alimentação</b>: refeição, lanche, café, água.</li>
-        <li>💼 <b>RDM — Despesas corporativas</b>: abastecimento, hospedagem e outros gastos de serviço.</li>
-      </ul>
-      <p>Cada aba mostra, no cantinho, <b>quanto você já lançou nela no mês</b>. Toque na aba e ela <b>abre</b>, revelando as duas formas de lançar <b>dentro dela</b>: <b>📷 Nota pelo QR Code</b> e <b>📝 Nota sem QR</b>. Como a aba já está escolhida, o app não pergunta RDA/RDM de novo — vai direto para o comprovante (e, se o fornecedor parecer da outra aba, avisa ali com o botão <b>Trocar</b>). Tocar na aba aberta fecha de novo.</p>
-      <ul>
-        <li>💸 <b>Repasse</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Dinheiro que você recebeu ou precisa pedir.</li>
-      </ul>
-      <p><b>💸 Como o Repasse funciona agora (24/09/2026):</b> o painel abre em <b>três páginas</b>, uma escolha por vez. <b>Passo 1</b> — o que você quer fazer: <b>🙋 Solicitar repasse</b> (pedir ao gestor) ou, só para <b>Gestor/Admin</b> (25/09/2026: colaborador não se autodeclara "já recebi" mais), <b>💰 Registrar recebido</b>; o título do alto acompanha a escolha. <b>Passo 2</b> — de qual aba: <b>🍽️ RDA</b> (alimentação) ou <b>💼 RDM</b> (corporativas). <b>Passo 3</b> — só então aparecem data, valor e descrição, com o resumo da escolha no alto e o <b>Salvar</b>. Nada vem marcado de antemão: era aí que se errava, porque a lista antiga guardava o tipo do lançamento anterior e um RDM entrava como RDA sem ninguém notar. O <b>‹ Voltar</b> anda um passo para trás (e volta a perguntar a aba); no primeiro passo, fecha a tela. Quem chega pelo botão do saldo ou pelo <b>💰 Lançar repasse</b> da Equipe já entra no passo 2, e o repasse criado a partir de uma nota entra direto no passo 3.</p>
-      <ul>
-      </ul>
-      <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os repasses registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>
-      <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>
-      <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto, à direita) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>
-      <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>
-      <p><b>Barra congelada (23/09/2026):</b> a saudação do Início tem, à direita, os botões <b>👤 Perfil</b> e <b>🚪 Sair</b>, e essa faixa <b>não sobe com a rolagem</b> — fica fixa no topo enquanto você desce a tela, então os dois estão sempre a um toque. Em telas estreitas os botões descem para a linha de baixo, dentro da mesma faixa.</p>
-      <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contador.</p>
-      <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>
-      <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), e os <b>últimos lançamentos</b>. Para sair da conta, use o <b>🚪 Sair</b> da faixa congelada do topo (o botão grande do rodapé saiu em 23/09/2026, era o mesmo comando duas vezes). Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>
-      <p>Para voltar (23/09/2026): o botão fixo de baixo leva para a <b>tela onde você estava antes</b> e mostra o nome dela — entrou no Painel vindo da <b>Equipe</b>? ele diz <b>‹ Equipe</b>. Tocando várias vezes você refaz o caminho de volta até o Início; no Início ele some. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>
-      <p class="ajuda-note">Gestor e admin veem ainda os atalhos <b>Frota / KM</b> e <b>Ponto</b> na fila <b>Ir para</b> — o colaborador não.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>📷 Lançar pelo QR Code (passo a passo)</h4>
-      <ul>
-        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📷 Nota pelo QR Code</b>. Aponte a câmera para o QR do cupom; leu, o app avisa.</li>
-        <li><b>2.</b> A aba já é a que você abriu — o app pula essa pergunta. Se o fornecedor for conhecido e parecer da <i>outra</i> aba (posto costuma ser RDM · Abastecimento, restaurante RDA), aparece um aviso em laranja com o botão <b>Trocar</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026).</li>
-        <li><b>3.</b> Toque em <b>Tirar foto</b>: a câmera abre dentro do próprio app; enquadre o cupom inteiro e toque no botão verde (ou use <b>Anexar arquivo</b>). Se a câmera do app não abrir, toque em <b>Usar a câmera do celular</b>. Pode fotografar com o celular em qualquer posição: o app <b>endireita a nota sozinho</b> (pelo QR Code ou pelo texto), e ela nunca fica de lado nem de cabeça para baixo. O anexo é obrigatório — sem ele a nota não salva.</li>
-        <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>
-        <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data e valor. Confira o <b>valor</b> e toque em <b>Salvar</b>. Tipo de documento, número e série o app tira da chave e grava sozinho, sem mostrar na tela.</li>
-      </ul>
-      <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom ou da NF-e; a NFS-e, nota de serviço, tem 50). Abre uma janela do próprio app: digite ou cole a chave (pode ser com espaços) e toque em <b>Usar chave</b>. Se faltar algum dígito, a janela avisa sem fechar.</p>
-      <p><b>📐 Foto sempre em pé (23/09/2026):</b> o celular costuma gravar a foto deitada e anotar a rotação num campo escondido do arquivo. A tela mostrava certo, mas o PDF, o ZIP e a planilha saíam de lado ou de cabeça para baixo. Agora o app <b>endireita a foto na hora de anexar</b> — o recorte, a leitura e o arquivo guardado já saem na posição certa. As fotos antigas foram endireitadas de uma vez no servidor.</p>
-      <p class="ajuda-note">🌐 Quando aparece <b>"Valor conferido no SEFAZ"</b>, o valor veio do site oficial do estado — pode confiar. Sem essa marca, o valor veio da leitura da foto: confira.</p>
-      <p>Nem todo estado permite essa conferência automática: <b>BA e GO</b> funcionam; <b>MG, SC e TO</b> exigem "não sou robô" ou não respondem, então nesses o valor vem sempre da foto. Os demais são conferidos conforme aparecem os primeiros cupons.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>📝 Lançar sem QR (recibo, DANFE, NFS-e)</h4>
-      <ul>
-        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📝 Nota sem QR</b>.</li>
-        <li><b>2.</b> <b>Tirar foto</b> ou <b>Anexar arquivo</b> (imagem, PDF ou XML). Ou <b>Preencher primeiro, anexar depois</b>.</li>
-        <li><b>3.</b> O app lê o que der da foto (valor, data, CNPJ, número). Com <b>XML</b> preenche tudo. Confira e <b>Salvar</b>.</li>
-      </ul>
-      <p>Se o CNPJ for de um fornecedor conhecido, aparece uma <b>sugestão de aba/categoria</b> no topo do formulário — toque em <b>Aplicar</b> se concordar.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🧾 Campos da nota</h4>
-      <ul>
-        <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Outros). Define a aba da planilha e a pasta nos arquivos.</li>
-        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo). Com chave, o app escolhe sozinho.</li>
-        <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>
-        <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>
-      </ul>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🔁 Notas repetidas</h4>
-      <p>O app avisa quando parece que a nota <b>já foi lançada</b> — mesma chave, mesmo número no mesmo fornecedor, ou mesmo fornecedor no mesmo dia com o mesmo valor. O aviso aparece logo depois da leitura e de novo ao salvar. <b>Nada é apagado sozinho</b>: você decide.</p>
-      <p>No <b>Painel</b>, o item <b>🔁 Possíveis duplicatas</b> lista as suspeitas; o cartão da nota ganha a etiqueta <b>duplicada?</b>.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🗑️ Lixeira</h4>
-      <p>Apagar uma nota abre uma janela do app (painel verde na parte de baixo da tela) que mostra o que será excluído e pede que você digite <b>EXCLUIR</b>; ela vai para a <b>Lixeira</b> (em Minhas notas → 🗑️), de onde dá para <b>Restaurar</b> ou <b>Apagar definitivo</b> (só o dono ou o admin; some do servidor com o anexo).</p>
-      <p><b>Vários de uma vez (05/10/2026):</b> na Lixeira, toque em <b>☑️ Selecionar</b>, marque os lançamentos (tocar no cartão marca; <b>marcar todas</b> pega a lista inteira) e escolha <b>♻️ Restaurar</b> ou <b>🗑 Apagar definitivo</b>. O app mostra a soma e pede confirmação; para apagar de vez é preciso digitar <b>EXCLUIR</b>, e quem não for o dono nem admin não apaga o que não é seu (esses ficam na lixeira). Os "só neste aparelho" não têm caixinha — continuam com o <b>Limpar daqui</b>.</p>
-      <ul>
-        <li>⚠️ <b>"Já existe uma nota igual ativa"</b> — a lixeira avisa quando restaurar criaria uma nota repetida; confirme só se tiver certeza.</li>
-        <li>📱 <b>"Só neste aparelho"</b> — é uma cópia antiga que já não existe no servidor (foi apagada em definitivo por outro aparelho). Não dá para restaurar; use <b>Limpar daqui</b>.</li>
-      </ul>
-      <p><b>Nada é apagado sozinho</b> pelo app nem pelo servidor.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🔗 Ver a nota no site da SEFAZ</h4>
-      <p>Notas lidas por QR mostram o botão <b>🔗</b> (na lista e no formulário) que abre o cupom no site oficial do estado. Nota de serviço (NFS-e) abre o link do próprio QR. Sem QR: cupom de <b>MG, GO, MT, PR, SP ou BA</b> abre a consulta de NFC-e da SEFAZ do estado com a chave já copiada (em GO ela já vem preenchida) — é só colar no campo e passar pelo "não sou robô". Nos outros casos abre o Portal Nacional com a chave preenchida. Para abrir o cupom direto, lance a nota pelo <b>QR</b>.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>🧮 Faturamento</h4>
-      <p><b>Faturamento</b> é a soma de <b>todas as despesas</b> (RDM, RDA e C.V.) de um colaborador ou da equipe no período — aparece na <b>Equipe</b> (card geral e em cada cartão), na ficha de cada colaborador e no <b>Dashboard Equipe</b>.</p>
-      <p>Dentro dele, o que a <b>empresa paga direto</b> (sem passar pelo colaborador, lançado por <b>🏢 Lançar Faturamento</b>) aparece separado como <b>"Pago direto pela empresa"</b> — nunca entra no saldo de ninguém. Esse recorte tem um <b>relatório em PDF</b> próprio, com a lista das notas e quem lançou cada uma, para levar à contabilidade.</p>
-      <p><b>Sem colaborador específico (28/09/2026):</b> ao lançar Faturamento, o gestor/admin pode tocar em <b>"Sem colaborador específico"</b> em vez de escolher alguém — para despesas da empresa que não têm como apontar para uma pessoa. A nota aparece como <b>"Faturamento geral (sem colaborador)"</b> na Equipe, no Histórico e no relatório em PDF.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>🕓 Histórico</h4>
-      <p>Em <b>Início → Ir para → Histórico</b>: quem lançou, editou ou apagou cada <b>nota</b> e <b>repasse</b> de toda a equipe nos últimos 60 dias, e também quem <b>trocou o papel ou o regime</b> de alguém (🎭/🔁) — antes isso só ficava no log do servidor.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>📁 Arquivos no servidor (no lugar do Drive)</h4>
-      <p>Em <b>Início → Arquivos</b>, toque no colaborador e depois no mês: as notas aparecem em miniatura, agrupadas como na pasta modelo (<b>RDA ALIMENTAÇÃO</b>, <b>RDM · ABASTECIMENTO / HOSPEDAGENS / OUTROS</b>). Toque na miniatura para ver a foto inteira.</p>
-      <p class="ajuda-gestor"><b>Todos de uma vez (gestor, admin e contador):</b> na primeira tela de Arquivos, o quadro <b>Baixar de todos de uma vez</b> tem <b>Notas de todos (ZIP)</b> — uma pasta por colaborador, do ano inteiro ou de um mês à escolha — e <b>Planilhas de todos (ZIP)</b>, com a planilha de cada um no modelo do seu regime.</p>
-      <p><b>⬇️ Baixar ZIP</b> monta, na hora, a pasta do mês (ou do ano) já com os nomes do modelo — <i>Colaborador/Ano/RDM DESPESAS CORPORATIVAS/ABASTECIMENTO/09 set/2026-09-03 POSTO X R$120,00.jpg</i> — e a <b>Planilha CV</b> do ano dentro. Notas sem anexo entram numa lista <i>SEM ANEXO.txt</i>. Não depende do Google Drive.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>🚗 Frota / KM dos veículos</h4>
-      <p>Em <b>Início → Ir para → Frota / KM</b>, toque em <b>Registrar KM</b>: escolha o veículo, a data e digite o <b>odômetro</b> (o número do painel). Foto do painel é opcional. Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo e nos abastecimentos.</p>
-      <p>O app calcula o <b>km rodado no mês</b> por veículo pelas leituras. Se digitar um número menor que a última leitura, ele avisa. O <b>gestor</b> vê todos os veículos, quem dirigiu e cadastra os veículos (placa, modelo, responsável).</p>
-      <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O painel mostra os últimos dados baixados.</p>
-      <p>Na tela da Frota há o <b>dashboard</b> (km no mês/ano, evolução, km por veículo e por motorista) e os botões <b>📗 Planilha de controle (Excel)</b> — abas Veículos × mês, Motoristas × mês e todas as Leituras — e <b>CSV do mês</b>.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>⏱️ Ponto de presença</h4>
-      <p>Em <b>Início → Ir para → Ponto</b>, um botão só: ele diz qual é a próxima marcação — <b>Entrada</b>, <b>Saída p/ intervalo</b>, <b>Volta</b>, <b>Saída</b>. A hora é a do servidor; sem internet a marcação fica guardada com a hora do aparelho e sobe depois (⏳).</p>
-      <p><b>Horas</b>: jornada de 8h (seg–sex) e 4h (sáb). O que passar conta como <b>extra 50%</b>; <b>domingos e feriados</b> contam inteiros como <b>extra 100%</b>. Esqueceu de bater? <b>Corrigir</b> vale para hoje e ontem; dias anteriores, o gestor corrige.</p>
-      <p>O <b>gestor</b> vê horas por colaborador, o calendário do mês, cadastra os <b>feriados</b> (＋ Feriado) e gera a <b>planilha de ponto</b> (Resumo, Espelho e Dias) ou o CSV.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>💳 Regime CV × RDM/RDA (reunião de 21/09/2026)</h4>
-      <p>Cada colaborador está em um <b>regime</b>, definido pelo gestor/admin em <b>Equipe → cartão → Editar → Regime de despesas</b>:</p>
-      <ul>
-        <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo. O relatório é a <b>Planilha de RDM e RDA</b> no <b>modelo oficial da empresa</b> (abas CABEÇALHO, BANCO DE DADOS, R.D.M. e R.D.A), preenchida pelo servidor com as notas do ano — o R.D.M. por categoria (Abastecimento, Hospedagens, Outros) e o R.D.A em duas colunas por mês; o BANCO DE DADOS recebe os repasses recebidos de RDM e de RDA. Sai em <b>Excel</b> (o modelo preenchido) e em <b>PDF</b> (A4 paisagem: capa, BANCO DE DADOS com extratos e quadro mês × trimestre, R.D.M. por categoria e R.D.A por mês — só os meses com lançamento). Continuam disponíveis o Excel anual resumido do app e o CSV.</li>
-        <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? O app oferece na hora <b>Pedir o repasse</b> (data, valor e justificativa já preenchidos) — e o gestor recebe a notificação. Quando o gestor marca como pago, o <b>Repasse recebido</b> é registrado sozinho e <b>abate</b> do que foi registrado.</li>
-      </ul>
-      <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>repasses</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = repasses recebidos. O Início mostra "Repasse a receber" em vez de saldo.</p>
-      <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV; <b>Planilha RDM/RDA</b> (Excel e PDF) e <b>Excel resumo</b> para os demais. <b>📗 Planilhas</b> (topo da Equipe) gera as planilhas de quem você marcar, <b>cada um no modelo do seu regime</b> — Excel único (aba RESUMO + abas de cada pessoa, ex.: <i>Cleiton_R.D.M.</i>, <i>Maria_RDM_RDA</i>) ou ZIP. A RDM/RDA leva uns 20 s por pessoa.</p>
-      <h4>🔔 Notificações e pedido de repasse pago</h4>
-      <p>O <b>🔔 sininho</b> no canto superior direito mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>
-      <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado e o pedido sai das pendências. <b>👤 Ver colaborador</b> abre o cartão dele.</p>
-      <p><b>💰 O repasse vale na hora (23/09/2026):</b> marcar o pedido como pago <b>já joga o valor no saldo</b> da pessoa, nos gráficos e nas planilhas — ninguém precisa confirmar nada. O mesmo vale para o repasse que o gestor lança pela <b>Equipe → 💰 Lançar repasse</b> e para o que o próprio colaborador registra. Se o dinheiro não chegou, quem desfaz o lançamento é o gestor, pela lixeira do repasse em <b>RDM/RDA e Planilhas</b>.</p>
-      <p class="ajuda-gestor"><b>💰 Lançar repasse direto (23/09/2026):</b> em <b>Equipe → o colaborador → 💰 Lançar repasse</b>, o gestor registra um repasse que já pagou. Esse <b>entra no saldo da pessoa na hora</b>, sem a etapa de confirmação — é para o dinheiro que já foi entregue, sem pedido no meio. O formulário avisa para quem está lançando, e a descrição sai como "Repasse lançado por (nome do gestor)".</p>
-      <p class="ajuda-gestor"><b>🔀 Corrigir RDA/RDM (23/09/2026):</b> lançou no grupo errado? Em <b>Equipe → o colaborador → 🧾 Notas</b>, o cartão da nota tem o botão <b>🔀</b> (só gestor/admin, e só em nota de outra pessoa). Ele abre os quatro grupos — <b>RDA</b>, <b>RDM · Abastecimento</b>, <b>RDM · Hospedagem</b> e <b>RDM · Outros</b> — com o atual marcado. Trocar muda <b>só o grupo</b>: valor, empresa, data e anexo continuam iguais, e a correção aparece no aparelho do colaborador no próximo sync. O anexo que já subiu para o Drive só troca de pasta quando alguém usar <b>🗂️ Reorganizar pastas no padrão</b>. A sua própria nota você corrige pelo <b>✏️</b> de sempre.</p>
-      <p><b>Colaborador:</b> quando o gestor marca o seu pedido como pago, o repasse <b>já entra no seu saldo</b> — você não precisa confirmar nada. Chega o aviso "Seu pedido de R$ … foi pago ✅", que você limpa com <b>OK, vi</b>. Se o dinheiro não chegou, fale com o gestor: quem desfaz o lançamento é ele.</p>
-      <h4>☁️ Envio para o servidor</h4>
-      <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>. Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b> e a cada <b>60 segundos</b>. A foto sobe antes da nota.</p>
-      <p>Indicador no topo:</p>
-      <ul>
-        <li><span class="ajuda-dot" style="background:#74C69D"></span> <b>online</b> — conectado</li>
-        <li><span class="ajuda-dot" style="background:#FFB703"></span> <b>sincronizando</b> — enviando</li>
-        <li><span class="ajuda-dot" style="background:#E63946"></span> <b>offline</b> — guardado no celular</li>
-        <li>⏳ na nota — ainda não enviada (vai sozinho quando voltar a internet)</li>
-        <li><b>⚠️ falhou ›</b> na nota — o envio não conseguiu terminar. <b>Toque nele</b>: o app diz o motivo (por exemplo, <b>anexo vazio</b>, quando o celular entrega o arquivo com 0 KB porque ele está só no iCloud ou no WhatsApp) e o que fazer. A nota fica guardada no celular; não saia da conta nem limpe os dados até ela subir. Se trocar de conta no mesmo celular, a nota de uma conta só sobe quando ela entrar de novo.</li>
-      </ul>
-      <p>As fotos ficam no <b>servidor da empresa</b>; o gestor as vê e baixa em <b>Início → Arquivos</b>.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>📱 Instalar no celular</h4>
-      <p>Endereço do app: <b>app.pmservicosagronomicos.com.br/rda-rdm-app</b>.</p>
-      <p><b>Android (Chrome):</b> menu (⋮) → <b>Adicionar à tela inicial</b>. Nas versões novas do Chrome essa opção mudou de lugar: se não estiver no menu, toque em <b>Compartilhar…</b> e <b>arraste para a esquerda</b> a fileira de ícones de baixo — ela costuma estar escondida ali.</p>
-      <p><b>iPhone (Safari):</b> Compartilhar → <b>Adicionar à Tela de Início</b>. Pelo Chrome no iPhone a opção não existe; tem que ser o Safari.</p>
-      <p>Instalado, vira um app normal e funciona até <b>sem internet</b>. Ao usar a câmera, toque em <b>Permitir</b>.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🔄 Atualizar o aplicativo</h4>
-      <p>O app se atualiza sozinho: <b>não existe nada para baixar</b> e ele nunca aparece na loja de aplicativos. A versão nova chega quando a tela é recarregada.</p>
-      <p><b>Pelo navegador:</b> puxe a página para baixo para recarregar. <b>Instalado:</b> feche o app por completo (tire da lista de apps abertos) e abra de novo.</p>
-      <p>Para conferir qual versão está no seu aparelho, olhe embaixo do botão <b>Entrar</b>, na tela de login — o número aparece ali. <b>Continua na versão antiga?</b> Espere uns 10 minutos e recarregue.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>🔑 Entrar e perfil</h4>
-      <p>Entre com <b>e-mail e senha</b> ou com o botão <b>Google</b>. Para criar conta: <b>Cadastrar</b>, e-mail e senha (mín. 6 caracteres).</p>
-      <p>Em <b>Perfil</b>, informe seu <b>Nome</b> e <b>Núcleo</b> e salve. O nome dá nome à <b>sua pasta</b> no ZIP dos arquivos e ao cabeçalho da planilha — preencha com o nome completo.</p>
-      <p><b>Esqueceu a senha?</b> Na tela de login toque em <b>Esqueci minha senha</b>, informe o e-mail e abra o link que chegar (confira o spam). O link vale <b>1 hora e um uso só</b>.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>👥 Papéis da equipe</h4>
-      <ul>
-        <li><b>Colaborador:</b> vê só as próprias notas.</li>
-        <li><b>Gestor:</b> o <b>cargo maior</b>. Vê a equipe e baixa os relatórios de todos em <b>Equipe / Baixar relatórios</b>; em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as notas dele. Em <b>Equipe → Editar</b> muda o <b>nome, o papel e o regime de qualquer pessoa</b> — inclusive tirar ou dar o papel de administrador. <b>Convida</b> por link (até outro gestor) e tem no Perfil as <b>ferramentas de servidor</b>: armazenamento, backup, cópia no Google Drive e atualizar estrutura do banco.</li>
-        <li><b>Admin:</b> o papel <b>técnico</b>, de quem mantém o app. Faz o mesmo que o gestor e ainda <b>apaga lançamento em definitivo</b>. Quem dá e quem tira esse papel é o gestor, em Equipe → Editar (o app pede confirmação nos dois sentidos). Ninguém muda o próprio papel — sempre outra pessoa faz.</li>
-        <li><b>Contador</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início dele mostra só Equipe e Arquivos.</li>
-      </ul>
-      <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contador, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>
-      <p class="ajuda-gestor"><b>🙋 Liberar cadastro novo (22/09/2026):</b> ninguém entra sozinho. Quem cria conta — pelo cadastro do app, pelo link de convite ou entrando com o Google — fica na tela <b>"Aguardando liberação"</b> e não lança nada até um gestor ou admin confirmar. Você é avisado de três formas: a notificação <b>🙋 no sino</b> (com <b>✅ Confirmar entrada</b> e <b>🚫 Recusar</b>), a etiqueta laranja <b>aguardando liberação</b> no cartão da pessoa na <b>Equipe</b>, e um <b>e-mail</b> para o caso de você não abrir o app. Confirmando, o app dela libera na hora (ela pode tocar em "Já fui liberado, conferir"); recusando, a conta é desativada na mesma hora — e dá para reativar depois pela Equipe. Fica registrado no cadastro <b>quem confirmou e quando</b>, e por qual caminho a pessoa entrou.</p>
-
-      <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>
-      <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (no <b>Excel</b> e no <b>PDF</b>, quem não lançou nada no mês e não tem saldo de meses anteriores começa desmarcado; em <b>Planilhas</b>, quem não lançou nada no ano; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, <b>saldo anterior</b>, recebido, <b>saldo acumulado</b> e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 Planilhas</b> gera as planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um) de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>
-      <p class="ajuda-gestor">A tela <b>Equipe / Baixar relatórios</b> não mostra mais os quadros Gasto no mês, Recebido, Saldo e Notas (decisão de 21/09/2026: isso já está no Painel, em RDM/RDA e Planilhas e no cartão de cada pessoa). Ficam o gráfico de <b>evolução do gasto</b> da equipe, os botões de relatório e a lista. <b>Em cada cartão o saldo é sempre o acumulado (01/10/2026):</b> o número grande já soma o que sobrou ou faltou dos <b>meses anteriores</b> (linha <b>Anterior</b>) + o recebido − o gasto do mês, para RDM e RDA separados. Pedido de repasse ainda não pago e <b>recarga do cartão</b> (CV) não entram como recebido, e o que a empresa paga direto (Faturamento) não entra como gasto. O mesmo vale no <b>Excel</b> (colunas Anterior e Saldo Acum.), no <b>PDF da equipe</b> e no <b>Excel resumo</b> do colaborador, cujo mês de janeiro parte do saldo de dezembro do ano anterior. Quem só carrega saldo de meses anteriores também aparece nos relatórios do mês. Há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>🚫 Colaborador que saiu da empresa</h4>
-      <p>Em <b>Equipe → ✏️</b> no cartão da pessoa (gestor ou admin):</p>
-      <ul>
-        <li><b>Desativar colaborador</b> — a pessoa não entra mais no app e sai das listas; as notas e o histórico dela continuam no sistema. Os desativados ficam na seção <b>🚫 Desativados</b>, no fim da Equipe, de onde dá para <b>Reativar</b>.</li>
-        <li><b>Excluir de vez (limpeza do banco)</b> — apaga o colaborador e <b>tudo</b> dele (notas, anexos, repasses, KM, ponto). Não tem volta, e <b>só o gestor</b> vê esta opção (o administrador não). O app mostra o nome e o e-mail da pessoa e só apaga depois que você <b>digita EXCLUIR</b> (sem a palavra, nada acontece); a exclusão é na hora.</li>
-      </ul>
-      <p>Ninguém desativa nem exclui a si mesmo.</p>
-    </div>
-
-    <div class="ajuda-sec ajuda-gestor">
-      <h4>🗄️ Backup e avisos (gestor e admin)</h4>
-      <p>Em <b>Perfil → 🗄️ Backup</b>: o servidor gera sozinho, <b>todo domingo de madrugada</b>, um ZIP com o banco e todas as fotos (fica a lista dos últimos 8). Toque num deles para baixar, ou em <b>Baixar backup completo</b> para gerar na hora. Guarde uma cópia por mês fora do servidor. Se o backup mais novo tiver mais de 8 dias, a tela avisa. A rotação guarda as <b>12 cópias semanais</b> mais novas e a <b>primeira de cada mês</b> dos últimos 12 meses.</p>
-      <p><b>☁️ Cópia no Google Drive:</b> na mesma seção, toque em <b>Conectar Google Drive ao backup</b> uma vez (o Google pede permissão só para arquivos que o app criar). A partir daí o backup semanal sobe sozinho para a pasta <b>Backups Petermann App</b> do seu Drive, com a mesma rotação — se a Locaweb perder o disco, a cópia está lá. <b>Enviar agora</b> testa a conexão com o backup mais novo; se a autorização expirar, chega e-mail e basta conectar de novo.</p>
-      <p>Qualquer erro do servidor (ou backup que falhar) chega por <b>e-mail</b> ao endereço configurado no servidor; e um monitor externo avisa se o site sair do ar. Só existe <b>uma</b> conta de Drive ligada ao backup: se outra pessoa conectar a dela, substitui a anterior — a tela mostra sempre qual conta está valendo.</p>
-      <h4>🧪 Ambiente de teste (homologação)</h4>
-      <p>Toda novidade entra primeiro em <b>teste.pmservicosagronomicos.com.br</b> — uma cópia do app com banco e fotos próprios, faixa laranja no topo e ícone "PM TESTE". Lance, apague, teste à vontade: <b>nada dali vale para a empresa</b> nem chega à produção. Entre lá com o mesmo e-mail e senha (o login pelo Google só funciona na produção). Quando o teste passa, a mesma versão vai para o app oficial.</p>
-      <h4>💾 Armazenamento do servidor (gestor e admin)</h4>
-      <p>Em <b>Perfil → 💾 Armazenamento do servidor</b> você vê quanto o app ocupa na Locaweb, separado em fotos, backups, banco, miniaturas e logs; a porcentagem de um <b>teto de alerta</b> (o plano da Locaweb é ilimitado em disco; o teto, 20 GB, serve para pegar crescimento anormal); o <b>crescimento por mês</b> e uma estimativa de quando o espaço acaba; e a idade do último backup. Verde = tudo bem, laranja = atenção (acima de 80 % ou backup com mais de 8 dias), vermelho = crítico (acima de 90 %).</p>
-      <p>Você não precisa abrir para vigiar: o servidor mede sozinho <b>todo dia às 04:10</b> e manda <b>e-mail</b> quando passar dos limites, quando o backup atrasar ou quando, no ritmo atual, o espaço for acabar em menos de 60 dias. Para liberar espaço: guarde menos cópias de backup ou peça mais espaço no painel da Locaweb.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>📊 Planilha de C.V. e pastas</h4>
-      <p>Na aba <b>RDM/RDA e Planilhas</b>, o quadro <b>⬇️ Baixar relatório</b> reúne tudo: <b>Excel anual</b> e <b>CSV do mês</b> (RDM/RDA) e a <b>Planilha de C.V.</b>. Os botões <b>Planilha de C.V.</b> (Excel ou PDF) geram a sua planilha do ano no <b>modelo padrão da empresa</b>, preenchida pelo servidor com as notas e repasses lançados — abas CABEÇALHO, BANCO DE DADOS, RDM_RDA e CV REEMBOLSO. O PDF sai em A4 paisagem, um mês por bloco. O gestor gera a de qualquer colaborador em <b>Equipe → cartão do colaborador</b>.</p>
-      <p>No ZIP de <b>Início → Arquivos</b>, as <b>fotos</b> vêm na árvore oficial:</p>
-      <ul>
-        <li><b>RDM</b> → Seu nome / Ano / <b>RDM DESPESAS CORPORATIVAS</b> / categoria / mês</li>
-        <li><b>RDA</b> → Seu nome / Ano / <b>RDA ALIMENTAÇÃO</b> / mês</li>
-      </ul>
-      <p>A categoria do RDM vem do campo <b>Categoria</b> da nota — por isso vale conferir na hora de lançar, senão a foto vai parar em <b>OUTROS</b>. O Google Drive não é mais usado.</p>
-    </div>
-
-    <div class="ajuda-sec">
-      <h4>💡 Dicas</h4>
-      <ul>
-        <li>Sempre que o cupom tiver <b>QR</b>, use o QR — é mais rápido e o valor vem do SEFAZ.</li>
-        <li>Foto boa: luz, cupom reto e inteiro no recorte.</li>
-        <li>Confira o <b>valor</b> antes de salvar quando não houver a marca do SEFAZ.</li>
-        <li>Lançou offline? Confirme depois que o <b>⏳</b> sumiu.</li>
-        <li>Use as setas <b>‹ ›</b> para trocar de mês. Ao ir para outro ano, o app baixa as notas daquele ano na hora (precisa de internet na primeira vez).</li>
-        <li>Fotos entram no servidor já reduzidas (~400 KB); o cupom continua legível.</li>
-      </ul>
-    </div>
-
+\r\f\xA0\v﻿`];function zn(e,t,n){var r=e==null?``:``+e;if(t&&(r=r?r+` `+t:t),n){for(var i of Object.keys(n))if(n[i])r=r?r+` `+i:i;else if(r.length)for(var a=i.length,o=0;(o=r.indexOf(i,o))>=0;){var s=o+a;(o===0||Rn.includes(r[o-1]))&&(s===r.length||Rn.includes(r[s]))?r=(o===0?``:r.substring(0,o))+r.substring(s+1):o=s}}return r===``?null:r}function Bn(e,t,n,r,i,a){var o=e[de];if(o!==n||o===void 0){var s=zn(n,r,a);s==null?e.removeAttribute(`class`):t?e.className=s:e.setAttribute(`class`,s),e[de]=n}else if(a&&i!==a)for(var c in a){var l=!!a[c];(i==null||l!==!!i[c])&&e.classList.toggle(c,l)}return a}var Vn=!1;function Hn(e){var t=Vn;try{return Vn=!1,[e(),Vn]}finally{Vn=t}}function Un(e,t,n,r){var i=!0,o=!!(n&8),s=!!(n&16),c=r,l=!0,u=void 0,d=()=>s&&i?(u??=He(r),Q(u)):(l&&(l=!1,c=s?dn(r):r),c);let f;if(o){var p=se in e||le in e;f=a(e,t)?.set??(p&&t in e?n=>e[t]=n:void 0)}var m,h=!1;o?[m,h]=Hn(()=>e[t]):m=e[t],m===void 0&&r!==void 0&&(m=d(),f&&(i&&Ce(t),f(m)));var g=i?()=>{var n=e[t];return n===void 0?d():(l=!0,n)}:()=>{var n=e[t];return n!==void 0&&(c=void 0),n===void 0?c:n};if(i&&!(n&4))return g;if(f){var _=e.$$legacy;return(function(e,t){return arguments.length>0?((!i||!t||_||h)&&f(t?g():e),e):g()})}var ee=!1,v=(n&1?He:Ge)(()=>(ee=!1,g()));o&&Q(v);var te=U;return(function(e,t){if(arguments.length>0){let n=t?Q(v):i&&o?P(e):e;return j(v,n),ee=!0,c!==void 0&&(c=n),e}return z&&ee||te.f&16384?v.v:Q(v)})}typeof window<`u`&&((window.__svelte??={}).v??=new Set).add(`5`);var Wn=`\r
+    <div class="ajuda-sec">\r
+      <h4>⚠️ "Nota para corrigir" no Início (24/09/2026)</h4>\r
+      <p>Quando falta alguma coisa em um lançamento, o Início mostra a faixa amarela dizendo <b>qual nota</b> e <b>o que falta nela</b> — por exemplo: "1 nota para corrigir: POSTO SYAGRI · 22/09/2026 — sem CNPJ · sem nº da nota".</p>\r
+      <p><b>Nota que já foi apagada do sistema (25/09/2026):</b> se um lançamento da lista já não existe mais no servidor — alguém apagou em definitivo e este aparelho ficou com a cópia guardada — ele aparece com a marca <b>"já não existe no servidor"</b> e, no lugar de Corrigir, o botão <b>🧹 Remover daqui</b>. Ele limpa <b>só a cópia deste aparelho</b>, e pede confirmação antes: nada some sozinho. Lançamento que ainda está esperando para subir nunca é oferecido para remover.</p>\r
+      <p><b>Toque na faixa</b> e abre a lista, uma linha por nota, com as etiquetas do que falta, o botão <b>📎 Ver</b> — que mostra o anexo, para você conferir antes de mexer — e o <b>Corrigir</b>, que abre a nota no formulário.</p>\r
+      <p class="ajuda-gestor"><b>Gestor e admin (24/09/2026):</b> a lista traz também as notas <b>da equipe</b>, cada uma com o nome de quem lançou (👤). É por ela que dá para ver o anexo e corrigir sem precisar abrir a Equipe e procurar a pessoa.</p>\r
+      <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>\r
+      <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>📅 A data nunca pode ser no futuro (24/09/2026)</h4>\r
+      <p>O lançamento registra um gasto que <b>já aconteceu</b>: <b>hoje</b> e qualquer dia passado valem; <b>amanhã em diante, não</b>. Ao salvar com data adiante de hoje, o app avisa e não grava, na nota e no repasse.</p>\r
+      <p>Se algum lançamento antigo estiver com data no futuro, ele aparece nas <b>pendências do Início</b> como "<b>N com data no futuro</b>" — foi assim que descobrimos uma nota que tinha sido gravada em 2045, por causa de uma chave de NFS-e lida como se fosse de NF-e.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🧾 Em nome de quem a nota tem que sair</h4>\r
+      <p>Na hora de pedir o cupom, o caixa pergunta se quer CPF na nota. A regra da empresa (24/09/2026):</p>\r
+      <ul>\r
+        <li>✅ <b>Sem consumidor identificado</b> — é o caso mais comum e está certo.</li>\r
+        <li>✅ <b>No CNPJ da empresa</b>: 17.117.768/0001-42.</li>\r
+        <li>✅ <b>No SEU CPF</b>, desde que ele esteja cadastrado no Perfil — é a exceção de 24/09/2026, para casos como <b>recarga de celular</b> em linha que está no seu nome.</li>\r
+        <li>🚫 <b>No CPF ou CNPJ de outra pessoa</b> — o app <b>não deixa lançar</b>. Peça outra nota no caixa.</li>\r
+      </ul>\r
+      <p>O app confere isso sozinho: quando a venda identifica o consumidor, o <b>QR Code da nota carrega esse CPF/CNPJ</b>, e é ele que o app lê. A checagem acontece <b>antes</b> de pedir a foto, para você não fotografar uma nota que não serve.</p>\r
+      <p><b>Para a exceção funcionar</b>, cadastre o seu CPF em <b>Perfil → Seu CPF</b>. Enquanto ele estiver em branco, nota no seu CPF continua sendo barrada — e a mensagem lembra disso.</p>\r
+      <p><b>Recibo:</b> quando não há como emitir nota — situação a evitar ao máximo —, o recibo vale, de preferência <b>no nome da empresa, com carimbo e o CNPJ do estabelecimento</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-cv">\r
+      <h4>💳 Cartão corporativo (C.V.) — recarga e repasse</h4>\r
+      <p><b>Duas perguntas, nessa ordem (24/09/2026):</b> em <b>Petermann – Despesas</b>, antes de qualquer coisa o app pergunta <b>como a nota foi paga</b> — <b>💳 Nota no cartão</b> ou <b>👛 Nota de repasse</b>. É essa escolha que decide para qual aba da planilha a nota vai. Só depois aparecem as categorias; a forma de pagamento fica no alto, com o botão <b>Trocar</b> se você errar.</p>\r
+      <p><b>Sem RDA e RDM (24/09/2026):</b> no regime de cartão não existe a divisão em duas abas. O gasto é lançado direto em uma das <b>quatro categorias</b>, do mesmo jeito que a planilha divide: <b>🍽️ Alimentação</b>, <b>⛽ Abastecimento</b>, <b>🏨 Hospedagem</b> e <b>📦 Outros</b> (borracharia, oficina, EPIs). Elas aparecem em <b>Petermann – Despesas</b>, cada uma com o total do mês, e o formulário da nota traz um campo <b>Categoria</b> no lugar de Tipo + Categoria. Repasse e recarga também não perguntam aba nenhuma. Desde 25/09/2026 o <b>Resumo do mês</b>, lá embaixo, segue essa mesma divisão: as <b>quatro categorias</b> no lugar de RDA e RDM, e um <b>único</b> quadro de <b>👛 Repasse a receber</b> — no cartão o que a empresa deve é um valor só.</p>\r
+      <p>Quem é do <b>cartão corporativo</b> tem, no Início, dois painéis próprios (24/09/2026):</p>\r
+      <ul>\r
+        <li><b>👛 Repasse</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>\r
+        <li><b>💳 Recarga do cartão</b> — quando o gestor transferir para o cartão pré-pago, <b>você registra o recebimento</b> aqui (07/10/2026) e o gestor é avisado. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>\r
+      </ul>\r
+      <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>\r
+      <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>\r
+    </div>\r
+\r
+        <div class="ajuda-sec ajuda-gestor">\r
+      <h4>✏️ Quem pode corrigir o lançamento de outra pessoa</h4>\r
+      <ul>\r
+        <li><b>Nota</b> — gestor e admin: em <b>Equipe → o colaborador → 🧾 Notas</b>, o <b>🔀</b> troca a categoria e o <b>🗑</b> exclui. <b>Várias de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b> (vale também em <b>Minhas notas</b>), marque as notas — tocar no cartão marca — ou use <b>marcar todas</b>, que pega só o que está na tela (se um filtro RDA/RDM estiver ligado, o que ele esconde fica de fora), e toque em <b>🗑 Excluir</b>: o app mostra a soma e pede para digitar <b>EXCLUIR</b>; as notas vão para a lixeira e podem ser restauradas. O <b>Contador</b> consulta e baixa relatórios; não edita nem apaga.</li>\r
+        <li><b>Repasse</b> — gestor e admin: em <b>Equipe → o colaborador → 💸 Repasses</b>, o <b>✏️</b> corrige valor, data e descrição, e o <b>🗑</b> exclui (24/09/2026). O valor sai do saldo da pessoa e das planilhas na hora. <b>Vários de uma vez (05/10/2026):</b> toque em <b>☑️ Selecionar</b>, marque os repasses (ou <b>marcar todos</b>, que vale para o mês aberto) e toque em <b>🗑 Excluir</b>; o app mostra a soma e pede uma confirmação antes de apagar.</li>\r
+      </ul>\r
+      <p>Toda correção vai direto ao servidor e aparece no aparelho do dono no próximo sync. O servidor guarda quem mexeu.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🔔 Notificação no celular (24/09/2026)</h4>\r
+      <p>Dá para receber os avisos no celular mesmo com o app fechado — e é isso que faz aparecer <b>o número no ícone do app</b>, como nos outros aplicativos. Quem liga é você, uma vez em cada aparelho: <b>Perfil → 🔔 Ligar notificações neste aparelho</b>. O celular vai pedir autorização; sem ela nada chega.</p>\r
+      <p>O que toca o aviso:</p>\r
+      <ul>\r
+        <li>💸 <b>Recebimento registrado</b> — para quem gerencia, assim que o colaborador registra um repasse ou recarga recebidos (07/10/2026).</li>\r
+        <li>✅ <b>Repasse ou recarga pago</b> — para quem recebe, quando o gestor marca como pago.</li>\r
+        <li>🙋 <b>Cadastro novo aguardando liberação</b> — para quem gerencia.</li>\r
+        <li>💳 <b>Cartão abaixo de R$ 300</b> — para quem gerencia, uma vez por dia.</li>\r
+      </ul>\r
+      <p>No Perfil dá para <b>enviar um teste</b> e para <b>desligar</b> só naquele aparelho. Tocando no aviso, o app abre.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>✨ O app se atualiza sozinho (24/09/2026)</h4>\r
+      <p>Não é mais preciso puxar a tela para baixo para receber novidade. O app confere sozinho, ao abrir, ao voltar para a frente, quando o sinal volta e <b>de 3 em 3 minutos</b> (era 20, mudou em 25/09/2026), se há versão nova publicada; havendo, ele limpa o que está guardado e recarrega. <b>Se você estiver com um lançamento aberto, ele não interrompe</b>: aparece um aviso verde embaixo — <b>"Versão nova do app disponível · Atualizar agora"</b> — e você pode tocar nele na hora que quiser. Se não tocar, tudo bem: <b>assim que você fechar o lançamento o app se atualiza sozinho</b>, em até meio minuto. O número da versão fica no <b>Perfil</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🏠 Tela Início — por onde tudo começa</h4>\r
+      <p>Ao entrar, o app abre no <b>Início</b>. O <b>botão grande 🧾 do topo</b> — que desde 25/09/2026 mostra direto o que ele faz (<b>“Postar nota de C.V. e repasse”</b>, <b>“Lançar nota de RDM e RDA”</b>…, conforme o seu regime) — reúne tudo de despesas. Dentro dele a tela continua se chamando <b>Petermann – Despesas</b>. Lá dentro (22/09/2026) ficam <b>duas abas grandes</b> — é por elas que todo lançamento começa:</p>\r
+      <ul>\r
+        <li>🍽️ <b>RDA — Alimentação</b>: refeição, lanche, café, água.</li>\r
+        <li>💼 <b>RDM — Despesas corporativas</b>: abastecimento, hospedagem e outros gastos de serviço.</li>\r
+      </ul>\r
+      <p>Cada aba mostra, no cantinho, <b>quanto você já lançou nela no mês</b>. Toque na aba e ela <b>abre</b>, revelando as duas formas de lançar <b>dentro dela</b>: <b>📷 Nota pelo QR Code</b> e <b>📝 Nota sem QR</b>. Como a aba já está escolhida, o app não pergunta RDA/RDM de novo — vai direto para o comprovante (e, se o fornecedor parecer da outra aba, avisa ali com o botão <b>Trocar</b>). Tocar na aba aberta fecha de novo.</p>\r
+      <ul>\r
+        <li>💸 <b>Repasse</b> — saiu daqui em 23/09/2026: agora é um <b>painel próprio no Início</b>, ao lado de Petermann – Despesas. Aqui você registra o dinheiro que recebeu.</li>\r
+      </ul>\r
+      <p><b>💸 Como o Repasse funciona (07/10/2026):</b> toque em <b>Repasse</b> (ou <b>Recarga do cartão</b>) no Início e escolha: <b>Registrar recebido</b> — o dinheiro já caiu; você preenche data, valor e descrição, entra no saldo na hora e o <b>gestor recebe uma notificação</b> de que você registrou — ou <b>Solicitar</b>, para pedir ao gestor, que marca como pago. Escolha a aba <b>RDA</b> ou <b>RDM</b> (a recarga não pergunta). Errou num registro seu? Você corrige ou apaga. O gestor também lança repasse e recarga para qualquer colaborador pela <b>Equipe</b>.</p>\r
+      <ul>\r
+      </ul>\r
+      <p><b>📊 Resumo do mês (22/09/2026):</b> logo abaixo das abas ficam, lado a lado, o total de <b>RDA</b> e o de <b>RDM</b> no mês, com o número de notas de cada um. Embaixo, a linha que interessa: <b>quanto a empresa está devendo a você</b> — gastos menos repasses recebidos, acumulado (no regime C.V., são os repasses registrados menos os recebidos). Se aparecer "adiantado com você", é o contrário: você está com dinheiro da empresa para gastar. Toque no bloco para abrir <b>RDM/RDA e Planilhas</b>.</p>\r
+      <p><b>De onde vem esse valor (22/09/2026):</b> no regime de <b>dinheiro em conta</b>, RDA e RDM são contas separadas — então o valor a receber aparece <b>separado por aba</b>, em duas caixas (nada de número somado): cada uma diz se é <b>a receber</b> (laranja), <b>adiantado com você</b> (verde, você recebeu mais do que gastou) ou <b>em dia</b>; e, embaixo, <b>uma tabela para cada aba</b> com os valores por mês — o gasto, o que você recebeu e o que ficou faltando naquele mês, sem misturar as duas contas. Em <b>laranja</b>, mês em que a empresa ficou devendo; em <b>verde</b> com sinal de menos, mês em que você recebeu mais do que gastou (sobrou para o mês seguinte). Aparecem os 6 meses mais recentes com movimento; o restante do ano está em RDM/RDA e Planilhas.</p>\r
+      <p><b>Aviso do gestor (22/09/2026):</b> o app avisa quando o valor de <b>RDM</b> a receber passa de <b>R$ 1.500,00</b> — só RDM, porque é a despesa que a empresa adianta; RDA entra no resumo mas não dispara aviso. O aviso é <b>só para gestor e admin</b>: chega no <b>sino</b> (🔔 no alto, à direita) com o nome e o valor de cada colaborador acima do limite, e aparece como faixa laranja no hub do gestor — tocando nela abrem as notificações, com <b>👤 Ver colaborador</b> e <b>OK, vi</b>. Dispensado, o aviso volta se o valor crescer. O colaborador continua vendo os próprios números no resumo, sem cobrança do app.</p>\r
+      <p>…e, logo abaixo, os atalhos <b>Ir para</b>: <b>Minhas notas</b>, <b>Painel</b>, <b>RDM/RDA e Planilhas</b> (o antigo Saldo) e, para gestor/admin, <b>Equipe</b> e <b>Arquivos</b>. Essas cinco telas ficam <b>dentro</b> de Petermann – Despesas. O <b>Painel</b> tem no topo um atalho de volta para Petermann – Despesas.</p>\r
+      <p><b>Barra congelada (23/09/2026):</b> a saudação do Início tem, à direita, os botões <b>👤 Perfil</b> e <b>🚪 Sair</b>, e essa faixa <b>não sobe com a rolagem</b> — fica fixa no topo enquanto você desce a tela, então os dois estão sempre a um toque. Em telas estreitas os botões descem para a linha de baixo, dentro da mesma faixa.</p>\r
+      <p>Na saudação do Início aparecem a sua <b>foto</b> (toque para ampliar; sem foto, toque para ir ao Perfil e colocar uma) e o seu <b>papel</b> — Colaborador, Gestor, Administrador ou Contador.</p>\r
+      <p>Com a tela no topo, <b>arraste para baixo e solte</b> para atualizar: o app sincroniza com o servidor, recarrega os dados e procura versão nova.</p>\r
+      <p>O <b>Início</b> ficou enxuto (22/09/2026): o painel <b>Petermann – Despesas</b>, a fila <b>Ir para</b> com <b>Perfil</b> (e, para gestor/admin, <b>Frota / KM</b> e <b>Ponto</b>), e os <b>últimos lançamentos</b>. Para sair da conta, use o <b>🚪 Sair</b> da faixa congelada do topo (o botão grande do rodapé saiu em 23/09/2026, era o mesmo comando duas vezes). Os números do mês (notas e saldo) saíram daqui — eles estão no <b>Painel</b> e em <b>RDM/RDA e Planilhas</b>, dentro de Petermann – Despesas. Se houver <b>pendência</b> (nota sem anexo, sem valor, aguardando envio ou possível duplicata), aparece uma faixa de aviso no topo: toque nela para ver quais no Painel.</p>\r
+      <p>Para voltar (23/09/2026): o botão fixo de baixo leva para a <b>tela onde você estava antes</b> e mostra o nome dela — entrou no Painel vindo da <b>Equipe</b>? ele diz <b>‹ Equipe</b>. Tocando várias vezes você refaz o caminho de volta até o Início; no Início ele some. O <b>‹ Início</b> do topo e a <b>logomarca</b> levam direto ao Início de qualquer lugar.</p>\r
+      <p class="ajuda-note">Gestor e admin veem ainda os atalhos <b>Frota / KM</b> e <b>Ponto</b> na fila <b>Ir para</b> — o colaborador não.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>📷 Lançar pelo QR Code (passo a passo)</h4>\r
+      <ul>\r
+        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📷 Nota pelo QR Code</b>. Aponte a câmera para o QR do cupom; leu, o app avisa.</li>\r
+        <li><b>2.</b> A aba já é a que você abriu — o app pula essa pergunta. Se o fornecedor for conhecido e parecer da <i>outra</i> aba (posto costuma ser RDM · Abastecimento, restaurante RDA), aparece um aviso em laranja com o botão <b>Trocar</b>. A escolha é sempre sua (decisão da reunião de 21/09/2026).</li>\r
+        <li><b>3.</b> Toque em <b>Tirar foto</b>: a câmera abre dentro do próprio app; enquadre o cupom inteiro e toque no botão verde (ou use <b>Anexar arquivo</b>). Se a câmera do app não abrir, toque em <b>Usar a câmera do celular</b>. Pode fotografar com o celular em qualquer posição: o app <b>endireita a nota sozinho</b> (pelo QR Code ou pelo texto), e ela nunca fica de lado nem de cabeça para baixo. O anexo é obrigatório — sem ele a nota não salva.</li>\r
+        <li><b>4.</b> Enquadre o cupom no recorte e confirme. O app lê a foto e, em paralelo, busca o <b>valor oficial no site da SEFAZ</b>.</li>\r
+        <li><b>5.</b> A nota aparece preenchida: empresa, CNPJ, data e valor. Confira o <b>valor</b> e toque em <b>Salvar</b>. Tipo de documento, número e série o app tira da chave e grava sozinho, sem mostrar na tela.</li>\r
+      </ul>\r
+      <p>Não leu o QR? Na própria tela da câmera há <b>⌨️ Não leu? Digitar a chave</b> (os 44 dígitos do cupom ou da NF-e; a NFS-e, nota de serviço, tem 50). Abre uma janela do próprio app: digite ou cole a chave (pode ser com espaços) e toque em <b>Usar chave</b>. Se faltar algum dígito, a janela avisa sem fechar.</p>\r
+      <p><b>📐 Foto sempre em pé (23/09/2026):</b> o celular costuma gravar a foto deitada e anotar a rotação num campo escondido do arquivo. A tela mostrava certo, mas o PDF, o ZIP e a planilha saíam de lado ou de cabeça para baixo. Agora o app <b>endireita a foto na hora de anexar</b> — o recorte, a leitura e o arquivo guardado já saem na posição certa. As fotos antigas foram endireitadas de uma vez no servidor.</p>\r
+      <p class="ajuda-note">🌐 Quando aparece <b>"Valor conferido no SEFAZ"</b>, o valor veio do site oficial do estado — pode confiar. Sem essa marca, o valor veio da leitura da foto: confira.</p>\r
+      <p>Nem todo estado permite essa conferência automática: <b>BA e GO</b> funcionam; <b>MG, SC e TO</b> exigem "não sou robô" ou não respondem, então nesses o valor vem sempre da foto. Os demais são conferidos conforme aparecem os primeiros cupons.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>📝 Lançar sem QR (recibo, DANFE, NFS-e)</h4>\r
+      <ul>\r
+        <li><b>1.</b> Em <b>Petermann – Despesas</b>, toque na aba <b>RDA</b> ou <b>RDM</b> e, dentro dela, em <b>📝 Nota sem QR</b>.</li>\r
+        <li><b>2.</b> <b>Tirar foto</b> ou <b>Anexar arquivo</b> (imagem, PDF ou XML). Ou <b>Preencher primeiro, anexar depois</b>.</li>\r
+        <li><b>3.</b> O app lê o que der da foto (valor, data, CNPJ, número). Com <b>XML</b> preenche tudo. Confira e <b>Salvar</b>.</li>\r
+      </ul>\r
+      <p>Se o CNPJ for de um fornecedor conhecido, aparece uma <b>sugestão de aba/categoria</b> no topo do formulário — toque em <b>Aplicar</b> se concordar.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🧾 Campos da nota</h4>\r
+      <ul>\r
+        <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Outros). Define a aba da planilha e a pasta nos arquivos.</li>\r
+        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo). Com chave, o app escolhe sozinho.</li>\r
+        <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>\r
+        <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>\r
+      </ul>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🔁 Notas repetidas</h4>\r
+      <p>O app avisa quando parece que a nota <b>já foi lançada</b> — mesma chave, mesmo número no mesmo fornecedor, ou mesmo fornecedor no mesmo dia com o mesmo valor. O aviso aparece logo depois da leitura e de novo ao salvar. <b>Nada é apagado sozinho</b>: você decide.</p>\r
+      <p>No <b>Painel</b>, o item <b>🔁 Possíveis duplicatas</b> lista as suspeitas; o cartão da nota ganha a etiqueta <b>duplicada?</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🗑️ Lixeira</h4>\r
+      <p>Apagar uma nota abre uma janela do app (painel verde na parte de baixo da tela) que mostra o que será excluído e pede que você digite <b>EXCLUIR</b>; ela vai para a <b>Lixeira</b> (em Minhas notas → 🗑️), de onde dá para <b>Restaurar</b> ou <b>Apagar definitivo</b> (só o dono ou o admin; some do servidor com o anexo).</p>\r
+      <p><b>Vários de uma vez (05/10/2026):</b> na Lixeira, toque em <b>☑️ Selecionar</b>, marque os lançamentos (tocar no cartão marca; <b>marcar todas</b> pega a lista inteira) e escolha <b>♻️ Restaurar</b> ou <b>🗑 Apagar definitivo</b>. O app mostra a soma e pede confirmação; para apagar de vez é preciso digitar <b>EXCLUIR</b>, e quem não for o dono nem admin não apaga o que não é seu (esses ficam na lixeira). Os "só neste aparelho" não têm caixinha — continuam com o <b>Limpar daqui</b>.</p>\r
+      <ul>\r
+        <li>⚠️ <b>"Já existe uma nota igual ativa"</b> — a lixeira avisa quando restaurar criaria uma nota repetida; confirme só se tiver certeza.</li>\r
+        <li>📱 <b>"Só neste aparelho"</b> — é uma cópia antiga que já não existe no servidor (foi apagada em definitivo por outro aparelho). Não dá para restaurar; use <b>Limpar daqui</b>.</li>\r
+      </ul>\r
+      <p><b>Nada é apagado sozinho</b> pelo app nem pelo servidor.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🔗 Ver a nota no site da SEFAZ</h4>\r
+      <p>Notas lidas por QR mostram o botão <b>🔗</b> (na lista e no formulário) que abre o cupom no site oficial do estado. Nota de serviço (NFS-e) abre o link do próprio QR. Sem QR: cupom de <b>MG, GO, MT, PR, SP ou BA</b> abre a consulta de NFC-e da SEFAZ do estado com a chave já copiada (em GO ela já vem preenchida) — é só colar no campo e passar pelo "não sou robô". Nos outros casos abre o Portal Nacional com a chave preenchida. Para abrir o cupom direto, lance a nota pelo <b>QR</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>🧮 Faturamento</h4>\r
+      <p><b>Faturamento</b> é a soma de <b>todas as despesas</b> (RDM, RDA e C.V.) de um colaborador ou da equipe no período — aparece na <b>Equipe</b> (card geral e em cada cartão), na ficha de cada colaborador e no <b>Dashboard Equipe</b>.</p>\r
+      <p>Dentro dele, o que a <b>empresa paga direto</b> (sem passar pelo colaborador, lançado por <b>🏢 Lançar Faturamento</b>) aparece separado como <b>"Pago direto pela empresa"</b> — nunca entra no saldo de ninguém. Esse recorte tem um <b>relatório em PDF</b> próprio, com a lista das notas e quem lançou cada uma, para levar à contabilidade.</p>\r
+      <p><b>Sem colaborador específico (28/09/2026):</b> ao lançar Faturamento, o gestor/admin pode tocar em <b>"Sem colaborador específico"</b> em vez de escolher alguém — para despesas da empresa que não têm como apontar para uma pessoa. A nota aparece como <b>"Faturamento geral (sem colaborador)"</b> na Equipe, no Histórico e no relatório em PDF.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>🕓 Histórico</h4>\r
+      <p>Em <b>Início → Ir para → Histórico</b>: quem lançou, editou ou apagou cada <b>nota</b> e <b>repasse</b> de toda a equipe nos últimos 60 dias, e também quem <b>trocou o papel ou o regime</b> de alguém (🎭/🔁) — antes isso só ficava no log do servidor.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>📁 Arquivos no servidor (no lugar do Drive)</h4>\r
+      <p>Em <b>Início → Arquivos</b>, toque no colaborador e depois no mês: as notas aparecem em miniatura, agrupadas como na pasta modelo (<b>RDA ALIMENTAÇÃO</b>, <b>RDM · ABASTECIMENTO / HOSPEDAGENS / OUTROS</b>). Toque na miniatura para ver a foto inteira.</p>\r
+      <p class="ajuda-gestor"><b>Todos de uma vez (gestor, admin e contador):</b> na primeira tela de Arquivos, o quadro <b>Baixar de todos de uma vez</b> tem <b>Notas de todos (ZIP)</b> — uma pasta por colaborador, do ano inteiro ou de um mês à escolha — e <b>Planilhas de todos (ZIP)</b>, com a planilha de cada um no modelo do seu regime.</p>\r
+      <p><b>⬇️ Baixar ZIP</b> monta, na hora, a pasta do mês (ou do ano) já com os nomes do modelo — <i>Colaborador/Ano/RDM DESPESAS CORPORATIVAS/ABASTECIMENTO/09 set/2026-09-03 POSTO X R$120,00.jpg</i> — e a <b>Planilha CV</b> do ano dentro. Notas sem anexo entram numa lista <i>SEM ANEXO.txt</i>. Não depende do Google Drive.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>🚗 Frota / KM dos veículos</h4>\r
+      <p>Em <b>Início → Ir para → Frota / KM</b>, toque em <b>Registrar KM</b>: escolha o veículo, a data e digite o <b>odômetro</b> (o número do painel). Foto do painel é opcional. Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo e nos abastecimentos.</p>\r
+      <p>O app calcula o <b>km rodado no mês</b> por veículo pelas leituras. Se digitar um número menor que a última leitura, ele avisa. O <b>gestor</b> vê todos os veículos, quem dirigiu e cadastra os veículos (placa, modelo, responsável).</p>\r
+      <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O painel mostra os últimos dados baixados.</p>\r
+      <p>Na tela da Frota há o <b>dashboard</b> (km no mês/ano, evolução, km por veículo e por motorista) e os botões <b>📗 Planilha de controle (Excel)</b> — abas Veículos × mês, Motoristas × mês e todas as Leituras — e <b>CSV do mês</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>⏱️ Ponto de presença</h4>\r
+      <p>Em <b>Início → Ir para → Ponto</b>, um botão só: ele diz qual é a próxima marcação — <b>Entrada</b>, <b>Saída p/ intervalo</b>, <b>Volta</b>, <b>Saída</b>. A hora é a do servidor; sem internet a marcação fica guardada com a hora do aparelho e sobe depois (⏳).</p>\r
+      <p><b>Horas</b>: jornada de 8h (seg–sex) e 4h (sáb). O que passar conta como <b>extra 50%</b>; <b>domingos e feriados</b> contam inteiros como <b>extra 100%</b>. Esqueceu de bater? <b>Corrigir</b> vale para hoje e ontem; dias anteriores, o gestor corrige.</p>\r
+      <p>O <b>gestor</b> vê horas por colaborador, o calendário do mês, cadastra os <b>feriados</b> (＋ Feriado) e gera a <b>planilha de ponto</b> (Resumo, Espelho e Dias) ou o CSV.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>💳 Regime CV × RDM/RDA (reunião de 21/09/2026)</h4>\r
+      <p>Cada colaborador está em um <b>regime</b>, definido pelo gestor/admin em <b>Equipe → cartão → Editar → Regime de despesas</b>:</p>\r
+      <ul>\r
+        <li><b>💰 RDM/RDA</b> (padrão) — recebe dinheiro em conta para as despesas. Tudo como sempre: RDA/RDM, repasses, saldo. O relatório é a <b>Planilha de RDM e RDA</b> no <b>modelo oficial da empresa</b> (abas CABEÇALHO, BANCO DE DADOS, R.D.M. e R.D.A), preenchida pelo servidor com as notas do ano — o R.D.M. por categoria (Abastecimento, Hospedagens, Outros) e o R.D.A em duas colunas por mês; o BANCO DE DADOS recebe os repasses recebidos de RDM e de RDA. Sai em <b>Excel</b> (o modelo preenchido) e em <b>PDF</b> (A4 paisagem: capa, BANCO DE DADOS com extratos e quadro mês × trimestre, R.D.M. por categoria e R.D.A por mês — só os meses com lançamento). Continuam disponíveis o Excel anual resumido do app e o CSV.</li>\r
+        <li><b>💳 CV</b> — tem <b>cartão corporativo</b>. As notas RDA/RDM são pagas no cartão; ao lançar, o campo <b>Pagamento</b> pergunta <b>Cartão corporativo</b> ou <b>Do meu bolso</b>. Marcou "do bolso"? Quando o gestor repassar, <b>você registra o recebimento</b> pelo Início → <b>Repasse</b>; ele é avisado e o valor <b>abate</b> do que foi registrado.</li>\r
+      </ul>\r
+      <p>Para quem é CV, a tela <b>C.V. e Planilha</b> mostra o gasto no <b>cartão</b> no mês (por categoria), o que foi pago do bolso e os <b>repasses</b> (registrados, recebidos e a receber). O único relatório é a <b>Planilha de C.V.</b> no modelo da empresa: grade <b>RDM_RDA</b> = notas no cartão; grade <b>CV REEMBOLSO</b> = notas do bolso; <b>TOTAL PAGO</b> = repasses recebidos. O Início mostra "Repasse a receber" em vez de saldo.</p>\r
+      <p class="ajuda-gestor">Na Equipe, quem é CV tem o selo <b>💳 CV</b>. No cartão do colaborador, os botões de download seguem o regime: <b>Planilha CV</b> (Excel/PDF) para CV; <b>Planilha RDM/RDA</b> (Excel e PDF) e <b>Excel resumo</b> para os demais. <b>📗 Planilhas</b> (topo da Equipe) gera as planilhas de quem você marcar, <b>cada um no modelo do seu regime</b> — Excel único (aba RESUMO + abas de cada pessoa, ex.: <i>Cleiton_R.D.M.</i>, <i>Maria_RDM_RDA</i>) ou ZIP. A RDM/RDA leva uns 20 s por pessoa.</p>\r
+      <h4>🔔 Notificações e pedido de repasse pago</h4>\r
+      <p>O <b>🔔 sininho</b> no canto superior direito mostra o número de avisos; o mesmo número aparece no <b>ícone do app</b> no celular (Android direto; no iPhone só com o app instalado na tela inicial e notificações permitidas).</p>\r
+      <p class="ajuda-gestor"><b>Gestor/admin:</b> cada <b>pedido de repasse</b> pendente da equipe vira um aviso, com quem pediu, valor, data e justificativa. <b>✅ Marcar como pago</b> confirma que o dinheiro foi enviado e o pedido sai das pendências. <b>👤 Ver colaborador</b> abre o cartão dele.</p>\r
+      <p><b>💰 O repasse vale na hora (23/09/2026):</b> marcar o pedido como pago <b>já joga o valor no saldo</b> da pessoa, nos gráficos e nas planilhas — ninguém precisa confirmar nada. O mesmo vale para o repasse que o gestor lança pela <b>Equipe → 💰 Lançar repasse</b> e para o que o próprio colaborador registra. Se o dinheiro não chegou, quem desfaz o lançamento é o gestor, pela lixeira do repasse em <b>RDM/RDA e Planilhas</b>.</p>\r
+      <p class="ajuda-gestor"><b>💰 Lançar repasse direto (23/09/2026):</b> em <b>Equipe → o colaborador → 💰 Lançar repasse</b>, o gestor registra um repasse que já pagou. Esse <b>entra no saldo da pessoa na hora</b>, sem a etapa de confirmação — é para o dinheiro que já foi entregue, sem pedido no meio. O formulário avisa para quem está lançando, e a descrição sai como "Repasse lançado por (nome do gestor)".</p>\r
+      <p class="ajuda-gestor"><b>🔀 Corrigir RDA/RDM (23/09/2026):</b> lançou no grupo errado? Em <b>Equipe → o colaborador → 🧾 Notas</b>, o cartão da nota tem o botão <b>🔀</b> (só gestor/admin, e só em nota de outra pessoa). Ele abre os quatro grupos — <b>RDA</b>, <b>RDM · Abastecimento</b>, <b>RDM · Hospedagem</b> e <b>RDM · Outros</b> — com o atual marcado. Trocar muda <b>só o grupo</b>: valor, empresa, data e anexo continuam iguais, e a correção aparece no aparelho do colaborador no próximo sync. O anexo que já subiu para o Drive só troca de pasta quando alguém usar <b>🗂️ Reorganizar pastas no padrão</b>. A sua própria nota você corrige pelo <b>✏️</b> de sempre.</p>\r
+      <p><b>Colaborador:</b> quando o gestor marca o seu pedido como pago, o repasse <b>já entra no seu saldo</b> — você não precisa confirmar nada. Chega o aviso "Seu pedido de R$ … foi pago ✅", que você limpa com <b>OK, vi</b>. Se o dinheiro não chegou, fale com o gestor: quem desfaz o lançamento é ele.</p>\r
+      <h4>☁️ Envio para o servidor</h4>\r
+      <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>. Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b> e a cada <b>60 segundos</b>. A foto sobe antes da nota.</p>\r
+      <p>Indicador no topo:</p>\r
+      <ul>\r
+        <li><span class="ajuda-dot" style="background:#74C69D"></span> <b>online</b> — conectado</li>\r
+        <li><span class="ajuda-dot" style="background:#FFB703"></span> <b>sincronizando</b> — enviando</li>\r
+        <li><span class="ajuda-dot" style="background:#E63946"></span> <b>offline</b> — guardado no celular</li>\r
+        <li>⏳ na nota — ainda não enviada (vai sozinho quando voltar a internet)</li>\r
+        <li><b>⚠️ falhou ›</b> na nota — o envio não conseguiu terminar. <b>Toque nele</b>: o app diz o motivo (por exemplo, <b>anexo vazio</b>, quando o celular entrega o arquivo com 0 KB porque ele está só no iCloud ou no WhatsApp) e o que fazer. A nota fica guardada no celular; não saia da conta nem limpe os dados até ela subir. Se trocar de conta no mesmo celular, a nota de uma conta só sobe quando ela entrar de novo.</li>\r
+      </ul>\r
+      <p>As fotos ficam no <b>servidor da empresa</b>; o gestor as vê e baixa em <b>Início → Arquivos</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>📱 Instalar no celular</h4>\r
+      <p>Endereço do app: <b>app.pmservicosagronomicos.com.br/rda-rdm-app</b>.</p>\r
+      <p><b>Android (Chrome):</b> menu (⋮) → <b>Adicionar à tela inicial</b>. Nas versões novas do Chrome essa opção mudou de lugar: se não estiver no menu, toque em <b>Compartilhar…</b> e <b>arraste para a esquerda</b> a fileira de ícones de baixo — ela costuma estar escondida ali.</p>\r
+      <p><b>iPhone (Safari):</b> Compartilhar → <b>Adicionar à Tela de Início</b>. Pelo Chrome no iPhone a opção não existe; tem que ser o Safari.</p>\r
+      <p>Instalado, vira um app normal e funciona até <b>sem internet</b>. Ao usar a câmera, toque em <b>Permitir</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🔄 Atualizar o aplicativo</h4>\r
+      <p>O app se atualiza sozinho: <b>não existe nada para baixar</b> e ele nunca aparece na loja de aplicativos. A versão nova chega quando a tela é recarregada.</p>\r
+      <p><b>Pelo navegador:</b> puxe a página para baixo para recarregar. <b>Instalado:</b> feche o app por completo (tire da lista de apps abertos) e abra de novo.</p>\r
+      <p>Para conferir qual versão está no seu aparelho, olhe embaixo do botão <b>Entrar</b>, na tela de login — o número aparece ali. <b>Continua na versão antiga?</b> Espere uns 10 minutos e recarregue.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>🔑 Entrar e perfil</h4>\r
+      <p>Entre com <b>e-mail e senha</b> ou com o botão <b>Google</b>. Para criar conta: <b>Cadastrar</b>, e-mail e senha (mín. 6 caracteres).</p>\r
+      <p>Em <b>Perfil</b>, informe seu <b>Nome</b> e <b>Núcleo</b> e salve. O nome dá nome à <b>sua pasta</b> no ZIP dos arquivos e ao cabeçalho da planilha — preencha com o nome completo.</p>\r
+      <p><b>Esqueceu a senha?</b> Na tela de login toque em <b>Esqueci minha senha</b>, informe o e-mail e abra o link que chegar (confira o spam). O link vale <b>1 hora e um uso só</b>.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>👥 Papéis da equipe</h4>\r
+      <ul>\r
+        <li><b>Colaborador:</b> vê só as próprias notas.</li>\r
+        <li><b>Gestor:</b> o <b>cargo maior</b>. Vê a equipe e baixa os relatórios de todos em <b>Equipe / Baixar relatórios</b>; em <b>Minhas notas</b>, Painel, RDM/RDA e Planilhas e Início aparecem só as notas dele. Em <b>Equipe → Editar</b> muda o <b>nome, o papel e o regime de qualquer pessoa</b> — inclusive tirar ou dar o papel de administrador. <b>Convida</b> por link (até outro gestor) e tem no Perfil as <b>ferramentas de servidor</b>: armazenamento, backup, cópia no Google Drive e atualizar estrutura do banco.</li>\r
+        <li><b>Admin:</b> o papel <b>técnico</b>, de quem mantém o app. Faz o mesmo que o gestor e ainda <b>apaga lançamento em definitivo</b>. Quem dá e quem tira esse papel é o gestor, em Equipe → Editar (o app pede confirmação nos dois sentidos). Ninguém muda o próprio papel — sempre outra pessoa faz.</li>\r
+        <li><b>Contador</b> (novo, 21/09/2026): <b>só vê e baixa</b> — Equipe / Baixar relatórios, cartões dos colaboradores, Arquivos, Excel/PDF/Planilha CV. Não lança nota nem repasse, não edita, não exclui. O Início dele mostra só Equipe e Arquivos.</li>\r
+      </ul>\r
+      <p class="ajuda-gestor"><b>✉️ Convidar por link</b> (Equipe): gestor/admin escolhe o papel (Contador, Colaborador; só o admin convida Gestor), gera o link e manda pelo <b>WhatsApp</b> ou copia. Quem abre o link vê "Aceitar convite" e cria a conta <b>já com aquele papel</b>. Cada link serve para <b>uma</b> pessoa e vale <b>7 dias</b>; a lista "Convites recentes" mostra quem usou e quem ainda não.</p>\r
+      <p class="ajuda-gestor"><b>🙋 Liberar cadastro novo (22/09/2026):</b> ninguém entra sozinho. Quem cria conta — pelo cadastro do app, pelo link de convite ou entrando com o Google — fica na tela <b>"Aguardando liberação"</b> e não lança nada até um gestor ou admin confirmar. Você é avisado de três formas: a notificação <b>🙋 no sino</b> (com <b>✅ Confirmar entrada</b> e <b>🚫 Recusar</b>), a etiqueta laranja <b>aguardando liberação</b> no cartão da pessoa na <b>Equipe</b>, e um <b>e-mail</b> para o caso de você não abrir o app. Confirmando, o app dela libera na hora (ela pode tocar em "Já fui liberado, conferir"); recusando, a conta é desativada na mesma hora — e dá para reativar depois pela Equipe. Fica registrado no cadastro <b>quem confirmou e quando</b>, e por qual caminho a pessoa entrou.</p>\r
+\r
+      <p>O admin promove os demais em <b>Equipe → ✏️ → escolher Papel/Núcleo → Salvar</b>.</p>\r
+      <p class="ajuda-gestor">No topo da <b>Equipe</b>, os três botões abrem primeiro a <b>lista de colaboradores</b> para você <b>marcar quem entra</b> (no <b>Excel</b> e no <b>PDF</b>, quem não lançou nada no mês e não tem saldo de meses anteriores começa desmarcado; em <b>Planilhas</b>, quem não lançou nada no ano; há "marcar/desmarcar todos"). <b>📗 Excel</b> exporta o resumo do mês só dos marcados, <b>📕 PDF</b> gera o <b>Relatório da Equipe</b> (resumo do mês, quadro por colaborador com gasto RDM/RDA, <b>saldo anterior</b>, recebido, <b>saldo acumulado</b> e pendências, e as notas e repasses de cada um) só dos marcados, e <b>📗 Planilhas</b> gera as planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um) de duas formas: <b>Excel único</b> — um só arquivo que abre na aba <b>RESUMO</b> (somatório de todo mundo: por colaborador, por mês e colaborador × mês, com total geral) seguida das abas de cada pessoa com o nome na frente (<i>Ana_RDM_RDA</i>, <i>Ana_BANCO DE DADOS</i>…) — ou <b>ZIP separado</b>, um arquivo completo por pessoa mais o <i>Resumo_Geral</i>. Leva uns 5 s por colaborador.</p>\r
+      <p class="ajuda-gestor">A tela <b>Equipe / Baixar relatórios</b> não mostra mais os quadros Gasto no mês, Recebido, Saldo e Notas (decisão de 21/09/2026: isso já está no Painel, em RDM/RDA e Planilhas e no cartão de cada pessoa). Ficam o gráfico de <b>evolução do gasto</b> da equipe, os botões de relatório e a lista. <b>Em cada cartão o saldo é sempre o acumulado (01/10/2026):</b> o número grande já soma o que sobrou ou faltou dos <b>meses anteriores</b> (linha <b>Anterior</b>) + o recebido − o gasto do mês, para RDM e RDA separados. Pedido de repasse ainda não pago e <b>recarga do cartão</b> (CV) não entram como recebido, e o que a empresa paga direto (Faturamento) não entra como gasto. O mesmo vale no <b>Excel</b> (colunas Anterior e Saldo Acum.), no <b>PDF da equipe</b> e no <b>Excel resumo</b> do colaborador, cujo mês de janeiro parte do saldo de dezembro do ano anterior. Quem só carrega saldo de meses anteriores também aparece nos relatórios do mês. Há uma <b>🔍 busca por nome ou e-mail</b> acima da lista. Tocar no cartão abre o <b>detalhe do colaborador</b>: foto, atalhos grandes (Planilha CV Excel/PDF, Arquivos, Editar), gasto/recebido/saldo/pendências do mês, RDM por categoria, gasto no ano e as notas e repasses do mês.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>🚫 Colaborador que saiu da empresa</h4>\r
+      <p>Em <b>Equipe → ✏️</b> no cartão da pessoa (gestor ou admin):</p>\r
+      <ul>\r
+        <li><b>Desativar colaborador</b> — a pessoa não entra mais no app e sai das listas; as notas e o histórico dela continuam no sistema. Os desativados ficam na seção <b>🚫 Desativados</b>, no fim da Equipe, de onde dá para <b>Reativar</b>.</li>\r
+        <li><b>Excluir de vez (limpeza do banco)</b> — apaga o colaborador e <b>tudo</b> dele (notas, anexos, repasses, KM, ponto). Não tem volta, e <b>só o gestor</b> vê esta opção (o administrador não). O app mostra o nome e o e-mail da pessoa e só apaga depois que você <b>digita EXCLUIR</b> (sem a palavra, nada acontece); a exclusão é na hora.</li>\r
+      </ul>\r
+      <p>Ninguém desativa nem exclui a si mesmo.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec ajuda-gestor">\r
+      <h4>🗄️ Backup e avisos (gestor e admin)</h4>\r
+      <p>Em <b>Perfil → 🗄️ Backup</b>: o servidor gera sozinho, <b>todo domingo de madrugada</b>, um ZIP com o banco e todas as fotos (fica a lista dos últimos 8). Toque num deles para baixar, ou em <b>Baixar backup completo</b> para gerar na hora. Guarde uma cópia por mês fora do servidor. Se o backup mais novo tiver mais de 8 dias, a tela avisa. A rotação guarda as <b>12 cópias semanais</b> mais novas e a <b>primeira de cada mês</b> dos últimos 12 meses.</p>\r
+      <p><b>☁️ Cópia no Google Drive:</b> na mesma seção, toque em <b>Conectar Google Drive ao backup</b> uma vez (o Google pede permissão só para arquivos que o app criar). A partir daí o backup semanal sobe sozinho para a pasta <b>Backups Petermann App</b> do seu Drive, com a mesma rotação — se a Locaweb perder o disco, a cópia está lá. <b>Enviar agora</b> testa a conexão com o backup mais novo; se a autorização expirar, chega e-mail e basta conectar de novo.</p>\r
+      <p>Qualquer erro do servidor (ou backup que falhar) chega por <b>e-mail</b> ao endereço configurado no servidor; e um monitor externo avisa se o site sair do ar. Só existe <b>uma</b> conta de Drive ligada ao backup: se outra pessoa conectar a dela, substitui a anterior — a tela mostra sempre qual conta está valendo.</p>\r
+      <h4>🧪 Ambiente de teste (homologação)</h4>\r
+      <p>Toda novidade entra primeiro em <b>teste.pmservicosagronomicos.com.br</b> — uma cópia do app com banco e fotos próprios, faixa laranja no topo e ícone "PM TESTE". Lance, apague, teste à vontade: <b>nada dali vale para a empresa</b> nem chega à produção. Entre lá com o mesmo e-mail e senha (o login pelo Google só funciona na produção). Quando o teste passa, a mesma versão vai para o app oficial.</p>\r
+      <h4>💾 Armazenamento do servidor (gestor e admin)</h4>\r
+      <p>Em <b>Perfil → 💾 Armazenamento do servidor</b> você vê quanto o app ocupa na Locaweb, separado em fotos, backups, banco, miniaturas e logs; a porcentagem de um <b>teto de alerta</b> (o plano da Locaweb é ilimitado em disco; o teto, 20 GB, serve para pegar crescimento anormal); o <b>crescimento por mês</b> e uma estimativa de quando o espaço acaba; e a idade do último backup. Verde = tudo bem, laranja = atenção (acima de 80 % ou backup com mais de 8 dias), vermelho = crítico (acima de 90 %).</p>\r
+      <p>Você não precisa abrir para vigiar: o servidor mede sozinho <b>todo dia às 04:10</b> e manda <b>e-mail</b> quando passar dos limites, quando o backup atrasar ou quando, no ritmo atual, o espaço for acabar em menos de 60 dias. Para liberar espaço: guarde menos cópias de backup ou peça mais espaço no painel da Locaweb.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>📊 Planilha de C.V. e pastas</h4>\r
+      <p>Na aba <b>RDM/RDA e Planilhas</b>, o quadro <b>⬇️ Baixar relatório</b> reúne tudo: <b>Excel anual</b> e <b>CSV do mês</b> (RDM/RDA) e a <b>Planilha de C.V.</b>. Os botões <b>Planilha de C.V.</b> (Excel ou PDF) geram a sua planilha do ano no <b>modelo padrão da empresa</b>, preenchida pelo servidor com as notas e repasses lançados — abas CABEÇALHO, BANCO DE DADOS, RDM_RDA e CV REEMBOLSO. O PDF sai em A4 paisagem, um mês por bloco. O gestor gera a de qualquer colaborador em <b>Equipe → cartão do colaborador</b>.</p>\r
+      <p>No ZIP de <b>Início → Arquivos</b>, as <b>fotos</b> vêm na árvore oficial:</p>\r
+      <ul>\r
+        <li><b>RDM</b> → Seu nome / Ano / <b>RDM DESPESAS CORPORATIVAS</b> / categoria / mês</li>\r
+        <li><b>RDA</b> → Seu nome / Ano / <b>RDA ALIMENTAÇÃO</b> / mês</li>\r
+      </ul>\r
+      <p>A categoria do RDM vem do campo <b>Categoria</b> da nota — por isso vale conferir na hora de lançar, senão a foto vai parar em <b>OUTROS</b>. O Google Drive não é mais usado.</p>\r
+    </div>\r
+\r
+    <div class="ajuda-sec">\r
+      <h4>💡 Dicas</h4>\r
+      <ul>\r
+        <li>Sempre que o cupom tiver <b>QR</b>, use o QR — é mais rápido e o valor vem do SEFAZ.</li>\r
+        <li>Foto boa: luz, cupom reto e inteiro no recorte.</li>\r
+        <li>Confira o <b>valor</b> antes de salvar quando não houver a marca do SEFAZ.</li>\r
+        <li>Lançou offline? Confirme depois que o <b>⏳</b> sumiu.</li>\r
+        <li>Use as setas <b>‹ ›</b> para trocar de mês. Ao ir para outro ano, o app baixa as notas daquele ano na hora (precisa de internet na primeira vez).</li>\r
+        <li>Fotos entram no servidor já reduzidas (~400 KB); o cupom continua legível.</li>\r
+      </ul>\r
+    </div>\r
+\r
 `,Gn=Tn(`<div class="full-overlay" style="display:flex"><div class="form-hdr"><button class="btn-voltar" aria-label="Voltar">‹ Voltar</button> <h3>Como usar o app</h3></div> <div></div></div>`),Kn={hash:`svelte-1n46o8q`,code:`
   /* Antes: app.js fazia
        document.querySelectorAll('.ajuda-gestor').forEach(e => e.style.display = ...)

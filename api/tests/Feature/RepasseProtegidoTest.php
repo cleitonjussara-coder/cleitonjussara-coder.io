@@ -54,6 +54,27 @@ class RepasseProtegidoTest extends TestCase
         return Repasse::findOrFail($id);
     }
 
+    public function test_colaborador_registra_o_proprio_recebimento_e_corrige_depois(): void
+    {
+        $this->pessoa('gestor');
+        $colab = $this->pessoa('colaborador');
+        $id = (string) \Illuminate\Support\Str::uuid();
+        $hoje = now('America/Sao_Paulo');
+        Sanctum::actingAs($colab);
+        $corpo = [
+            'user_id' => $colab->id, 'tipo' => 'RDM', 'valor' => 300, 'data' => $hoje->format('Y-m-d'),
+            'mes' => (int) $hoje->format('n'), 'ano' => (int) $hoje->format('Y'),
+            'kind' => 'received', 'destino' => 'recarga', 'deleted' => false,
+        ];
+        $this->putJson("/api/repasses/$id", $corpo)->assertOk()->assertJsonPath('kind', 'received');
+        $rep = Repasse::findOrFail($id);
+        $this->assertNotNull($rep->confirmado_em);
+
+        $this->putJson("/api/repasses/$id", array_replace($corpo, ['valor' => 350]))->assertOk();
+        $this->putJson("/api/repasses/$id", array_replace($corpo, ['deleted' => true]))->assertOk();
+        $this->assertTrue((bool) $rep->fresh()->deleted);
+    }
+
     public function test_colaborador_nao_apaga_recarga_lancada_pelo_gestor(): void
     {
         $gestor = $this->pessoa('gestor');
