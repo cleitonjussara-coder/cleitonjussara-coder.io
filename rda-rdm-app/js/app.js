@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 361;
+const APP_BUILD = 362;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -927,8 +927,8 @@ function _itensMenu() {
     itens.push({ view:'dashequipe', ico:'📈', lbl:'Dashboard Equipe', sub:'gastos de todos, com filtros' });
     itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
   }
+  if (_veFrota()) itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
-    itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
     itens.push({ view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
   }
   itens.push({ view:'perfil', ico:'👤', lbl:'Perfil', sub:'conta, backup, ajuda' });
@@ -1132,6 +1132,8 @@ function _ehGestorOuAdmin() {
 function _ehContabilidade() { return user?.role === 'contabilidade'; }
 /* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
 function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
+/* Frota/KM: gestor/admin sempre; colaborador só se for do regime CV (09/10/2026). */
+function _veFrota() { return MODULOS_EXTRAS && (_ehGestorOuAdmin() || _ehCV()); }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
    separado de propósito: é por ele que passam saldo do cartão, repasse e
    resumo por categoria, que são do cartão e não do nome do regime. */
@@ -2584,7 +2586,7 @@ function switchView(v, voltando = false) {
   if (v==='home')    renderHome();
   else if (v==='inicio') renderInicio();
   else if (v==='despesas') { _pagamentoCV = null; _abaDespesa = null; renderDespesas(); }
-  else if (v==='frota')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Frota?.render(); else switchView('inicio'); }
+  else if (v==='frota')  { if (_veFrota()) window.Frota?.render(); else switchView('inicio'); }
   else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
   else if (v==='arquivos') _montarArquivos();
   else if (v==='notas')  renderNotas();
