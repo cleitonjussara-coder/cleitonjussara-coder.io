@@ -243,9 +243,88 @@ window.OCR = (() => {
     return ((data?.confidence || 0) / 100) * String(data?.text || '').replace(/[^0-9A-Za-zÀ-ÿ]/g, '').length;
   }
 
+  /* ── Odômetro (09/10/2026) ─────────────────────────────────
+     Recebe o recorte só do número do painel. Painel de carro tem dígito de
+     LCD claro sobre fundo escuro (ou o contrário), então o recorte vai ao
+     Tesseract em quatro versões — tons de cinza esticados, binarizada, e as
+     duas invertidas — só com dígitos permitidos e uma linha de texto. O
+     resultado é sempre SUGESTÃO: quem chama preenche o campo e pede conferência.
+     `ref` = última leitura do veículo, para escolher entre candidatos. */
+  async function _variantesOdometro(blob) {
+    const img = await new Promise((res, rej) => {
+      const i = new Image(), url = URL.createObjectURL(blob);
+      i.onload = () => { URL.revokeObjectURL(url); res(i); };
+      i.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Falha ao carregar imagem')); };
+      i.src = url;
+    });
+    const W = 900, k = Math.min(4, W / img.width), w = Math.round(img.width * k), h = Math.round(img.height * k);
+    const borda = Math.round(h * 0.25);
+    const c = document.createElement('canvas');
+    c.width = w + 2 * borda; c.height = h + 2 * borda;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, borda, borda, w, h);
+    const id = ctx.getImageData(borda, borda, w, h);
+    const d = id.data, n = w * h;
+    const g = new Uint8Array(n), hist = new Uint32Array(256);
+    for (let p = 0, i = 0; p < n; p++, i += 4) { g[p] = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) | 0; hist[g[p]]++; }
+    const pct = q => { let a = 0; for (let v = 0; v < 256; v++) { a += hist[v]; if (a >= n * q) return v; } return 255; };
+    const lo = pct(0.02), hi = Math.max(lo + 1, pct(0.98)), meio = (lo + hi) / 2;
+    const gerar = (binario, inverso) => {
+      const o = ctx.createImageData(w, h), od = o.data;
+      for (let p = 0, i = 0; p < n; p++, i += 4) {
+        let v = Math.min(255, Math.max(0, (g[p] - lo) * 255 / (hi - lo)));
+        if (binario) v = g[p] > meio ? 255 : 0;
+        if (inverso) v = 255 - v;
+        od[i] = od[i+1] = od[i+2] = v; od[i+3] = 255;
+      }
+      const cv = document.createElement('canvas');
+      cv.width = w + 2 * borda; cv.height = h + 2 * borda;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = inverso ? '#000' : '#fff'; cx.fillRect(0, 0, cv.width, cv.height);   // margem clara em volta (dígito escuro), como o Tesseract prefere
+      cx.putImageData(o, borda, borda);
+      return new Promise(res => cv.toBlob(res, 'image/png'));
+    };
+    return Promise.all([gerar(false, false), gerar(false, true), gerar(true, false), gerar(true, true)]);
+  }
+
+  async function lerOdometro(blob, ref) {
+    await init();
+    const variantes = await _variantesOdometro(blob);
+    const votos = new Map();                       // valor → { n, conf }
+    try {
+      await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE });
+      for (const v of variantes) {
+        if (!v) continue;
+        const { data } = await worker.recognize(v);
+        const conf = data?.confidence || 0;
+        const achados = new Set();
+        for (const linha of String(data?.text || '').split(/\r?\n/)) {
+          const junto = linha.replace(/\D/g, '');                       // "0 8 5 4 2 0" → "085420"
+          if (junto.length >= 3 && junto.length <= 7) achados.add(junto);
+          for (const m of linha.matchAll(/\d{3,7}/g)) achados.add(m[0]);
+        }
+        for (const t of achados) {
+          const num = parseInt(t, 10);
+          const x = votos.get(num) || { n: 0, conf: 0 };
+          x.n++; x.conf = Math.max(x.conf, conf);
+          votos.set(num, x);
+        }
+      }
+    } finally {
+      try { await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK }); } catch (_) {}   // devolve o leitor ao modo das notas
+    }
+    let lista = [...votos.entries()].map(([valor, x]) => ({ valor, n: x.n, conf: x.conf }));
+    if (!lista.length) return { valor: null, candidatos: [] };
+    /* com a última leitura do veículo, o plausível (igual ou até 5.000 km acima) ganha */
+    const plaus = Number.isFinite(ref) ? lista.filter(c => c.valor >= ref && c.valor - ref <= 5000) : [];
+    const base = plaus.length ? plaus : lista;
+    base.sort((a, b) => b.n - a.n || b.conf - a.conf || String(b.valor).length - String(a.valor).length);
+    return { valor: base[0].valor, candidatos: lista.map(c => c.valor), plausivel: plaus.length > 0 || !Number.isFinite(ref) };
+  }
+
   async function terminate() {
     if (worker) { await worker.terminate(); worker = null; ready = false; }
   }
 
-  return { init, processar, parseFiscalText, pontuarLeitura, terminate };
+  return { init, processar, parseFiscalText, pontuarLeitura, lerOdometro, terminate };
 })();

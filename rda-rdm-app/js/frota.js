@@ -305,7 +305,7 @@ window.Frota = (() => {
     const ativos = veiculos.filter(v => v.ativo !== false);
     if (!ativos.length) { toast('Nenhum veículo cadastrado — peça ao gestor', 'err'); return; }
     const r = id ? registros.find(x => x.id === id) : null;
-    _fotoKm = null;
+    _fotoKm = null; _odoLido = null; _avisoOdo('');
     $('km-id').value = r?.id || '';
     const sel = $('km-veiculo');
     sel.innerHTML = ativos.map(v => `<option value="${v.id}">${esc(v.placa)}${v.modelo ? ' · ' + esc(v.modelo) : ''}</option>`).join('');
@@ -323,18 +323,66 @@ window.Frota = (() => {
   }
   function fecharForm() { $('km-overlay').style.display = 'none'; }
 
-  function _mostrarUltimaLeitura() {
+  function _ultimaLeitura() {
     const vid = $('km-veiculo').value;
     const ult = registros.filter(r => r.veiculo_id === vid && r.id !== $('km-id').value).sort((a, b) => b.data.localeCompare(a.data) || b.odometro - a.odometro)[0];
     const res = resumo?.veiculos?.find(v => v.veiculo_id === vid);
-    const odo = ult?.odometro ?? res?.ultimo_odometro;
-    const dt = ult?.data ?? res?.ultima_data;
+    return { odo: ult?.odometro ?? res?.ultimo_odometro ?? null, dt: ult?.data ?? res?.ultima_data ?? null };
+  }
+
+  function _mostrarUltimaLeitura() {
+    const { odo, dt } = _ultimaLeitura();
     $('km-ultima').textContent = odo != null ? `Última leitura: ${kmFmt(odo)} km em ${fmtData(dt)}` : 'Primeira leitura deste veículo';
   }
 
-  function onFoto(e) {
+  /* ── Leitura do odômetro pela foto (09/10/2026) ────────────
+     Tirou a foto → enquadra o número → o app lê e SUGERE o valor no campo.
+     Nunca salva sozinho: o aviso pede conferência, e leitura menor que a
+     última (ou salto grande) é sinalizada. Qualquer falha deixa o campo como
+     está — digitar continua funcionando como sempre. */
+  const SALTO_SUSPEITO = 2000;        // km acima da última leitura que pedem confirmação
+  let _odoLido = null;                // valor que o app leu da foto (para saber se o campo ainda é ele)
+
+  function _avisoOdo(texto, tom) {
+    const el = $('km-odo-aviso'); if (!el) return;
+    el.textContent = texto || '';
+    el.style.color = tom === 'warn' ? 'var(--danger, #b45309)' : tom === 'ok' ? 'var(--primary)' : 'var(--text2)';
+    el.style.display = texto ? '' : 'none';
+  }
+
+  async function onFoto(e) {
     _fotoKm = e.target.files?.[0] || null;
     $('km-foto-nome').textContent = _fotoKm ? `📷 ${_fotoKm.name || 'foto do odômetro'} pronta para enviar` : '';
+    _odoLido = null; _avisoOdo('');
+    if (!_fotoKm || !window.Recorte || !window.OCR) return;
+    let foto = _fotoKm;
+    try { if (typeof _normalizarOrientacao === 'function') foto = await _normalizarOrientacao(foto); } catch (_) {}
+    const ov = $('crop-overlay');
+    const tit = ov?.querySelector('.crop-tit'), usar = $('crop-usar'), inteira = $('crop-inteira');
+    const antes = [tit?.textContent, usar?.textContent, inteira?.textContent];
+    if (tit) tit.textContent = 'Enquadre o odômetro';
+    if (usar) usar.textContent = 'Ler número';
+    if (inteira) inteira.textContent = 'Pular leitura';
+    let recorte = null;
+    try { recorte = await Recorte.abrir(foto, { odometro: true }); } catch (_) { recorte = null; }
+    if (tit) tit.textContent = antes[0];
+    if (usar) usar.textContent = antes[1];
+    if (inteira) inteira.textContent = antes[2];
+    if (!recorte) return;                                   // "Pular leitura": fica só a foto anexada
+    _avisoOdo('Lendo o número da foto…');
+    try {
+      const { odo: ref } = _ultimaLeitura();
+      const r = await OCR.lerOdometro(recorte, ref);
+      if (r.valor == null) { _avisoOdo('Não consegui ler o número. Digite o odômetro.', 'warn'); return; }
+      const campo = $('km-odometro'), atual = campo.value.trim();
+      if (atual && atual !== String(_odoLido)) { _avisoOdo(`A foto parece indicar ${kmFmt(r.valor)} km, mas o campo já tem um valor — confira.`, 'warn'); return; }
+      campo.value = r.valor; _odoLido = r.valor;
+      if (ref != null && r.valor < ref) _avisoOdo(`Li ${kmFmt(r.valor)} km, menor que a última leitura (${kmFmt(ref)} km). Pode ser o parcial — confira ou enquadre de novo.`, 'warn');
+      else if (ref != null && r.valor - ref > SALTO_SUSPEITO) _avisoOdo(`Li ${kmFmt(r.valor)} km, ${kmFmt(r.valor - ref)} km acima da última leitura. Confira o número.`, 'warn');
+      else _avisoOdo('Lido da foto. Confira o número.', 'ok');
+    } catch (_) {
+      _avisoOdo('Não consegui ler o número (sem internet na primeira vez?). Digite o odômetro.', 'warn');
+    }
   }
 
   async function salvar() {
@@ -346,6 +394,12 @@ window.Frota = (() => {
       observacao: $('km-obs').value.trim() || null,
     };
     if (!payload.veiculo_id || !payload.data || !Number.isFinite(payload.odometro)) { toast('Veículo, data e odômetro são obrigatórios', 'err'); return; }
+    /* número lido da foto com salto grande sobre a última leitura: confirma antes de gravar */
+    if (_odoLido != null && payload.odometro === _odoLido) {
+      const { odo: ref } = _ultimaLeitura();
+      if (ref != null && payload.odometro - ref > SALTO_SUSPEITO
+          && !(await pedirConfirmacao({ mensagem: `O odômetro lido da foto (${kmFmt(payload.odometro)} km) está ${kmFmt(payload.odometro - ref)} km acima da última leitura (${kmFmt(ref)} km). Está certo?`, confirmar: 'Está certo, salvar' }))) return;
+    }
 
     let foto = null;
     if (_fotoKm) {

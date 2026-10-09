@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=362">
+  <link rel="manifest" href="manifest.json?v=363">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1851,7 +1851,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=362" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=363" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2352,10 +2352,11 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <input class="inp" id="km-obs" type="text" autocapitalize="sentences" placeholder="Ex.: saída para Cristalina, abastecimento…">
     </div>
     <div class="field">
-      <label class="lbl">Foto do painel (opcional)</label>
+      <label class="lbl">Foto do painel (opcional — o app lê o número)</label>
       <input type="file" id="km-foto" accept="image/*" capture="environment" style="display:none" onchange="Frota.onFoto(event)">
       <button type="button" class="btn btn-outline btn-full" onclick="$('km-foto').click()">📷 Fotografar o odômetro</button>
       <div id="km-foto-nome" style="font-size:14px;color:var(--text2);margin-top:6px"></div>
+      <div id="km-odo-aviso" style="display:none;font-size:14px;line-height:1.4;margin-top:6px;font-weight:600"></div>
     </div>
     <p style="font-size:14px;color:var(--text2);line-height:1.5">Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo, e nos abastecimentos. O km rodado do mês é calculado pelas leituras.</p>
   </div>
@@ -2494,32 +2495,32 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=362"></script>
-<script defer src="js/db.js?v=362"></script>
-<script defer src="js/nfce.js?v=362"></script>
-<script defer src="js/sefaz.js?v=362"></script>
-<script defer src="js/brasilapi.js?v=362"></script>
-<script defer src="js/ocr.js?v=362"></script>
-<script defer src="js/recorte.js?v=362"></script>
-<script defer src="js/excel.js?v=362"></script>
-<script defer src="js/gestor.js?v=362"></script>
-<script defer src="js/frota.js?v=362"></script>
-<script defer src="js/ponto.js?v=362"></script>
-<script defer src="js/gdrive.js?v=362"></script>
+<script defer src="js/api.js?v=363"></script>
+<script defer src="js/db.js?v=363"></script>
+<script defer src="js/nfce.js?v=363"></script>
+<script defer src="js/sefaz.js?v=363"></script>
+<script defer src="js/brasilapi.js?v=363"></script>
+<script defer src="js/ocr.js?v=363"></script>
+<script defer src="js/recorte.js?v=363"></script>
+<script defer src="js/excel.js?v=363"></script>
+<script defer src="js/gestor.js?v=363"></script>
+<script defer src="js/frota.js?v=363"></script>
+<script defer src="js/ponto.js?v=363"></script>
+<script defer src="js/gdrive.js?v=363"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=362"></script>
+<script defer src="js/svelte-ajuda.js?v=363"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=362"></script>
+<script defer src="js/svelte-historico.js?v=363"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=362"></script>
+<script defer src="js/svelte-arquivos.js?v=363"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=362"></script>
-<script defer src="js/app.js?v=362"></script>
+<script defer src="js/svelte-perfil.js?v=363"></script>
+<script defer src="js/app.js?v=363"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=362').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=363').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

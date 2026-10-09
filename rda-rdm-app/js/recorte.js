@@ -786,7 +786,7 @@ window.Recorte = (() => {
     if (!carregou) { try { URL.revokeObjectURL(url); } catch (_) {} return null; }
 
     _trabalho = _prepararTrabalho(img);
-    _mapa = null; _conferido = false;
+    _mapa = null; _conferido = !!opts.odometro;   // odômetro: não é papel, sem a garantia de "não cortar a nota"
     try { _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
 
@@ -803,24 +803,27 @@ window.Recorte = (() => {
     _origem = null; _alvo = null;
     let detalhe = null;
     /* rosto (foto de perfil) não tem papel nem texto: usa só o detector antigo */
-    if (!opts.semTexto) {
+    if (!opts.semTexto && !opts.odometro) {
       try {
         detalhe = _mapa && _sugerir(_mapa);
         if (detalhe) { sugestao = detalhe.f; _origem = detalhe.origem; _alvo = detalhe.alvo; }
       } catch (_) { sugestao = null; }
     }
-    if (!sugestao) {                       // sem texto suficiente: o detector antigo (claro × escuro)
+    if (!sugestao && !opts.odometro) {     // sem texto suficiente: o detector antigo (claro × escuro)
       try {
         sugestao = _mapa && _detectar(_mapa);
         if (sugestao) sugestao = _crescerAtePapel(sugestao, _mapa).rect;
       } catch (_) { sugestao = null; }
     }
-    const f = sugestao || { x: 0.05, y: 0.05, w: 0.90, h: 0.90 };
+    /* odômetro (09/10/2026): caixa larga e baixa no meio da foto — o número é
+       uma faixa estreita, e o colaborador só ajusta em volta dele */
+    const f = sugestao || (opts.odometro ? { x: 0.12, y: 0.36, w: 0.76, h: 0.28 } : { x: 0.05, y: 0.05, w: 0.90, h: 0.90 });
     _rect = _limitar(_deFracoes(f));
     _aplicarRect();
     /* o texto diz QUAL detector enquadrou — facilita conferir em campo se o
        aparelho está com a versão nova e o que ele fez com a foto */
-    $('crop-dica').textContent = sugestao
+    $('crop-dica').textContent = opts.odometro ? 'Ajuste a caixa só em volta do número do odômetro'
+      : sugestao
       ? (_origem === 'papel' ? 'Enquadrei a nota pelo papel — arraste os cantos para ajustar'
         : _origem === 'texto' ? 'Enquadrei a nota pelo texto — arraste os cantos para ajustar'
         : 'Enquadrei a nota (modo simples) — arraste os cantos para ajustar')
