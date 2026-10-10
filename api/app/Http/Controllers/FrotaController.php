@@ -6,8 +6,10 @@ use App\Models\Colaborador;
 use App\Models\KmRegistro;
 use App\Models\Veiculo;
 use App\Services\FotoStorage;
+use App\Services\LeitorOdometro;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -136,6 +138,32 @@ class FrotaController extends Controller
         $k->save();
 
         return response()->json(['foto_path' => $path]);
+    }
+
+    /**
+     * POST /km/ler-foto — IA de visão lê o odômetro do recorte da foto.
+     * Só SUGERE o número (o app preenche o campo e pede conferência); nada é
+     * gravado aqui. Limite diário por colaborador para segurar o gasto.
+     */
+    public function lerFoto(Request $r, LeitorOdometro $leitor): JsonResponse
+    {
+        $r->validate(['file' => ['required', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:4096']]);
+        if (! $leitor->disponivel()) {
+            return response()->json(['valor' => null, 'motivo' => 'indisponivel']);
+        }
+
+        $chave = 'odometro-ia:'.$r->user()->id.':'.now('America/Sao_Paulo')->format('Y-m-d');
+        $limite = (int) config('petermann.anthropic.limite_dia');
+        if ($limite > 0 && (int) Cache::get($chave, 0) >= $limite) {
+            return response()->json(['valor' => null, 'motivo' => 'limite']);
+        }
+        Cache::add($chave, 0, now()->addDay());
+        Cache::increment($chave);
+
+        $arq = $r->file('file');
+        $valor = $leitor->ler((string) file_get_contents($arq->getRealPath()), (string) $arq->getMimeType());
+
+        return response()->json(['valor' => $valor, 'motivo' => $valor === null ? 'nao_leu' : null]);
     }
 
     private function kmJson(KmRegistro $k): array

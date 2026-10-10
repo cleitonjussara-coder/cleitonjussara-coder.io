@@ -114,6 +114,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     /* frota: veículos + registros de km (16/09/2026) */
     Route::get('/veiculos', [FrotaController::class, 'veiculos']);
     Route::put('/veiculos/{id}', [FrotaController::class, 'veiculoUpsert']);
+    Route::post('/km/ler-foto', [FrotaController::class, 'lerFoto']);   // IA de visão, 2ª tentativa (09/10/2026) — antes do {id}
     Route::get('/km', [FrotaController::class, 'index']);
     Route::put('/km/{id}', [FrotaController::class, 'upsert']);
     Route::delete('/km/{id}', [FrotaController::class, 'destroy']);

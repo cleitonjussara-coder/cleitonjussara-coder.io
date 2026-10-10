@@ -56,6 +56,16 @@ return [
        o limite real da hospedagem é o upload_max_filesize do PHP). */
     'foto_max_kb' => (int) env('FOTO_MAX_KB', 20480),
 
+    /* Leitura do odômetro por IA de visão (09/10/2026) — segunda tentativa do
+       app quando o leitor do aparelho falha. A chave fica SÓ no .env do
+       servidor; sem ela o recurso simplesmente não responde e o app segue com
+       a digitação. Limite por colaborador por dia para não gastar à toa. */
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'modelo_odometro' => env('ANTHROPIC_MODELO_ODOMETRO', 'claude-haiku-5-5'),
+        'limite_dia' => (int) env('ODOMETRO_IA_LIMITE_DIA', 30),
+    ],
+
     /* Só para desenvolvimento no Windows (curl do PHP sem CA): caminho de um
        ca-bundle.crt. Em produção fica vazio e o PHP usa o do sistema. */
     'ca_bundle' => env('CA_BUNDLE'),

@@ -329,6 +329,12 @@ window.API = (() => {
       if (ext) form.append('ext', ext);
       return req('POST', `/km/${id}/foto`, { form, timeout: 120_000 });
     },
+    /* IA de visão lê o odômetro do recorte (2ª tentativa) → { valor, motivo } */
+    kmLerFoto(blob) {
+      const form = new FormData();
+      form.append('file', blob, 'odometro.jpg');
+      return req('POST', '/km/ler-foto', { form, timeout: 45_000 });
+    },
     resumo: (ano, mes) => req('GET', '/frota/resumo', { query: { ano, mes } }),
     anual: ano => req('GET', '/frota/anual', { query: { ano } }),
   };

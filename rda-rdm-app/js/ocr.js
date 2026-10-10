@@ -309,6 +309,9 @@ window.OCR = (() => {
           x.n++; x.conf = Math.max(x.conf, conf);
           votos.set(num, x);
         }
+        /* leitura confiante e plausível: não gasta as variantes que sobram (cada uma custa segundos no celular) */
+        const bom = [...votos.entries()].find(([valor, x]) => x.conf >= 80 && (!Number.isFinite(ref) || (valor >= ref && valor - ref <= 5000)));
+        if (bom) break;
       }
     } finally {
       try { await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK }); } catch (_) {}   // devolve o leitor ao modo das notas
