@@ -30,7 +30,14 @@ if [[ "$MODO" == "--verificar" ]]; then
 fi
 
 read -rsp "Cole a chave (sk-ant-...) e tecle Enter — não aparece na tela: " CHAVE; echo
-if [[ ! "$CHAVE" =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]]; then echo "✗ isso não parece uma chave da Anthropic (deve começar com sk-ant-)"; exit 1; fi
+CHAVE=$(printf '%s' "$CHAVE" | tr -d '[:space:]"'"'")      # tira espaço, quebra de linha (\r) e aspas que vêm junto da colagem
+if [[ ! "$CHAVE" =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]]; then
+  # diagnóstico SEM revelar a chave: tamanho, começo (7 letras) e se veio abreviada com "..."
+  ABREV=não; [[ "$CHAVE" == *...* || "$CHAVE" == *…* ]] && ABREV=sim
+  echo "✗ isso não parece uma chave da Anthropic: recebi ${#CHAVE} caracteres, começando com '${CHAVE:0:7}', abreviada com '...': $ABREV"
+  echo "  (uma chave inteira tem uns 100+ caracteres e começa com sk-ant-; copie de novo logo após criar)"
+  exit 1
+fi
 
 # remove a linha antiga (se houver), garante quebra de linha no fim e acrescenta a nova
 tr -d '\r' < "$TMP/env.atual" | grep -v '^ANTHROPIC_API_KEY=' > "$TMP/env.novo" || true
