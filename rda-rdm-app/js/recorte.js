@@ -361,7 +361,18 @@ window.Recorte = (() => {
     const r = { x0: Math.max(0, ax - R), y0: Math.max(0, ay - R), x1: Math.min(W, bx + R + 1), y1: Math.min(H, by + R + 1) };
     const area = (r.x1 - r.x0) * (r.y1 - r.y0) / (W * H);
     // quase a foto toda = o "papel" é o fundo (mesa branca): não serve de âncora
-    return area < 0.06 || area > 0.93 ? null : r;
+    if (area < 0.06 || area > 0.93) return null;
+    /* por linha: da 1ª à última coluna do papel (devolve o miolo preenchido — letra e QR são "buracos" no mapa de claro,
+       mas o papel é convexo). Serve ao teste de texto cortado, mesmo com a nota girada ou em perspectiva. */
+    const lmin = new Int16Array(H).fill(W), lmax = new Int16Array(H).fill(-1);
+    for (let p = 0; p < W * H; p++) {
+      if (rot[p] !== melhorId) continue;
+      const yy = (p / W) | 0, xx = p - yy * W;
+      if (xx < lmin[yy]) lmin[yy] = xx;
+      if (xx > lmax[yy]) lmax[yy] = xx;
+    }
+    r.lmin = lmin; r.lmax = lmax; r.R = R;
+    return r;
   }
 
   /* Brilho do papel: percentil 80 do cinza dentro do miolo (o texto escuro
@@ -580,7 +591,8 @@ window.Recorte = (() => {
      papel) e conta quantos caem FORA do retângulo. Devolve null (pode salvar) ou
      { lados: ['embaixo', ...] }. Sem região da nota (_alvo nulo: odômetro, rosto,
      foto sem texto), não há como julgar e deixa passar. */
-  const FRACAO_CORTE = 0.002;   // parte do texto da nota (traços) que pode ficar fora do retângulo antes de barrar; no mínimo 12 pixels de traço (dois ou três caracteres)
+  const FRACAO_CORTE = 0.005;   // parte do texto da nota (traços) que pode ficar fora do retângulo antes de barrar (uma linha inteira ≈ 3%)
+  const MIN_TRACOS = 30;        // e nunca menos que isto (alarme falso custa mais que deixar passar uma lasca de letra)
   const BORDA_PAPEL = 6;    // px do mapa (≈ 22 px da foto) em volta do limite do papel que não contam
   const CROMA_TEXTO = 45;   // tinta e papel térmico são neutros; o tecido azul/colorido atrás da nota não
   function _textoCortado(f, mapa) {
@@ -603,18 +615,19 @@ window.Recorte = (() => {
     for (let v = 0; v < 256; v++) { acum += hist[v]; if (acum >= n * 0.99) { p99 = v; break; } }
     const T = Math.max(32, Math.round(p99 * 0.5));
 
-    /* brilho do papel (percentil 85 da região) e, para cada pixel, o MAIOR brilho numa janela 9x9: texto está sobre
-       papel claro (a janela tem papel perto), a textura do tecido/mesa escura atrás da nota não. */
+    /* Texto está no MEIO do papel: nos quatro quadrantes em volta do traço (cantos de 6x6 px do mapa) há papel
+       claro. Borda do papel — reta ou inclinada —, tecido e mesa não passam: de um dos lados não há papel. */
     let ag = 0, P = 255;
     for (let v = 0; v < 256; v++) { ag += hg[v]; if (ag >= n * 0.85) { P = v; break; } }
-    const claro = P * 0.7;
-    const HM = new Uint8Array(W * H), MX = new Uint8Array(W * H), Rm = 4;
-    for (let y = y0; y < y1; y++) for (let x = Math.max(0, x0 - Rm); x < Math.min(W, x1 + Rm); x++) {
-      let m = 0; for (let k = Math.max(0, x - Rm); k <= Math.min(W - 1, x + Rm); k++) { const g = cinza[y * W + k]; if (g > m) m = g; } HM[y * W + x] = m;
-    }
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      let m = 0; for (let k = Math.max(0, y - Rm); k <= Math.min(H - 1, y + Rm); k++) { const g = HM[k * W + x]; if (g > m) m = g; } MX[y * W + x] = m;
-    }
+    const claro = P * 0.75, Rq = 5;
+    const quadranteClaro = (x, y, sx, sy) => {
+      for (let k = 0; k <= Rq; k++) {
+        const yy = y + sy * k; if (yy < 0 || yy >= H) continue;
+        for (let j = 0; j <= Rq; j++) { const xx = x + sx * j; if (xx >= 0 && xx < W && cinza[yy * W + xx] >= claro) return true; }
+      }
+      return false;
+    };
+    const noMeioDoPapel = (x, y) => quadranteClaro(x, y, 1, 1) && quadranteClaro(x, y, -1, 1) && quadranteClaro(x, y, 1, -1) && quadranteClaro(x, y, -1, -1);
 
     /* duas imagens integrais: bordas fortes VERTICAIS e HORIZONTAIS. Texto tem as duas na mesma vizinhança;
        a borda reta do papel (contra o tecido/mesa) só tem uma — e não pode contar como texto. */
@@ -634,26 +647,32 @@ window.Recorte = (() => {
     const r = { x0: Math.round(f.x * W), y0: Math.round(f.y * H), x1: Math.round((f.x + f.w) * W), y1: Math.round((f.y + f.h) * H) };
     const R = 4, lado = { esq: 0, dir: 0, topo: 0, base: 0 };
     let total = 0, fora = 0;
+    const pontos = [];                                   // x,y (mapa) dos traços que ficaram de fora — a tela desenha em vermelho
     for (let y = Math.max(R, y0); y < Math.min(H - R, y1); y++) {
       for (let x = Math.max(R, x0); x < Math.min(W - R, x1); x++) {
-        if (E[y * W + x] <= T || croma[y * W + x] > CROMA_TEXTO || MX[y * W + x] < claro) continue;   // fundo colorido ou escuro (tecido, mesa) não é texto
-        /* a própria borda do papel (e a sombra colada nela) faz traço denso nos dois sentidos: ignora a faixa de
-           ~1,5% em volta do limite do papel, dos dois lados. Texto de verdade fica mais para dentro (margem da bobina). */
-        if (_papel && Math.abs(Math.min(x - _papel.x0, _papel.x1 - x, y - _papel.y0, _papel.y1 - y)) <= BORDA_PAPEL) continue;
+        if (E[y * W + x] <= T || croma[y * W + x] > CROMA_TEXTO) continue;   // fraco, ou tecido colorido (jeans, toalha)
+        /* Só vale traço DENTRO do papel (encolhido ~1,5%): fora dele é tecido, mesa, sombra; na borda, o contorno do
+           papel faz traço denso nos dois sentidos. Papel girado ou em perspectiva também: o limite é por linha. */
+        if (_papel) {
+          if (y - _papel.y0 <= BORDA_PAPEL || _papel.y1 - y <= BORDA_PAPEL) continue;
+          if (_papel.lmin && (x < _papel.lmin[y] - _papel.R + BORDA_PAPEL || x > _papel.lmax[y] + _papel.R - BORDA_PAPEL)) continue;
+          if (!_papel.lmin && Math.abs(Math.min(x - _papel.x0, _papel.x1 - x)) <= BORDA_PAPEL) continue;
+        }
         const nv = soma(SV, x, y, R), nh = soma(SH, x, y, R);
         if (nv + nh < 16 || nv < 5 || nh < 5) continue;  // traço isolado ou borda reta = não é texto
+        if (!noMeioDoPapel(x, y)) continue;              // borda do papel (inclinada também), tecido, mesa
         total++;
         const e = x < r.x0, d = x >= r.x1, t = y < r.y0, b = y >= r.y1;
-        if (e || d || t || b) { fora++; if (e) lado.esq++; if (d) lado.dir++; if (t) lado.topo++; if (b) lado.base++; }
+        if (e || d || t || b) { fora++; pontos.push(x, y); if (e) lado.esq++; if (d) lado.dir++; if (t) lado.topo++; if (b) lado.base++; }
       }
     }
     if (total < 40) return null;                         // quase sem texto: não dá para julgar
-    const minimo = Math.max(12, Math.round(total * FRACAO_CORTE));
+    const minimo = Math.max(MIN_TRACOS, Math.round(total * FRACAO_CORTE));
     if (fora < minimo) return null;
     const piso = Math.max(4, Math.round(minimo * 0.35));
     const nomes = { esq: 'à esquerda', dir: 'à direita', topo: 'em cima', base: 'embaixo' };
     const lados = Object.keys(lado).filter(k => lado[k] >= piso).map(k => nomes[k]);
-    return { lados: lados.length ? lados : ['nas bordas'], fora, total };
+    return { lados: lados.length ? lados : ['nas bordas'], fora, total, pontos, W, H };
   }
 
   /* ── Geometria do palco ─────────────────────────────────── */
@@ -697,13 +716,28 @@ window.Recorte = (() => {
 
   /* ── Arraste (mouse e toque, via pointer events) ────────── */
   /* Aviso de texto cortado: a caixa pisca em vermelho e a mensagem fica no topo. Some quando a pessoa mexe na caixa. */
-  function _avisarCorte(msg) {
+  function _marcarTracos(corte) {
+    const palco = $('crop-palco'); if (!palco || !_caixaImg || !corte?.pontos?.length) return;
+    let cv = $('crop-marcas');
+    if (!cv) { cv = document.createElement('canvas'); cv.id = 'crop-marcas'; cv.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:3'; palco.appendChild(cv); }
+    const pr = palco.getBoundingClientRect();
+    cv.width = Math.round(pr.width); cv.height = Math.round(pr.height); cv.style.width = pr.width + 'px'; cv.style.height = pr.height + 'px';
+    const g = cv.getContext('2d'), c = _caixaImg;
+    g.clearRect(0, 0, cv.width, cv.height); g.fillStyle = 'rgba(255,70,70,.9)';
+    const passo = Math.max(1, Math.ceil(corte.pontos.length / 2 / 600));          // no máximo ~600 marcas
+    for (let i = 0; i < corte.pontos.length; i += 2 * passo) {
+      g.fillRect(c.x + (corte.pontos[i] / corte.W) * c.w - 2, c.y + (corte.pontos[i + 1] / corte.H) * c.h - 2, 4, 4);
+    }
+  }
+  function _avisarCorte(msg, corte) {
+    _marcarTracos(corte);
     const rect = $('crop-rect'), dica = $('crop-dica');
     rect.style.borderColor = '#ff5252';
     dica.textContent = '⚠️ ' + msg;
     dica.style.opacity = '1'; dica.style.color = '#ffb4b4';
   }
   function _limparAviso() {
+    const mc = $('crop-marcas'); if (mc) mc.remove();
     $('crop-rect').style.borderColor = '';
     const dica = $('crop-dica');
     if (_dicaPadrao && dica.textContent !== _dicaPadrao) dica.textContent = _dicaPadrao;
@@ -826,7 +860,7 @@ window.Recorte = (() => {
           if (!confirmou) {
             const msg = 'O recorte está cortando o texto da nota (' + corte.lados.join(', ') + '). Aumente a caixa até incluir todo o texto — ou, se a caixa está certa, toque em Usar recorte de novo.';
             if (!_bloqueio || _bloqueio.chave !== chave) _bloqueio = { chave, quando: Date.now() };   // não renova em toque repetido: senão insistir nunca liberaria
-            _avisarCorte(msg);
+            _avisarCorte(msg, corte);
             if (typeof toast === 'function') toast('O recorte cortaria o texto da nota (' + corte.lados.join(', ') + '). Aumente a caixa.', 'err');
             return;
           }
