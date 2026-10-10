@@ -350,20 +350,6 @@ window.Frota = (() => {
     el.style.display = texto ? '' : 'none';
   }
 
-  /* O recorte pode ter 3000 px; a IA cobra por tamanho da imagem e 1000 px lê o odômetro de sobra. */
-  async function _reduzirParaIa(blob, lado = 1000) {
-    const url = URL.createObjectURL(blob);
-    try {
-      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('imagem')); i.src = url; });
-      const k = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      return (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85))) || blob;
-    } catch (_) { return blob; }
-    finally { URL.revokeObjectURL(url); }
-  }
-
   async function onFoto(e) {
     _fotoKm = e.target.files?.[0] || null;
     $('km-foto-nome').textContent = _fotoKm ? `📷 ${_fotoKm.name || 'foto do odômetro'} pronta para enviar` : '';
@@ -393,7 +379,7 @@ window.Frota = (() => {
          internet, sem chave/saldo no servidor, limite do dia ou IA sem ler. */
       if (navigator.onLine && sb?.frota?.kmLerFoto) {
         try {
-          const ia = await sb.frota.kmLerFoto(await _reduzirParaIa(recorte));
+          const ia = await sb.frota.kmLerFoto(await _imagemParaIa(recorte, 1000));
           if (ia?.valor != null) r = { valor: ia.valor };
         } catch (_) { /* segue para o leitor do aparelho */ }
       }

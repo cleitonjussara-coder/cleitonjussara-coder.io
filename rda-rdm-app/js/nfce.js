@@ -21,6 +21,15 @@ window.NFCE = (() => {
      perceber. Nenhuma nota de verdade custa R$ 1 milhão. */
   function valorPlausivel(v) { return typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000000; }
 
+  /* 10/10/2026: parseFloat("69A3F5…") devolve 69 — o hash do QR (cHashQRCode), que vem na posição do
+     valor em alguns formatos, começa com dígitos e virava "valor" 69 por cima da leitura certa da nota
+     (cupom de GO, R$ 45,26). O campo só vale se a STRING INTEIRA for um valor: dígitos, e no máximo
+     2 casas depois do separador. Qualquer outra coisa (hash, token, chave) devolve NaN. */
+  function numeroDeValor(s) {
+    const m = String(s == null ? '' : s).trim().match(/^(\d{1,7})(?:[.,](\d{1,2}))?$/);
+    return m ? parseFloat(m[1] + '.' + (m[2] || '0')) : NaN;
+  }
+
   /* Chave de 44 dígitos → objeto com todos os campos */
   function parseChave44(raw) {
     const c = digits(raw);
@@ -146,7 +155,7 @@ window.NFCE = (() => {
           /* QR versão 2/3 (chave|versão|tpAmb|cIdToken|vNF|…): o valor vem
              no 5º campo — visto em GO em 19/09/2026 ("…|3|1|18|124.36|||hash") */
           if (digits(parts[0]).length === 44 && parts.length >= 5) {
-            const v5 = parseFloat(String(parts[4] || '').replace(',', '.'));
+            const v5 = numeroDeValor(parts[4]);
             if (valorPlausivel(v5)) valor = v5;
           }
           /* vNF = índice 10 num formato mais longo. 26/09/2026: NÃO usar
@@ -155,7 +164,7 @@ window.NFCE = (() => {
              compensar. Mantém o separador e valida o resultado. */
           const candidate = parts[10];
           if (candidate) {
-            const v = parseFloat(String(candidate).replace(',', '.'));
+            const v = numeroDeValor(candidate);
             if (valorPlausivel(v)) valor = v;
           }
           // fallback: qualquer valor monetário no pipe
@@ -174,7 +183,7 @@ window.NFCE = (() => {
       if (!valor) {
         const vNF = u.searchParams.get('vNF') || u.searchParams.get('valor');
         if (vNF) {
-          const v = parseFloat(vNF.replace(',', '.'));
+          const v = numeroDeValor(vNF);
           if (valorPlausivel(v)) valor = v;
         }
       }

@@ -29,8 +29,11 @@ window.Recorte = (() => {
   let _caixaImg = null;      // onde a <img> está desenhada dentro do palco
   let _arraste = null;       // { modo, x0, y0, rect0 }
   let _mapa = null;          // análise da foto (cinza + limiar), feita uma vez
-  let _conferido = false;    // "Usar recorte" já passou pela garantia de não cortar
+  let _bloqueio = null;      // último "cortaria o texto": { chave: caixa, quando } — permite salvar mesmo assim se a pessoa insistir com a caixa igual
+  let _dicaPadrao = '';      // texto de ajuda da abertura (volta quando a pessoa mexe de novo na caixa depois de um aviso)
+  let _ocupado = false;      // um "Usar recorte" em andamento (corte + salvar): ignora toques repetidos
   let _origem = null;        // 'papel' | 'texto' | null — qual detector enquadrou (a garantia usa a mesma régua)
+  let _papel = null;         // retângulo do papel achado por brilho e cor (px do mapa) — a borda dele não conta como texto
   let _alvo = null;          // o que o recorte não deve cortar sem avisar (px do mapa): o papel ou o miolo de texto
 
   const MIN = 36;            // menor recorte aceitável, em px de tela
@@ -467,7 +470,7 @@ window.Recorte = (() => {
       const extra = Math.round(H * 0.03);
       const alvo = respiro({ x0: pc.x0, y0: ay < pc.y0 ? Math.max(0, ay - extra) : ay,
                              x1: pc.x1, y1: by > pc.y1 - 1 ? Math.min(H, by + 1 + extra) : by + 1 });
-      return { f: fr(alvo), origem: 'papel', alvo };
+      return { f: fr(alvo), origem: 'papel', alvo, papel: pc };
     }
     const t = _limiteTexto(mapa);
     const ft = t && _sugerirPorTexto(mapa, t);
@@ -566,27 +569,91 @@ window.Recorte = (() => {
     return { rect: r, mudou };
   }
 
-  /* Garantia do "Usar recorte" na régua nova: se o papel continua além de
-     algum lado (degrau de brilho mais adiante), amplia até ele. */
-  function _conferirPapel(f, mapa) {
-    const { W, H } = mapa;
-    const r = { x0: Math.round(f.x * W), y0: Math.round(f.y * H), x1: Math.round((f.x + f.w) * W), y1: Math.round((f.y + f.h) * H) };
-    const e = _origem === 'papel' ? { ...r } : _expandirAoPapel(r, mapa);
-    /* o que a detecção achou (papel ou texto) e ficou de fora do retângulo
-       conta como "continua": sombra no pé da nota esconde a borda, não o texto */
-    if (_alvo) {
-      e.x0 = Math.min(e.x0, _alvo.x0); e.y0 = Math.min(e.y0, _alvo.y0);
-      e.x1 = Math.max(e.x1, _alvo.x1); e.y1 = Math.max(e.y1, _alvo.y1);
+  /* O recorte corta o TEXTO da nota? (10/10/2026)
+     Antes, o "Usar recorte" ampliava a caixa por conta própria sempre que o papel
+     continuava além dela — e devolvia a pessoa à tela de recorte. Agora o recorte
+     fica exatamente como ela desenhou, e só é barrado quando deixaria texto da
+     nota de fora (o anexo é a evidência fiscal). Margem de papel em branco, sombra
+     e borda NÃO contam: só traço de letra.
+     Como: dentro da região da nota achada na abertura (_alvo), pega os pixels de
+     borda forte (traço de letra) que estão em vizinhança densa (texto, não ruído de
+     papel) e conta quantos caem FORA do retângulo. Devolve null (pode salvar) ou
+     { lados: ['embaixo', ...] }. Sem região da nota (_alvo nulo: odômetro, rosto,
+     foto sem texto), não há como julgar e deixa passar. */
+  const FRACAO_CORTE = 0.002;   // parte do texto da nota (traços) que pode ficar fora do retângulo antes de barrar; no mínimo 12 pixels de traço (dois ou três caracteres)
+  const BORDA_PAPEL = 6;    // px do mapa (≈ 22 px da foto) em volta do limite do papel que não contam
+  const CROMA_TEXTO = 45;   // tinta e papel térmico são neutros; o tecido azul/colorido atrás da nota não
+  function _textoCortado(f, mapa) {
+    if (!_alvo) return null;
+    const { W, H, cinza, croma } = mapa, N = _alvo;
+    const x0 = Math.max(1, N.x0), x1 = Math.min(W - 1, N.x1), y0 = Math.max(1, N.y0), y1 = Math.min(H - 1, N.y1);
+    if (x1 - x0 < 20 || y1 - y0 < 20) return null;
+
+    const E = new Uint8Array(W * H), V = new Uint8Array(W * H), hist = new Uint32Array(256), hg = new Uint32Array(256);
+    let n = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = y * W + x;
+        const gx = Math.abs(cinza[i + 1] - cinza[i - 1]), gy = Math.abs(cinza[i + W] - cinza[i - W]);
+        const e = Math.min(255, gx > gy ? gx : gy);
+        E[i] = e; V[i] = gx > gy ? 1 : 0; hist[e]++; hg[cinza[i]]++; n++;      // V: borda vertical (gradiente em x) ou horizontal
+      }
     }
-    const rx = Math.round(W * 0.01), ry = Math.round(H * 0.01);
-    const cresceu = (a, b) => a !== b;
-    const mudou = cresceu(e.x0, r.x0) || cresceu(e.y0, r.y0) || cresceu(e.x1, r.x1) || cresceu(e.y1, r.y1);
-    const g = { x0: Math.max(0, e.x0 - (e.x0 !== r.x0 ? rx : 0)), y0: Math.max(0, e.y0 - (e.y0 !== r.y0 ? ry : 0)),
-                x1: Math.min(W, e.x1 + (e.x1 !== r.x1 ? rx : 0)), y1: Math.min(H, e.y1 + (e.y1 !== r.y1 ? ry : 0)) };
-    const rect = { x: g.x0 / W, y: g.y0 / H, w: (g.x1 - g.x0) / W, h: (g.y1 - g.y0) / H };
-    const grande = Math.abs(rect.x - f.x) > 0.01 || Math.abs(rect.y - f.y) > 0.01
-                || Math.abs(rect.x + rect.w - f.x - f.w) > 0.01 || Math.abs(rect.y + rect.h - f.y - f.h) > 0.01;
-    return { rect, mudou: mudou && grande };
+    let acum = 0, p99 = 0;
+    for (let v = 0; v < 256; v++) { acum += hist[v]; if (acum >= n * 0.99) { p99 = v; break; } }
+    const T = Math.max(32, Math.round(p99 * 0.5));
+
+    /* brilho do papel (percentil 85 da região) e, para cada pixel, o MAIOR brilho numa janela 9x9: texto está sobre
+       papel claro (a janela tem papel perto), a textura do tecido/mesa escura atrás da nota não. */
+    let ag = 0, P = 255;
+    for (let v = 0; v < 256; v++) { ag += hg[v]; if (ag >= n * 0.85) { P = v; break; } }
+    const claro = P * 0.7;
+    const HM = new Uint8Array(W * H), MX = new Uint8Array(W * H), Rm = 4;
+    for (let y = y0; y < y1; y++) for (let x = Math.max(0, x0 - Rm); x < Math.min(W, x1 + Rm); x++) {
+      let m = 0; for (let k = Math.max(0, x - Rm); k <= Math.min(W - 1, x + Rm); k++) { const g = cinza[y * W + k]; if (g > m) m = g; } HM[y * W + x] = m;
+    }
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      let m = 0; for (let k = Math.max(0, y - Rm); k <= Math.min(H - 1, y + Rm); k++) { const g = HM[k * W + x]; if (g > m) m = g; } MX[y * W + x] = m;
+    }
+
+    /* duas imagens integrais: bordas fortes VERTICAIS e HORIZONTAIS. Texto tem as duas na mesma vizinhança;
+       a borda reta do papel (contra o tecido/mesa) só tem uma — e não pode contar como texto. */
+    const SV = new Int32Array((W + 1) * (H + 1)), SH = new Int32Array((W + 1) * (H + 1));
+    for (let y = 0; y < H; y++) {
+      let lv = 0, lh = 0;
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (E[i] > T) { if (V[i]) lv++; else lh++; }
+        SV[(y + 1) * (W + 1) + x + 1] = SV[y * (W + 1) + x + 1] + lv;
+        SH[(y + 1) * (W + 1) + x + 1] = SH[y * (W + 1) + x + 1] + lh;
+      }
+    }
+    const soma = (S, x, y, R) => S[(y + R + 1) * (W + 1) + x + R + 1] - S[(y - R) * (W + 1) + x + R + 1]
+                               - S[(y + R + 1) * (W + 1) + x - R] + S[(y - R) * (W + 1) + x - R];
+
+    const r = { x0: Math.round(f.x * W), y0: Math.round(f.y * H), x1: Math.round((f.x + f.w) * W), y1: Math.round((f.y + f.h) * H) };
+    const R = 4, lado = { esq: 0, dir: 0, topo: 0, base: 0 };
+    let total = 0, fora = 0;
+    for (let y = Math.max(R, y0); y < Math.min(H - R, y1); y++) {
+      for (let x = Math.max(R, x0); x < Math.min(W - R, x1); x++) {
+        if (E[y * W + x] <= T || croma[y * W + x] > CROMA_TEXTO || MX[y * W + x] < claro) continue;   // fundo colorido ou escuro (tecido, mesa) não é texto
+        /* a própria borda do papel (e a sombra colada nela) faz traço denso nos dois sentidos: ignora a faixa de
+           ~1,5% em volta do limite do papel, dos dois lados. Texto de verdade fica mais para dentro (margem da bobina). */
+        if (_papel && Math.abs(Math.min(x - _papel.x0, _papel.x1 - x, y - _papel.y0, _papel.y1 - y)) <= BORDA_PAPEL) continue;
+        const nv = soma(SV, x, y, R), nh = soma(SH, x, y, R);
+        if (nv + nh < 16 || nv < 5 || nh < 5) continue;  // traço isolado ou borda reta = não é texto
+        total++;
+        const e = x < r.x0, d = x >= r.x1, t = y < r.y0, b = y >= r.y1;
+        if (e || d || t || b) { fora++; if (e) lado.esq++; if (d) lado.dir++; if (t) lado.topo++; if (b) lado.base++; }
+      }
+    }
+    if (total < 40) return null;                         // quase sem texto: não dá para julgar
+    const minimo = Math.max(12, Math.round(total * FRACAO_CORTE));
+    if (fora < minimo) return null;
+    const piso = Math.max(4, Math.round(minimo * 0.35));
+    const nomes = { esq: 'à esquerda', dir: 'à direita', topo: 'em cima', base: 'embaixo' };
+    const lados = Object.keys(lado).filter(k => lado[k] >= piso).map(k => nomes[k]);
+    return { lados: lados.length ? lados : ['nas bordas'], fora, total };
   }
 
   /* ── Geometria do palco ─────────────────────────────────── */
@@ -629,7 +696,22 @@ window.Recorte = (() => {
   }
 
   /* ── Arraste (mouse e toque, via pointer events) ────────── */
+  /* Aviso de texto cortado: a caixa pisca em vermelho e a mensagem fica no topo. Some quando a pessoa mexe na caixa. */
+  function _avisarCorte(msg) {
+    const rect = $('crop-rect'), dica = $('crop-dica');
+    rect.style.borderColor = '#ff5252';
+    dica.textContent = '⚠️ ' + msg;
+    dica.style.opacity = '1'; dica.style.color = '#ffb4b4';
+  }
+  function _limparAviso() {
+    $('crop-rect').style.borderColor = '';
+    const dica = $('crop-dica');
+    if (_dicaPadrao && dica.textContent !== _dicaPadrao) dica.textContent = _dicaPadrao;
+    dica.style.opacity = ''; dica.style.color = '';
+  }
+
   function _aoPressionar(e) {
+    _limparAviso();
     const modo = e.target.dataset?.alca || 'mover';
     _arraste = { modo, x0: e.clientX, y0: e.clientY, rect0: { ..._rect } };
     e.target.setPointerCapture?.(e.pointerId);
@@ -724,21 +806,33 @@ window.Recorte = (() => {
     window.addEventListener('pointerup',   _aoSoltar);
     window.addEventListener('pointercancel', _aoSoltar);
     $('crop-usar').addEventListener('click', async () => {
-      /* Antes de salvar, confere se o papel continua para fora do
-         retângulo. Se continuar, amplia, mostra e espera um segundo toque —
-         o usuário vê o que vai ser salvo. Uma vez por foto: se ele encolher
-         de propósito depois disso (nota vizinha, por exemplo), vale o dele. */
-      if (!_conferido && _mapa) {
-        _conferido = true;
-        let ajuste = null;
-        try { ajuste = _origem ? _conferirPapel(_fracoes(), _mapa) : _crescerAtePapel(_fracoes(), _mapa); } catch (_) {}
-        if (ajuste?.mudou) {
-          _rect = _limitar(_deFracoes(ajuste.rect));
-          _aplicarRect();
-          $('crop-dica').textContent = 'Ampliei para não cortar a nota — confira e toque em Usar recorte de novo';
-          return;
+      if (_ocupado) return;      // o corte leva ~1 s no celular: sem isso, um 2º toque disparava outro corte
+      _ocupado = true;
+      const btn = $('crop-usar'), rotulo = btn.textContent;
+      try { await _usarRecorte(btn); } finally { _ocupado = false; btn.textContent = rotulo; }
+    });
+    async function _usarRecorte(btn) {
+      /* O recorte fica EXATAMENTE como a pessoa desenhou (sem ampliar sozinho). A
+         única coisa que o barra é cortar o texto da nota (10/10/2026): aí o toque
+         não salva, o retângulo pisca em vermelho e a mensagem diz o lado. */
+      if (_mapa && _alvo) {
+        let corte = null;
+        const f = _fracoes(), chave = [f.x, f.y, f.w, f.h].map(v => v.toFixed(3)).join('|');
+        try { corte = _textoCortado(f, _mapa); } catch (_) { corte = null; }
+        if (corte) {
+          /* Saída para falso alarme (fundo claro e texturizado, por exemplo): com a caixa IGUAL à que foi barrada e
+             pelo menos 1,5 s depois do aviso (pra um toque duplo por reflexo não passar), vale o que ela desenhou. */
+          const confirmou = _bloqueio && _bloqueio.chave === chave && Date.now() - _bloqueio.quando > 1500;
+          if (!confirmou) {
+            const msg = 'O recorte está cortando o texto da nota (' + corte.lados.join(', ') + '). Aumente a caixa até incluir todo o texto — ou, se a caixa está certa, toque em Usar recorte de novo.';
+            if (!_bloqueio || _bloqueio.chave !== chave) _bloqueio = { chave, quando: Date.now() };   // não renova em toque repetido: senão insistir nunca liberaria
+            _avisarCorte(msg);
+            if (typeof toast === 'function') toast('O recorte cortaria o texto da nota (' + corte.lados.join(', ') + '). Aumente a caixa.', 'err');
+            return;
+          }
         }
       }
+      btn.textContent = 'Recortando…';
       /* 01/10/2026: se o corte falhava (canvas sem memória no celular,
          toBlob vazio), `out` ficava null e a foto ORIGINAL era salva sem
          avisar — a pessoa achava que tinha recortado. Agora tenta de novo em
@@ -757,7 +851,7 @@ window.Recorte = (() => {
         return;
       }
       _fechar(out);
-    });
+    }
     $('crop-inteira').addEventListener('click', () => _fechar(null));
     window.addEventListener('resize', () => {
       if ($('crop-overlay').style.display !== 'flex') return;
@@ -786,7 +880,7 @@ window.Recorte = (() => {
     if (!carregou) { try { URL.revokeObjectURL(url); } catch (_) {} return null; }
 
     _trabalho = _prepararTrabalho(img);
-    _mapa = null; _conferido = !!opts.odometro;   // odômetro: não é papel, sem a garantia de "não cortar a nota"
+    _mapa = null;
     try { _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
 
@@ -800,13 +894,13 @@ window.Recorte = (() => {
        onde o papel fica estreito (sombra, canto enrolado), e o texto do
        topo ou do rodapé ficava de fora. */
     let sugestao = null;
-    _origem = null; _alvo = null;
+    _origem = null; _alvo = null; _papel = null;
     let detalhe = null;
     /* rosto (foto de perfil) não tem papel nem texto: usa só o detector antigo */
     if (!opts.semTexto && !opts.odometro) {
       try {
         detalhe = _mapa && _sugerir(_mapa);
-        if (detalhe) { sugestao = detalhe.f; _origem = detalhe.origem; _alvo = detalhe.alvo; }
+        if (detalhe) { sugestao = detalhe.f; _origem = detalhe.origem; _alvo = detalhe.alvo; _papel = detalhe.papel || null; }
       } catch (_) { sugestao = null; }
     }
     if (!sugestao && !opts.odometro) {     // sem texto suficiente: o detector antigo (claro × escuro)
@@ -828,6 +922,9 @@ window.Recorte = (() => {
         : _origem === 'texto' ? 'Enquadrei a nota pelo texto — arraste os cantos para ajustar'
         : 'Enquadrei a nota (modo simples) — arraste os cantos para ajustar')
       : 'Não achei a nota — arraste os cantos para enquadrar';
+    _dicaPadrao = $('crop-dica').textContent;
+    _bloqueio = null;
+    _limparAviso();                       // aviso de texto cortado de uma foto anterior não pode sobrar na próxima
     window.__recorteDiag = { metodo: _origem || (sugestao ? 'simples' : 'nenhum'), mapa: _mapa && [_mapa.W, _mapa.H],
                              alvo: _alvo, caixa: f, foto: [img.naturalWidth, img.naturalHeight] };
 

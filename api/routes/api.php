@@ -68,6 +68,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::post('/notas/chave-existe', [NotaController::class, 'chaveExiste']);
     Route::post('/notas/existem', [NotaController::class, 'existem']);
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
+    Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto']);   // IA de visão lê a nota (10/10/2026)
     Route::post('/notas/reparar-fotos', [NotaController::class, 'repararFotos']);
     Route::put('/notas/{id}', [NotaController::class, 'upsert']);
     Route::patch('/notas/{id}/tipo', [NotaController::class, 'corrigirTipo']);   // gestor corrige RDA⇄RDM (23/09/2026)

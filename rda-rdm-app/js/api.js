@@ -266,6 +266,13 @@ window.API = (() => {
       const r = await req('POST', '/notas/consultar-qr', { body: { qr_url: qrUrl, chave: chave || null }, timeout: 25_000 });
       return (r && typeof r.valor === 'number') ? r : null;
     },
+    /* IA de visão lê a foto da nota → { dados: {cnpj, razao_social, valor, data, numero, serie, chave}|null, motivo }.
+       Sugestão já validada pelo servidor (CNPJ/chave/data/valor); null = sem IA, sem saldo ou não leu. */
+    lerFotoIa(blob) {
+      const form = new FormData();
+      form.append('file', blob, 'nota.jpg');
+      return req('POST', '/notas/ler-foto', { form, timeout: 45_000 });
+    },
     existem: async ids => (await req('POST', '/notas/existem', { body: { ids } })).notas || [],
     chaveExiste: async (chave, ignoreId) =>
       (await req('POST', '/notas/chave-existe', { body: { chave, ignore_id: ignoreId || null } })).existe,

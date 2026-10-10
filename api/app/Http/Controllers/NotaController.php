@@ -344,6 +344,37 @@ class NotaController extends Controller
     }
 
     /**
+     * POST /notas/ler-foto (multipart: file) → {dados: {cnpj, razao_social, valor, data, numero, serie, chave}|null, motivo}
+     * IA de visão lê a foto da nota — só SUGERE; o app preenche o formulário e a
+     * pessoa confere. Cada campo é validado (CNPJ, chave, data, valor) antes de
+     * sair (App\Services\LeitorNota). Limite diário por colaborador.
+     */
+    public function lerFoto(Request $r, \App\Services\LeitorNota $leitor): JsonResponse
+    {
+        $r->validate(['file' => ['required', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:6144']]);
+        if (! $leitor->disponivel()) {
+            return response()->json(['dados' => null, 'motivo' => 'indisponivel']);
+        }
+
+        $chave = 'nota-ia:'.$r->user()->id.':'.now('America/Sao_Paulo')->format('Y-m-d');
+        $limite = (int) config('petermann.anthropic.limite_dia_notas');
+        if ($limite > 0 && (int) \Illuminate\Support\Facades\Cache::get($chave, 0) >= $limite) {
+            return response()->json(['dados' => null, 'motivo' => 'limite']);
+        }
+        \Illuminate\Support\Facades\Cache::add($chave, 0, now()->addDay());
+        \Illuminate\Support\Facades\Cache::increment($chave);
+
+        $arq = $r->file('file');
+        $dados = $leitor->ler((string) file_get_contents($arq->getRealPath()), (string) $arq->getMimeType());
+        /* só na homologação: registra o que a IA devolveu (já validado, sem razão social) para comparar com a nota — o nível de log da homologação é warning */
+        if (app()->environment('staging')) {
+            Log::warning('LeitorNota[leitura]', ['user' => $r->user()->id, 'bytes' => $arq->getSize(), 'dados' => $dados ? array_diff_key($dados, ['razao_social' => 1]) : null]);
+        }
+
+        return response()->json(['dados' => $dados, 'motivo' => $dados === null ? 'nao_leu' : null]);
+    }
+
+    /**
      * POST /notas/chave-existe {chave, ignore_id}
      * Trava anti-duplicata de EQUIPE: a chave já existe em QUALQUER
      * colaborador? Devolve só sim/não (era a função SECURITY DEFINER

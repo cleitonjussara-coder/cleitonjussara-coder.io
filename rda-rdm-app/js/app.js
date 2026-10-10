@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 365;
+const APP_BUILD = 371;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6717,6 +6717,61 @@ async function _anexoUtilizavel(file, input) {
   return false;
 }
 
+/* ── Leitura da nota: IA primeiro, Tesseract de reserva (10/10/2026) ──────────
+   Com internet, a foto (reduzida) vai ao servidor, que pergunta a um modelo de
+   visão e devolve os campos JÁ validados (CNPJ, chave, data, valor). Sem
+   internet, sem chave/saldo no servidor, limite do dia ou IA sem valor, o
+   Tesseract do aparelho lê (o que a IA trouxe tem prioridade e o Tesseract
+   completa o que faltou). Devolve o mesmo formato do OCR.processar e NUNCA
+   lança. `_ia: true` marca que a IA participou — a tela pede conferência. */
+async function _imagemParaIa(blob, lado = 1600) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('imagem')); i.src = url; });
+    const k = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85))) || blob;
+  } catch (_) { return blob; }
+  finally { URL.revokeObjectURL(url); }
+}
+
+/* O Tesseract só é baixado quando é preciso — e com a IA lendo primeiro, quem sempre tem internet nunca
+   o baixaria, e a reserva falharia justo offline. Depois da 1ª leitura por IA da sessão, ele é preparado
+   em segundo plano (uma vez; fora do modo de economia de dados). */
+let _ocrAquecido = false;
+function _aquecerOcr() {
+  if (_ocrAquecido || !window.OCR || !navigator.onLine || navigator.connection?.saveData) return;
+  _ocrAquecido = true;
+  (window.requestIdleCallback || (f => setTimeout(f, 4000)))(() => { OCR.init().catch(() => { _ocrAquecido = false; }); }, { timeout: 15000 });
+}
+
+async function _lerNotaPorIa(blob) {
+  if (!navigator.onLine || !sb?.notas?.lerFotoIa || !blob || !/^image\//i.test(blob.type || '')) return null;   // PDF/XML já têm texto exato
+  try {
+    const r = await sb.notas.lerFotoIa(await _imagemParaIa(blob));
+    const d = r?.dados;
+    if (!d || !(d.valor || d.cnpj || d.chave)) return null;
+    _aquecerOcr();
+    return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
+             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '',
+             uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', _ia: true };
+  } catch (_) { return null; }
+}
+
+async function _lerNota(blob) {
+  const ia = await _lerNotaPorIa(blob);
+  if (ia?.valor) return ia;                                  // IA trouxe o valor: basta
+  const prog = $('ocr-progress'); if (prog) prog.textContent = 'Lendo o texto no aparelho…';
+  let ocr;
+  try { ocr = (await OCR.processar(blob)) || {}; } catch (_) { ocr = {}; }
+  if (!ia) return ocr;
+  const junto = { ...ocr };                                  // IA leu parte (sem valor): ela manda, o Tesseract completa
+  for (const [k, v] of Object.entries(ia)) if (v && k !== '_ia') junto[k] = v;   // sem _ia: o valor veio do Tesseract, o aviso não deve creditá-lo à IA
+  return junto;
+}
+
 async function onFotoNota(e) {
   let file = e.target.files[0];
   if (!file) return;
@@ -6729,6 +6784,7 @@ async function onFotoNota(e) {
   $('ocr-progress').textContent = 'Lendo a nota…';
 
   const dados = { metodo_captura: 'foto' };
+  let porIa = false;
 
   // 1) tenta ler o QR Code da própria foto (chave NFC-e)
   try {
@@ -6750,7 +6806,8 @@ async function onFotoNota(e) {
   // 2) OCR do texto p/ preencher o que o QR não traz (valor, data, CNPJ, razão)
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
-    const r = await OCR.processar(file);
+    const r = await _lerNota(file);
+    porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
     dados.data         = dados.data         || r.data         || hoje();
@@ -6764,6 +6821,8 @@ async function onFotoNota(e) {
 
   if (!dados.chave && !dados.cnpj && !dados.valor) {
     toast('Não consegui ler a nota. Tente uma foto mais nítida ou use "Manual".', 'err');
+  } else if (porIa) {
+    toast('Preenchido pela IA. Confira o valor, o CNPJ e a data.', 'ok');
   }
 
   // abre o formulário e ANEXA a foto (abrirFormNota zera fotoBlob, então setamos depois)
@@ -7482,8 +7541,8 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
           atualizarPreviewFoto(fotoURL);
         }
       }
-      $('ocr-progress').textContent = 'Lendo o texto…';
-      try { ocr = await OCR.processar(alvo); } catch (_) {}
+      $('ocr-progress').textContent = 'Lendo a nota…';
+      ocr = await _lerNota(alvo);
     }
 
     if (qr?.documento === 'nfse' && !$('nf-qr-url').value) { $('nf-qr-url').value = qr.qr_url; _atualizarDocumentoAuto(); }
@@ -7547,7 +7606,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     if (daChave && !$('nf-valor').value) enriquecerViaSefaz(chave);
 
     toast(preencheu.length
-      ? `Preenchido: ${preencheu.join(', ')}. Confira o valor e o tipo.`
+      ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. Confira o valor e o tipo.`
       : 'Confira os campos manualmente', preencheu.length ? 'ok' : 'err');
 
     // valor oficial (se a consulta do QR já respondeu, aplica por cima do OCR)

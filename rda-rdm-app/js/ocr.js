@@ -11,7 +11,6 @@
 window.OCR = (() => {
   let worker = null;
   let ready  = false;
-  let _loading = false;
 
   const _d = s => String(s||'').replace(/\D/g,'');
   const _pf = v => { const n = parseFloat(String(v||'').replace(/\.(?=\d{3}(?!\d))/g,'').replace(',','.')); return isNaN(n)?null:n; };
@@ -56,37 +55,43 @@ window.OCR = (() => {
     if (_tesseractLoaded) return;
     return new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.onload  = () => { _tesseractLoaded = true; res(); };
-      s.onerror = () => rej(new Error('Falha ao carregar Tesseract.js'));
+      /* versão FIXA (era @5): o jsDelivr serve versão exata com cache de 1 ano, então o que foi
+         baixado uma vez sobrevive offline — importa agora que a IA lê primeiro e o Tesseract é reserva */
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      const tid = setTimeout(() => { s.remove(); rej(new Error('Tesseract.js demorou demais para carregar')); }, 25000);
+      s.onload  = () => { clearTimeout(tid); _tesseractLoaded = true; res(); };
+      s.onerror = () => { clearTimeout(tid); rej(new Error('Falha ao carregar Tesseract.js')); };
       document.head.appendChild(s);
     });
   }
 
-  async function init() {
-    if (ready) return;
-    if (_loading) { while (!ready) await new Promise(r => setTimeout(r, 200)); return; }
-    _loading = true;
-    try {
-      await _ensureTesseract();
-      worker = await Tesseract.createWorker('por', 1, {
-        logger(m) {
-          if (m.status === 'recognizing text') {
-            const pct = Math.round(m.progress * 100);
-            window.dispatchEvent(new CustomEvent('ocr-progress', { detail: pct }));
-          }
-        },
-        errorHandler(e) { console.warn('OCR warn:', e); },
-      });
-      // PSM 6 = bloco uniforme de texto (cupom fiscal) — mais rápido que PSM 3
-      await worker.setParameters({
-        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-        // desabilita dicionários para acelerar (cupons têm muitos números)
-        load_system_dawg: 'F',
-        load_freq_dawg: 'F',
-      });
-      ready = true;
-    } finally { _loading = false; }
+  /* Uma Promise compartilhada: quem chama init() enquanto outro já está iniciando espera a MESMA
+     inicialização — e, se ela falhar, todos recebem o erro (antes, o 2º chamador ficava girando para sempre). */
+  let _initP = null;
+  function init() {
+    if (ready) return Promise.resolve();
+    return _initP || (_initP = (async () => {
+      try {
+        await _ensureTesseract();
+        worker = await Tesseract.createWorker('por', 1, {
+          logger(m) {
+            if (m.status === 'recognizing text') {
+              const pct = Math.round(m.progress * 100);
+              window.dispatchEvent(new CustomEvent('ocr-progress', { detail: pct }));
+            }
+          },
+          errorHandler(e) { console.warn('OCR warn:', e); },
+        });
+        // PSM 6 = bloco uniforme de texto (cupom fiscal) — mais rápido que PSM 3
+        await worker.setParameters({
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          // desabilita dicionários para acelerar (cupons têm muitos números)
+          load_system_dawg: 'F',
+          load_freq_dawg: 'F',
+        });
+        ready = true;
+      } finally { _initP = null; }
+    })());
   }
 
   /* ── Parser principal ────────────────────────────────── */

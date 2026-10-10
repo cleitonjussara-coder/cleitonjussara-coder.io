@@ -64,6 +64,10 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
         'modelo_odometro' => env('ANTHROPIC_MODELO_ODOMETRO', 'claude-haiku-5-5'),
         'limite_dia' => (int) env('ODOMETRO_IA_LIMITE_DIA', 30),
+        /* Leitura de NOTA fiscal por foto (10/10/2026): IA primeiro, Tesseract de reserva. */
+        'modelo_nota' => env('ANTHROPIC_MODELO_NOTA', 'claude-haiku-5-5'),
+        'effort_nota' => env('ANTHROPIC_EFFORT_NOTA', 'low'),
+        'limite_dia_notas' => (int) env('NOTA_IA_LIMITE_DIA', 80),
     ],
 
     /* Só para desenvolvimento no Windows (curl do PHP sem CA): caminho de um

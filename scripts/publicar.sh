@@ -47,6 +47,7 @@ sftp_app() {
     echo "put rda-rdm-app/index.html $APP_DIR/rda-rdm-app/index.html"
     echo "put rda-rdm-app/sw.js $APP_DIR/rda-rdm-app/sw.js"
     echo "put rda-rdm-app/manifest.json $APP_DIR/rda-rdm-app/manifest.json"
+    echo "put rda-rdm-app/privacidade.html $APP_DIR/rda-rdm-app/privacidade.html"
     [[ "$AMB" == "teste" ]] && echo "put rda-rdm-app/manifest-teste.json $APP_DIR/rda-rdm-app/manifest-teste.json"
   } > "$lote"
   sftp "${SSH_OPTS[@]}" -b "$lote" "$HOST" >/dev/null
