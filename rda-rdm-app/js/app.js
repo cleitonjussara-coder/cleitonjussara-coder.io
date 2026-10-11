@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 377;
+const APP_BUILD = 378;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -926,6 +926,7 @@ function _itensMenu() {
   if (_ehGestorOuAdmin()) {
     itens.push({ view:'dashequipe', ico:'📈', lbl:'Dashboard Equipe', sub:'gastos de todos, com filtros' });
     itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
+    itens.push({ view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
   }
   if (_veFrota()) itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
@@ -2535,7 +2536,7 @@ function dispensarTodasNotificacoes() { _notifMarcarVistos(_notificacoes().filte
 const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
-  perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico',
+  perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
   dashequipe: 'Dashboard Equipe',
 };
 let _histViews = [];
@@ -2595,6 +2596,7 @@ function switchView(v, voltando = false) {
   else if (v==='equipe') renderEquipe();
   else if (v==='perfil') renderPerfil();
   else if (v==='historico') renderHistorico();
+  else if (v==='rastreio') { if (_ehGestorOuAdmin()) window.Rastreio?.render(); else switchView('inicio'); }
   else if (v==='dashequipe') renderDashEquipe();
 }
 

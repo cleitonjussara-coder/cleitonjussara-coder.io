@@ -12,6 +12,7 @@ use App\Http\Controllers\FotoController;
 use App\Http\Controllers\FrotaController;
 use App\Http\Controllers\NotaController;
 use App\Http\Controllers\PontoController;
+use App\Http\Controllers\RastreioController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\RepasseController;
 use App\Http\Middleware\ExigeConfirmacao;
@@ -53,6 +54,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () 
     Route::delete('/me/foto', [AuthController::class, 'removerFotoPerfil']);
 
     Route::get('/colaboradores', [ColaboradorController::class, 'index']);
+    Route::get('/colaboradores/atividade', [RastreioController::class, 'atividade']);   // rastreio da equipe (11/10/2026) — antes do {id}
     Route::get('/colaboradores/historico', [ColaboradorController::class, 'historico']);   // troca de papel/regime (26/09/2026) — antes do {id}, senão "historico" vira id
     Route::post('/convites', [ConviteController::class, 'criar']);
     Route::get('/convites', [ConviteController::class, 'lista']);

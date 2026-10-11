@@ -235,6 +235,8 @@ window.API = (() => {
   /* ── dados ───────────────────────────────────────────────── */
   const colaboradores = {
     list: () => req('GET', '/colaboradores'),
+    /* rastreio da equipe (gestor/admin, 11/10/2026): visto no app, última nota, contagens e notas recentes por pessoa */
+    atividade: () => req('GET', '/colaboradores/atividade'),
     get: id => req('GET', `/colaboradores/${id}`),
     update: (id, data) => req('PATCH', `/colaboradores/${id}`, { body: data }),
     /* 20/09/2026: desativar/reativar e exclusão em duas confirmações */
