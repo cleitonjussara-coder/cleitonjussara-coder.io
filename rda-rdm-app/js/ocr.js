@@ -179,6 +179,10 @@ window.OCR = (() => {
     // 4. Valor — cascata
     const valorPats = [
       /VALOR\s+DA\s+OPERA\S*\s*\/?\s*SERVI\S*[\s\S]{0,160}?R\$\s*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,   // NFS-e: o valor do serviço
+      /* 11/10/2026 (regra do Cleiton): o que vale é o valor PAGO, não o "valor total" dos itens. "Valor a pagar" já
+         traz acréscimo/desconto/arredondamento e não traz troco; a coluna "Valor Pago" é o que saiu no cartão/dinheiro. */
+      /VALOR\s+A\s+PAGAR\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
+      /VALOR\s+PAGO[\s\S]{0,80}?(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
       /(?:TOTAL\s*(?:GERAL|DA\s*NOTA|A\s*PAGAR)?|VALOR\s*TOTAL|A\s*PAGAR)\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
       /(?:DINHEIRO|PIX|CART[AÃ]O|D[ÉE]BITO|CR[ÉE]DITO)\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
       /TOTAL[^\d]{0,10}(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,
@@ -187,7 +191,16 @@ window.OCR = (() => {
     ];
     for (const p of valorPats) {
       const m = oneLine.match(p);
-      if (m) { const v = _pf(m[1]); if(v!==null && v>0){r.valor=v;break;} }
+      if (m) {
+        let v = _pf(m[1]);
+        /* "Valor Pago" em dinheiro mostra o que foi ENTREGUE; o valor pago de verdade é isso menos o troco */
+        if (v !== null && p.source.startsWith('VALOR\\s+PAGO')) {
+          const tr = oneLine.match(/TROCO\s*[R$:\s]*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i);
+          const t = tr ? _pf(tr[1]) : null;
+          if (t && v - t > 0) v = Math.round((v - t) * 100) / 100;
+        }
+        if (v !== null && v > 0) { r.valor = v; break; }
+      }
     }
     if (!r.valor) {
       const allVals = [...oneLine.matchAll(/([0-9]{1,7}[.,][0-9]{2})/g)]

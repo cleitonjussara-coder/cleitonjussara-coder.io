@@ -225,7 +225,9 @@ class LeitorNotaTest extends TestCase
         Http::assertSent(fn ($req) => $req->hasHeader('x-api-key', 'chave-de-teste')
             && $req->data()['model'] === 'claude-haiku-5-5'
             && $req->data()['messages'][0]['content'][0]['type'] === 'image'
-            && str_contains($req->data()['messages'][0]['content'][1]['text'], 'EMITENTE'));
+            && str_contains($req->data()['messages'][0]['content'][1]['text'], 'EMITENTE')
+            && str_contains($req->data()['messages'][0]['content'][1]['text'], 'VALOR PAGO')                // regra: o registro é o valor pago
+            && str_contains($req->data()['messages'][0]['content'][1]['text'], 'NÃO o "Valor Total"'));
     }
 
     public function test_sem_chave_erro_da_api_e_recusa_viram_sem_dados(): void
