@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 378;
+const APP_BUILD = 379;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -492,12 +492,12 @@ function _salvarUrlQR(chave, url) {
 }
 
 let _toastTimer;
-function toast(msg, tipo='ok') {
+function toast(msg, tipo='ok', ms=3000) {
   const el = $('toast');
   el.textContent = msg;
   el.className = `toast toast-${tipo} show`;
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 /* ── Janelas do próprio app (no lugar de prompt/confirm/alert) ───────────
@@ -770,11 +770,37 @@ function setLoading(on, msg = '') {
   }
 }
 
+/* "Enviar agora" (11/10/2026): zera a espera de tudo que está pendente neste aparelho e envia já, esperando terminar.
+   O que ficou pendente por falta de sinal continua salvo e tenta sozinho quando a rede voltar. */
+let _enviandoAgora = false;
+async function enviarAgora() {
+  if (_enviandoAgora || !sb || !user) return;
+  if (!navigator.onLine) { toast('Sem internet — fica salvo no celular e envia quando a rede voltar', 'err'); return; }
+  _enviandoAgora = true;
+  const btn = $('offline-banner-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+  const txt = $('offline-banner-text'); if (txt) txt.textContent = '⏳ Enviando as pendências…';
+  try {
+    const r = await DB.forcarEnvio(sb, user.id);
+    await carregarDadosLocais();
+    if (viewAtual === 'notas') renderNotas();
+    if (viewAtual === 'home') renderHome();
+    if (!r.restam) toast(r.tinha ? '✅ Tudo enviado' : 'Nada pendente para enviar', 'ok');
+    else toast(`${Math.max(0, r.tinha - r.restam)} enviado(s) · ${r.restam} ainda pendente(s). Ficam salvas no celular e o app tenta de novo sozinho; se continuar, a nota mostra "falhou" com o motivo.`, 'err', 6000);
+  } catch (e) {
+    toast('Não enviou: ' + (e?.message || 'erro'), 'err');
+  } finally {
+    _enviandoAgora = false;
+    await syncBadge(false);
+  }
+}
+
 async function syncBadge(syncing) {
   const dot = $('sync-dot');
   const txt = $('sync-txt');
   const banner = $('offline-banner');
   const bannerText = $('offline-banner-text');
+  const bannerBtn = $('offline-banner-btn');
   if (!dot || !txt) return;
 
   if (syncing) {
@@ -796,7 +822,9 @@ async function syncBadge(syncing) {
         ? `📡 Offline — ${summary.count} item${summary.count === 1 ? '' : 's'} aguardando sincronização`
         : '📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.';
       banner.style.display = 'flex';
+      document.body.classList.add('tem-banner-sync');
     }
+    if (bannerBtn) bannerBtn.style.display = 'none';          // sem internet não há o que forçar
     return;
   }
 
@@ -805,11 +833,16 @@ async function syncBadge(syncing) {
   if (banner && bannerText) {
     if (summary.count) {
       const suffix = summary.failedCount ? ` · ${summary.failedCount} com falha` : '';
-      const retryText = summary.scheduledCount ? ' · reprocessando em breve' : '';
-      bannerText.textContent = `🔄 ${summary.count} item${summary.count === 1 ? '' : 's'} pendente${summary.count === 1 ? '' : 's'} de sincronização${suffix}${retryText}`;
+      const seg = summary.nextAttemptAt ? Math.round((summary.nextAttemptAt - Date.now()) / 1000) : 0;
+      const retryText = !summary.scheduledCount ? '' : (seg <= 90 ? ' · tentando de novo em instantes' : ' · toque em Enviar agora para tentar já');
+      bannerText.textContent = `🔄 ${summary.count} ${summary.count === 1 ? 'item pendente' : 'itens pendentes'} de envio${suffix}${retryText}`;
       banner.style.display = 'flex';
+      document.body.classList.add('tem-banner-sync');
+      if (bannerBtn && !_enviandoAgora) { bannerBtn.style.display = 'inline-block'; bannerBtn.disabled = false; bannerBtn.textContent = 'Enviar agora'; }
     } else {
       banner.style.display = 'none';
+      document.body.classList.remove('tem-banner-sync');
+      if (bannerBtn) bannerBtn.style.display = 'none';
     }
   }
 }
@@ -1039,7 +1072,7 @@ async function init() {
   window.addEventListener('online', async () => {
     syncBadge(false);
     if (sb && user) {
-      await DB.sync(sb, user.id);
+      /* o db.js (setupAutoSync) já envia quando a rede volta — duas rodadas em dobro eram desperdício */
       if (driveOk) await pullFromDrive();
     }
   });
@@ -1054,7 +1087,7 @@ async function init() {
     if (viewAtual==='lixeira') renderNotasApagadas();
     if (viewAtual==='saldo') renderSaldo();
     const {ok,pulled,fotosFail,erroFoto} = e.detail||{};
-    if ((ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
+    if (!_enviandoAgora && (ok||0)+(pulled||0) > 0) toast(`Sincronizado: ${ok||0} enviados, ${pulled||0} recebidos`);
     if (fotosFail) _avisarFalhaAnexo(fotosFail, erroFoto);
   });
   window.addEventListener('ocr-progress', e => {
@@ -8274,8 +8307,8 @@ async function excluirNotasSelecionadas() {
     /* a ficha do colaborador lê do servidor: sem enviar antes, a nota reapareceria */
     if (feitas && sb && navigator.onLine) {
       if ((await DB.sync(sb, user.id).catch(() => undefined)) === null) {
-        await new Promise(r => setTimeout(r, 2500));   // já havia uma sincronização rodando
-        await DB.sync(sb, user.id).catch(() => {});
+        await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
+        await DB.sync(sb, user.id).catch(() => {});     // garante uma rodada completa depois
       }
     }
     await carregarDadosLocais();

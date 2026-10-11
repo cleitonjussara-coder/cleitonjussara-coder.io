@@ -243,7 +243,7 @@ window.DB = (() => {
     const now = new Date().toISOString();
     let n = 0;
     for (const i of (await _getAll('sync_queue')).filter(x => x.entity_id === entityId)) {
-      await _put('sync_queue', { ...i, attempts: 0, status: 'pending', next_attempt_at: now, last_error: null, updated_at: now });
+      await _mutarFila(i.id, cur => ({ ...cur, attempts: 0, contada_em: null, status: 'pending', next_attempt_at: now, last_error: null, updated_at: now }));
       n++;
     }
     const nota = await _get('notas', entityId).catch(() => null);
@@ -580,6 +580,35 @@ window.DB = (() => {
  
   /* ── SYNC ────────────────────────────────────────────── */
   let _running = false;
+  let _novaRodada = null;          // pedido de sync feito DURANTE uma rodada: roda de novo assim que ela terminar
+  let _loopAtual = null;           // promessa da rodada em andamento (quem precisa esperar usa aguardarSync())
+  let _ultimoInicio = 0;           // quando a última rodada começou (evita disparos em rajada)
+  let _timerReenvio = null;        // reenvio rápido enquanto sobra coisa na fila
+  let _rapidosSeguidos = 0;        // reenvios rápidos já feitos nesta sequência de falhas (para depois de 4)
+  let _ultimoDisparo = 0;          // quando o último gatilho automático disparou (trava de rajada)
+  let _auto = null;                // { sb, getUid } do setupAutoSync (instala os ouvintes UMA vez)
+  /* Quem está logado AGORA, perguntado ao app (getUid do setupAutoSync). _sessaoUid é a memória do db.js e pode estar
+     velha (o logout não avisa o db.js); nenhum envio pode usar um uid capturado antes de uma troca de conta. Sem
+     getter registrado, não bloqueia nada. */
+  let _uidVivo = null;
+  const _contaViva = uid => { if (!uid || !_uidVivo) return true; try { return _uidVivo() === uid; } catch (_) { return true; } };
+
+  /* Lê e grava o item da fila NA MESMA transação: o que se grava é o registro ATUAL, não uma cópia lida antes (uma
+     edição que entrou no meio não é desfeita), e item já enviado e apagado não ressuscita. fn devolve o novo item ou null. */
+  const _mutarFila = (id, fn) => _tx(['sync_queue'], 'readwrite', (t, res, rej) => {
+    const s = t.objectStore('sync_queue');
+    const g = s.get(id);
+    g.onerror = e => rej(e.target.error);
+    g.onsuccess = () => {
+      const cur = g.result;
+      if (!cur) { res(null); return; }
+      const novo = fn(cur);
+      if (!novo) { res(cur); return; }
+      const p = s.put(novo);
+      p.onsuccess = () => res(novo);
+      p.onerror = e => rej(e.target.error);
+    };
+  });
 
   async function _ensureQueueFromExisting() {
     const [allN, allR, allFotos, queueItems] = await Promise.all([
@@ -651,9 +680,13 @@ window.DB = (() => {
     let fotosOk = 0, fotosFail = 0, erroFoto = null;
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
 
-    for (const item of dueItems) {
-      /* trocou de conta no meio do ciclo (upload longo): o que falta é da conta antiga e espera ela voltar */
-      if (meuId && _sessaoUid && _sessaoUid !== meuId) break;
+    for (const item0 of dueItems) {
+      /* trocou de conta no meio do ciclo (upload longo): o que falta é da conta antiga e espera ela voltar.
+         _contaViva pergunta ao app quem está logado AGORA — _sessaoUid sozinho pode estar velho (revisão 11/10/2026). */
+      if (meuId && ((_sessaoUid && _sessaoUid !== meuId) || !_contaViva(meuId))) break;
+      /* o item pode ter mudado desde que a lista foi montada (edição da nota, "Enviar agora", envio concluído): usa o ATUAL */
+      const item = await _get('sync_queue', item0.id);
+      if (!item) continue;
       const now = new Date().toISOString();
       await _put('sync_queue', { ...item, status: 'running', updated_at: now });
       try {
@@ -708,27 +741,39 @@ window.DB = (() => {
         if (item.entity === 'nota') await sb.notas.upsert(payload);
         else                        await sb.repasses.upsert(payload);
 
-        if (item.entity === 'nota') {
-          await _put('notas', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+        const store = item.entity === 'nota' ? 'notas' : 'repasses';
+        const atualReg = await _get(store, item.entity_id);
+        if (atualReg && record.updated_at && atualReg.updated_at !== record.updated_at) {
+          /* A pessoa MEXEU no registro enquanto o envio estava no ar: o que subiu é a versão anterior. Não marca como
+             enviado nem apaga o item da fila — a versão nova sobe na próxima rodada, sem sobrescrever a edição. */
+          const q = await _get('sync_queue', item.id);
+          if (q) await _put('sync_queue', { ...q, status: 'pending', attempts: 0, contada_em: null, next_attempt_at: now, updated_at: now });
         } else {
-          await _put('repasses', { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+          await _del('sync_queue', item.id);
         }
-        await _del('sync_queue', item.id);
         ok++;
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
-        const attempts = (item.attempts || 0) + 1;
+        /* Falha de REDE/5xx só gasta uma das MAX_SYNC_ATTEMPTS tentativas se a última contada tem 1 min ou mais: com o
+           reenvio rápido (3-20 s), sinal ruim passageiro não pode virar "falhou" em meio minuto. Recusa do servidor
+           (422/403…) conta sempre. */
+        const agoraMs = Date.now();
+        const ultimaContada = item.contada_em ? new Date(item.contada_em).getTime() : 0;
         /* nota recusada por "Anexo obrigatório" enquanto o anexo ainda está na fila tentando subir (sinal fraco) é
            dependência passageira, não recusa: segue com a espera curta de sempre */
         const irmaFoto = item.entity === 'nota' && /anexo obrigat/i.test(message)
           ? (await _getAll('sync_queue')).find(q => q.entity === 'foto' && q.entity_id === item.entity_id && q.status !== 'failed') : null;
         const recusado = !irmaFoto && STATUS_RECUSADO.includes(e?.status);
-        const nextAttemptAt = new Date(Date.now() + (recusado ? _esperaDoErro(e, attempts) : _retryDelayMs(attempts))).toISOString();
+        const conta = recusado || agoraMs - ultimaContada >= 60_000;
+        const attempts = (item.attempts || 0) + (conta ? 1 : 0);
+        const espera = recusado ? _esperaDoErro(e, attempts) : (conta ? _retryDelayMs(attempts) : Math.min(20_000, Math.max(3_000, _retryDelayMs(Math.max(1, attempts)))));
+        const nextAttemptAt = new Date(Date.now() + espera).toISOString();
         /* recusa do servidor (422/403…) vira "falhou" já na 3ª tentativa: a pessoa precisa ver o aviso logo, não só
            depois de 1 hora de espera de 30 min entre as tentativas */
         const nextStatus = (attempts >= MAX_SYNC_ATTEMPTS || (recusado && attempts >= 3)) ? 'failed' : 'pending';
-        const updatedItem = { ...item, attempts, next_attempt_at: nextAttemptAt, status: nextStatus, last_error: message, updated_at: now };
-        await _put('sync_queue', updatedItem);
+        /* grava sobre o item ATUAL (uma edição pode ter entrado no payload durante o envio) */
+        await _mutarFila(item.id, cur => ({ ...cur, attempts, contada_em: conta ? now : (item.contada_em || null), next_attempt_at: nextAttemptAt, status: nextStatus, last_error: message, updated_at: now }));
         if (item.entity === 'foto') {
           falhou(message);
         } else {
@@ -963,33 +1008,154 @@ window.DB = (() => {
     return n;
   }
 
-  async function sync(sb, userId) {
+  /* Uma rodada: sobe o que está na fila e (se não for "leve") baixa novidades e repara anexos órfãos.
+     A rodada LEVE é a do reenvio rápido: só envia, sem puxar tudo do servidor a cada 3 s. */
+  async function _rodada(sb, userId, leve) {
+    if (!leve) { try { await repararQrUrls(userId); } catch (_) {} }
+    const push = await pushPending(sb, userId);
+    if (leve) {
+      const rl = { ...push, pulled: 0, recuperadas: 0 };
+      if (push.ok || push.fotosOk) window.dispatchEvent(new CustomEvent('db-synced', { detail: rl }));
+      return rl;
+    }
+    const pulled = await pullIncremental(sb, userId);
+    let recuperadas = 0;
+    try { recuperadas = await repararFotosOrfas(sb, userId); } catch (_) {}
+    const result = { ...push, pulled, recuperadas };
+    window.dispatchEvent(new CustomEvent('db-synced', { detail: result }));
+    return result;
+  }
+
+  /* 11/10/2026 — envio das notas que ficava "pendente" no celular. Antes: um pedido de sync feito enquanto outra
+     rodada já rodava era DESCARTADO (a nota recém-salva esperava até 60 s pelo próximo ciclo). Agora ele vira uma
+     rodada a mais, logo em seguida. Devolve null nesse caso, como sempre (quem precisa esperar: aguardarSync()).
+     Devolve undefined (não null) se a conta que pediu já não é a que está logada: nada é enviado. */
+  async function sync(sb, userId, leve) {
+    if (userId && !_contaViva(userId)) return undefined;
     if (userId) _sessaoUid = userId;
-    if (_running) return null;
+    if (_running) {
+      _novaRodada = { sb, userId: userId || _sessaoUid, leve: !!leve && (_novaRodada ? _novaRodada.leve : true) };
+      return null;
+    }
     _running = true;
-    try {
-      try { await repararQrUrls(userId); } catch (_) {}
-      const push   = await pushPending(sb, userId);
-      const pulled = await pullIncremental(sb, userId);
-      let recuperadas = 0;
-      try { recuperadas = await repararFotosOrfas(sb, userId); } catch (_) {}
-      const result = { ...push, pulled, recuperadas };
-      window.dispatchEvent(new CustomEvent('db-synced', { detail: result }));
-      return result;
-    } finally {
-      _running = false;
+    _ultimoInicio = Date.now();
+    _loopAtual = (async () => {
+      let caiu = false;
+      try {
+        let result = await _rodada(sb, userId, leve);
+        for (let voltas = 0; _novaRodada && voltas < 3; voltas++) {
+          const p = _novaRodada; _novaRodada = null;
+          if (!_contaViva(p.userId || userId)) break;      // quem pediu saiu ou trocou de conta: o que é dele espera ele voltar
+          if (p.userId) _sessaoUid = p.userId;
+          result = await _rodada(p.sb || sb, p.userId || userId, p.leve);
+        }
+        return result;
+      } catch (e) {
+        caiu = true; throw e;
+      } finally {
+        _running = false; _loopAtual = null; _novaRodada = null;
+        if (!caiu) _reagendarReenvio(sb);                   // rodada que estourou não gera laço de reenvio
+      }
+    })();
+    return _loopAtual;
+  }
+  const aguardarSync = () => _loopAtual || Promise.resolve(null);
+
+  /* Sobrou coisa na fila (rede fraca, servidor ocupado)? Tenta de novo logo — 3 a 20 s — em vez de esperar o ciclo de
+     60 s, que nem corre com o app em segundo plano. Só enquanto nada tiver "falhado" de vez, no máximo 4 vezes seguidas
+     (depois disso valem o ciclo de 60 s, os gatilhos e o botão) e só para a conta que está logada AGORA. */
+  async function _reagendarReenvio(sb) {
+    if (_timerReenvio) { clearTimeout(_timerReenvio); _timerReenvio = null; }
+    const uid = _uidVivo ? _uidVivo() : _sessaoUid;
+    if (!sb || !uid || uid !== _sessaoUid || !navigator.onLine) return;
+    let r; try { r = await getSyncQueueSummary(); } catch (_) { return; }
+    if (!r.count) { _rapidosSeguidos = 0; return; }
+    if (r.failedCount > 0 || _rapidosSeguidos >= 4) return;
+    const espera = r.nextAttemptAt ? r.nextAttemptAt - Date.now() : 0;
+    if (espera > 30_000) return;
+    const ms = Math.min(20_000, Math.max(3_000, espera + 500));
+    _timerReenvio = setTimeout(() => {
+      _timerReenvio = null;
+      const u = _uidVivo ? _uidVivo() : _sessaoUid;
+      if (u && u === _sessaoUid && navigator.onLine && !document.hidden) { _rapidosSeguidos++; sync(sb, u, true).catch(() => {}); }
+    }, ms);
+  }
+
+  /* Voltou para o app, a rede mudou ou voltou: a espera CURTA (até 2 min) deixa de valer — o motivo da falha pode ter
+     passado, inclusive em item que já tinha virado "falhou" por rede. Recusa do servidor (espera de 30 min) não é
+     tocada: só o botão "Enviar agora" libera. Grava sobre o item ATUAL (_mutarFila). */
+  async function _liberarEsperaCurta(userId) {
+    const iso = new Date().toISOString();
+    const curta = it => {
+      if (!it || it.status === 'running' || !it.next_attempt_at) return false;
+      const falta = new Date(it.next_attempt_at).getTime() - Date.now();
+      return falta > 0 && falta <= 120_000;
+    };
+    for (const i of await _getAll('sync_queue')) {
+      if (!curta(i)) continue;
+      if (userId && !(await _itemEhDaSessao(i, userId))) continue;
+      await _mutarFila(i.id, cur => (curta(cur) ? { ...cur, next_attempt_at: iso } : null));
     }
   }
 
+  /* "Enviar agora": zera a espera e as tentativas de TUDO que esta conta tem na fila (inclusive o que já tinha
+     virado "falhou") e envia já, esperando terminar. Devolve quantos itens havia, quantos restam e o 1º motivo. */
+  async function forcarEnvio(sb, userId) {
+    if (userId && !_contaViva(userId)) return { tinha: 0, restam: 0, falharam: 0, motivo: null };
+    if (userId) _sessaoUid = userId;
+    const meuId = userId || _sessaoUid;
+    _rapidosSeguidos = 0;
+    /* a rodada em voo ainda vai gravar os itens que já leu (tentativas e espera antigas): zerar antes disso não vale */
+    while (_running) await aguardarSync().catch(() => {});
+    const agora = new Date().toISOString();
+    let tinha = 0;
+    for (const i of await _getAll('sync_queue')) {
+      if (meuId && !(await _itemEhDaSessao(i, meuId))) continue;
+      tinha++;
+      await _mutarFila(i.id, cur => ({ ...cur, attempts: 0, contada_em: null, status: 'pending', next_attempt_at: agora, updated_at: agora }));
+      const store = i.entity === 'repass' ? 'repasses' : i.entity === 'nota' ? 'notas' : null;
+      if (store) {
+        const loc = await _get(store, i.entity_id).catch(() => null);
+        if (loc && loc.sync_status === 'failed') await _put(store, { ...loc, synced: false, sync_status: 'pending', sync_error: null });
+      }
+    }
+    /* sync() devolve null quando outra rodada ocupa o lugar (um gatilho pode ter começado uma no meio): espera e tenta de novo */
+    for (let k = 0; k < 4; k++) {
+      const r = await sync(sb, meuId);
+      if (r !== null) break;
+      await aguardarSync().catch(() => {});
+    }
+    const resumo = await getSyncQueueSummary();
+    let motivo = null;
+    for (const i of await _getAll('sync_queue')) {
+      if (i.last_error && (!meuId || await _itemEhDaSessao(i, meuId))) { motivo = i.last_error; break; }
+    }
+    return { tinha, restam: resumo.count, falharam: resumo.failedCount, motivo };
+  }
+
+  /* Gatilhos automáticos. Instala os ouvintes UMA vez (cada login chama de novo: só atualiza sb e getUid). */
   function setupAutoSync(sb, getUid) {
-    window.addEventListener('online', () => {
-      const uid = getUid();
-      if (uid) sync(sb, uid);
-    });
-    setInterval(() => {
-      const uid = getUid();
-      if (uid && navigator.onLine) sync(sb, uid);
-    }, 60_000);
+    _uidVivo = getUid;
+    if (_auto) { _auto.sb = sb; _auto.getUid = getUid; return; }
+    _auto = { sb, getUid };
+    /* Dispara uma rodada agora. Em rajada (foco + visibilidade + rede ao mesmo tempo) só a primeira conta: o carimbo
+       é gravado ANTES de qualquer await. */
+    const disparar = (livre) => {
+      const uid = _auto.getUid();
+      if (!uid || !navigator.onLine) return;
+      if (!livre && Date.now() - Math.max(_ultimoInicio, _ultimoDisparo) < 3000) return;
+      _ultimoDisparo = Date.now();
+      _rapidosSeguidos = 0;
+      _liberarEsperaCurta(uid).catch(() => {}).then(() => sync(_auto.sb, uid)).catch(() => {});
+    };
+    window.addEventListener('online', () => disparar(true));
+    /* 11/10/2026: voltar para o app (da câmera, de outro app, do bloqueio de tela) envia na hora — antes só o relógio
+       de 60 s, que o celular pausa com o app em segundo plano. */
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) disparar(false); });
+    window.addEventListener('pageshow', e => { if (e.persisted) disparar(false); });
+    window.addEventListener('focus', () => disparar(false));
+    try { navigator.connection?.addEventListener?.('change', () => disparar(false)); } catch (_) {}
+    setInterval(() => disparar(true), 60_000);
   }
 
   return {
@@ -999,7 +1165,7 @@ window.DB = (() => {
     saveFotoLocal, getFotoLocal, repararFotosLocais, repararFotosOrfas, getFalhaSync, tentarDeNovo,
     saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse, mesclarRepassesRemotos,
     upsertFromDrive,
-    sync, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
+    sync, aguardarSync, forcarEnvio, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
     garantirAno, anosSincronizados, getNotasEquipe,
   };
 })();

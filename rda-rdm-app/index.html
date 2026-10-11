@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=378">
+  <link rel="manifest" href="manifest.json?v=379">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -204,6 +204,7 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
 #hdr-grupo{flex-shrink:0;background:linear-gradient(180deg,#0a4a24,#062d16);box-shadow:0 4px 14px rgba(0,0,0,.4)}
 /* Cabeçalho = só a logomarca agora, mais compacta (26/09/2026: "ocupar o
    menos espaço possível"). Sino e foto desceram pra faixa de saudação. */
+body.tem-banner-sync #app-header{padding-top:2px}   /* o banner de envio já cobre a área do notch */
 #app-header{
   position:relative;background:transparent;color:#fff;
   display:flex;align-items:center;justify-content:center;
@@ -273,8 +274,10 @@ h1,h2,h3,h4,.pnl-tit,.aba-hero-sigla,.res-val,.ini-kpi-val,.cdet-kpi-val{letter-
 .sync-dot.online{background:#74C69D}
 .sync-dot.offline{background:#E63946}
 .sync-dot.syncing{background:var(--warning);animation:pulse 1s infinite}
-.offline-banner{display:none;align-items:center;justify-content:center;gap:8px;padding:8px 12px;background:#fff3cd;color:#7a4a00;font-size:14px;font-weight:600;border-bottom:1px solid #f3d68f}
+.offline-banner{display:none;align-items:center;justify-content:center;gap:8px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;background:#fff3cd;color:#7a4a00;font-size:14px;font-weight:600;border-bottom:1px solid #f3d68f}
 .offline-banner span{line-height:1.4;text-align:center}
+.offline-banner button{display:none;flex-shrink:0;background:#7a4a00;color:#fff3cd;border:0;border-radius:8px;padding:7px 12px;font-size:14px;font-weight:700;cursor:pointer}
+.offline-banner button:disabled{opacity:.6}
 .sync-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:13px;font-weight:700}
 .sync-pill.pending{background:#fff3cd;color:#7a4a00}
 .sync-pill.failed{background:#ffe5e7;color:#a61e2f}
@@ -1843,6 +1846,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <div id="demo-banner">⚠️ Modo demonstração — dados salvos apenas neste dispositivo</div>
   <div id="offline-banner" class="offline-banner">
     <span id="offline-banner-text">📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.</span>
+    <button id="offline-banner-btn" type="button" onclick="enviarAgora()">Enviar agora</button>
   </div>
   <!-- 26/09/2026: cabeçalho + faixa do usuário viraram "um só ambiente" —
        pedido do Cleiton. Um wrapper só, com UM fundo contínuo, pra sumir a
@@ -1851,7 +1855,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=378" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=379" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2495,33 +2499,33 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=378"></script>
-<script defer src="js/db.js?v=378"></script>
-<script defer src="js/nfce.js?v=378"></script>
-<script defer src="js/sefaz.js?v=378"></script>
-<script defer src="js/brasilapi.js?v=378"></script>
-<script defer src="js/ocr.js?v=378"></script>
-<script defer src="js/recorte.js?v=378"></script>
-<script defer src="js/excel.js?v=378"></script>
-<script defer src="js/gestor.js?v=378"></script>
-<script defer src="js/frota.js?v=378"></script>
-<script defer src="js/ponto.js?v=378"></script>
-<script defer src="js/rastreio.js?v=378"></script>
-<script defer src="js/gdrive.js?v=378"></script>
+<script defer src="js/api.js?v=379"></script>
+<script defer src="js/db.js?v=379"></script>
+<script defer src="js/nfce.js?v=379"></script>
+<script defer src="js/sefaz.js?v=379"></script>
+<script defer src="js/brasilapi.js?v=379"></script>
+<script defer src="js/ocr.js?v=379"></script>
+<script defer src="js/recorte.js?v=379"></script>
+<script defer src="js/excel.js?v=379"></script>
+<script defer src="js/gestor.js?v=379"></script>
+<script defer src="js/frota.js?v=379"></script>
+<script defer src="js/ponto.js?v=379"></script>
+<script defer src="js/rastreio.js?v=379"></script>
+<script defer src="js/gdrive.js?v=379"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=378"></script>
+<script defer src="js/svelte-ajuda.js?v=379"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=378"></script>
+<script defer src="js/svelte-historico.js?v=379"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=378"></script>
+<script defer src="js/svelte-arquivos.js?v=379"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=378"></script>
-<script defer src="js/app.js?v=378"></script>
+<script defer src="js/svelte-perfil.js?v=379"></script>
+<script defer src="js/app.js?v=379"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=378').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=379').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
