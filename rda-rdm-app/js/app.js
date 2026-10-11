@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 375;
+const APP_BUILD = 376;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5618,6 +5618,7 @@ function renderPerfil() {
       </p>
     </div>
     ` : ''}
+    <p id="perfil-versao" style="text-align:center;font-size:13px;color:var(--text2);margin-top:14px">Versão do app: ${APP_VERSION} · publicação ${APP_BUILD}</p>
   </div>`);
   _pintarBotaoInstalar();
   _mostrarAvatar();
