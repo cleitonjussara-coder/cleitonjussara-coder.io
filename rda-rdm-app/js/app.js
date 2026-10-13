@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 380;
+const APP_BUILD = 381;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -8144,7 +8144,7 @@ async function _salvarNotaInterno() {
     const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
       semValor ? '⚠️ Nota salva SEM valor — edite para completar'
-      : _atraso >= LANC_DIAS_LIMITE ? `⏰ Nota salva, mas ela é de ${_atraso} dias atrás. Lance as notas no dia do gasto, sem passar de uma semana.`
+      : _atraso >= LANC_DIAS_LIMITE ? `⏰ Nota salva, mas é de ${_atraso} dias atrás. Lance as notas no dia do gasto.`
       : _removeuRepetida ? 'Nota salva — a repetida anterior foi para a lixeira'
       : 'Nota salva!',
       semValor || _atraso >= LANC_DIAS_LIMITE ? 'err' : 'ok', _atraso >= LANC_DIAS_LIMITE ? 6000 : 3000);
