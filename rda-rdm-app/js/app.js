@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 379;
+const APP_BUILD = 380;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3078,6 +3078,49 @@ function renderDespesas() {
    de quem está no campo, um resumo do mês e atalhos para o resto.
    Nada aqui é novo: só chama o que já existe (QR, Manual, Repasse).
 ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   LANÇAMENTO DIÁRIO (13/10/2026, pedido do Cleiton: "criar alerta para o
+   colaborador para não acumular notas mais de uma semana, lançamento
+   diário"). Duas lembranças, só para a própria pessoa:
+   1) faixa na Início contando os dias desde a última nota que ELA lançou
+      (o mesmo carimbo created_at que o Rastreio da equipe usa para o
+      gestor): 1 a 3 dias lembra, 4 a 6 avisa, 7 ou mais alerta;
+   2) ao salvar uma nota NOVA com data de 7 dias atrás ou mais, avisa que
+      ela ficou guardada tempo demais.
+═══════════════════════════════════════════════════════════ */
+const LANC_DIAS_AVISO = 4;    // a partir daqui a faixa fica amarela
+const LANC_DIAS_LIMITE = 7;   // uma semana: faixa vermelha / nota atrasada
+function _diaLocalMs(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  if (isNaN(d)) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function _diasAtras(v) {
+  const dia = _diaLocalMs(v);
+  return dia == null ? null : Math.round((_diaLocalMs(new Date()) - dia) / 86400000);
+}
+function _diasSemLancar() {
+  let ultima = null;
+  for (const n of notas) {
+    if (n.deleted || (n.user_id && user?.id && n.user_id !== user.id) || !n.created_at) continue;
+    if (!ultima || String(n.created_at) > String(ultima)) ultima = n.created_at;
+  }
+  return ultima ? _diasAtras(ultima) : null;
+}
+function _faixaLancamentoDiarioHTML() {
+  if (_ehContabilidade()) return '';
+  const dias = _diasSemLancar();
+  if (dias == null || dias <= 0) return '';
+  const quando = dias === 1 ? 'ontem' : `há <b>${dias} dias</b>`;
+  if (dias >= LANC_DIAS_LIMITE) return `
+    <div class="ini-dica ini-lanc ini-lanc-alerta" onclick="switchView('despesas')">🚨 Sua última nota foi lançada ${quando}: <b>já faz uma semana ou mais</b>. Lance hoje as notas que estão guardadas e, daqui pra frente, lance no dia do gasto.</div>`;
+  if (dias >= LANC_DIAS_AVISO) return `
+    <div class="ini-dica ini-lanc ini-lanc-aviso" onclick="switchView('despesas')">⏰ Sua última nota foi lançada ${quando}. <b>Não deixe as notas passarem de uma semana</b>: se teve gasto, lance hoje.</div>`;
+  return `
+    <div class="ini-dica ini-lanc" onclick="switchView('despesas')">📅 Lançamento é diário: sua última nota foi lançada ${quando}. Se teve gasto, lance hoje.</div>`;
+}
+
 function renderInicio() {
   const A = _agregaPeriodo(filMes, filAno, 'mensal');
   const hora = new Date().getHours();
@@ -3216,6 +3259,7 @@ function renderInicio() {
         </span>
       </button>` : ''}
     </div>
+    ${_faixaLancamentoDiarioHTML()}
     ${!_ehContabilidade() && pendTotal ? `
     <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
       ? `⚠️ <b>1 nota para corrigir</b>: ${_ehNotaDeOutroUsuario(_pendNotas[0].nota) ? esc(_pendNotas[0].nota.user_nome || _rotuloProprietario(_pendNotas[0].nota)) + ' · ' : ''}${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
@@ -8097,11 +8141,13 @@ async function _salvarNotaInterno() {
     fecharFormNota();
     await carregarDadosLocais();
     renderNotas();
+    const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
       semValor ? '⚠️ Nota salva SEM valor — edite para completar'
+      : _atraso >= LANC_DIAS_LIMITE ? `⏰ Nota salva, mas ela é de ${_atraso} dias atrás. Lance as notas no dia do gasto, sem passar de uma semana.`
       : _removeuRepetida ? 'Nota salva — a repetida anterior foi para a lixeira'
       : 'Nota salva!',
-      semValor ? 'err' : 'ok');
+      semValor || _atraso >= LANC_DIAS_LIMITE ? 'err' : 'ok', _atraso >= LANC_DIAS_LIMITE ? 6000 : 3000);
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
   } finally { setLoading(false); }
