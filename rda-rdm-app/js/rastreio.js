@@ -124,7 +124,7 @@ window.Rastreio = (() => {
       <p class="rs-sub">Atualizado às ${dados ? hhmm(dados.gerado_em) : '—'} · toque num cartão para ver as últimas notas.</p>
       <div class="rs-chips">${chip('todos', 'Todos')}${chip('ativos', 'Ativos hoje')}${chip('parados', 'Parados')}</div>
       <div class="rs-lista">${mostra.length ? mostra.map(_cartao).join('') : '<div class="empty-state"><div class="empty-icon">🛰️</div><p>Ninguém neste filtro.</p></div>'}</div>
-      <p class="rs-leg">Bolinha: verde lançou hoje · amarelo 1 a ${LIMITE_AMARELO} dias · vermelho mais de ${LIMITE_AMARELO} dias · cinza sem notas em 60 dias.<br>"Visto no app" é o último uso do aplicativo, mesmo sem lançar nota.</p>`;
+      <p class="rs-leg">Bolinha: verde lançou hoje · amarelo 1 a ${LIMITE_AMARELO} dias · vermelho mais de ${LIMITE_AMARELO} dias · cinza sem notas em 60 dias.<br>"Visto no app" é o último contato do aparelho com o servidor, mesmo sem lançar nota — inclui o envio em segundo plano de nota que ficou esperando.</p>`;
     el.scrollTop = rolagem;
   }
 

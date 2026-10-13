@@ -173,7 +173,7 @@
     <div class="ajuda-sec ajuda-gestor">\r
       <h4>🕓 Histórico</h4>\r
       <p>Em <b>Início → Ir para → Histórico</b>: quem lançou, editou ou apagou cada <b>nota</b> e <b>repasse</b> de toda a equipe nos últimos 60 dias, e também quem <b>trocou o papel ou o regime</b> de alguém (🎭/🔁) — antes isso só ficava no log do servidor.</p>\r
-      <p>No menu <b>☰ → 🛰️ Rastreio da equipe</b> (só gestor e administrador, 11/10/2026): um cartão por colaborador, do mais ativo para o mais parado. Cada cartão mostra <b>quando a pessoa usou o app por último</b> ("visto no app", mesmo sem lançar nota), quando lançou a <b>última nota</b>, quantas lançou <b>hoje, na semana e no mês</b> (com o total em R$ do mês) e, ao tocar, as <b>últimas notas</b> mexidas: ✚ lançou, ✏️ editou, 🗑️ apagou. A bolinha: <b>verde</b> lançou hoje, <b>amarela</b> há 1 a 3 dias, <b>vermelha</b> há mais de 3 dias, <b>cinza</b> sem notas nos últimos 60 dias. Os filtros <b>Ativos hoje</b> e <b>Parados</b> ajudam a achar quem precisa de um lembrete. Precisa de internet.</p>\r
+      <p>No menu <b>☰ → 🛰️ Rastreio da equipe</b> (só gestor e administrador, 11/10/2026): um cartão por colaborador, do mais ativo para o mais parado. Cada cartão mostra <b>quando a pessoa usou o app por último (no Android, o envio em segundo plano de uma nota que ficou esperando também conta como contato)</b> ("visto no app", mesmo sem lançar nota), quando lançou a <b>última nota</b>, quantas lançou <b>hoje, na semana e no mês</b> (com o total em R$ do mês) e, ao tocar, as <b>últimas notas</b> mexidas: ✚ lançou, ✏️ editou, 🗑️ apagou. A bolinha: <b>verde</b> lançou hoje, <b>amarela</b> há 1 a 3 dias, <b>vermelha</b> há mais de 3 dias, <b>cinza</b> sem notas nos últimos 60 dias. Os filtros <b>Ativos hoje</b> e <b>Parados</b> ajudam a achar quem precisa de um lembrete. Precisa de internet.</p>\r
     </div>\r
 \r
     <div class="ajuda-sec ajuda-gestor ajuda-contador">\r
@@ -217,6 +217,7 @@
       <h4>☁️ Envio para o servidor</h4>\r
       <p>Tudo é salvo <b>primeiro no celular</b> e enviado depois — dá pra lançar <b>sem internet</b>. Envia automático: ao <b>salvar</b>, ao <b>voltar a internet</b>, ao <b>voltar para o app</b> (da câmera, de outro app ou do bloqueio de tela) e, enquanto sobrar pendência, a cada poucos segundos (11/10/2026). A foto sobe antes da nota.</p>\r
       <p>Quando há nota esperando para ir, aparece no topo o aviso <b>"N itens pendentes de envio"</b> com o botão <b>Enviar agora</b>: ele zera a espera e envia na hora, e diz quantas foram e o que ainda ficou. Sem sinal, nada se perde: a nota fica salva no celular e sobe sozinha quando a rede voltar. Puxar a tela para baixo continua funcionando.</p>\r
+      <p><b>Envio com o app fechado (Android):</b> no Android (Chrome), a nota que ficou esperando é enviada sozinha assim que o celular volta a ter internet, <b>mesmo com o app fechado</b> — e se você bloquear a tela no meio do envio, ele continua. No iPhone o sistema não permite isso: lá a nota sobe quando você abre o app de novo (ou toca em <b>Enviar agora</b>).</p>\r
       <p>Indicador no topo:</p>\r
       <ul>\r
         <li><span class="ajuda-dot" style="background:#74C69D"></span> <b>online</b> — conectado</li>\r
