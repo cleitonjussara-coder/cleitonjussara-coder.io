@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 379;
+const APP_BUILD = 380;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -786,6 +786,7 @@ async function enviarAgora() {
     if (viewAtual === 'notas') renderNotas();
     if (viewAtual === 'home') renderHome();
     if (!r.restam) toast(r.tinha ? '✅ Tudo enviado' : 'Nada pendente para enviar', 'ok');
+    else if (r.ocupado) toast(`${Math.max(0, r.tinha - r.restam)} enviado(s) · ${r.restam} em envio. O aparelho ainda está enviando em segundo plano — as notas seguem sendo enviadas.`, 'ok', 5000);
     else toast(`${Math.max(0, r.tinha - r.restam)} enviado(s) · ${r.restam} ainda pendente(s). Ficam salvas no celular e o app tenta de novo sozinho; se continuar, a nota mostra "falhou" com o motivo.`, 'err', 6000);
   } catch (e) {
     toast('Não enviou: ' + (e?.message || 'erro'), 'err');
@@ -1470,6 +1471,21 @@ async function diagnosticoInstalacao() {
   } else {
     L.push('Service worker: não suportado neste navegador');
   }
+  L.push(`Envio em segundo plano (Android/Chrome): ${'SyncManager' in window ? 'disponível' : 'indisponível neste aparelho (iPhone/Firefox) — o envio é com o app aberto'}`);
+  try {
+    const esp = await DB.getMeta('sessao_fundo');
+    L.push(`  conta espelhada para o envio em segundo plano: ${sn(!!(esp && esp.token))}`);
+    /* o service worker carregou o código de envio? (pergunta a ele; sem resposta em 2 s = ainda não está controlando) */
+    const st = await new Promise(res => {
+      const c = navigator.serviceWorker?.controller;
+      if (!c) { res(null); return; }
+      const h = e => { if (e.data && e.data.tipo === 'envio-fundo-status') { navigator.serviceWorker.removeEventListener('message', h); res(e.data); } };
+      navigator.serviceWorker.addEventListener('message', h);
+      setTimeout(() => { navigator.serviceWorker.removeEventListener('message', h); res(null); }, 2000);
+      c.postMessage({ tipo: 'envio-fundo-status' });
+    });
+    L.push(`  código de envio carregado no service worker: ${st ? sn(st.db && st.api) : 'sem resposta (worker ainda não controla esta página)'}`);
+  } catch (_) {}
   L.push('');
 
   /* A pergunta que mais importa quando a opção some do menu do Chrome:
@@ -8306,10 +8322,13 @@ async function excluirNotasSelecionadas() {
     await syncBadge(false);
     /* a ficha do colaborador lê do servidor: sem enviar antes, a nota reapareceria */
     if (feitas && sb && navigator.onLine) {
-      if ((await DB.sync(sb, user.id).catch(() => undefined)) === null) {
+      let r = await DB.sync(sb, user.id).catch(() => undefined);
+      if (r === null) {
         await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
-        await DB.sync(sb, user.id).catch(() => {});     // garante uma rodada completa depois
+        r = await DB.sync(sb, user.id).catch(() => undefined);   // garante uma rodada completa depois
       }
+      /* o envio em segundo plano (service worker) ainda segurava a vez: tenta mais uma ou duas vezes */
+      for (let k = 0; r && r.ocupado && k < 2; k++) r = await DB.sync(sb, user.id).catch(() => undefined);
     }
     await carregarDadosLocais();
     if (viewAtual === 'equipe') renderEquipe();
