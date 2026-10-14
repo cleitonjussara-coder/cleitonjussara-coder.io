@@ -379,6 +379,8 @@ window.Gestor = (() => {
           const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
           const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
 
+          /* o Contador só visualiza e baixa relatórios: não lança nota nem tem saldo (14/10/2026) */
+          const ehContador = m.role === 'contabilidade';
           const canEdit = currentUser.role==='admin' || currentUser.role==='gestor';
           const semFotoM  = mns.filter(n => !n.foto_path).length;
           const semValorM = mns.filter(n => Number(n.valor || 0) <= 0).length;
@@ -400,7 +402,7 @@ window.Gestor = (() => {
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
               <span class="colab-seta">›</span>
             </div>
-            <div class="colab-bal">
+            ${ehContador ? '' : `<div class="colab-bal">
               <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
                 <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
                 <span class="bal-val">${brl(rdmAcum)}</span>
@@ -415,11 +417,11 @@ window.Gestor = (() => {
                 <span class="bal-detail">Gasto ${brl(rdaG)}</span>
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
-            </div>
-            ${recargaM ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(vai para o cartão, não entra no saldo)</span></div>` : ''}
-            ${mns.length ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
-            ${pagoEmpresaM ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
-            <div class="colab-resumo">${resumo}</div>
+            </div>`}
+            ${recargaM && !ehContador ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(vai para o cartão, não entra no saldo)</span></div>` : ''}
+            ${mns.length && !ehContador ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
+            ${pagoEmpresaM && !ehContador ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
+            ${ehContador ? '' : `<div class="colab-resumo">${resumo}</div>`}
           </div>`;
         });
 
