@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=398">
+  <link rel="manifest" href="manifest.json?v=402">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1862,7 +1862,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=398" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=402" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -1983,7 +1983,11 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <p class="qr-hint" id="qr-hint">Aponte para o QR Code da NFCe</p>
     <div id="qr-status-txt"></div>
     <div id="qr-motor" style="font-size:13px;color:rgba(255,255,255,.75);margin-top:4px"></div>
-    <div style="display:none;align-items:center;gap:8px;margin-top:10px;color:#fff;font-size:14px">🔍 <input type="range" id="qr-zoom" style="width:160px"> zoom</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px">
+      <div style="display:none;align-items:center;gap:8px;color:#fff;font-size:14px">🔍 <input type="range" id="qr-zoom" style="width:120px"> zoom</div>
+      <button type="button" class="btn btn-sm" id="qr-lanterna" title="Lanterna" aria-label="Lanterna" aria-pressed="false"
+              style="display:none;background:rgba(255,255,255,.92);color:#222;border:none;padding:6px 14px">🔦</button>
+    </div>
     <button type="button" class="btn btn-sm" style="margin-top:14px;background:rgba(255,255,255,.92);color:#222;border:none"
             onclick="fecharQR();fecharBarcode();iniciarChaveNFCe()">⌨️ Não leu? Digitar a chave</button>
     <button type="button" class="btn btn-sm" id="qr-btn-ocr" style="margin-top:8px;background:rgba(255,255,255,.92);color:#222;border:none"
@@ -1999,6 +2003,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   <video id="cam-nota-video" playsinline muted autoplay></video>
   <div class="cam-nota-barra">
     <p class="cam-nota-dica" id="cam-nota-dica">Enquadre a nota inteira e toque no botão</p>
+    <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-flash" style="display:none"
+            onclick="alternarFlashNota()">🔦 Flash: Automático</button>
     <button type="button" class="cam-nota-disparo" id="cam-nota-disparo" aria-label="Tirar foto"
             onclick="dispararCameraNota()"></button>
     <button type="button" class="btn btn-sm cam-nota-alt" onclick="cameraNotaDoSistema()">Usar a câmera do celular</button>
@@ -2514,33 +2520,33 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=398"></script>
-<script defer src="js/db.js?v=398"></script>
-<script defer src="js/nfce.js?v=398"></script>
-<script defer src="js/sefaz.js?v=398"></script>
-<script defer src="js/brasilapi.js?v=398"></script>
-<script defer src="js/ocr.js?v=398"></script>
-<script defer src="js/recorte.js?v=398"></script>
-<script defer src="js/excel.js?v=398"></script>
-<script defer src="js/gestor.js?v=398"></script>
-<script defer src="js/frota.js?v=398"></script>
-<script defer src="js/ponto.js?v=398"></script>
-<script defer src="js/rastreio.js?v=398"></script>
-<script defer src="js/gdrive.js?v=398"></script>
+<script defer src="js/api.js?v=402"></script>
+<script defer src="js/db.js?v=402"></script>
+<script defer src="js/nfce.js?v=402"></script>
+<script defer src="js/sefaz.js?v=402"></script>
+<script defer src="js/brasilapi.js?v=402"></script>
+<script defer src="js/ocr.js?v=402"></script>
+<script defer src="js/recorte.js?v=402"></script>
+<script defer src="js/excel.js?v=402"></script>
+<script defer src="js/gestor.js?v=402"></script>
+<script defer src="js/frota.js?v=402"></script>
+<script defer src="js/ponto.js?v=402"></script>
+<script defer src="js/rastreio.js?v=402"></script>
+<script defer src="js/gdrive.js?v=402"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=398"></script>
+<script defer src="js/svelte-ajuda.js?v=402"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=398"></script>
+<script defer src="js/svelte-historico.js?v=402"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=398"></script>
+<script defer src="js/svelte-arquivos.js?v=402"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=398"></script>
-<script defer src="js/app.js?v=398"></script>
+<script defer src="js/svelte-perfil.js?v=402"></script>
+<script defer src="js/app.js?v=402"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=398').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=402').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

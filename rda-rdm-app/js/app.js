@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 398;
+const APP_BUILD = 402;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6105,8 +6105,19 @@ async function iniciarQR() {
     try {
       const track = stream.getVideoTracks()[0];
       const caps  = track.getCapabilities ? track.getCapabilities() : {};
-      if (caps.focusMode && caps.focusMode.includes('continuous')) {
-        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      _aplicarCamera(track, { semResolucao: true }).catch(() => {});   // foco/exposição contínuos (14/10/2026); a resolução do leitor fica como estava
+      const btnLant = $('qr-lanterna');
+      if (btnLant) {
+        btnLant.style.display = caps.torch ? '' : 'none';
+        btnLant.style.background = 'rgba(255,255,255,.92)';
+        btnLant.setAttribute('aria-pressed', 'false');
+        btnLant.onclick = async () => {
+          const ligar = !_camEstado.get(track)?.torch;
+          if (await _aplicarCamera(track, { torch: ligar })) {            // só muda o botão se a lanterna obedeceu
+            btnLant.style.background = ligar ? '#ffe066' : 'rgba(255,255,255,.92)';
+            btnLant.setAttribute('aria-pressed', ligar ? 'true' : 'false');
+          }
+        };
       }
       /* zoom da câmera (19/09/2026): QR pequeno lê melhor aproximando pela
          lente do que chegando o celular — o foco não perde. Slider só aparece
@@ -6115,8 +6126,8 @@ async function iniciarQR() {
       if (zoomEl && caps.zoom && caps.zoom.max > caps.zoom.min) {
         zoomEl.min = caps.zoom.min; zoomEl.max = Math.min(caps.zoom.max, 5); zoomEl.step = caps.zoom.step || 0.1;
         zoomEl.value = Math.min(zoomEl.max, Math.max(caps.zoom.min, 1.5));
-        track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
-        zoomEl.oninput = () => track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
+        _aplicarCamera(track, { zoom: Number(zoomEl.value) }).catch(() => {});
+        zoomEl.oninput = () => _aplicarCamera(track, { zoom: Number(zoomEl.value) }).catch(() => {});
         zoomEl.parentElement.style.display = 'flex';
       } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
       /* 30/09/2026: só o texto "Leitor nativo do Android ativo" saiu (aparecia até no iOS); "Leitor: jsQR" continua. */
@@ -6282,7 +6293,7 @@ function fecharQR() {
   cancelAnimationFrame(qrFrame);
   clearInterval(window._qrDiag);
   document.getElementById('qr-diag')?.remove();
-  qrStream?.getTracks().forEach(t => t.stop());
+  qrStream?.getTracks().forEach(t => t.stop());   // parar a câmera apaga a lanterna
   qrStream = null;
   $('qr-overlay').style.display = 'none';
 }
@@ -7112,6 +7123,90 @@ function lancarManualComAnexo(modo) {
     _pedirFotoPasso2();
   }
 }
+/* ── Câmera: qualidade máxima, flash (lanterna) e foto nítida (14/10/2026) ──────────────────────────
+   Pedido do campo: foto à noite ou em lugar escuro, e celulares que "seguram" a qualidade da câmera deixavam a nota
+   borrada. Aqui, para cada câmera aberta (nota e leitor de QR):
+   · foco, exposição e balanço de branco CONTÍNUOS (o que o aparelho declarar) e a MAIOR resolução da câmera;
+   · lanterna (torch) quando o aparelho expõe — no Android/Chrome; o iPhone não deixa o site ligar a lanterna;
+   · na hora do disparo, foto na resolução máxima do sensor (ImageCapture) e checagem de nitidez: se saiu borrada, o
+     app oferece tirar de novo antes de seguir.
+   Tudo é "o que o aparelho declarar": sem a capacidade, a parte some e o resto segue como antes. */
+const _camEstado = new WeakMap();   // track → { torch, zoom }
+
+function _capsDaCamera(track) {
+  try { return (track && track.getCapabilities) ? track.getCapabilities() : {}; } catch (_) { return {}; }
+}
+
+/* Aplica TUDO de uma vez: foco, lanterna e zoom saem juntos, sempre com o estado completo. ATENÇÃO: no Chrome/Android
+   uma propriedade OMITIDA em applyConstraints não volta ao padrão (a lanterna ligada continua ligada) — por isso a
+   lanterna vai SEMPRE com torch:true ou torch:false explícito. O estado só é guardado se o aparelho aceitou. */
+async function _aplicarCamera(track, mudanca = {}) {
+  if (!track || track.readyState === 'ended') return false;
+  const est = { ...(_camEstado.get(track) || { torch: false, zoom: undefined }), ...mudanca };
+  const caps = _capsDaCamera(track);
+  const tem = (k, v) => Array.isArray(caps[k]) && caps[k].includes(v);
+  const adv = [];
+  if (tem('focusMode', 'continuous')) adv.push({ focusMode: 'continuous' });
+  if (tem('exposureMode', 'continuous')) adv.push({ exposureMode: 'continuous' });
+  if (tem('whiteBalanceMode', 'continuous')) adv.push({ whiteBalanceMode: 'continuous' });
+  if (caps.torch) adv.push({ torch: !!est.torch });
+  if (est.zoom !== undefined && caps.zoom) adv.push({ zoom: est.zoom });
+  const c = { advanced: adv };
+  /* resolução: a maior que a câmera declara (alguns celulares abrem em 720p e só entregam mais se pedirem) */
+  if (!est.semResolucao && caps.width?.max && caps.height?.max) {
+    c.width = { ideal: Math.min(caps.width.max, 3840) }; c.height = { ideal: Math.min(caps.height.max, 2160) };   // 4K ao vivo no máximo
+  }
+  try { await track.applyConstraints(c); _camEstado.set(track, est); return true; }
+  catch (_) {
+    /* a combinação foi recusada: tenta só o essencial (foco + lanterna), sem resolução */
+    try { await track.applyConstraints({ advanced: adv }); _camEstado.set(track, est); return true; } catch (_2) { return false; }
+  }
+}
+
+function _temLanterna(track) { return !!_capsDaCamera(track).torch; }
+
+/* Brilho médio (0–255) do que a câmera está vendo agora: poucos pixels bastam. */
+function _brilhoDoVideo(video) {
+  try {
+    if (!video?.videoWidth) return null;
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(video, 0, 0, 32, 32);
+    const d = cx.getImageData(0, 0, 32, 32).data; let soma = 0;
+    for (let i = 0; i < d.length; i += 4) soma += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    return soma / (d.length / 4);
+  } catch (_) { return null; }
+}
+
+/* Nitidez da foto: variância do laplaciano numa versão reduzida. Texto nítido tem muitas bordas (valor alto); foto
+   borrada, mexida ou fora de foco fica com pouco (valor baixo). null = não deu para medir (nunca barra a foto). */
+const _NITIDEZ_MIN = 50;
+async function _nitidezDaFoto(blob) {
+  let url;
+  try {
+    url = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img')); i.src = url; });
+    const L = 640, k = Math.min(1, L / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(8, Math.round(img.naturalWidth * k)), h = Math.max(8, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, w, h);
+    const d = cx.getImageData(0, 0, w, h).data;
+    const g = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    let soma = 0, soma2 = 0, n = 0;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const lap = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+      soma += lap; soma2 += lap * lap; n++;
+    }
+    if (!n) return null;
+    const m = soma / n;
+    return soma2 / n - m * m;
+  } catch (_) { return null; }
+  finally { if (url) URL.revokeObjectURL(url); }
+}
+
 /* ── Câmera da nota DENTRO do app (06/10/2026) ──────────────
    Relato do campo: na RDA, depois de ler o QR, ao tirar a foto da nota o
    app fechava e reiniciava. Era a câmera do SISTEMA (input capture): ela
@@ -7121,29 +7216,82 @@ function lancarManualComAnexo(modo) {
    Sem getUserMedia ou com erro, cai na câmera do sistema como antes. */
 let _camNotaStream = null;
 let _camNotaAoCancelar = null;
+let _camNotaFlash = 'auto';        // 'auto' | 'ligado' | 'desligado' (lembrado entre as fotos)
+let _camNotaLuzTimer = null;
+let _camNotaSeq = 0;               // número da abertura: fechar enquanto abre invalida a câmera que ainda está chegando
+let _camNotaFlashSeq = 0;          // idem para o flash (toques rápidos no botão não deixam temporizador órfão)
+try { const f = localStorage.getItem('cam_flash'); if (['auto', 'ligado', 'desligado'].includes(f)) _camNotaFlash = f; } catch (_) {}
 async function abrirCameraNota(aoCancelar) {
   _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
   if (!navigator.mediaDevices?.getUserMedia) { cameraNotaDoSistema(); return; }
   const ov = $('cam-nota-overlay');
   const video = $('cam-nota-video');
   const btn = $('cam-nota-disparo');
+  const seq = ++_camNotaSeq;
   ov.style.display = 'flex';
   if (btn) btn.disabled = true;
+  { const bf = $('cam-nota-flash'); if (bf) bf.style.display = 'none'; }   // só reaparece quando a câmera disser que tem lanterna
   try {
-    _camNotaStream = await navigator.mediaDevices.getUserMedia({
+    const aberta = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
     }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
-    if (ov.style.display !== 'flex') { _pararCameraNota(); return; }   // fechou enquanto abria
+    /* fechou (ou fechou e abriu de novo) enquanto esta câmera abria: ela chegou atrasada, é desta abertura que já passou — para */
+    if (seq !== _camNotaSeq || ov.style.display !== 'flex') { aberta.getTracks().forEach(t => t.stop()); return; }
+    _camNotaStream = aberta;
     video.srcObject = _camNotaStream;
     await video.play().catch(() => {});
     if (btn) btn.disabled = false;
+    _iniciarFlashNota();
   } catch (e) {
     console.warn('câmera interna da nota:', e);
     cameraNotaDoSistema();
   }
 }
+/* Flash da câmera da nota: Automático (acende sozinho no escuro), Ligado ou Desligado. Só aparece onde o aparelho
+   deixa o site ligar a lanterna (Android/Chrome). */
+function _rotuloFlashNota() {
+  return '🔦 Flash: ' + ({ auto: 'Automático', ligado: 'Ligado', desligado: 'Desligado' }[_camNotaFlash] || 'Automático');
+}
+async function _iniciarFlashNota() {
+  const vez = ++_camNotaFlashSeq;                     // chamadas sobrepostas: só a última vale
+  clearInterval(_camNotaLuzTimer);
+  const track = _camNotaStream?.getVideoTracks()[0];
+  const btn = $('cam-nota-flash');
+  const dica = $('cam-nota-dica');
+  if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';   // aviso de "escuro" de uma sessão anterior não fica
+  if (!track) return;
+  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado' });
+  if (vez !== _camNotaFlashSeq || _camNotaStream?.getVideoTracks()[0] !== track) return;   // fechou/trocou durante a espera
+  const temLanterna = _temLanterna(track);
+  if (btn) { btn.style.display = temLanterna ? '' : 'none'; btn.textContent = _rotuloFlashNota(); }
+  if (_camNotaFlash !== 'auto') return;
+  /* Automático: depois de a câmera acertar a exposição, se está escuro acende (e não apaga sozinho — apagar mudaria o
+     brilho medido e ficaria piscando). Sem lanterna, só avisa. */
+  let medidas = 0;
+  const timer = setInterval(() => {
+    const t = _camNotaStream?.getVideoTracks()[0];
+    if (vez !== _camNotaFlashSeq || !t || t !== track) { clearInterval(timer); return; }
+    medidas++;
+    if (medidas < 2) return;                                   // 1ª medida: a exposição ainda está se ajustando
+    const b = _brilhoDoVideo($('cam-nota-video'));
+    if (b !== null && b < 55) {
+      if (temLanterna) { _aplicarCamera(track, { torch: true }); if (dica) dica.textContent = 'Está escuro: flash ligado. Enquadre a nota inteira e toque no botão'; }
+      else if (dica) dica.textContent = 'Pouca luz: procure um lugar mais claro ou use a câmera do celular (com flash)';
+    }
+    if (temLanterna ? (_camEstado.get(track)?.torch || medidas >= 8) : medidas >= 8) clearInterval(timer);
+  }, 600);
+  _camNotaLuzTimer = timer;
+}
+async function alternarFlashNota() {
+  _camNotaFlash = _camNotaFlash === 'auto' ? 'ligado' : _camNotaFlash === 'ligado' ? 'desligado' : 'auto';
+  try { localStorage.setItem('cam_flash', _camNotaFlash); } catch (_) {}
+  const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';
+  await _iniciarFlashNota();
+}
 function _pararCameraNota() {
-  _camNotaStream?.getTracks().forEach(t => t.stop());
+  _camNotaSeq++; _camNotaFlashSeq++;                  // invalida abertura e flash que ainda estejam a caminho
+  clearInterval(_camNotaLuzTimer);
+  _camNotaStream?.getTracks().forEach(t => t.stop());   // parar a câmera apaga a lanterna
   _camNotaStream = null;
   const video = $('cam-nota-video');
   if (video) video.srcObject = null;
@@ -7168,36 +7316,68 @@ function cameraNotaDoSistema() {
 async function dispararCameraNota() {
   const video = $('cam-nota-video');
   const btn = $('cam-nota-disparo');
-  const track = _camNotaStream?.getVideoTracks()[0];
+  const stream = _camNotaStream;
+  const track = stream?.getVideoTracks()[0];
   if (!track || !video?.videoWidth) return;
   if (btn) btn.disabled = true;
   let blob = null;
-  /* Foto na resolução cheia do sensor quando o navegador deixa (Chrome no
-     Android); senão, o quadro do vídeo. */
+  /* Foto na resolução cheia do sensor quando o navegador deixa (Chrome no Android); senão, o quadro do vídeo.
+     14/10/2026: pede a MAIOR resolução que a câmera declara e respeita o flash escolhido; uma pausa curta antes do
+     disparo deixa o foco e o tremor da mão assentarem (foto mexida era o borrão mais comum). */
   try {
     if (typeof ImageCapture !== 'undefined') {
-      blob = await Promise.race([
-        new ImageCapture(track).takePhoto(),
-        new Promise(r => setTimeout(() => r(null), 5000)),   // celular que trava no takePhoto
-      ]);
+      await new Promise(r => setTimeout(r, 250));
+      const ic = new ImageCapture(track);
+      let opcoes = {};
+      try {
+        const pc = await Promise.race([ic.getPhotoCapabilities(), new Promise(r => setTimeout(() => r(null), 1500))]);
+        if (pc?.imageWidth?.max && pc?.imageHeight?.max) {
+          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, 4096 / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
+          opcoes.imageWidth = Math.round(mw * k); opcoes.imageHeight = Math.round(mh * k);
+        }
+        const luz = pc?.fillLightMode;
+        if (Array.isArray(luz)) {
+          const torchLigada = !!_camEstado.get(track)?.torch;                  // a lanterna já ilumina: não dispara outro flash
+          if (_camNotaFlash === 'desligado' || torchLigada) { if (luz.includes('off')) opcoes.fillLightMode = 'off'; }
+          else if (_camNotaFlash === 'ligado' && luz.includes('flash')) opcoes.fillLightMode = 'flash';
+          else if (_camNotaFlash === 'auto' && luz.includes('auto')) opcoes.fillLightMode = 'auto';
+        }
+      } catch (_) { opcoes = {}; }
+      const tirar = async (o) => Promise.race([ic.takePhoto(o), new Promise(r => setTimeout(() => r(null), 9000))]);   // celular que trava no takePhoto
+      let rejeitou = false;
+      try { blob = await tirar(opcoes); } catch (_) { blob = null; rejeitou = true; }
+      /* opção recusada (rejeitou): repete sem opções. Se só demorou (travou 9 s), NÃO repete — vai direto ao quadro do vídeo */
+      if (!blob && rejeitou && Object.keys(opcoes).length) { try { blob = await tirar(undefined); } catch (_) { blob = null; } }
     }
   } catch (_) { blob = null; }
+  if (_camNotaStream !== stream) return;       // cancelou (✕ / "câmera do celular") durante o disparo: não segue
   if (blob && blob.type !== 'image/jpeg') {   // anexo da nota é sempre .jpg
     try {
       const bmp = await createImageBitmap(blob);
       const c = document.createElement('canvas');
       c.width = bmp.width; c.height = bmp.height;
       c.getContext('2d').drawImage(bmp, 0, 0);
-      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
     } catch (_) { blob = null; }
   }
   if (!blob) {
     const c = document.createElement('canvas');
     c.width = video.videoWidth; c.height = video.videoHeight;
     c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
-    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
   if (!blob) { if (btn) btn.disabled = false; toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  /* foto borrada? oferece tirar de novo AGORA, com a câmera ainda aberta (depois de fechar, ela não volta) */
+  const nit = await _nitidezDaFoto(blob);
+  if (_camNotaStream !== stream) return;       // cancelou enquanto media a nitidez: sem diálogo, sem anexar
+  if (nit !== null && nit < _NITIDEZ_MIN) {
+    const denovo = await pedirConfirmacao({
+      titulo: 'A foto saiu borrada',
+      mensagem: 'O texto da nota está sem nitidez. Segure o celular firme, deixe a câmera focar e tente de novo — com pouca luz, ligue o flash.',
+      confirmar: 'Tirar de novo', cancelar: 'Usar assim mesmo',
+    });
+    if (denovo) { if (btn) btn.disabled = false; return; }
+  }
   _camNotaAoCancelar = null;
   _pararCameraNota();
   const file = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
