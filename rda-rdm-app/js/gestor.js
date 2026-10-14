@@ -17,6 +17,57 @@ window.Gestor = (() => {
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
   const ini = nome => (nome||'?').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /* Gráfico de evolução do ano (Equipe e ficha do colaborador). 14/10/2026, pedido do
+     Paulo: tocar numa coluna mostra os valores do mês (RDM, RDA, Total), igual ao
+     gráfico do Painel; "Abrir" leva a tela para aquele mês. Redesenha só a faixa. */
+  const _tipoEvo = n => (n.tipo === 'RDM' || n.tipo === 'RDA') ? n.tipo : (n.tipo || 'Outros');
+  function _evoCard(titulo, direita, mes, lista) {
+    const dados = [];
+    for (let m = 1; m <= 12; m++) {
+      const doMes = lista.filter(n => n.mes === m);
+      const por = {};
+      doMes.forEach(n => { const t = _tipoEvo(n); por[t] = (por[t] || 0) + Number(n.valor || 0); });
+      dados.push({ por, total: Object.values(por).reduce((a, b) => a + b, 0) });
+    }
+    const max = Math.max(1, ...dados.map(d => d.total));
+    return `<div class="dash-card evo-card" data-mes="${mes}" data-evo="${encodeURIComponent(JSON.stringify(dados))}">
+      <div class="dash-card-title">${titulo}${direita ? ` <span style="float:right">${direita}</span>` : ''}</div>
+      <div class="evo">
+        ${dados.map((d, i) => `<div class="evo-col evo-tap ${i + 1 === mes ? 'cur' : ''}" title="${MESES[i]}: ${brl(d.total)}" onclick="Gestor.tocarBarra(this,${i})">
+          <div class="evo-bar" style="height:${Math.max(2, Math.round(d.total / max * 100))}%"></div>
+        </div>`).join('')}
+      </div>
+      <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
+      <div class="evo-drill" style="margin-top:8px"><div class="db-hint">Toque numa coluna para ver os valores do mês</div></div>
+    </div>`;
+  }
+
+  function tocarBarra(el, i) {
+    const card = el.closest('.evo-card');
+    if (!card) return;
+    const dados = JSON.parse(decodeURIComponent(card.dataset.evo || '%5B%5D'));
+    const mesAberto = Number(card.dataset.mes);
+    const area = card.querySelector('.evo-drill');
+    const jaSel = el.classList.contains('sel');
+    card.querySelectorAll('.evo-col.sel').forEach(c => c.classList.remove('sel'));
+    if (jaSel || !dados[i]) {
+      area.innerHTML = '<div class="db-hint">Toque numa coluna para ver os valores do mês</div>';
+      return;
+    }
+    el.classList.add('sel');
+    const d = dados[i];
+    const tipos = [...new Set(['RDM', 'RDA', ...Object.keys(d.por)])];
+    area.innerHTML = `<div class="db-drill">
+      <span><b>${MESES[i]}</b></span>
+      ${tipos.map(t => `<span>${esc(t)} <b>${brl(d.por[t] || 0)}</b></span>`).join('')}
+      <span>Total <b>${brl(d.total)}</b></span>
+      <span class="sp">
+        ${i + 1 !== mesAberto ? `<button class="btn btn-sm btn-primary" onclick="mudarMesEquipe(${i + 1 - mesAberto})">Abrir</button>` : ''}
+        <button class="btn btn-sm btn-outline" onclick="Gestor.tocarBarra(this.closest('.evo-card').querySelectorAll('.evo-col')[${i}],${i})">Fechar</button>
+      </span>
+    </div>`;
+  }
+
   const fmtData = d => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
 
   /* ── Saldo ACUMULADO (01/10/2026: "sempre somar os saldos acumulativos dos meses anteriores")
@@ -182,11 +233,6 @@ window.Gestor = (() => {
       _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id).concat(comSaldoAnterior)) };
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
 
-      // Evolução: gasto por mês no ano
-      const evo = [];
-      for (let m = 1; m <= 12; m++) evo.push(soma(nsAno.filter(n => n.mes === m)));
-      const maxEvo = Math.max(1, ...evo);
-
       // ── Cabeçalho ──
       let html = `<div class="ini-ola" style="padding:4px 2px 6px"><h2>👥 Equipe / Baixar relatórios</h2><span>${collabs.length} colaborador${collabs.length===1?"":"es"} ativo${collabs.length===1?"":"s"}</span></div>
       <div class="page-hd">
@@ -210,15 +256,7 @@ window.Gestor = (() => {
          cartão de cada colaborador. A Equipe é "Equipe / Baixar relatórios". */
 
       // ── Evolução (ano) ──
-      html += `<div class="dash-card">
-        <div class="dash-card-title">Evolução do gasto · ${ano}</div>
-        <div class="evo">
-          ${evo.map((v, i) => `<div class="evo-col ${i + 1 === mes ? 'cur' : ''}" title="${MESES[i]}: ${brl(v)}">
-            <div class="evo-bar" style="height:${Math.max(2, Math.round(v / maxEvo * 100))}%"></div>
-          </div>`).join('')}
-        </div>
-        <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
-      </div>`;
+      html += _evoCard(`Evolução do gasto · ${ano}`, '', mes, nsAno);
 
       /* Faturamento da equipe (26/09/2026, redefinido a pedido do Cleiton):
          é a soma de TODAS as despesas do mês, não só o que a empresa paga
@@ -443,9 +481,6 @@ window.Gestor = (() => {
 
       /* evolução do ano (só deste colaborador, sem Faturamento) */
       const nsAnoProprias = (nsAno || []).filter(n => n.pagamento !== 'empresa');
-      const evo = [];
-      for (let m = 1; m <= 12; m++) evo.push(soma(nsAnoProprias.filter(n => n.mes === m)));
-      const maxEvo = Math.max(1, ...evo);
       const totalAno = soma(nsAnoProprias);
 
       const podeEditar = currentUser.role === 'admin' || currentUser.role === 'gestor';
@@ -523,15 +558,7 @@ window.Gestor = (() => {
             </div>`).join('')}
         </div>
 
-        <div class="dash-card">
-          <div class="dash-card-title">Gasto no ano · ${ano} <span style="float:right">${brl(totalAno)}</span></div>
-          <div class="evo">
-            ${evo.map((v, i) => `<div class="evo-col ${i + 1 === mes ? 'cur' : ''}" title="${MESES[i]}: ${brl(v)}">
-              <div class="evo-bar" style="height:${Math.max(2, Math.round(v / maxEvo * 100))}%"></div>
-            </div>`).join('')}
-          </div>
-          <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
-        </div>
+        ${_evoCard(`Gasto no ano · ${ano}`, brl(totalAno), mes, nsAnoProprias)}
       </div>`;
 
       const _podeSelNotas = podeEditar && notas.length && typeof selNotasBarraHTML === 'function';
@@ -1000,5 +1027,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { tocarBarra, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
