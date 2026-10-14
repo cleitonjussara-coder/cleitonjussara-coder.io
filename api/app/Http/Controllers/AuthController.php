@@ -260,7 +260,7 @@ class AuthController extends Controller
         ];
         /* Token do Google só vai ao app se o escopo do Drive foi pedido e
            concedido: é o que deixa gestor/admin entrar já com o Drive ligado. */
-        $driveOk = ! empty($state['drive']) && str_contains($tok['scope'] ?? '', 'auth/drive');
+        $driveOk = ! $user->soLeitura() && ! empty($state['drive']) && str_contains($tok['scope'] ?? '', 'auth/drive');
         if ($driveOk) {
             $frag['google_token'] = $tok['access_token'];
             $frag['google_exp'] = time() + (int) ($tok['expires_in'] ?? 3300);

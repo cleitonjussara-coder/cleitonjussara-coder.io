@@ -16,6 +16,7 @@ use App\Http\Controllers\RastreioController;
 use App\Http\Controllers\RelatorioController;
 use App\Http\Controllers\RepasseController;
 use App\Http\Middleware\ExigeConfirmacao;
+use App\Http\Middleware\SomenteLeitura;
 use App\Services\GoogleOAuth;
 use Illuminate\Support\Facades\Route;
 
@@ -46,7 +47,7 @@ Route::prefix('auth')->group(function () {
 Route::get('/fotos/{path}', [FotoController::class, 'show'])->where('path', '.*')->name('fotos.show');
 
 /* ── com token (Sanctum) ───────────────────────────────────── */
-Route::middleware(['auth:sanctum', ExigeConfirmacao::class])->group(function () {
+Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::class])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateMe']);

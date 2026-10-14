@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 390;
+const APP_BUILD = 391;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -945,7 +945,7 @@ function _pintarBarraUsuario() {
 ═══════════════════════════════════════════════════════════ */
 function _itensMenu() {
   const itens = [
-    { view:'inicio', ico:'🏠', lbl:'Início', sub:'lançar nota e repasse' },
+    { view:'inicio', ico:'🏠', lbl:'Início', sub: _ehContabilidade() ? 'equipe e arquivos' : 'lançar nota e repasse' },
   ];
   if (!_ehContabilidade()) {
     itens.push({ view:'home', ico:'📊', lbl:'Painel', sub:'gráficos e pendências' });
@@ -1165,7 +1165,7 @@ function _ehGestorOuAdmin() {
    cartões, relatórios, Arquivos. Não lança, não edita, não exclui. */
 function _ehContabilidade() { return user?.role === 'contabilidade'; }
 /* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
-function _ehCV(u = user) { return (u?.regime || 'rdm_rda') === 'cv'; }
+function _ehCV(u = user) { return u?.role !== 'contabilidade' && (u?.regime || 'rdm_rda') === 'cv'; }   // Contador não tem cartão nem Frota
 /* Frota/KM: gestor/admin sempre; colaborador só se for do regime CV (09/10/2026). */
 function _veFrota() { return MODULOS_EXTRAS && (_ehGestorOuAdmin() || _ehCV()); }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
@@ -2160,6 +2160,8 @@ function _notificacoes() {
 function fmtDataBR(d) { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; }
 
 async function atualizarNotificacoes() {
+  /* o sino só traz pedido de repasse, cadastro novo e cartão baixo: nada disso é do Contador */
+  if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
   if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
   const n = _notificacoes().length;
   const sino = $('hdr-sino'), num = $('hdr-sino-num');
@@ -2580,6 +2582,8 @@ function voltarView() {
 }
 
 function switchView(v, voltando = false) {
+  /* Contador só consulta e baixa (14/10/2026): nada de Painel, Notas, Saldo, lixeira, Frota… */
+  if (_ehContabilidade() && !['inicio', 'equipe', 'arquivos', 'perfil'].includes(v)) v = 'inicio';
   /* histórico: não empilha repetição nem o próprio destino (evita laço) */
   if (!voltando && viewAtual && viewAtual !== v) {
     _histViews = _histViews.filter(x => x !== v);
@@ -3193,9 +3197,9 @@ function renderInicio() {
          26/09/2026: Perfil/Frota/Ponto saíram pro menu ☰ lateral — o
          "Ir para" da Início não existe mais. -->
     <div class="ini-paineis">
-      <button class="pnl pnl-grande" onclick="switchView('despesas')">
+      <button class="pnl pnl-grande" onclick="switchView('${_ehContabilidade() ? 'equipe' : 'despesas'}')">
         <span class="pnl-conteudo">
-          <span class="pnl-ico">🧾</span>
+          <span class="pnl-ico">${_ehContabilidade() ? '👥' : '🧾'}</span>
           ${/* 25/09/2026: o nome "Petermann – Despesas" saiu; quem vira título
                 grande é a ação do cartão, que era o subtítulo miúdo. */''}
           <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
@@ -3205,7 +3209,13 @@ function renderInicio() {
               : "Lançar nota de RDM e RDA"}</span>
         </span>
       </button>
-      ${_ehContabilidade() ? '' : _usaCartao() ? `
+      ${_ehContabilidade() ? `
+      <button class="pnl pnl-grande" onclick="switchView('arquivos')">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">📁</span>
+          <span class="pnl-tit pnl-tit-frase">Arquivos e anexos</span>
+        </span>
+      </button>` : _usaCartao() ? `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'carteira')">
         <span class="pnl-conteudo">
           <span class="pnl-ico">👛</span>
@@ -4901,7 +4911,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   const pendSync = _statusNota(n);
   return `
       <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
-        <input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">
+        ${_ehContabilidade() ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">`}
         ${n.foto_path||n.foto_local ? `
         <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
                 title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
@@ -4928,8 +4938,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
-            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
-            <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>
+            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
+            <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
           </div>
         </div>
       </div>`;
@@ -7156,6 +7166,7 @@ function _mostrarFormAposLeitura() {
 }
 
 async function abrirFormNota(dados = {}) {
+  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
     abrirSeletorTipoLancamento(dados);
     return;
@@ -7926,6 +7937,7 @@ async function salvarNota() {
 }
 
 async function _salvarNotaInterno() {
+  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
@@ -8154,6 +8166,7 @@ async function _salvarNotaInterno() {
 }
 
 async function editarNota(id) {
+  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);
@@ -8242,6 +8255,7 @@ async function confirmarExclusaoNota(id) {
 }
 
 async function excluirNota(id) {
+  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   if (!(await confirmarExclusaoNota(id))) return;
   await DB.softDeleteNota(id);
   await syncBadge(false);
@@ -8320,6 +8334,7 @@ function marcarTodasNotas(on) {
 }
 
 async function excluirNotasSelecionadas() {
+  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return false; }
   const vis = new Set(_selNotasVisiveis().map(c => c.value));
   const lista = [..._selNotas].filter(id => vis.has(id)).map(_notaPorId).filter(Boolean);
   if (!lista.length) { toast('Nenhuma nota selecionada', 'err'); return false; }

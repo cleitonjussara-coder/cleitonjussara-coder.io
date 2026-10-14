@@ -74,6 +74,11 @@ class ColaboradorController extends Controller
         if (! $gereOutro && ! $u->ehAdmin()) {
             unset($d['role'], $d['nucleo'], $d['regime']);      // ninguém se promove nem muda o próprio regime
         }
+        /* Contador não tem cartão nem Frota: o regime dele é sempre o padrão
+           (14/10/2026). Sem isto, um "CV" esquecido abria Frota/KM para ele. */
+        if (($d['role'] ?? $alvo->role) === 'contabilidade') {
+            $d['regime'] = 'rdm_rda';
+        }
         if (isset($d['nome'])) {
             $d['nome'] = trim($d['nome']);
         }

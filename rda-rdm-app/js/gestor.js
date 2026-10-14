@@ -439,7 +439,7 @@ window.Gestor = (() => {
                   <div class="colab-nome">${esc(m.nome||m.email)}</div>
                   <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + new Date(m.desativado_em).toLocaleDateString('pt-BR') : ''}</div>
                 </div>
-                <button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>
+                ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>` : ''}
               </div>
             </div>`).join('')}</div></details>`;
         }
@@ -965,12 +965,12 @@ window.Gestor = (() => {
           ${souEu ? '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
             : '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo e ainda apaga lançamento em definitivo.</p>'}
           <label class="lbl">Regime de despesas</label>
-          <select class="inp" id="g-regime" ${podeRegime ? '' : 'disabled'}>
+          <select class="inp" id="g-regime" ${podeRegime && colab.role !== 'contabilidade' ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
             <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; repasse do que sai do bolso; gera Planilha CV</option>
           </select>
           <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
-          ${souEu ? '' : `
+          ${!podeEditar ? '' : `
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl">Situação</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
