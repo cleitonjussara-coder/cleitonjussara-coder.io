@@ -145,12 +145,22 @@ window.GDrive = (() => {
     if (accessToken && window.google?.accounts?.oauth2) {
       google.accounts.oauth2.revoke(accessToken, () => {});
     }
+    esquecer();
+  }
+
+  /* Larga a conta conectada SEM revogar o token no Google: é o que o logout
+     do app faz, para quem entrar depois na mesma aba não operar o Drive com a
+     conta de quem saiu (aparelho compartilhado). Quem saiu continua com o
+     token valendo em outro aparelho — revogar derrubaria isso também. */
+  function esquecer() {
     accessToken   = null;
     tokenExpiry   = 0;
     fileIndex     = {};
     _folderCache  = {};
     _indicePronto = false;   // sem isso a reconexão reusaria o índice da conta antiga
-    sessionStorage.removeItem(LS_KEY);
+    _indicePromise = null;
+    _geracao++;              // varredura em andamento não repõe o índice depois do logout
+    try { sessionStorage.removeItem(LS_KEY); } catch (_) {}
   }
 
   /* ════════════════════════════════════════════
@@ -227,7 +237,9 @@ window.GDrive = (() => {
      guardar "plano" por nome continua funcionando.
   ════════════════════════════════════════════ */
   async function _refreshIndex() {
+    const geracao = _geracao;
     const files = await _walkTree(FOLDER_ID);
+    if (geracao !== _geracao) return;       // esquecer() rodou no meio: o resultado é da conta antiga
     fileIndex = {};
     files.forEach(f => { fileIndex[f.name] = f.id; });
     _indicePronto = true;
@@ -243,6 +255,7 @@ window.GDrive = (() => {
      índice para atualizar o arquivo em vez de duplicar. */
   let _indicePronto  = false;
   let _indicePromise = null;
+  let _geracao       = 0;     // sobe a cada esquecer(); ver _refreshIndex
   function _garantirIndice() {
     if (_indicePronto) return Promise.resolve();
     if (!_indicePromise) {
@@ -633,7 +646,7 @@ window.GDrive = (() => {
   }
 
   return {
-    init, requestAccess, setToken, disconnect, testarConexao,
+    init, requestAccess, setToken, disconnect, esquecer, testarConexao,
     syncNotas, loadNotas,
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
     atualizarIndice, migrarParaModeloPadrao,

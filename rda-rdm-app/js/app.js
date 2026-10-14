@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 391;
+const APP_BUILD = 392;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1813,6 +1813,14 @@ async function logout() {
     if (sb) await sb.auth.logout();
   } catch (_) {}
   user = null; notas = []; repasses = []; equipePorId = {};
+  /* Aparelho compartilhado: o que era da conta que saiu não pode sobrar na
+     aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
+     (colaborador herdava a lista) e o Drive seguia conectado com o token do
+     anterior. O token não é revogado — só esquecido aqui. */
+  notasEquipe = []; repassesEquipe = [];
+  driveOk = false;
+  try { window.GDrive?.esquecer(); } catch (_) {}
+  try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
   document.getElementById('demo-banner').style.display = 'none';
   showTela('auth');
   renderAuth('login');
