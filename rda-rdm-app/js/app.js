@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 402;
+const APP_BUILD = 403;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6318,9 +6318,12 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
      formulário só aparece quando o OCR terminar, já com o máximo preenchido. */
   if (dados.qr_url && dados.chave) _sefazPorQr(dados.qr_url, dados.chave);   // valor oficial, em paralelo
   const aba = _abaPreEscolhida;                    // veio de uma aba do hub (22/09/2026)
-  abrirSeletorTipoLancamento({ ...dados, _manual: true });
+  /* 14/10/2026 (pedido do campo, para ganhar tempo): o anexo é obrigatório, então depois do QR a câmera abre SOZINHA —
+     sem a tela "Comprovante da nota" no meio. Com a aba já escolhida não há pergunta nenhuma; sem aba, a pessoa
+     escolhe RDA/RDM e a câmera abre em seguida. */
+  abrirSeletorTipoLancamento({ ...dados, _manual: true, _direitoParaFoto: true });
   const lido = dados.documento === 'nfse' ? 'QR da NFS-e lido! 🧰' : 'Chave lida! 🔑';
-  toast(aba ? `${lido} Agora fotografe a nota (aba ${aba}).` : `${lido} Escolha a aba e fotografe a nota.`);
+  toast(aba ? `${lido} Fotografe a nota (aba ${aba}).` : `${lido} Escolha a aba e fotografe a nota.`);
 }
 
 /* Passo 2 do fluxo "QR → foto": destaca o botão de foto como chamada de ação.
@@ -6457,7 +6460,7 @@ async function iniciarChaveNFCe() {
     const p = NFCE.parseChaveNfse50(chave);
     abrirSeletorTipoLancamento({
       cnpj: p.cnpj, uf: p.uf, numero: p.numero, mes: p.mes, ano: p.ano, data: hoje(),
-      qr_url: p.qr_url, documento: 'nfse', metodo_captura: 'chave_nfse', _manual: true,
+      qr_url: p.qr_url, documento: 'nfse', metodo_captura: 'chave_nfse', _manual: true, _direitoParaFoto: true,
     });
     toast('NFS-e identificada pela chave — agora o arquivo da nota');
     return;
@@ -6483,6 +6486,7 @@ async function onChaveNFCe(raw) {
       mes            : result.mes,
       ano            : result.ano,
       _manual        : true,
+      _direitoParaFoto: true,
     });
     toast(isNFe ? 'NF-e identificada pela chave — agora a foto' : 'NFC-e identificada pela chave — agora a foto');
   } catch (e) {
@@ -7076,6 +7080,7 @@ function selecionarTipoLancamento(tipo, subtipo = null) {
      aqui, e não um "abrir sozinho" que o celular bloquearia. */
   if (dados._manual) {
     _dadosLancamentoPendentes = dados;
+    if (dados._direitoParaFoto) { lancarManualComAnexo('foto', { automatico: true }); return; }   // QR/chave já lidos: foto direto
     const pill = $('tipo-lancamento-passo2-aba');
     const s = dados._sugestao;
     if (pill) {
@@ -7104,9 +7109,9 @@ function voltarEscolhaAba() {
   const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
   if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; }
 }
-function lancarManualComAnexo(modo) {
+function lancarManualComAnexo(modo, opts = {}) {
   const dados = { ...(_dadosLancamentoPendentes || {}) };
-  delete dados._manual; delete dados._sugestao;
+  delete dados._manual; delete dados._sugestao; delete dados._direitoParaFoto;
   fecharSeletorTipoLancamento();
   abrirFormNota(dados);                // parte síncrona: campos preenchidos e overlay aberto
   if (modo === 'foto' || modo === 'arquivo') {
@@ -7115,7 +7120,7 @@ function lancarManualComAnexo(modo) {
        a câmera, o formulário aparece do mesmo jeito (evento cancel). */
     _formEsperandoLeitura = true;
     $('nota-form-overlay').style.display = 'none';
-    if (modo === 'foto') { abrirCameraNota(_mostrarFormAposLeitura); return; }
+    if (modo === 'foto') { abrirCameraNota(_mostrarFormAposLeitura, { automatico: !!opts.automatico }); return; }
     const inp = $('f-arq-nota');
     inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
     inp?.click();
@@ -7221,9 +7226,18 @@ let _camNotaLuzTimer = null;
 let _camNotaSeq = 0;               // número da abertura: fechar enquanto abre invalida a câmera que ainda está chegando
 let _camNotaFlashSeq = 0;          // idem para o flash (toques rápidos no botão não deixam temporizador órfão)
 try { const f = localStorage.getItem('cam_flash'); if (['auto', 'ligado', 'desligado'].includes(f)) _camNotaFlash = f; } catch (_) {}
-async function abrirCameraNota(aoCancelar) {
+/* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
+   sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
+function _semCameraNoAutomatico() {
+  const cb = _camNotaAoCancelar;
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  if (cb) cb();
+}
+async function abrirCameraNota(aoCancelar, opts = {}) {
   _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
-  if (!navigator.mediaDevices?.getUserMedia) { cameraNotaDoSistema(); return; }
+  const automatico = !!opts.automatico;
+  if (!navigator.mediaDevices?.getUserMedia) { if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema(); return; }
   const ov = $('cam-nota-overlay');
   const video = $('cam-nota-video');
   const btn = $('cam-nota-disparo');
@@ -7232,9 +7246,17 @@ async function abrirCameraNota(aoCancelar) {
   if (btn) btn.disabled = true;
   { const bf = $('cam-nota-flash'); if (bf) bf.style.display = 'none'; }   // só reaparece quando a câmera disser que tem lanterna
   try {
-    const aberta = await navigator.mediaDevices.getUserMedia({
+    const pedir = () => navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
     }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
+    let aberta;
+    try { aberta = await pedir(); }
+    catch (e) {
+      if (!automatico) throw e;
+      await new Promise(r => setTimeout(r, 400));          // a câmera do leitor de QR acabou de ser solta: dá um instante e tenta de novo
+      if (seq !== _camNotaSeq) return;                      // fechou nesse meio tempo
+      aberta = await pedir();
+    }
     /* fechou (ou fechou e abriu de novo) enquanto esta câmera abria: ela chegou atrasada, é desta abertura que já passou — para */
     if (seq !== _camNotaSeq || ov.style.display !== 'flex') { aberta.getTracks().forEach(t => t.stop()); return; }
     _camNotaStream = aberta;
@@ -7244,8 +7266,17 @@ async function abrirCameraNota(aoCancelar) {
     _iniciarFlashNota();
   } catch (e) {
     console.warn('câmera interna da nota:', e);
-    cameraNotaDoSistema();
+    if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema();
   }
+}
+/* PDF, XML ou imagem já no aparelho, no lugar da foto (NFS-e costuma vir em PDF). Parte de um toque, então o seletor
+   de arquivo abre normalmente; cancelar o seletor mostra o formulário, como em "Anexar arquivo". */
+function anexarArquivoNoLugarDaFoto() {
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  const inp = $('f-arq-nota');
+  inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
+  inp?.click();
 }
 /* Flash da câmera da nota: Automático (acende sozinho no escuro), Ligado ou Desligado. Só aparece onde o aparelho
    deixa o site ligar a lanterna (Android/Chrome). */

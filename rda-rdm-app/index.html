@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=402">
+  <link rel="manifest" href="manifest.json?v=403">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1378,6 +1378,7 @@ body{font-size:18.5px}
 .cam-nota-disparo:active{transform:scale(.92)}
 .cam-nota-disparo:disabled{opacity:.5}
 .cam-nota-alt{background:rgba(255,255,255,.92);color:#222;border:none}
+.cam-nota-alts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .foto-btn-wrap{
   border:2px dashed var(--border);border-radius:var(--radius-sm);
   padding:14px;text-align:center;cursor:pointer;
@@ -1862,7 +1863,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=402" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=403" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2007,7 +2008,10 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
             onclick="alternarFlashNota()">🔦 Flash: Automático</button>
     <button type="button" class="cam-nota-disparo" id="cam-nota-disparo" aria-label="Tirar foto"
             onclick="dispararCameraNota()"></button>
-    <button type="button" class="btn btn-sm cam-nota-alt" onclick="cameraNotaDoSistema()">Usar a câmera do celular</button>
+    <div class="cam-nota-alts">
+      <button type="button" class="btn btn-sm cam-nota-alt" onclick="anexarArquivoNoLugarDaFoto()">📎 Anexar arquivo</button>
+      <button type="button" class="btn btn-sm cam-nota-alt" onclick="cameraNotaDoSistema()">Câmera do celular</button>
+    </div>
   </div>
   <button class="btn-overlay-close" onclick="fecharCameraNota(true)">✕</button>
 </div>
@@ -2520,33 +2524,33 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=402"></script>
-<script defer src="js/db.js?v=402"></script>
-<script defer src="js/nfce.js?v=402"></script>
-<script defer src="js/sefaz.js?v=402"></script>
-<script defer src="js/brasilapi.js?v=402"></script>
-<script defer src="js/ocr.js?v=402"></script>
-<script defer src="js/recorte.js?v=402"></script>
-<script defer src="js/excel.js?v=402"></script>
-<script defer src="js/gestor.js?v=402"></script>
-<script defer src="js/frota.js?v=402"></script>
-<script defer src="js/ponto.js?v=402"></script>
-<script defer src="js/rastreio.js?v=402"></script>
-<script defer src="js/gdrive.js?v=402"></script>
+<script defer src="js/api.js?v=403"></script>
+<script defer src="js/db.js?v=403"></script>
+<script defer src="js/nfce.js?v=403"></script>
+<script defer src="js/sefaz.js?v=403"></script>
+<script defer src="js/brasilapi.js?v=403"></script>
+<script defer src="js/ocr.js?v=403"></script>
+<script defer src="js/recorte.js?v=403"></script>
+<script defer src="js/excel.js?v=403"></script>
+<script defer src="js/gestor.js?v=403"></script>
+<script defer src="js/frota.js?v=403"></script>
+<script defer src="js/ponto.js?v=403"></script>
+<script defer src="js/rastreio.js?v=403"></script>
+<script defer src="js/gdrive.js?v=403"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=402"></script>
+<script defer src="js/svelte-ajuda.js?v=403"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=402"></script>
+<script defer src="js/svelte-historico.js?v=403"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=402"></script>
+<script defer src="js/svelte-arquivos.js?v=403"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=402"></script>
-<script defer src="js/app.js?v=402"></script>
+<script defer src="js/svelte-perfil.js?v=403"></script>
+<script defer src="js/app.js?v=403"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=402').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=403').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
