@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 396;
+const APP_BUILD = 398;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6575,7 +6575,9 @@ async function _normalizarOrientacao(blob) {
    2) Sem QR: lê o texto nas posições possíveis e fica com a que o OCR
       entende (de cabeça para baixo o OCR não reconhece quase nada).
    Na dúvida, a foto fica como veio. */
-async function _anguloDoQR(img) {
+/* `saida.texto` recebe o texto do QR que o jsQR decodificou no caminho (14/10/2026): quem endireita a foto já leu o
+   QR — reaproveitar evita decodificar a mesma foto outra vez (ver _qrDaFoto). */
+async function _anguloDoQR(img, saida) {
   try { await _ensureJsQR(); } catch (_) {}
   if (typeof jsQR === 'undefined') return null;
   const c = document.createElement('canvas');
@@ -6587,6 +6589,7 @@ async function _anguloDoQR(img) {
     try {
       const d = cx.getImageData(0, 0, c.width, c.height);
       const code = jsQR(d.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+      if (saida && code?.data && saida.texto === undefined) saida.texto = code.data;
       const L = code?.location;
       if (!L) return null;
       // topo do QR = do olho de cima-esquerda ao de cima-direita
@@ -6625,8 +6628,8 @@ function _girarImagem(img, graus, maxLado = 0) {
 }
 
 /* Quanto girar (horário) para a nota ficar em pé. 0 = já está. */
-async function _giroParaEmPe(img) {
-  const ang = await _anguloDoQR(img);
+async function _giroParaEmPe(img, saida) {
+  const ang = await _anguloDoQR(img, saida);
   if (ang !== null) {
     let g = -ang;                                   // desfaz o giro do QR
     g = ((g % 360) + 540) % 360 - 180;              // -180..180
@@ -6662,16 +6665,23 @@ async function _endireitarComAviso(blob) {
   finally { if (ov && !aberto) ov.style.display = 'none'; }
 }
 
+/* QR já decodificado ao endireitar, por foto (WeakMap: some junto com a foto; nunca vale para outra imagem) */
+const _qrDaFoto = new WeakMap();
+
 async function _endireitarNota(blob) {
   try {
     if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return blob;
     const img = await _blobToImg(blob);
-    const g = await _giroParaEmPe(img);
-    if (!g) return blob;
-    const c = _girarImagem(img, g);
-    const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
-    if (!out || !out.size) return blob;
-    return new File([out], (blob.name || 'nota.jpg').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    const saida = {};
+    const g = await _giroParaEmPe(img, saida);
+    let resultado = blob;
+    if (g) {
+      const c = _girarImagem(img, g);
+      const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      if (out && out.size) resultado = new File([out], (blob.name || 'nota.jpg').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    }
+    if (saida.texto) _qrDaFoto.set(resultado, saida.texto);
+    return resultado;
   } catch (e) {
     console.warn('endireitar nota:', e);
     return blob;
@@ -6711,6 +6721,10 @@ function _melhorCodigo(codes) {
 }
 
 async function _qrStringFromBlob(blob) {
+  /* já decodificado ao endireitar esta foto: não decodifica de novo (14/10/2026). Só vale se for QR de nota (link ou
+     chave de 44/50 dígitos) — a foto pode ter outro código, e aí o leitor completo escolhe o melhor. */
+  const pronto = blob && typeof blob === 'object' ? _qrDaFoto.get(blob) : null;
+  if (pronto && (/^https?:\/\//i.test(pronto) || /(?<!\d)(\d{44}|\d{50})(?!\d)/.test(String(pronto).replace(/\s/g, '')))) return pronto;
   // prepara o detector nativo (se houver)
   let detector = null;
   try {
@@ -6871,6 +6885,10 @@ async function _lerNotaPorIa(blob) {
 async function _lerNota(blob) {
   const ia = await _lerNotaPorIa(blob);
   if (ia?.valor) return ia;                                  // IA trouxe o valor: basta
+  /* 14/10/2026 (pedido do Cleiton: "com internet, IA no lugar do OCR"): a IA respondeu com parte dos dados e há
+     internet — não espera o Tesseract (segundos a mais). O que faltar (o valor, em geral) o aviso da tela diz e a pessoa
+     digita. O Tesseract fica para quando NÃO há IA: offline, sem chave/saldo, limite do dia ou IA que não leu nada. */
+  if (ia && navigator.onLine) return ia;
   const prog = $('ocr-progress'); if (prog) prog.textContent = 'Lendo o texto no aparelho…';
   let ocr;
   try { ocr = (await OCR.processar(blob)) || {}; } catch (_) { ocr = {}; }
@@ -6894,6 +6912,9 @@ async function onFotoNota(e) {
   const dados = { metodo_captura: 'foto' };
   let porIa = false;
 
+  /* 14/10/2026: a IA é espera de REDE; a leitura do QR é CPU. Começam juntas (antes: QR primeiro, IA depois) */
+  const leituraDaNota = _lerNota(file).catch(() => ({}));
+
   // 1) tenta ler o QR Code da própria foto (chave NFC-e)
   try {
     await _ensureJsQR().catch(() => {});
@@ -6914,7 +6935,7 @@ async function onFotoNota(e) {
   // 2) OCR do texto p/ preencher o que o QR não traz (valor, data, CNPJ, razão)
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
-    const r = await _lerNota(file);
+    const r = await leituraDaNota;
     porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
@@ -7628,10 +7649,15 @@ function _mostrarChaveNota() {
 async function extrairDadosDaFoto(file, ocrPronto = null) {
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
-  $('ocr-progress').textContent = 'Procurando QR Code…';
+  $('ocr-progress').textContent = 'Lendo a nota…';
   try {
-    // Busca 1: QR Code na foto INTEIRA — o QR pode cair fora do recorte
-    const qr = await _lerQRdaImagem(file);
+    /* Busca 1: QR Code na foto INTEIRA — o QR pode cair fora do recorte.
+       14/10/2026: (a) se a chave já veio do escaneamento ao vivo ("Escanear QR" → foto), NÃO lê de novo — era a leitura
+       repetida; (b) quando precisa ler, começa JÁ e termina enquanto o recorte e a IA trabalham, em vez de uma espera
+       à parte antes de tudo (o resultado só é usado depois da leitura da nota). */
+    const chaveJaLida = _digitos($('nf-chave').value).length === 44;
+    const nfseJaLida = !!$('nf-qr-url').value && _ehUrlNfse($('nf-qr-url').value);
+    const qrEmCurso = (chaveJaLida || nfseJaLida) ? Promise.resolve(null) : _lerQRdaImagem(file).catch(() => null);
 
     // OCR do texto impresso — usado principalmente para o VALOR
     let ocr = ocrPronto || {};
@@ -7660,6 +7686,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       $('ocr-progress').textContent = 'Lendo a nota…';
       ocr = await _lerNota(alvo);
     }
+    const qr = await qrEmCurso;
 
     if (qr?.documento === 'nfse' && !$('nf-qr-url').value) { $('nf-qr-url').value = qr.qr_url; _atualizarDocumentoAuto(); }
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido
@@ -7721,9 +7748,12 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     // SEFAZ em background p/ tentar o valor, se ainda faltar
     if (daChave && !$('nf-valor').value) enriquecerViaSefaz(chave);
 
+    /* 14/10/2026: com internet a IA lê no lugar do Tesseract e, quando traz só parte, o valor pode ficar em branco —
+       a mensagem diz isso (a consulta oficial da SEFAZ ainda tenta o valor em segundo plano, logo acima/abaixo). */
+    const semValor = !$('nf-valor').value;
     toast(preencheu.length
-      ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. Confira o valor e o tipo.`
-      : 'Confira os campos manualmente', preencheu.length ? 'ok' : 'err');
+      ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. ${semValor ? 'Não li o valor: digite-o (ou aguarde a consulta oficial).' : 'Confira o valor e o tipo.'}`
+      : 'Confira os campos manualmente', preencheu.length && !semValor ? 'ok' : 'err', semValor ? 6000 : undefined);
 
     // valor oficial (se a consulta do QR já respondeu, aplica por cima do OCR)
     const _k = _digitos($('nf-chave').value);
