@@ -42,6 +42,15 @@ window.Gestor = (() => {
     </div>`;
   }
 
+  function alternarFaturamento(hd) {
+    const card = hd.closest('.fat-card');
+    const det = card.querySelector('.fat-det');
+    const abrindo = det.style.display === 'none';
+    det.style.display = abrindo ? 'block' : 'none';
+    card.querySelector('.fat-seta').textContent = abrindo ? '▴' : '▾';
+    card.querySelector('.fat-dica').style.display = abrindo ? 'none' : '';
+  }
+
   function tocarBarra(el, i) {
     const card = el.closest('.evo-card');
     if (!card) return;
@@ -264,10 +273,49 @@ window.Gestor = (() => {
          pela empresa" logo abaixo, um recorte dentro do total. */
       const faturamentoEquipeMes = soma(ns);
       if (ns.length) {
-        html += `<div class="dash-card">
-          <div class="dash-card-title">🧮 Faturamento da equipe · ${MESES[mes-1]} ${ano}</div>
-          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(faturamentoEquipeMes)}</div>
-          <div style="font-size:13px;color:var(--text2)">${ns.length} nota${ns.length===1?'':'s'} no mês · soma de RDM, RDA e CV de toda a equipe</div>
+        /* 14/10/2026 (Cleiton): o cartão abre ao toque e mostra de onde vem o total —
+           por tipo, por categoria do RDM e por colaborador (o nome abre a ficha). */
+        const linha = (rot, val, qtd, extra = '') => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;border-top:1px solid var(--border)${extra}">
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${rot}</span>
+            <span style="font-weight:700;white-space:nowrap">${brl(val)}${qtd ? ` <span style="font-weight:500;color:var(--text2);font-size:12.5px">· ${qtd}</span>` : ''}</span>
+          </div>`;
+        const pct = v => faturamentoEquipeMes > 0 ? Math.round(v / faturamentoEquipeMes * 100) + '%' : '';
+        const tit = t => `<div style="font-size:12.5px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 2px">${t}</div>`;
+        const nn = q => `${q} nota${q === 1 ? '' : 's'}`;
+
+        const porTipo = new Map();
+        ns.forEach(n => { const t = _tipoEvo(n); const c = porTipo.get(t) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porTipo.set(t, c); });
+        const tiposHtml = [...porTipo].sort((a, b) => b[1].v - a[1].v)
+          .map(([t, c]) => linha(`<b>${esc(t)}</b> <span style="color:var(--text2);font-size:12.5px">${pct(c.v)}</span>`, c.v, nn(c.q))).join('');
+
+        const rdmNs = ns.filter(n => n.tipo === 'RDM');
+        const catDe = n => { const k = String(n.subtipo || '').toLowerCase(); return k === 'abastecimento' ? '⛽ Abastecimento' : k === 'hospedagem' ? '🏨 Hospedagem' : '🧰 Outros'; };
+        const porCatRdm = new Map();
+        rdmNs.forEach(n => { const k = catDe(n); const c = porCatRdm.get(k) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porCatRdm.set(k, c); });
+        const catsHtml = rdmNs.length
+          ? tit('RDM por categoria') + [...porCatRdm].sort((a, b) => b[1].v - a[1].v).map(([k, c]) => linha(k, c.v, nn(c.q))).join('')
+          : '';
+
+        const porPessoa = new Map();
+        ns.forEach(n => { const c = porPessoa.get(n.user_id) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porPessoa.set(n.user_id, c); });
+        const pessoasHtml = [...porPessoa].sort((a, b) => b[1].v - a[1].v).map(([id, c]) => {
+          const col = todos.find(x => x.id === id);
+          const nome = esc(col?.nome || col?.email || 'Desconhecido');
+          return linha(col ? `<a href="#" style="color:var(--primary-d);font-weight:600;text-decoration:none" onclick="event.preventDefault();Gestor.abrir('${esc(id)}')">${nome} ›</a>` : nome, c.v, nn(c.q));
+        }).join('');
+
+        html += `<div class="dash-card fat-card">
+          <div class="fat-hd" style="cursor:pointer" onclick="Gestor.alternarFaturamento(this)">
+            <div class="dash-card-title">🧮 Faturamento da equipe · ${MESES[mes-1]} ${ano} <span class="fat-seta" style="float:right">▾</span></div>
+            <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(faturamentoEquipeMes)}</div>
+            <div style="font-size:13px;color:var(--text2)">${ns.length} nota${ns.length===1?'':'s'} no mês · soma de RDM, RDA e CV de toda a equipe</div>
+            <div class="fat-dica" style="font-size:12.5px;color:var(--text2);margin-top:6px">Toque para ver os detalhes dos gastos</div>
+          </div>
+          <div class="fat-det" style="display:none">
+            ${tit('Por tipo')}${tiposHtml}
+            ${catsHtml}
+            ${tit('Por colaborador')}${pessoasHtml}
+          </div>
         </div>`;
       }
 
@@ -1027,5 +1075,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { tocarBarra, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { tocarBarra, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
