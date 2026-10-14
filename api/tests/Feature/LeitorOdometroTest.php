@@ -84,6 +84,19 @@ class LeitorOdometroTest extends TestCase
         }
     }
 
+    public function test_resposta_sem_texto_tenta_de_novo_uma_vez(): void
+    {
+        config(['petermann.anthropic.key' => 'k']);
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push(['stop_reason' => 'max_tokens', 'content' => [['type' => 'thinking', 'thinking' => '...']]])
+            ->push($this->respostaIa('{"odometro": 85420}'))]);
+        Sanctum::actingAs($this->colaborador());
+
+        $this->post('/api/km/ler-foto', ['file' => $this->foto()], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('valor', 85420);
+        Http::assertSentCount(2);
+    }
+
     public function test_erro_da_api_e_recusa_nao_derrubam_o_endpoint(): void
     {
         config(['petermann.anthropic.key' => 'k']);

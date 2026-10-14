@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -248,6 +249,72 @@ class LeitorNotaTest extends TestCase
         Http::fake(['api.anthropic.com/*' => Http::response(['stop_reason' => 'refusal', 'content' => []])]);
         $this->post('/api/notas/ler-foto', ['file' => $this->foto()], ['Accept' => 'application/json'])
             ->assertOk()->assertJson(['dados' => null, 'motivo' => 'nao_leu']);
+    }
+
+    /** 200 OK em que o raciocínio comeu o limite: só um bloco "thinking", nenhum texto. */
+    private function semTexto(string $stop = 'max_tokens'): array
+    {
+        return ['stop_reason' => $stop, 'content' => [['type' => 'thinking', 'thinking' => '...']], 'usage' => ['output_tokens' => 1500]];
+    }
+
+    public function test_resposta_sem_texto_tenta_de_novo_uma_vez_com_mais_espaco_e_aproveita(): void
+    {
+        config(['petermann.anthropic.key' => 'k']);
+        Log::spy();
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push($this->semTexto())
+            ->push($this->ia(['cnpj' => self::CNPJ, 'valor' => 45.99, 'data' => '2026-09-10']))]);
+        Sanctum::actingAs($this->colaborador());
+
+        $this->post('/api/notas/ler-foto', ['file' => $this->foto()], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('dados.valor', 45.99)->assertJsonPath('motivo', null);
+
+        Http::assertSentCount(2);
+        $pedidos = Http::recorded()->map(fn ($par) => $par[0]->data())->values();
+        $this->assertSame(1500, $pedidos[0]['max_tokens']);
+        $this->assertGreaterThan(1500, $pedidos[1]['max_tokens']);
+        $this->assertStringContainsString('SOMENTE com o JSON', $pedidos[1]['messages'][0]['content'][1]['text']);
+        // o motivo da primeira falha ficou no log (antes sumia sem rastro)
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $ctx = []) => str_contains($m, 'resposta sem texto (max_tokens)') && ($ctx['stop_reason'] ?? '') === 'max_tokens')->once();
+    }
+
+    public function test_duas_falhas_seguidas_viram_nao_leu_com_o_motivo_registrado(): void
+    {
+        config(['petermann.anthropic.key' => 'k']);
+        Log::spy();
+        Http::fake(['api.anthropic.com/*' => Http::response($this->semTexto())]);
+        Sanctum::actingAs($this->colaborador());
+
+        $this->post('/api/notas/ler-foto', ['file' => $this->foto()], ['Accept' => 'application/json'])
+            ->assertOk()->assertJson(['dados' => null, 'motivo' => 'nao_leu', 'detalhe' => 'max_tokens']);
+
+        Http::assertSentCount(2);   // uma tentativa e UMA repetição, nunca laço
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $ctx = []) => $m === 'LeitorNota[nao_leu]' && ($ctx['motivo'] ?? '') === 'max_tokens')->once();
+    }
+
+    public function test_texto_sem_json_tambem_tenta_de_novo(): void
+    {
+        config(['petermann.anthropic.key' => 'k']);
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push(['stop_reason' => 'end_turn', 'content' => [['type' => 'text', 'text' => 'Não consegui enxergar bem a imagem.']]])
+            ->push($this->ia(['cnpj' => self::CNPJ, 'valor' => 12.0]))]);
+
+        $dados = $this->leitor()->ler('bytes-de-imagem');
+        $this->assertSame(12.0, $dados['valor']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_recusa_e_erro_de_acesso_nao_repetem(): void
+    {
+        config(['petermann.anthropic.key' => 'k']);
+        Http::fake(['api.anthropic.com/*' => Http::response(['stop_reason' => 'refusal', 'content' => []])]);
+        $this->assertNull($this->leitor()->ler('bytes'));
+        Http::assertSentCount(1);
+
+        Http::fake(['api.anthropic.com/*' => Http::response(['error' => 'x'], 500)]);
+        Cache::forget('visao-ia-fora');
+        $this->assertNull($this->leitor()->ler('bytes'));
+        Http::assertSentCount(1);
     }
 
     public function test_acesso_recusado_liga_o_disjuntor_e_a_segunda_chamada_nem_sai(): void

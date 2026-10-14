@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 393;
+const APP_BUILD = 394;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -6911,8 +6911,15 @@ async function onFotoNota(e) {
   ov.style.display = 'none';
   e.target.value = '';
 
+  /* 14/10/2026: leitura PARCIAL também avisa o que faltou (cupom amassado: o valor vem, o CNPJ não). Antes só
+     avisava quando NADA era lido, e a pessoa seguia sem notar o campo em branco. */
+  const faltou = [];
+  if (!dados.valor) faltou.push('o valor');
+  if (!dados.cnpj && !dados.chave) faltou.push('o CNPJ');
   if (!dados.chave && !dados.cnpj && !dados.valor) {
     toast('Não consegui ler a nota. Tente uma foto mais nítida ou use "Manual".', 'err');
+  } else if (faltou.length) {
+    toast(`${porIa ? 'Preenchido pela IA, mas não' : 'Não'} consegui ler ${faltou.join(' nem ')}. Preencha à mão e confira o resto.`, 'err', 6000);
   } else if (porIa) {
     toast('Preenchido pela IA. Confira o valor, o CNPJ e a data.', 'ok');
   }

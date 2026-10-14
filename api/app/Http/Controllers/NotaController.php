@@ -377,7 +377,13 @@ class NotaController extends Controller
             Log::warning('LeitorNota[leitura]', ['user' => $r->user()->id, 'bytes' => $arq->getSize(), 'dados' => $dados ? array_diff_key($dados, ['razao_social' => 1]) : null]);
         }
 
-        return response()->json(['dados' => $dados, 'motivo' => $dados === null ? 'nao_leu' : null]);
+        if ($dados === null) {
+            /* caso de 12/10/2026: o app recebia "nao_leu" e o servidor não deixava rastro. Agora fica quem, o tamanho
+               do arquivo e o motivo (o aviso do VisaoIa logo acima diz o detalhe da API). */
+            Log::warning('LeitorNota[nao_leu]', ['user' => $r->user()->id, 'bytes' => $arq->getSize(), 'mime' => $arq->getMimeType(), 'motivo' => $leitor->ultimoMotivo()]);
+        }
+
+        return response()->json(['dados' => $dados, 'motivo' => $dados === null ? 'nao_leu' : null, 'detalhe' => $dados === null ? $leitor->ultimoMotivo() : null]);
     }
 
     /**

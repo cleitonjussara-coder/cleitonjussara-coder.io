@@ -32,7 +32,14 @@ class LeitorOdometro
      */
     public function ler(string $bytes, string $mime = 'image/jpeg'): ?int
     {
-        $texto = $this->ia->perguntar('odometro', (string) config('petermann.anthropic.modelo_odometro'), $bytes, $mime, self::PROMPT);
+        $modelo = (string) config('petermann.anthropic.modelo_odometro');
+        $texto = $this->ia->perguntar('odometro', $modelo, $bytes, $mime, self::PROMPT);
+
+        /* 14/10/2026: mesma 2ª tentativa da nota — só quando o modelo gastou o limite ou não escreveu nada
+           (falha passageira). Recusa, saldo e rede não repetem. */
+        if ($texto === null && in_array($this->ia->ultimoMotivo, ['max_tokens', 'sem_texto'], true)) {
+            $texto = $this->ia->perguntar('odometro', $modelo, $bytes, $mime, self::PROMPT.' Responda SOMENTE com o JSON.', 3000);
+        }
 
         return $texto === null ? null : $this->extrair([['type' => 'text', 'text' => $texto]]);
     }
