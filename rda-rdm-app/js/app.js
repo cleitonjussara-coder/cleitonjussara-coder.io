@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 381;
+const APP_BUILD = 382;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -8479,6 +8479,11 @@ async function verFoto(id) {
   if (_kindDoExt(ext) && !_ehImagemExt(ext)) { window.open(url, '_blank'); return; }
 
   // imagem (ou tipo desconhecido) → visualizador
+  _fotoViewerAtual = {
+    url,
+    nome: `${n.tipo}_${String(n.data || '').slice(0, 10)}_${Math.round((Number(n.valor) || 0) * 100)}.${ext || 'jpg'}`
+      .replace(/[^\w.-]+/g, '_'),
+  };
   $('foto-viewer-img').src = url;
   $('foto-viewer-info').textContent =
     `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;
@@ -8489,6 +8494,49 @@ function fecharFotoViewer() {
   const ov = $('foto-viewer-overlay');
   ov.style.display = 'none';
   $('foto-viewer-img').src = '';
+  _fotoViewerAtual = null;
+}
+
+/* Baixar / compartilhar o anexo aberto (pedido do Paulo, 14/10/2026). */
+let _fotoViewerAtual = null;
+
+async function _blobDoViewer() {
+  const a = _fotoViewerAtual;
+  if (!a) return null;
+  const r = await fetch(a.url);
+  if (!r.ok) throw new Error('http ' + r.status);
+  return r.blob();
+}
+
+async function baixarFotoViewer() {
+  const a = _fotoViewerAtual;
+  if (!a) return;
+  try {
+    const blob = await _blobDoViewer();
+    const obj = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = obj; el.download = a.nome;
+    document.body.appendChild(el); el.click(); el.remove();
+    setTimeout(() => URL.revokeObjectURL(obj), 10000);
+  } catch (e) {
+    window.open(a.url, '_blank');   // sem CORS/sem rede para o blob: abre a imagem, daí segura e salva
+  }
+}
+
+async function compartilharFotoViewer() {
+  const a = _fotoViewerAtual;
+  if (!a) return;
+  try {
+    const blob = await _blobDoViewer();
+    const file = new File([blob], a.nome, { type: blob.type || 'image/jpeg' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: $('foto-viewer-info').textContent });
+      return;
+    }
+  } catch (e) {
+    if (e?.name === 'AbortError') return;   // usuário fechou a folha de compartilhar
+  }
+  toast('Este aparelho não compartilha arquivo — use Baixar', 'err');
 }
 
 /* ── Ajuda / Como usar ───────────────────────────────────── */
