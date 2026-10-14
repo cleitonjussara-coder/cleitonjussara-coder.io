@@ -225,6 +225,9 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     const pendingItems = queueItems.filter(item => item.status !== 'running');
     const failedItems = queueItems.filter(item => item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS);
     const scheduledItems = pendingItems.filter(item => item.next_attempt_at && new Date(item.next_attempt_at).getTime() > now);
+    /* "falhou" espera 30 min e não conta para quem decide se vale ficar tentando (envio em segundo plano) */
+    const ativosAgendados = scheduledItems.filter(item => !(item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS));
+    const proximaAtivaAt = ativosAgendados.length ? Math.min(...ativosAgendados.map(item => new Date(item.next_attempt_at).getTime())) : null;
     const nextAttemptAt = scheduledItems.length
       ? scheduledItems.reduce((earliest, item) => {
           const ts = new Date(item.next_attempt_at).getTime();
@@ -237,6 +240,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       failedCount: failedItems.length,
       scheduledCount: scheduledItems.length,
       nextAttemptAt,
+      proximaAtivaAt,
     };
   }
 
@@ -464,7 +468,8 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     heic:'image/heic', gif:'image/gif', pdf:'application/pdf', xml:'text/xml',
   };
   const saveFotoLocal = async (nota_id, blob, ext) => {
-    const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase() };
+    /* `em`: carimbo desta versão do anexo — o envio compara antes de apagar o blob local (anexo trocado durante o upload) */
+    const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase(), em: new Date().toISOString() + ':' + Math.random().toString(36).slice(2, 8) };
     await _put('fotos', entry);
     await _queueOp({ entity: 'foto', entity_id: nota_id, action: 'upload', payload: entry });
     return entry;
@@ -655,7 +660,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     }
     const existingFoto = new Set(queueItems.filter(i => i.entity === 'foto').map(i => i.entity_id));
     for (const f of allFotos) {
-      if (!existingFoto.has(f.nota_id)) {
+      if (!existingFoto.has(f.nota_id) && !f.recusada) {
         const dono = allN.find(x => x.id === f.nota_id);
         await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f, queued_by: dono?.created_by || dono?.user_id || _sessaoUid });
       }
@@ -731,9 +736,23 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
              isso só gera 422 sem fim; recusa aqui com o motivo, que a nota passa a mostrar. */
           if (!blob.size) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
           const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id, nota.user_id === null);
-          await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
-          await delFotoLocal(item.entity_id);
-          await _del('sync_queue', item.id);
+          /* 14/10/2026 (revisão): a nota é LIDA DE NOVO e só recebe o caminho do anexo — a cópia lida antes do upload
+             (até 120 s atrás) desfazia a edição ou a exclusão feita nesse meio tempo. updated_at não é mexido, para o
+             envio da nota perceber a edição (compara updated_at). */
+          const notaAgora = await _get('notas', item.entity_id);
+          if (notaAgora) await _put('notas', { ...notaAgora, foto_path: path, foto_local: ext, sync_error: null });
+          /* o anexo foi TROCADO enquanto este subia (a pessoa corrigiu a nota/o Contador trocou a foto): o que subiu é
+             o antigo. Não apaga o blob novo nem o item — ele volta para a fila e sobe na próxima rodada. */
+          const fotoAgora = await _get('fotos', item.entity_id).catch(() => null);
+          const itemAgora = await _get('sync_queue', item.id).catch(() => null);
+          const trocou = (fotoAgora && (fotoAgora.em || null) !== (payload.em || null))
+            || (itemAgora && itemAgora.payload && (itemAgora.payload.em || null) !== (payload.em || null));
+          if (trocou) {
+            if (itemAgora) await _put('sync_queue', { ...itemAgora, status: 'pending', attempts: 0, contada_em: null, next_attempt_at: now, updated_at: now });
+          } else {
+            await delFotoLocal(item.entity_id);
+            await _del('sync_queue', item.id);
+          }
           /* o anexo chegou: a nota que esperava por ele (422 "Anexo obrigatório") não precisa esperar a espera dela */
           for (const q of await _getAll('sync_queue')) {
             if (q.entity === 'nota' && q.entity_id === item.entity_id) {
@@ -781,7 +800,12 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
            o registro continua guardado no aparelho, só sem tentar subir de novo. */
         if (e?.status === 403 && /^contabilidade/i.test(message)) {
           await _del('sync_queue', item.id);
-          if (item.entity !== 'foto') {
+          if (item.entity === 'foto') {
+            /* o anexo fica guardado, mas marcado: sem isto _ensureQueueFromExisting o recolocava na fila a cada rodada
+               e o arquivo inteiro subia de novo só para tomar 403 (revisão de 14/10/2026) */
+            const f = await _get('fotos', item.entity_id);
+            if (f) await _put('fotos', { ...f, recusada: true });
+          } else {
             const lojaRec = item.entity === 'nota' ? 'notas' : 'repasses';
             const local = await _get(lojaRec, item.entity_id);
             if (local) await _put(lojaRec, { ...local, synced: true, sync_status: 'synced', sync_error: message });
@@ -1145,6 +1169,10 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     /* a rodada em voo ainda vai gravar os itens que já leu (tentativas e espera antigas): zerar antes disso não vale */
     while (_running) await aguardarSync().catch(() => {});
     const agora = new Date().toISOString();
+    /* conta ANTES de esperar a trava: se o service worker esvaziar a fila enquanto esperamos, o aviso diz
+       "tudo enviado" em vez de "nada pendente" (revisão de 14/10/2026) */
+    let tinhaAntes = 0;
+    for (const i of await _getAll('sync_queue')) { if (!meuId || await _itemEhDaSessao(i, meuId)) tinhaAntes++; }
     let tinha = 0;
     const zerar = async () => {
       tinha = 0;
@@ -1178,7 +1206,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     for (const i of await _getAll('sync_queue')) {
       if (i.last_error && (!meuId || await _itemEhDaSessao(i, meuId))) { motivo = i.last_error; break; }
     }
-    return { tinha, restam: resumo.count, falharam: resumo.failedCount, motivo, ocupado };
+    return { tinha: Math.max(tinha, tinhaAntes), restam: resumo.count, falharam: resumo.failedCount, motivo, ocupado };
   }
 
   /* ── ENVIO EM SEGUNDO PLANO (fase 2, 12/10/2026) ──────────────────────────────────────────────────────────────
@@ -1311,9 +1339,11 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         const sum = await getSyncQueueSummary();
         r.restam = sum.count;
         const pend = sum.count - sum.failedCount;
-        r.repetir = pend > 0 && (!sum.nextAttemptAt || sum.nextAttemptAt - Date.now() <= 120_000);
+        /* o próximo envio conta só entre os itens que serão tentados: um item "falhou" (30 min de espera) não pode
+           fazer o worker desistir de itens vencidos que sobraram (revisão de 14/10/2026) */
+        r.repetir = pend > 0 && (!sum.proximaAtivaAt || sum.proximaAtivaAt - Date.now() <= 120_000);
         if (pend <= 0) { parar = true; return; }                          // nada mais para enviar
-        const espera = sum.nextAttemptAt ? sum.nextAttemptAt - Date.now() : 0;
+        const espera = sum.proximaAtivaAt ? sum.proximaAtivaAt - Date.now() : 0;
         const fez = p.ok || p.fail || p.fotosOk || p.fotosFail;
         if (espera > 45_000 || (!fez && espera <= 0)) { parar = true; return; }
         esperar = Math.max(0, espera);

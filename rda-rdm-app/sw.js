@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v395';
+const CACHE   = 'petermann-v396';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -57,7 +57,8 @@ const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
    mesmo cliente da API. O ?v= acompanha o build (scripts/bump-build.js) — sem ele o navegador poderia reusar um
    db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
    normal e só o envio em segundo plano fica de fora. */
-try { importScripts('./js/api.js?v=395', './js/db.js?v=395'); } catch (_) { /* sem envio em segundo plano */ }
+let _importErro = null;
+try { importScripts('./js/api.js?v=396', './js/db.js?v=396'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
@@ -65,6 +66,14 @@ const CDN = [
 
 // ── Install: pré-cache do shell (resiliente: ignora arquivo que faltar) ──
 self.addEventListener('install', e => {
+  /* Falha de REDE ao baixar api.js/db.js na instalação (comum em campo): o worker ficaria instalado SEM o envio e,
+     depois de instalado, o navegador não aceita importar scripts novos — ficaria assim até o próximo build. Então a
+     instalação falha e o navegador tenta de novo na próxima abertura (o worker antigo segue valendo). Qualquer outro
+     erro (bug no db.js, por exemplo) NÃO bloqueia: o resto do worker (push, cache) continua como antes. */
+  if (_importErro && _importErro.name === 'NetworkError') {
+    e.waitUntil(Promise.reject(_importErro));
+    return;
+  }
   e.waitUntil(
     caches.open(CACHE)
       .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null))))
