@@ -755,6 +755,18 @@ window.DB = (() => {
         ok++;
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
+        /* Recusa por PAPEL (Contador, 14/10/2026): o servidor nunca vai aceitar esse item — quem virou Contador com
+           nota nova ou repasse parado na fila ficava com "N itens pendentes" para sempre. Sai da fila (o aviso some);
+           o registro continua guardado no aparelho, só sem tentar subir de novo. */
+        if (e?.status === 403 && /^contabilidade/i.test(message)) {
+          await _del('sync_queue', item.id);
+          if (item.entity !== 'foto') {
+            const lojaRec = item.entity === 'nota' ? 'notas' : 'repasses';
+            const local = await _get(lojaRec, item.entity_id);
+            if (local) await _put(lojaRec, { ...local, synced: true, sync_status: 'synced', sync_error: message });
+          }
+          continue;
+        }
         /* Falha de REDE/5xx só gasta uma das MAX_SYNC_ATTEMPTS tentativas se a última contada tem 1 min ou mais: com o
            reenvio rápido (3-20 s), sinal ruim passageiro não pode virar "falhou" em meio minuto. Recusa do servidor
            (422/403…) conta sempre. */
