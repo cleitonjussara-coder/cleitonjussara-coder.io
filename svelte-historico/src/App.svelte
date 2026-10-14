@@ -17,6 +17,9 @@
      pode ser null de propósito — quem editou/lançou (quem = updated_by)
      nunca é, então continua usando nome() puro. */
   const nomeDono = id => id === null ? 'Faturamento geral (sem colaborador)' : nome(id);
+  /* Quem editou/lançou: quando é o Contador (que corrige nota incorreta, 14/10/2026)
+     o papel vai junto do nome, para o gestor ver de relance que não foi o colaborador. */
+  const nomeAutor = id => nome(id) + (equipePorId[id]?.role === 'contabilidade' ? ' (Contador)' : '');
   const mesmoInstante = (a, b) => a && b && Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 3000;
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
@@ -44,7 +47,7 @@
       quando: n.updated_at,
       acao: n.deleted ? 'apagou' : (mesmoInstante(n.created_at, n.updated_at) ? 'lançou' : 'editou'),
       tipoItem: 'nota',
-      quem: nome(n.updated_by),
+      quem: nomeAutor(n.updated_by),
       dono: nomeDono(n.user_id),
       resumo: `${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${esc(n.razao_social || (n.cnpj ? formatarCnpj(n.cnpj) : 'sem empresa'))} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}`,
     }));
@@ -52,7 +55,7 @@
       quando: r.updated_at,
       acao: r.deleted ? 'apagou' : (mesmoInstante(r.created_at, r.updated_at) ? 'lançou' : 'editou'),
       tipoItem: 'repasse',
-      quem: nome(r.updated_by),
+      quem: nomeAutor(r.updated_by),
       dono: nome(r.user_id),
       resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
     }));

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Colaborador;
+use App\Models\Nota;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -24,6 +25,9 @@ class ContadorSoLeituraTest extends TestCase
     private const LIBERADAS = [
         'POST auth/logout', 'PATCH me', 'POST me/foto', 'DELETE me/foto',
         'POST fotos/urls', 'POST notas/existem', 'PATCH colaboradores/{id}',
+        /* corrigir nota que já existe (14/10/2026): o controller segura o resto */
+        'PUT notas/{id}', 'PATCH notas/{id}/tipo', 'POST notas/{id}/foto',
+        'POST notas/chave-existe', 'POST notas/ler-foto',
     ];
 
     private function pessoa(string $role): Colaborador
@@ -111,6 +115,105 @@ class ContadorSoLeituraTest extends TestCase
             $this->getJson('/api/notas/apagadas')->assertOk();
         }
         $this->assertTrue(true);
+    }
+
+    private function nota(Colaborador $dono, array $campos = []): Nota
+    {
+        $agora = now('America/Sao_Paulo');
+        $n = new Nota(array_replace([
+            'id' => (string) Str::uuid(), 'user_id' => $dono->id, 'tipo' => 'RDA', 'valor' => 50,
+            'data' => $agora->format('Y-m-d'), 'mes' => (int) $agora->format('n'), 'ano' => (int) $agora->format('Y'),
+            'razao_social' => 'FORNECEDOR TESTE', 'deleted' => false,
+        ], $campos));
+        $n->save();
+
+        return $n->fresh();
+    }
+
+    private function corpo(Nota $n, array $troca = []): array
+    {
+        return array_replace([
+            'user_id' => $n->user_id, 'tipo' => $n->tipo, 'valor' => (float) $n->valor,
+            'data' => $n->data->format('Y-m-d'), 'mes' => (int) $n->mes, 'ano' => (int) $n->ano,
+            'razao_social' => $n->razao_social, 'deleted' => false,
+        ], $troca);
+    }
+
+    public function test_contador_corrige_nota_existente_e_fica_registrado_como_autor(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $contador = $this->pessoa('contabilidade');
+        $nota = $this->nota($colab);
+        Sanctum::actingAs($contador);
+
+        $this->putJson("/api/notas/{$nota->id}", $this->corpo($nota, ['valor' => 77.5, 'razao_social' => 'RAZAO CORRIGIDA']))
+            ->assertOk();
+        $this->assertEquals(77.5, $nota->fresh()->valor);
+
+        $depois = $nota->fresh();
+        $this->assertSame('RAZAO CORRIGIDA', $depois->razao_social);
+        $this->assertSame($colab->id, $depois->user_id, 'a nota continua do colaborador');
+        $this->assertSame($contador->id, $depois->updated_by, 'o Histórico lê updated_by: precisa ser o Contador');
+    }
+
+    public function test_contador_corrige_o_grupo_da_nota(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $nota = $this->nota($colab, ['tipo' => 'RDA']);
+        Sanctum::actingAs($this->pessoa('contabilidade'));
+
+        $this->patchJson("/api/notas/{$nota->id}/tipo", ['tipo' => 'RDM', 'subtipo' => 'Hospedagem'])->assertOk()->assertJsonPath('mudou', true);
+        $this->assertSame('RDM', $nota->fresh()->tipo);
+    }
+
+    public function test_contador_nao_lanca_nota_nova_nem_exclui_nem_troca_o_dono(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $outro = $this->pessoa('gestor');
+        $contador = $this->pessoa('contabilidade');
+        $nota = $this->nota($colab);
+        Sanctum::actingAs($contador);
+
+        $nova = $this->nota($colab);
+        $nova->delete();   // um id que não existe mais: seria nota NOVA
+        $this->putJson("/api/notas/{$nova->id}", $this->corpo($nova))->assertStatus(403);
+        $this->assertNull(Nota::find($nova->id));
+
+        $this->putJson("/api/notas/{$nota->id}", $this->corpo($nota, ['deleted' => true]))->assertStatus(403);
+        $this->assertFalse((bool) $nota->fresh()->deleted);
+
+        $this->putJson("/api/notas/{$nota->id}", $this->corpo($nota, ['user_id' => $outro->id]))->assertStatus(403);
+        $this->assertSame($colab->id, $nota->fresh()->user_id);
+
+        $this->deleteJson("/api/notas/{$nota->id}")->assertStatus(403);
+        $this->assertNotNull(Nota::find($nota->id));
+    }
+
+    public function test_contador_nao_mexe_em_nota_de_faturamento_nem_em_repasse(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $fat = $this->nota($colab, ['pagamento' => 'empresa']);
+        $comum = $this->nota($colab);
+        Sanctum::actingAs($this->pessoa('contabilidade'));
+
+        $this->putJson("/api/notas/{$fat->id}", $this->corpo($fat, ['valor' => 1]))->assertStatus(403);
+        $this->putJson("/api/notas/{$comum->id}", $this->corpo($comum, ['pagamento' => 'empresa']))->assertStatus(403);
+        $this->putJson('/api/repasses/'.Str::uuid(), ['user_id' => $colab->id, 'tipo' => 'RDM', 'valor' => 10, 'data' => now('America/Sao_Paulo')->format('Y-m-d'), 'mes' => 1, 'ano' => 2026, 'kind' => 'received'])->assertStatus(403);
+    }
+
+    public function test_anexo_so_pode_ser_trocado_em_nota_que_existe(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $nota = $this->nota($colab);
+        Sanctum::actingAs($this->pessoa('contabilidade'));
+
+        $arquivo = \Illuminate\Http\UploadedFile::fake()->image('nota.jpg', 100, 100);
+        $this->post("/api/notas/{$nota->id}/foto", ['file' => $arquivo], ['Accept' => 'application/json'])->assertOk();
+        $this->assertNotEmpty($nota->fresh()->foto_path);
+
+        $novoId = (string) Str::uuid();
+        $outro = \Illuminate\Http\UploadedFile::fake()->image('nota2.jpg', 100, 100);
+        $this->post("/api/notas/{$novoId}/foto", ['file' => $outro, 'user_id' => $colab->id], ['Accept' => 'application/json'])->assertStatus(403);
     }
 
     public function test_gestor_que_vira_contador_perde_o_regime_cv(): void

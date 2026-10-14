@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 391;
+const APP_BUILD = 392;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1181,10 +1181,12 @@ function _usaCartaoDe(donoId) {
 }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
-/* Corrigir a nota de QUALQUER colaborador: só gestor e admin. A
-   contabilidade consulta e baixa relatório — decisão do Cleiton, mantida em
-   24/09/2026 depois de experimentarmos o contrário. */
-function _corrigeNotaDeOutro() { return _ehGestorOuAdmin(); }
+/* Corrigir a nota de QUALQUER colaborador: gestor, admin e contabilidade.
+   Em 24/09/2026 a contabilidade ficou só consultando; em 14/10/2026 o Cleiton
+   voltou atrás: o Contador corrige a nota incorreta (editar, trocar anexo e
+   grupo). Continua sem lançar nota nova, sem excluir e sem repasse. A edição
+   entra no Histórico com o nome dele. */
+function _corrigeNotaDeOutro() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 
 function _ehNotaDeOutroUsuario(n) {
   return !!n?.user_id && !!user?.id && n.user_id !== user.id;
@@ -4938,8 +4940,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
-            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
-            <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
+            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
+            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
           </div>
         </div>
       </div>`;
@@ -7166,7 +7168,7 @@ function _mostrarFormAposLeitura() {
 }
 
 async function abrirFormNota(dados = {}) {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
+  if (_ehContabilidade() && !dados.id) { toast('Contador corrige notas existentes; não lança nota nova', 'err'); return; }
   if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
     abrirSeletorTipoLancamento(dados);
     return;
@@ -7257,13 +7259,13 @@ async function abrirFormNota(dados = {}) {
   _atualizarLinkConsulta();
 
   // título e banner de correção por gestor/admin (ou nota de Faturamento)
-  const isGestorEdit = _ehGestorOuAdmin() && !!dados.id && _ehNotaDeOutroUsuario(dados);
+  const isGestorEdit = _corrigeNotaDeOutro() && !!dados.id && _ehNotaDeOutroUsuario(dados);
   const isFaturamento = _pagamentoForcado === 'empresa';
   const banner = $('gestor-edit-banner');
   const bannerTitle = $('gestor-edit-title');
   const bannerText = $('gestor-edit-text');
   if (banner) banner.style.display = (isGestorEdit || isFaturamento) ? 'flex' : 'none';
-  if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : 'Correção de gestor';
+  if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : (_ehContabilidade() ? 'Correção do contador' : 'Correção de gestor');
   if (bannerText) bannerText.textContent = isFaturamento
     ? (_semColaboradorForcado
         ? 'Paga direto pela empresa, sem colaborador específico — não entra no saldo nem no cartão de ninguém, só no painel geral da equipe.'
@@ -7937,7 +7939,7 @@ async function salvarNota() {
 }
 
 async function _salvarNotaInterno() {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
+  if (_ehContabilidade() && !$('nf-id').value) { toast('Contador corrige notas existentes; não lança nota nova', 'err'); return; }
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
@@ -8152,7 +8154,7 @@ async function _salvarNotaInterno() {
     await syncBadge(false);
     fecharFormNota();
     await carregarDadosLocais();
-    renderNotas();
+    if (_ehContabilidade()) renderEquipe(); else renderNotas();   // Contador não tem 'Minhas notas'
     const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
       semValor ? '⚠️ Nota salva SEM valor — edite para completar'
@@ -8166,7 +8168,6 @@ async function _salvarNotaInterno() {
 }
 
 async function editarNota(id) {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);

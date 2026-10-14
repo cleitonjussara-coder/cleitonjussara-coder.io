@@ -27,6 +27,14 @@ class SomenteLeitura
         'DELETE me/foto',
         'POST fotos/urls',      // é assim que ele vê os anexos das notas
         'POST notas/existem',   // conferência de lixeira/sincronização (só devolve ids)
+        /* Corrigir nota incorreta (pedido do Cleiton, 14/10/2026). O NotaController
+           segura o resto: só nota que já existe, sem excluir, sem trocar o dono e
+           sem Faturamento. Lançar nota nova, apagar e repasse seguem fechados. */
+        'PUT notas/{id}',
+        'PATCH notas/{id}/tipo',
+        'POST notas/{id}/foto',
+        'POST notas/chave-existe',   // checagem de duplicata no formulário
+        'POST notas/ler-foto',       // leitura do anexo trocado
     ];
 
     /** Módulos que ele não usa: nem a leitura (ponto, quilometragem, frota). */

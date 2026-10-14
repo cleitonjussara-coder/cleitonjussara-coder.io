@@ -170,11 +170,17 @@ class NotaController extends Controller
             $d['mes'] = $mesCerto;
             $d['ano'] = $anoCerto;
         }
-        $this->podeGravar($u, $d['user_id']);
-
         $nota = Nota::find($id);
+        $this->podeGravar($u, $d['user_id'], $nota !== null);
         if ($nota) {
-            $this->podeGravar($u, $nota->user_id);
+            $this->podeGravar($u, $nota->user_id, true);
+        }
+        /* Contador (14/10/2026, pedido do Cleiton): corrige a nota que está
+           incorreta — mas só ela. Não lança nota nova (podeGravar), não a
+           manda para a lixeira e não troca de quem ela é. */
+        if ($u->soLeitura()) {
+            abort_if($nota->deleted || ($d['deleted'] ?? false), 403, 'Contabilidade corrige notas, mas não as exclui.');
+            abort_unless(($d['user_id'] ?? null) === $nota->user_id, 403, 'Contabilidade não troca o dono da nota.');
         }
         /* 25/09/2026: nota de Faturamento (paga direto pela empresa, exclui do
            saldo/cartão de quem for escolhido) só gestor ou admin lança —
@@ -231,8 +237,8 @@ class NotaController extends Controller
     public function corrigirTipo(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
-        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta');
-        abort_unless($u->gerencia(), 403, 'Só gestor ou admin corrige o grupo de uma nota');
+        /* gestor, admin e (desde 14/10/2026) contabilidade corrigem o grupo */
+        abort_unless($u->veTudo(), 403, 'Só gestor, admin ou contabilidade corrigem o grupo de uma nota');
 
         $d = $r->validate([
             'tipo' => ['required', Rule::in(Nota::TIPOS)],
@@ -425,7 +431,7 @@ class NotaController extends Controller
             $pasta = Nota::PASTA_GERAL;
         } else {
             $pasta = $nota ? $nota->user_id : ($r->input('user_id') ?: $u->id);
-            $this->podeGravar($u, $pasta);
+            $this->podeGravar($u, $pasta, $nota !== null);
         }
 
         $path = $this->fotos->salvarPara($pasta, $id, $r->file('file'), $r->input('ext'));
@@ -471,9 +477,16 @@ class NotaController extends Controller
     /* $donoId nula só acontece em nota de Faturamento sem colaborador
        (28/09/2026) — nesse caso só passa quem gerencia (a validação já
        garante isso, aqui é a segunda trava do lado do servidor). */
-    private function podeGravar(Colaborador $u, ?string $donoId): void
+    /* `notaExiste`: o Contador só mexe em nota que já existe (corrigir); para ele
+       lançar nota nova continua 403. Quem vê a nota ser de outro é problema do
+       upsert, que prende o dono. */
+    private function podeGravar(Colaborador $u, ?string $donoId, bool $notaExiste = false): void
     {
-        abort_if($u->soLeitura(), 403, 'Contabilidade só consulta e baixa relatórios; não lança notas');
+        if ($u->soLeitura()) {
+            abort_unless($notaExiste, 403, 'Contabilidade corrige notas que já existem; não lança nota nova');
+
+            return;
+        }
         abort_unless($donoId === $u->id || $u->gerencia(), 403, 'Sem permissão para esta nota');
     }
 }
