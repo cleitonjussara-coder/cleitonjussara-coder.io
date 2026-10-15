@@ -71,6 +71,33 @@ window.Gestor = (() => {
     card.querySelector('.fat-dica').style.display = abrindo ? 'none' : '';
   }
 
+  /* Notas do Faturamento (pagamento='empresa') do mês, em lista única — sem nome de colaborador (15/10/2026).
+     O painel só traz colunas resumidas, então a lista vem do servidor ao tocar em "Ver notas". */
+  async function verNotasFaturamento(btn, ano, mes) {
+    const box = btn.closest('.dash-card').querySelector('.fat-notas');
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = '👁 Ver notas'; return; }
+    box.style.display = 'block';
+    btn.textContent = '🙈 Esconder notas';
+    box.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:8px 0">Carregando…</div>';
+    try {
+      const todas = await _ctx.sb.notas.list({ ano, mes, deleted: '0', fields: 'data,tipo,subtipo,valor,razao_social,cnpj,foto_path,pagamento' });
+      const lista = (todas || []).filter(n => n.pagamento === 'empresa').sort((a, b) => String(b.data).localeCompare(String(a.data)));
+      box.innerHTML = lista.length ? lista.map(n => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;padding:7px 0;border-top:1px solid var(--border)">
+          <div style="min-width:0">
+            <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
+            <div style="color:var(--text2);font-size:12.5px">${fmtDataBR(n.data)} · ${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
+            <b>${brl(n.valor)}</b>
+            ${n.foto_path ? `<button class="btn-icon-sm" onclick="verFoto('${esc(n.id)}')" title="Ver o anexo">📎</button>` : ''}
+          </div>
+        </div>`).join('') : '<div style="color:var(--text2);font-size:13px;padding:8px 0">Nenhuma nota neste mês.</div>';
+    } catch (e) {
+      box.innerHTML = '<div style="color:var(--danger,#c0392b);font-size:13px;padding:8px 0">Não foi possível carregar as notas. Tente de novo.</div>';
+    }
+  }
+
   function tocarBarra(el, i) {
     const card = el.closest('.evo-card');
     if (!card) return;
@@ -381,7 +408,11 @@ window.Gestor = (() => {
             <span>Lançado por <b>${esc(p.nome)}</b></span>
             <span style="font-weight:700">${brl(p.val)} · ${p.qtd} nota${p.qtd===1?'':'s'}</span>
           </div>`).join('')}
-          <button class="btn btn-sm btn-outline" style="margin-top:10px" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-sm btn-outline" onclick="Gestor.verNotasFaturamento(this, ${ano}, ${mes})">👁 Ver notas</button>
+            <button class="btn btn-sm btn-outline" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
+          </div>
+          <div class="fat-notas" style="display:none;margin-top:8px"></div>
         </div>`;
       }
 
@@ -1139,5 +1170,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
