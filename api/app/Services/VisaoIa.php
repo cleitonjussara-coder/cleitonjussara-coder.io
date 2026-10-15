@@ -27,6 +27,14 @@ class VisaoIa
 
     private const DISJUNTOR = 'visao-ia-fora';
 
+    /**
+     * Por que a ÚLTIMA chamada não devolveu texto (14/10/2026): 'indisponivel', 'http_<status>', 'erro',
+     * 'recusou' (o modelo recusou), 'max_tokens' (o raciocínio gastou o limite e não sobrou resposta) ou
+     * 'sem_texto' (a API respondeu sem nenhum bloco de texto). Null quando houve texto. Quem chama usa
+     * isto para decidir se vale tentar de novo: só 'max_tokens' e 'sem_texto' são passageiros.
+     */
+    public ?string $ultimoMotivo = null;
+
     public function disponivel(): bool
     {
         return (string) config('petermann.anthropic.key') !== '' && ! Cache::has(self::DISJUNTOR);
@@ -38,7 +46,10 @@ class VisaoIa
      */
     public function perguntar(string $origem, string $modelo, string $bytes, string $mime, string $pedido, int $maxTokens = 1024, string $effort = 'low', int $timeout = 20): ?string
     {
+        $this->ultimoMotivo = null;
         if (! $this->disponivel() || $bytes === '') {
+            $this->ultimoMotivo = 'indisponivel';
+
             return null;
         }
         if (! in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
@@ -69,6 +80,7 @@ class VisaoIa
 
             if (! $res->successful()) {
                 $st = $res->status();
+                $this->ultimoMotivo = 'http_'.$st;
                 Log::warning("VisaoIa[$origem]: API respondeu $st", ['corpo' => mb_substr($res->body(), 0, 300)]);
                 if (in_array($st, [401, 402, 403], true) || ($st === 400 && stripos($res->body(), 'credit balance') !== false)) {
                     app(AlertaErro::class)->avisar(
@@ -83,17 +95,34 @@ class VisaoIa
 
                 return null;
             }
-            if (($res->json('stop_reason') ?? '') === 'refusal') {
+            $stop = (string) ($res->json('stop_reason') ?? '');
+            if ($stop === 'refusal') {
+                $this->ultimoMotivo = 'recusou';
+                Log::warning("VisaoIa[$origem]: o modelo recusou a imagem (stop_reason=refusal)");
+
                 return null;
             }
+            $tipos = [];
             foreach ($res->json('content') ?? [] as $b) {
-                if (($b['type'] ?? '') === 'text') {
-                    return (string) ($b['text'] ?? '');
+                $tipos[] = (string) ($b['type'] ?? '?');
+                if (($b['type'] ?? '') === 'text' && trim((string) ($b['text'] ?? '')) !== '') {
+                    return (string) $b['text'];
                 }
             }
 
+            /* 200 OK sem texto aproveitável — antes isto sumia sem rastro (caso de 12/10/2026). Agora o log diz
+               por quê: com max_tokens o raciocínio do modelo gastou o limite inteiro. */
+            $this->ultimoMotivo = $stop === 'max_tokens' ? 'max_tokens' : 'sem_texto';
+            Log::warning("VisaoIa[$origem]: resposta sem texto ({$this->ultimoMotivo})", [
+                'stop_reason' => $stop,
+                'blocos' => $tipos,
+                'max_tokens' => $maxTokens,
+                'saida_tokens' => $res->json('usage.output_tokens'),
+            ]);
+
             return null;
         } catch (Throwable $e) {
+            $this->ultimoMotivo = 'erro';
             Log::warning("VisaoIa[$origem]: ".$e->getMessage());
             Cache::put(self::DISJUNTOR, 1, now()->addMinutes(5));
 

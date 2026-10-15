@@ -4,7 +4,7 @@
    Stores: notas | repasses | fotos | meta
    O parâmetro `sb` das funções de sync é o cliente da API (js/api.js).
 ───────────────────────────────────────────────────────────── */
-window.DB = (() => {
+globalThis.DB = (() => {      // globalThis: este arquivo também roda no service worker (envio em segundo plano, fase 2)
   const DB_NAME = 'petermann_v1';
   const DB_VER  = 4;
   const MAX_SYNC_ATTEMPTS = 5;
@@ -52,7 +52,15 @@ window.DB = (() => {
           s.createIndex('next_attempt_at', 'next_attempt_at', { unique: false });
         }
       };
-      req.onsuccess = e => { _db = e.target.result; res(_db); };
+      req.onsuccess = e => {
+        _db = e.target.result;
+        /* Agora o service worker também abre este banco (envio em segundo plano). Se outra parte do app pedir
+           troca de versão ou exclusão do banco, esta conexão FECHA — senão o pedido fica preso até o worker ser
+           desligado pelo navegador, e nenhuma abertura nova do banco anda enquanto isso. A próxima chamada reabre. */
+        const conn = _db;
+        conn.onversionchange = () => { try { conn.close(); } catch (_) {} if (_db === conn) _db = null; };
+        res(_db);
+      };
       req.onerror   = e => rej(e.target.error);
     });
   }
@@ -120,7 +128,14 @@ window.DB = (() => {
     };
   };
 
+  /* Entrou item na fila: pede ao navegador o envio em segundo plano (ver registrarEnvioFundo). Não espera, não falha. */
   const _queueOp = async (entry) => {
+    const item = await _queueOpInterno(entry);
+    registrarEnvioFundo();
+    return item;
+  };
+
+  const _queueOpInterno = async (entry) => {
     const now = new Date().toISOString();
     const existingItems = await _getAll('sync_queue');
     const existingItem = existingItems.find(item =>
@@ -210,6 +225,9 @@ window.DB = (() => {
     const pendingItems = queueItems.filter(item => item.status !== 'running');
     const failedItems = queueItems.filter(item => item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS);
     const scheduledItems = pendingItems.filter(item => item.next_attempt_at && new Date(item.next_attempt_at).getTime() > now);
+    /* "falhou" espera 30 min e não conta para quem decide se vale ficar tentando (envio em segundo plano) */
+    const ativosAgendados = scheduledItems.filter(item => !(item.status === 'failed' || item.attempts >= MAX_SYNC_ATTEMPTS));
+    const proximaAtivaAt = ativosAgendados.length ? Math.min(...ativosAgendados.map(item => new Date(item.next_attempt_at).getTime())) : null;
     const nextAttemptAt = scheduledItems.length
       ? scheduledItems.reduce((earliest, item) => {
           const ts = new Date(item.next_attempt_at).getTime();
@@ -222,6 +240,7 @@ window.DB = (() => {
       failedCount: failedItems.length,
       scheduledCount: scheduledItems.length,
       nextAttemptAt,
+      proximaAtivaAt,
     };
   }
 
@@ -449,7 +468,8 @@ window.DB = (() => {
     heic:'image/heic', gif:'image/gif', pdf:'application/pdf', xml:'text/xml',
   };
   const saveFotoLocal = async (nota_id, blob, ext) => {
-    const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase() };
+    /* `em`: carimbo desta versão do anexo — o envio compara antes de apagar o blob local (anexo trocado durante o upload) */
+    const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase(), em: new Date().toISOString() + ':' + Math.random().toString(36).slice(2, 8) };
     await _put('fotos', entry);
     await _queueOp({ entity: 'foto', entity_id: nota_id, action: 'upload', payload: entry });
     return entry;
@@ -640,14 +660,18 @@ window.DB = (() => {
     }
     const existingFoto = new Set(queueItems.filter(i => i.entity === 'foto').map(i => i.entity_id));
     for (const f of allFotos) {
-      if (!existingFoto.has(f.nota_id)) {
+      if (!existingFoto.has(f.nota_id) && !f.recusada) {
         const dono = allN.find(x => x.id === f.nota_id);
         await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f, queued_by: dono?.created_by || dono?.user_id || _sessaoUid });
       }
     }
   }
 
-  async function pushPending(sb, userId) {
+  /* opts (12/10/2026, envio em segundo plano):
+       travado — quem chama SEGURA a trava de envio entre página e service worker: nenhum outro contexto está enviando
+                 agora, então item "running" é órfão (o contexto que o pegou morreu) e vale já, sem esperar os 30 s;
+       ate     — instante-limite (ms) para COMEÇAR um item novo: o service worker só tem alguns minutos por evento. */
+  async function pushPending(sb, userId, opts) {
     if (!sb || !navigator.onLine) return { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null };
     await _ensureQueueFromExisting();
     const queueItems = await _getAll('sync_queue');
@@ -655,6 +679,7 @@ window.DB = (() => {
     let dueItems = queueItems.filter(item => {
       const isDue = !item.next_attempt_at || new Date(item.next_attempt_at).getTime() <= now;
       if (item.status === 'running') {
+        if (opts?.travado) return isDue;
         const updatedAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
         return isDue && now - updatedAt > 30_000;
       }
@@ -681,6 +706,7 @@ window.DB = (() => {
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
 
     for (const item0 of dueItems) {
+      if (opts?.ate && Date.now() > opts.ate) break;      // sem tempo para começar mais um: o resto vai no próximo evento
       /* trocou de conta no meio do ciclo (upload longo): o que falta é da conta antiga e espera ela voltar.
          _contaViva pergunta ao app quem está logado AGORA — _sessaoUid sozinho pode estar velho (revisão 11/10/2026). */
       if (meuId && ((_sessaoUid && _sessaoUid !== meuId) || !_contaViva(meuId))) break;
@@ -710,9 +736,23 @@ window.DB = (() => {
              isso só gera 422 sem fim; recusa aqui com o motivo, que a nota passa a mostrar. */
           if (!blob.size) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
           const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id, nota.user_id === null);
-          await _put('notas', { ...nota, foto_path: path, foto_local: ext, sync_error: null, updated_at: now });
-          await delFotoLocal(item.entity_id);
-          await _del('sync_queue', item.id);
+          /* 14/10/2026 (revisão): a nota é LIDA DE NOVO e só recebe o caminho do anexo — a cópia lida antes do upload
+             (até 120 s atrás) desfazia a edição ou a exclusão feita nesse meio tempo. updated_at não é mexido, para o
+             envio da nota perceber a edição (compara updated_at). */
+          const notaAgora = await _get('notas', item.entity_id);
+          if (notaAgora) await _put('notas', { ...notaAgora, foto_path: path, foto_local: ext, sync_error: null });
+          /* o anexo foi TROCADO enquanto este subia (a pessoa corrigiu a nota/o Contador trocou a foto): o que subiu é
+             o antigo. Não apaga o blob novo nem o item — ele volta para a fila e sobe na próxima rodada. */
+          const fotoAgora = await _get('fotos', item.entity_id).catch(() => null);
+          const itemAgora = await _get('sync_queue', item.id).catch(() => null);
+          const trocou = (fotoAgora && (fotoAgora.em || null) !== (payload.em || null))
+            || (itemAgora && itemAgora.payload && (itemAgora.payload.em || null) !== (payload.em || null));
+          if (trocou) {
+            if (itemAgora) await _put('sync_queue', { ...itemAgora, status: 'pending', attempts: 0, contada_em: null, next_attempt_at: now, updated_at: now });
+          } else {
+            await delFotoLocal(item.entity_id);
+            await _del('sync_queue', item.id);
+          }
           /* o anexo chegou: a nota que esperava por ele (422 "Anexo obrigatório") não precisa esperar a espera dela */
           for (const q of await _getAll('sync_queue')) {
             if (q.entity === 'nota' && q.entity_id === item.entity_id) {
@@ -755,6 +795,23 @@ window.DB = (() => {
         ok++;
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
+        /* Recusa por PAPEL (Contador, 14/10/2026): o servidor nunca vai aceitar esse item — quem virou Contador com
+           nota nova ou repasse parado na fila ficava com "N itens pendentes" para sempre. Sai da fila (o aviso some);
+           o registro continua guardado no aparelho, só sem tentar subir de novo. */
+        if (e?.status === 403 && /^contabilidade/i.test(message)) {
+          await _del('sync_queue', item.id);
+          if (item.entity === 'foto') {
+            /* o anexo fica guardado, mas marcado: sem isto _ensureQueueFromExisting o recolocava na fila a cada rodada
+               e o arquivo inteiro subia de novo só para tomar 403 (revisão de 14/10/2026) */
+            const f = await _get('fotos', item.entity_id);
+            if (f) await _put('fotos', { ...f, recusada: true });
+          } else {
+            const lojaRec = item.entity === 'nota' ? 'notas' : 'repasses';
+            const local = await _get(lojaRec, item.entity_id);
+            if (local) await _put(lojaRec, { ...local, synced: true, sync_status: 'synced', sync_error: message });
+          }
+          continue;
+        }
         /* Falha de REDE/5xx só gasta uma das MAX_SYNC_ATTEMPTS tentativas se a última contada tem 1 min ou mais: com o
            reenvio rápido (3-20 s), sinal ruim passageiro não pode virar "falhou" em meio minuto. Recusa do servidor
            (422/403…) conta sempre. */
@@ -1012,7 +1069,11 @@ window.DB = (() => {
      A rodada LEVE é a do reenvio rápido: só envia, sem puxar tudo do servidor a cada 3 s. */
   async function _rodada(sb, userId, leve) {
     if (!leve) { try { await repararQrUrls(userId); } catch (_) {} }
-    const push = await pushPending(sb, userId);
+    /* o envio é um só por vez ENTRE contextos: se o service worker está enviando em segundo plano, a página espera a
+       vez (_esperaTravaMs: 8 s; 30 s no "Enviar agora") em vez de mandar a mesma fila em dobro; sem a vez, pula o envio
+       desta rodada (resultado traz ocupado: true) e segue com o resto */
+    const env = await _comTravaDeEnvio(travado => pushPending(sb, userId, { travado }), _esperaTravaMs);
+    const push = env.ocupado ? { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null, ocupado: true } : env.valor;
     if (leve) {
       const rl = { ...push, pulled: 0, recuperadas: 0 };
       if (push.ok || push.fotosOk) window.dispatchEvent(new CustomEvent('db-synced', { detail: rl }));
@@ -1108,34 +1169,200 @@ window.DB = (() => {
     /* a rodada em voo ainda vai gravar os itens que já leu (tentativas e espera antigas): zerar antes disso não vale */
     while (_running) await aguardarSync().catch(() => {});
     const agora = new Date().toISOString();
+    /* conta ANTES de esperar a trava: se o service worker esvaziar a fila enquanto esperamos, o aviso diz
+       "tudo enviado" em vez de "nada pendente" (revisão de 14/10/2026) */
+    let tinhaAntes = 0;
+    for (const i of await _getAll('sync_queue')) { if (!meuId || await _itemEhDaSessao(i, meuId)) tinhaAntes++; }
     let tinha = 0;
-    for (const i of await _getAll('sync_queue')) {
-      if (meuId && !(await _itemEhDaSessao(i, meuId))) continue;
-      tinha++;
-      await _mutarFila(i.id, cur => ({ ...cur, attempts: 0, contada_em: null, status: 'pending', next_attempt_at: agora, updated_at: agora }));
-      const store = i.entity === 'repass' ? 'repasses' : i.entity === 'nota' ? 'notas' : null;
-      if (store) {
-        const loc = await _get(store, i.entity_id).catch(() => null);
-        if (loc && loc.sync_status === 'failed') await _put(store, { ...loc, synced: false, sync_status: 'pending', sync_error: null });
+    const zerar = async () => {
+      tinha = 0;
+      for (const i of await _getAll('sync_queue')) {
+        if (meuId && !(await _itemEhDaSessao(i, meuId))) continue;
+        tinha++;
+        await _mutarFila(i.id, cur => ({ ...cur, attempts: 0, contada_em: null, status: 'pending', next_attempt_at: agora, updated_at: agora }));
+        const store = i.entity === 'repass' ? 'repasses' : i.entity === 'nota' ? 'notas' : null;
+        if (store) {
+          const loc = await _get(store, i.entity_id).catch(() => null);
+          if (loc && loc.sync_status === 'failed') await _put(store, { ...loc, synced: false, sync_status: 'pending', sync_error: null });
+        }
       }
-    }
+    };
+    /* o reset roda COM a trava de envio: um envio em voo no service worker (ou em outra aba) gravaria o resultado dele
+       por cima do zero. Sem conseguir a vez em 30 s, zera assim mesmo (como antes). */
+    if ((await _comTravaDeEnvio(zerar, 30_000)).ocupado) await zerar();
     /* sync() devolve null quando outra rodada ocupa o lugar (um gatilho pode ter começado uma no meio): espera e tenta de novo */
-    for (let k = 0; k < 4; k++) {
-      const r = await sync(sb, meuId);
-      if (r !== null) break;
-      await aguardarSync().catch(() => {});
-    }
+    const esperaAntes = _esperaTravaMs;
+    _esperaTravaMs = 30_000;
+    let ocupado = false;
+    try {
+      for (let k = 0; k < 4; k++) {
+        const r = await sync(sb, meuId);
+        if (r !== null) { ocupado = !!(r && r.ocupado); break; }
+        await aguardarSync().catch(() => {});
+      }
+    } finally { _esperaTravaMs = esperaAntes; }
     const resumo = await getSyncQueueSummary();
     let motivo = null;
     for (const i of await _getAll('sync_queue')) {
       if (i.last_error && (!meuId || await _itemEhDaSessao(i, meuId))) { motivo = i.last_error; break; }
     }
-    return { tinha, restam: resumo.count, falharam: resumo.failedCount, motivo };
+    return { tinha: Math.max(tinha, tinhaAntes), restam: resumo.count, falharam: resumo.failedCount, motivo, ocupado };
+  }
+
+  /* ── ENVIO EM SEGUNDO PLANO (fase 2, 12/10/2026) ──────────────────────────────────────────────────────────────
+     Chrome/Edge no Android: o navegador acorda o service worker (evento "sync") quando a rede volta — com o app
+     FECHADO — e ele manda a fila. iPhone/Safari e Firefox não têm Background Sync: lá tudo isto é no-op e o envio
+     continua pela página (builds 379+). O service worker carrega este arquivo e o api.js (importScripts): a lógica de
+     envio é a MESMA da página (pushPending), com o mesmo cliente da API.
+       • sessão — o SW não lê o localStorage: o par token+uid da conta logada é espelhado no IndexedDB (meta
+         'sessao_fundo') pelo api.js e apagado no logout/401. Só sobe o que ESSA conta pôs na fila; sem espelho o SW
+         não envia nada. O token fica no mesmo domínio do localStorage (mesma exposição).
+       • trava — Web Locks 'petermann-envio': página e SW nunca enviam ao mesmo tempo (nem duas abas). */
+  const TRAVA_ENVIO = 'petermann-envio';
+  const TAG_ENVIO_FUNDO = 'petermann-envio';
+  let _esperaTravaMs = 8_000;         // quanto a PÁGINA espera pela vez de enviar (o "Enviar agora" sobe isto para 30 s)
+  const _dorme = ms => new Promise(r => setTimeout(r, ms));
+
+  /* Roda fn(travado) com a trava de envio. Espera a vez por até esperaMs; se não vier, devolve { ocupado: true } sem
+     rodar fn. travado = true quando a trava foi obtida (nenhum outro contexto envia: "running" na fila é órfão);
+     sem Web Locks no navegador roda direto, com travado = false (vale a regra velha dos 30 s). */
+  async function _comTravaDeEnvio(fn, esperaMs) {
+    const locks = globalThis.navigator?.locks;
+    if (!locks?.request) return { ocupado: false, valor: await fn(false) };
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), esperaMs);
+    let dentro = false;
+    try {
+      return await locks.request(TRAVA_ENVIO, { signal: ctrl.signal }, async () => {
+        dentro = true; clearTimeout(t);
+        return { ocupado: false, valor: await fn(true) };
+      });
+    } catch (e) {
+      if (!dentro && e && e.name === 'AbortError') return { ocupado: true, valor: null };   // esgotou a espera pela vez
+      /* a trava falhou por outro motivo ANTES de fn rodar (navegador recusou, modo restrito...): FALHA SEGURA — envia sem
+         ela, como no build 379. Nunca derrubar o envio da página por causa de um recurso novo (iPhone passa por aqui). */
+      if (!dentro) { console.warn('[envio] trava indisponível, enviando sem ela:', e); return { ocupado: false, valor: await fn(false) }; }
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+
+  let _fundoUid = null;               // no service worker: a conta que está enviando AGORA (null = sessão encerrada)
+  let _espelhoFila = Promise.resolve();   // grava/apaga o espelho NA ORDEM em que foi pedido
+
+  /* Chamado pelo api.js a cada mudança de sessão. token+uid completos → grava; qualquer outra coisa → apaga e avisa o
+     service worker, que para de enviar no meio do ciclo (logout/troca de conta/401). */
+  /* Apaga o espelho SÓ se ele ainda guarda este token (leitura e exclusão na mesma transação): o 401 de um envio em
+     segundo plano com o token VELHO não pode apagar o espelho da conta que acabou de entrar na página. */
+  const _apagarEspelhoSe = tk => _tx(['meta'], 'readwrite', (t, res, rej) => {
+    const s = t.objectStore('meta');
+    const g = s.get('sessao_fundo');
+    g.onerror = e => rej(e.target.error);
+    g.onsuccess = () => {
+      if (!(g.result && g.result.v && g.result.v.token === tk)) { res(false); return; }
+      const d = s.delete('sessao_fundo');
+      d.onsuccess = () => res(true);
+      d.onerror = e => rej(e.target.error);
+    };
+  });
+
+  function espelharSessao(token, uid, tokenAnterior) {
+    const completo = !!(token && uid);
+    if (!completo) {
+      _fundoUid = null;
+      try { globalThis.navigator?.serviceWorker?.controller?.postMessage({ tipo: 'sessao-encerrada' }); } catch (_) {}
+    }
+    /* no service worker (sem document) a ordem de apagar vem de um 401: só vale para o token que levou o 401 */
+    const noWorker = typeof document === 'undefined';
+    const op = () => (completo
+      ? _put('meta', { k: 'sessao_fundo', v: { token, uid, em: new Date().toISOString() } })
+      : (noWorker && tokenAnterior ? _apagarEspelhoSe(tokenAnterior) : _del('meta', 'sessao_fundo'))).catch(() => {});
+    _espelhoFila = _espelhoFila.then(op, op);
+    return _espelhoFila;
+  }
+  const encerrarSessaoFundo = () => { _fundoUid = null; };
+
+  /* Pede ao navegador um evento "sync" (envio em segundo plano). Com internet ele dispara já; sem, dispara quando a
+     rede voltar — inclusive com o app fechado. Mesma tag = um pedido só. `forcar` ignora o intervalo mínimo de 1,5 s
+     entre pedidos (chamado ao sair do app). Nunca lança. */
+  let _regFundoTimer = null;
+  async function _registrarAgora() {
+    try {
+      const reg = await Promise.race([navigator.serviceWorker.ready, _dorme(4000).then(() => { throw new Error('sem service worker'); })]);
+      await reg.sync.register(TAG_ENVIO_FUNDO);
+      return true;
+    } catch (_) { return false; }     // sem suporte/permissão: o envio pela página continua valendo
+  }
+  /* Sem forçar, o pedido espera 2 s e vira um só: a nota entra na fila ANTES do anexo (saveNota e depois saveFotoLocal),
+     e um service worker acordado entre os dois mandaria a nota sem o arquivo (422 à toa). */
+  function registrarEnvioFundo(forcar) {
+    try {
+      if (!('serviceWorker' in globalThis.navigator) || !('SyncManager' in globalThis)) return Promise.resolve(false);
+      if (forcar) {
+        if (_regFundoTimer) { clearTimeout(_regFundoTimer); _regFundoTimer = null; }
+        return _registrarAgora();
+      }
+      if (!_regFundoTimer) _regFundoTimer = setTimeout(() => { _regFundoTimer = null; _registrarAgora(); }, 2000);
+      return Promise.resolve(true);
+    } catch (_) { return Promise.resolve(false); }
+  }
+
+  /* Corpo do evento "sync" do service worker: manda a fila da conta espelhada. Dois pedidos juntos viram um só.
+     Devolve { ok, fail, fotosOk, fotosFail, restam, repetir, motivo } — repetir = sobrou coisa que vale tentar de novo
+     (o SW rejeita o evento e o navegador reagenda). Tempo: o SW tem ~5 min por evento; não começa item novo depois de
+     prazoMs (padrão 150 s) e um upload leva no máximo 120 s. */
+  let _fundoEmVoo = null;
+  function enviarEmFundo(opts) {
+    if (!_fundoEmVoo) _fundoEmVoo = _enviarEmFundo(opts || {}).finally(() => { _fundoEmVoo = null; });
+    return _fundoEmVoo;
+  }
+
+  async function _enviarEmFundo({ prazoMs = 150_000, esperaTravaMs = 30_000 }) {
+    const r = { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, restam: 0, repetir: false, motivo: null };
+    /* o orçamento do evento (~5 min no Chrome) conta desde AGORA, inclusive a espera pela trava: prazoMs 150 s + um
+       upload de até 120 s + espera pela trava de 30 s cabem com folga */
+    const ate = Date.now() + prazoMs;
+    for (let volta = 0; volta < 3 && Date.now() < ate; volta++) {
+      let parar = false, esperar = 0;
+      /* UMA volta por vez COM a trava; a espera entre voltas é feita FORA dela, para a página poder enviar nesse meio tempo */
+      const env = await _comTravaDeEnvio(async travado => {
+        /* a sessão é lida DEPOIS de conseguir a vez: se a conta mudou enquanto esperava, vale a de agora */
+        const reg = await _get('meta', 'sessao_fundo').catch(() => null);
+        const s = reg && reg.v;
+        if (!s || !s.token || !s.uid) { r.motivo = 'sem-sessao'; r.repetir = false; parar = true; return; }
+        const api = globalThis.API;
+        if (!api?.auth?.usarToken) { r.motivo = 'sem-api'; parar = true; return; }
+        _fundoUid = s.uid; _uidVivo = () => _fundoUid; _sessaoUid = s.uid;
+        api.auth.usarToken(s.token);
+        const p = await pushPending(api, s.uid, { travado, ate });
+        r.ok += p.ok; r.fail += p.fail; r.fotosOk += p.fotosOk; r.fotosFail += p.fotosFail;
+        if (!_fundoUid) { r.motivo = 'sessao-encerrada'; r.repetir = false; parar = true; return; }   // logout/troca de conta/401 no meio
+        const sum = await getSyncQueueSummary();
+        r.restam = sum.count;
+        const pend = sum.count - sum.failedCount;
+        /* o próximo envio conta só entre os itens que serão tentados: um item "falhou" (30 min de espera) não pode
+           fazer o worker desistir de itens vencidos que sobraram (revisão de 14/10/2026) */
+        r.repetir = pend > 0 && (!sum.proximaAtivaAt || sum.proximaAtivaAt - Date.now() <= 120_000);
+        if (pend <= 0) { parar = true; return; }                          // nada mais para enviar
+        const espera = sum.proximaAtivaAt ? sum.proximaAtivaAt - Date.now() : 0;
+        const fez = p.ok || p.fail || p.fotosOk || p.fotosFail;
+        if (espera > 45_000 || (!fez && espera <= 0)) { parar = true; return; }
+        esperar = Math.max(0, espera);
+      }, esperaTravaMs);
+      if (env.ocupado) { r.motivo = 'ocupado'; r.repetir = true; return r; }
+      if (parar || volta >= 2 || Date.now() + esperar >= ate) break;      // sem tempo (ou última volta): não dorme à toa
+      if (esperar > 0) await _dorme(esperar + 300);                       // espera curta de nova tentativa
+    }
+    return r;
   }
 
   /* Gatilhos automáticos. Instala os ouvintes UMA vez (cada login chama de novo: só atualiza sb e getUid). */
   function setupAutoSync(sb, getUid) {
     _uidVivo = getUid;
+    /* espelha a sessão para o envio em segundo plano (quem já estava logado antes desta versão ganha o espelho aqui) */
+    try {
+      const tk = sb?.auth?.token, ue = sb?.auth?.user?.id;
+      if (tk && ue && ue === getUid()) espelharSessao(tk, ue);
+    } catch (_) {}
     if (_auto) { _auto.sb = sb; _auto.getUid = getUid; return; }
     _auto = { sb, getUid };
     /* Dispara uma rodada agora. Em rajada (foco + visibilidade + rede ao mesmo tempo) só a primeira conta: o carimbo
@@ -1151,7 +1378,20 @@ window.DB = (() => {
     window.addEventListener('online', () => disparar(true));
     /* 11/10/2026: voltar para o app (da câmera, de outro app, do bloqueio de tela) envia na hora — antes só o relógio
        de 60 s, que o celular pausa com o app em segundo plano. */
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) disparar(false); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) { disparar(false); return; }
+      /* saiu do app (bloqueou a tela, trocou de app) com coisa na fila: entrega ao service worker, que segue enviando
+         mesmo que o navegador congele ou feche esta página (só onde há Background Sync) */
+      getSyncQueueSummary().then(r => { if (r.count - r.failedCount > 0) registrarEnvioFundo(true); }).catch(() => {});
+    });
+    /* o service worker terminou um envio em segundo plano: atualiza as telas como depois de qualquer sincronização */
+    try {
+      navigator.serviceWorker?.addEventListener('message', e => {
+        const d = e.data;
+        if (!d || d.tipo !== 'envio-fundo' || !(d.ok || d.fotosOk)) return;
+        window.dispatchEvent(new CustomEvent('db-synced', { detail: { ok: d.ok || 0, fail: d.fail || 0, fotosOk: d.fotosOk || 0, fotosFail: d.fotosFail || 0, erroFoto: null, pulled: 0, recuperadas: 0, doFundo: true } }));
+      });
+    } catch (_) {}
     window.addEventListener('pageshow', e => { if (e.persisted) disparar(false); });
     window.addEventListener('focus', () => disparar(false));
     try { navigator.connection?.addEventListener?.('change', () => disparar(false)); } catch (_) {}
@@ -1166,6 +1406,7 @@ window.DB = (() => {
     saveRepasse, getRepassesUser, getRepassesTodos, softDeleteRepasse, mesclarRepassesRemotos,
     upsertFromDrive,
     sync, aguardarSync, forcarEnvio, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
+    espelharSessao, encerrarSessaoFundo, registrarEnvioFundo, enviarEmFundo,
     garantirAno, anosSincronizados, getNotasEquipe,
   };
 })();

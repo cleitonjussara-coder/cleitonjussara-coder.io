@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v392';
+const CACHE   = 'petermann-v410';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -51,13 +51,29 @@ const RUNTIME_CACHE = [
   './icon-512.png?v=160',
 ];
 const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
-  
+
+/* ── Envio em segundo plano (Background Sync, fase 2, 12/10/2026) ──────────
+   O service worker carrega o MESMO api.js e db.js da página: a fila é enviada pela mesma lógica (pushPending), com o
+   mesmo cliente da API. O ?v= acompanha o build (scripts/bump-build.js) — sem ele o navegador poderia reusar um
+   db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
+   normal e só o envio em segundo plano fica de fora. */
+let _importErro = null;
+try { importScripts('./js/api.js?v=410', './js/db.js?v=410'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
+
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
 ];
 
 // ── Install: pré-cache do shell (resiliente: ignora arquivo que faltar) ──
 self.addEventListener('install', e => {
+  /* Falha de REDE ao baixar api.js/db.js na instalação (comum em campo): o worker ficaria instalado SEM o envio e,
+     depois de instalado, o navegador não aceita importar scripts novos — ficaria assim até o próximo build. Então a
+     instalação falha e o navegador tenta de novo na próxima abertura (o worker antigo segue valendo). Qualquer outro
+     erro (bug no db.js, por exemplo) NÃO bloqueia: o resto do worker (push, cache) continua como antes. */
+  if (_importErro && _importErro.name === 'NetworkError') {
+    e.waitUntil(Promise.reject(_importErro));
+    return;
+  }
   e.waitUntil(
     caches.open(CACHE)
       .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null))))
@@ -113,6 +129,43 @@ self.addEventListener('notificationclick', e => {
     }
     await self.clients.openWindow(destino);
   })());
+});
+
+// ── Envio em segundo plano ───────────────────────────────────
+/* O navegador dispara "sync" quando há rede, MESMO com o app fechado (Chrome/Edge no Android; iPhone e Firefox não têm).
+   A página pede com registration.sync.register('petermann-envio') — ao entrar item na fila, ao sair do app com coisa
+   pendente. Rejeitar o evento faz o navegador tentar de novo mais tarde (poucas vezes); por isso só rejeita quando
+   sobrou algo que vale tentar de novo, e nunca na última chance. */
+async function envioEmFundo(ultimaChance) {
+  if (typeof DB === 'undefined' || !DB.enviarEmFundo) return null;      // db.js não carregou: nada a fazer
+  const r = await DB.enviarEmFundo();
+  if (r.ok || r.fotosOk) {
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const j of janelas) j.postMessage({ tipo: 'envio-fundo', ok: r.ok, fail: r.fail, fotosOk: r.fotosOk, fotosFail: r.fotosFail, restam: r.restam });
+  }
+  if (r.repetir && !ultimaChance) throw new Error('envio em segundo plano: sobrou fila, tentar de novo');
+  return r;
+}
+
+self.addEventListener('sync', e => {
+  if (e.tag === 'petermann-envio') e.waitUntil(envioEmFundo(e.lastChance));
+});
+
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  /* a página saiu da conta (logout, troca, 401): se há envio em andamento, ele para antes do próximo item */
+  if (d.tipo === 'sessao-encerrada') { if (typeof DB !== 'undefined') DB.encerrarSessaoFundo?.(); return; }
+  /* diagnóstico (Perfil > Diagnóstico): o worker conseguiu carregar o api.js e o db.js? */
+  if (d.tipo === 'envio-fundo-status') {
+    e.source && e.source.postMessage({ tipo: 'envio-fundo-status', db: typeof DB !== 'undefined' && !!DB.enviarEmFundo, api: typeof API !== 'undefined' });
+    return;
+  }
+  /* roda o mesmo envio sem esperar o navegador disparar o evento (diagnóstico/teste) e devolve o resultado */
+  if (d.tipo === 'envio-fundo-agora') {
+    e.waitUntil(envioEmFundo(true).then(
+      r => e.source && e.source.postMessage({ tipo: 'envio-fundo-resultado', r }),
+      err => e.source && e.source.postMessage({ tipo: 'envio-fundo-resultado', erro: String(err && err.message || err) })));
+  }
 });
 
 // ── Fetch ────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Lê os campos de uma foto de nota fiscal (cupom NFC-e, DANFE, NFS-e, recibo)
@@ -54,24 +55,61 @@ class LeitorNota
         return $this->ia->disponivel();
     }
 
+    /** Por que a última leitura não trouxe texto (ver VisaoIa::$ultimoMotivo); null se trouxe. */
+    public function ultimoMotivo(): ?string
+    {
+        return $this->ia->ultimoMotivo;
+    }
+
     /**
      * @return array<string, mixed>|null null = a IA não respondeu (sem chave, rede, saldo, recusa);
      *                                   senão as oito chaves de CAMPOS, cada uma já validada ou null
      */
     public function ler(string $bytes, string $mime = 'image/jpeg'): ?array
     {
-        $texto = $this->ia->perguntar(
+        $inicio = microtime(true);
+        $texto = $this->perguntar($bytes, $mime, self::PROMPT, 1500, 25);
+
+        /* 2ª tentativa (14/10/2026): cupom amassado/torto às vezes faz o modelo "pensar" até estourar o limite e
+           não sobrar resposta (200 OK sem texto), ou ele responde sem o JSON. Isso é passageiro — repete UMA vez,
+           com bem mais espaço e pedindo só o JSON. Recusa, falta de saldo e erro de rede NÃO repetem. O app espera
+           45 s; a 2ª tentativa usa só o que sobrou desse tempo. */
+        if ($this->valeTentarDeNovo($texto)) {
+            $restante = (int) floor(42 - (microtime(true) - $inicio));
+            if ($restante >= 8) {
+                Log::warning('LeitorNota: sem resposta útil, tentando de novo', ['motivo' => $this->ia->ultimoMotivo ?? 'sem_json']);
+                $texto = $this->perguntar($bytes, $mime, self::PROMPT.' Responda SOMENTE com o JSON, curto, sem explicação.', 4000, min(25, $restante));
+                if ($texto === null) {
+                    Log::warning('LeitorNota: a 2ª tentativa também não trouxe texto', ['motivo' => $this->ia->ultimoMotivo]);
+                }
+            }
+        }
+
+        return $texto === null ? null : $this->validar($texto);
+    }
+
+    private function perguntar(string $bytes, string $mime, string $pedido, int $maxTokens, int $timeout): ?string
+    {
+        return $this->ia->perguntar(
             'nota',
             (string) config('petermann.anthropic.modelo_nota'),
             $bytes,
             $mime,
-            self::PROMPT,
-            1500,
+            $pedido,
+            $maxTokens,
             (string) config('petermann.anthropic.effort_nota'),
-            25,
+            $timeout,
         );
+    }
 
-        return $texto === null ? null : $this->validar($texto);
+    /** Falha passageira: o modelo gastou o limite/não escreveu nada, ou respondeu sem JSON. */
+    private function valeTentarDeNovo(?string $texto): bool
+    {
+        if ($texto === null) {
+            return in_array($this->ia->ultimoMotivo, ['max_tokens', 'sem_texto'], true);
+        }
+
+        return ! preg_match('/\{.*\}/s', $texto);
     }
 
     /** Extrai o JSON do texto do modelo e confere cada campo. Sempre devolve as chaves de CAMPOS. */

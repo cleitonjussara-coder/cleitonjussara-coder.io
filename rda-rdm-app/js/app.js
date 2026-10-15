@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 392;
+const APP_BUILD = 410;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -786,6 +786,7 @@ async function enviarAgora() {
     if (viewAtual === 'notas') renderNotas();
     if (viewAtual === 'home') renderHome();
     if (!r.restam) toast(r.tinha ? '✅ Tudo enviado' : 'Nada pendente para enviar', 'ok');
+    else if (r.ocupado) toast(`${Math.max(0, r.tinha - r.restam)} enviado(s) · ${r.restam} em envio. O aparelho ainda está enviando em segundo plano — as notas seguem sendo enviadas.`, 'ok', 5000);
     else toast(`${Math.max(0, r.tinha - r.restam)} enviado(s) · ${r.restam} ainda pendente(s). Ficam salvas no celular e o app tenta de novo sozinho; se continuar, a nota mostra "falhou" com o motivo.`, 'err', 6000);
   } catch (e) {
     toast('Não enviou: ' + (e?.message || 'erro'), 'err');
@@ -1181,10 +1182,12 @@ function _usaCartaoDe(donoId) {
 }
 /* quem enxerga a equipe inteira (leitura): gestor, admin e contabilidade */
 function _veEquipe() { return _ehGestorOuAdmin() || _ehContabilidade(); }
-/* Corrigir a nota de QUALQUER colaborador: só gestor e admin. A
-   contabilidade consulta e baixa relatório — decisão do Cleiton, mantida em
-   24/09/2026 depois de experimentarmos o contrário. */
-function _corrigeNotaDeOutro() { return _ehGestorOuAdmin(); }
+/* Corrigir a nota de QUALQUER colaborador: gestor, admin e contabilidade.
+   Em 24/09/2026 a contabilidade ficou só consultando; em 14/10/2026 o Cleiton
+   voltou atrás: o Contador corrige a nota incorreta (editar, trocar anexo e
+   grupo). Continua sem lançar nota nova, sem excluir e sem repasse. A edição
+   entra no Histórico com o nome dele. */
+function _corrigeNotaDeOutro() { return _ehGestorOuAdmin() || _ehContabilidade(); }
 
 function _ehNotaDeOutroUsuario(n) {
   return !!n?.user_id && !!user?.id && n.user_id !== user.id;
@@ -1470,6 +1473,21 @@ async function diagnosticoInstalacao() {
   } else {
     L.push('Service worker: não suportado neste navegador');
   }
+  L.push(`Envio em segundo plano (Android/Chrome): ${'SyncManager' in window ? 'disponível' : 'indisponível neste aparelho (iPhone/Firefox) — o envio é com o app aberto'}`);
+  try {
+    const esp = await DB.getMeta('sessao_fundo');
+    L.push(`  conta espelhada para o envio em segundo plano: ${sn(!!(esp && esp.token))}`);
+    /* o service worker carregou o código de envio? (pergunta a ele; sem resposta em 2 s = ainda não está controlando) */
+    const st = await new Promise(res => {
+      const c = navigator.serviceWorker?.controller;
+      if (!c) { res(null); return; }
+      const h = e => { if (e.data && e.data.tipo === 'envio-fundo-status') { navigator.serviceWorker.removeEventListener('message', h); res(e.data); } };
+      navigator.serviceWorker.addEventListener('message', h);
+      setTimeout(() => { navigator.serviceWorker.removeEventListener('message', h); res(null); }, 2000);
+      c.postMessage({ tipo: 'envio-fundo-status' });
+    });
+    L.push(`  código de envio carregado no service worker: ${st ? sn(st.db && st.api) : 'sem resposta (worker ainda não controla esta página)'}`);
+  } catch (_) {}
   L.push('');
 
   /* A pergunta que mais importa quando a opção some do menu do Chrome:
@@ -2391,6 +2409,19 @@ async function excluirRepassesDeOutro(ids) {
   return ok > 0;
 }
 
+/* A ficha do colaborador lê do SERVIDOR; correção ou exclusão de nota é gravada primeiro neste aparelho e vai na fila. Antes de
+   redesenhar a ficha, manda a fila — senão ela voltaria com o valor antigo, como se a correção não tivesse pegado. */
+async function _enviarFilaAntesDaFicha() {
+  if (!sb || !user || !navigator.onLine) return;
+  let r = await DB.sync(sb, user.id).catch(() => undefined);
+  if (r === null) {
+    await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
+    r = await DB.sync(sb, user.id).catch(() => undefined);   // garante uma rodada completa depois
+  }
+  /* o envio em segundo plano (service worker) ainda segurava a vez: tenta mais uma ou duas vezes */
+  for (let k = 0; r && r.ocupado && k < 2; k++) r = await DB.sync(sb, user.id).catch(() => undefined);
+}
+
 /* redesenha a ficha do colaborador com os dados novos do servidor */
 async function _recarregarEquipe() {
   try {
@@ -2695,7 +2726,7 @@ function trocarPagamentoCV() {
 
 /* 24/09/2026 — regime de cartão corporativo: não existe RDA x RDM. O gasto
    é dividido nas MESMAS quatro categorias da planilha (as quatro colunas de
-   CV ALELO), todas juntas. O banco continua guardando tipo/subtipo, que é o
+   CARTÃO CORPORATIVO), todas juntas. O banco continua guardando tipo/subtipo, que é o
    que o relatório lê; para quem é CV o app só deixa de PERGUNTAR a aba. */
 const CATEGORIAS_CV = [
   { chave: 'alimentacao',   ico: '🍽️', nome: 'Alimentação',   tipo: 'RDA', subtipo: null,
@@ -4946,8 +4977,8 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
-            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="Editar">✏️</button>
-            <button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
+            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
+            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
           </div>
         </div>
       </div>`;
@@ -6095,8 +6126,19 @@ async function iniciarQR() {
     try {
       const track = stream.getVideoTracks()[0];
       const caps  = track.getCapabilities ? track.getCapabilities() : {};
-      if (caps.focusMode && caps.focusMode.includes('continuous')) {
-        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      _aplicarCamera(track, { semResolucao: true }).catch(() => {});   // foco/exposição contínuos (14/10/2026); a resolução do leitor fica como estava
+      const btnLant = $('qr-lanterna');
+      if (btnLant) {
+        btnLant.style.display = caps.torch ? '' : 'none';
+        btnLant.style.background = 'rgba(255,255,255,.92)';
+        btnLant.setAttribute('aria-pressed', 'false');
+        btnLant.onclick = async () => {
+          const ligar = !_camEstado.get(track)?.torch;
+          if (await _aplicarCamera(track, { torch: ligar })) {            // só muda o botão se a lanterna obedeceu
+            btnLant.style.background = ligar ? '#ffe066' : 'rgba(255,255,255,.92)';
+            btnLant.setAttribute('aria-pressed', ligar ? 'true' : 'false');
+          }
+        };
       }
       /* zoom da câmera (19/09/2026): QR pequeno lê melhor aproximando pela
          lente do que chegando o celular — o foco não perde. Slider só aparece
@@ -6105,8 +6147,8 @@ async function iniciarQR() {
       if (zoomEl && caps.zoom && caps.zoom.max > caps.zoom.min) {
         zoomEl.min = caps.zoom.min; zoomEl.max = Math.min(caps.zoom.max, 5); zoomEl.step = caps.zoom.step || 0.1;
         zoomEl.value = Math.min(zoomEl.max, Math.max(caps.zoom.min, 1.5));
-        track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
-        zoomEl.oninput = () => track.applyConstraints({ advanced: [{ zoom: Number(zoomEl.value) }] }).catch(() => {});
+        _aplicarCamera(track, { zoom: Number(zoomEl.value) }).catch(() => {});
+        zoomEl.oninput = () => _aplicarCamera(track, { zoom: Number(zoomEl.value) }).catch(() => {});
         zoomEl.parentElement.style.display = 'flex';
       } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
       /* 30/09/2026: só o texto "Leitor nativo do Android ativo" saiu (aparecia até no iOS); "Leitor: jsQR" continua. */
@@ -6272,7 +6314,7 @@ function fecharQR() {
   cancelAnimationFrame(qrFrame);
   clearInterval(window._qrDiag);
   document.getElementById('qr-diag')?.remove();
-  qrStream?.getTracks().forEach(t => t.stop());
+  qrStream?.getTracks().forEach(t => t.stop());   // parar a câmera apaga a lanterna
   qrStream = null;
   $('qr-overlay').style.display = 'none';
 }
@@ -6297,9 +6339,12 @@ async function _finalizarCapturaQR(parsed, frameBlob) {
      formulário só aparece quando o OCR terminar, já com o máximo preenchido. */
   if (dados.qr_url && dados.chave) _sefazPorQr(dados.qr_url, dados.chave);   // valor oficial, em paralelo
   const aba = _abaPreEscolhida;                    // veio de uma aba do hub (22/09/2026)
-  abrirSeletorTipoLancamento({ ...dados, _manual: true });
+  /* 14/10/2026 (pedido do campo, para ganhar tempo): o anexo é obrigatório, então depois do QR a câmera abre SOZINHA —
+     sem a tela "Comprovante da nota" no meio. Com a aba já escolhida não há pergunta nenhuma; sem aba, a pessoa
+     escolhe RDA/RDM e a câmera abre em seguida. */
+  abrirSeletorTipoLancamento({ ...dados, _manual: true, _direitoParaFoto: true });
   const lido = dados.documento === 'nfse' ? 'QR da NFS-e lido! 🧰' : 'Chave lida! 🔑';
-  toast(aba ? `${lido} Agora fotografe a nota (aba ${aba}).` : `${lido} Escolha a aba e fotografe a nota.`);
+  toast(aba ? `${lido} Fotografe a nota (aba ${aba}).` : `${lido} Escolha a aba e fotografe a nota.`);
 }
 
 /* Passo 2 do fluxo "QR → foto": destaca o botão de foto como chamada de ação.
@@ -6436,7 +6481,7 @@ async function iniciarChaveNFCe() {
     const p = NFCE.parseChaveNfse50(chave);
     abrirSeletorTipoLancamento({
       cnpj: p.cnpj, uf: p.uf, numero: p.numero, mes: p.mes, ano: p.ano, data: hoje(),
-      qr_url: p.qr_url, documento: 'nfse', metodo_captura: 'chave_nfse', _manual: true,
+      qr_url: p.qr_url, documento: 'nfse', metodo_captura: 'chave_nfse', _manual: true, _direitoParaFoto: true,
     });
     toast('NFS-e identificada pela chave — agora o arquivo da nota');
     return;
@@ -6462,6 +6507,7 @@ async function onChaveNFCe(raw) {
       mes            : result.mes,
       ano            : result.ano,
       _manual        : true,
+      _direitoParaFoto: true,
     });
     toast(isNFe ? 'NF-e identificada pela chave — agora a foto' : 'NFC-e identificada pela chave — agora a foto');
   } catch (e) {
@@ -6565,7 +6611,9 @@ async function _normalizarOrientacao(blob) {
    2) Sem QR: lê o texto nas posições possíveis e fica com a que o OCR
       entende (de cabeça para baixo o OCR não reconhece quase nada).
    Na dúvida, a foto fica como veio. */
-async function _anguloDoQR(img) {
+/* `saida.texto` recebe o texto do QR que o jsQR decodificou no caminho (14/10/2026): quem endireita a foto já leu o
+   QR — reaproveitar evita decodificar a mesma foto outra vez (ver _qrDaFoto). */
+async function _anguloDoQR(img, saida) {
   try { await _ensureJsQR(); } catch (_) {}
   if (typeof jsQR === 'undefined') return null;
   const c = document.createElement('canvas');
@@ -6577,6 +6625,7 @@ async function _anguloDoQR(img) {
     try {
       const d = cx.getImageData(0, 0, c.width, c.height);
       const code = jsQR(d.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+      if (saida && code?.data && saida.texto === undefined) saida.texto = code.data;
       const L = code?.location;
       if (!L) return null;
       // topo do QR = do olho de cima-esquerda ao de cima-direita
@@ -6615,8 +6664,8 @@ function _girarImagem(img, graus, maxLado = 0) {
 }
 
 /* Quanto girar (horário) para a nota ficar em pé. 0 = já está. */
-async function _giroParaEmPe(img) {
-  const ang = await _anguloDoQR(img);
+async function _giroParaEmPe(img, saida) {
+  const ang = await _anguloDoQR(img, saida);
   if (ang !== null) {
     let g = -ang;                                   // desfaz o giro do QR
     g = ((g % 360) + 540) % 360 - 180;              // -180..180
@@ -6652,16 +6701,23 @@ async function _endireitarComAviso(blob) {
   finally { if (ov && !aberto) ov.style.display = 'none'; }
 }
 
+/* QR já decodificado ao endireitar, por foto (WeakMap: some junto com a foto; nunca vale para outra imagem) */
+const _qrDaFoto = new WeakMap();
+
 async function _endireitarNota(blob) {
   try {
     if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return blob;
     const img = await _blobToImg(blob);
-    const g = await _giroParaEmPe(img);
-    if (!g) return blob;
-    const c = _girarImagem(img, g);
-    const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
-    if (!out || !out.size) return blob;
-    return new File([out], (blob.name || 'nota.jpg').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    const saida = {};
+    const g = await _giroParaEmPe(img, saida);
+    let resultado = blob;
+    if (g) {
+      const c = _girarImagem(img, g);
+      const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      if (out && out.size) resultado = new File([out], (blob.name || 'nota.jpg').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    }
+    if (saida.texto) _qrDaFoto.set(resultado, saida.texto);
+    return resultado;
   } catch (e) {
     console.warn('endireitar nota:', e);
     return blob;
@@ -6701,6 +6757,10 @@ function _melhorCodigo(codes) {
 }
 
 async function _qrStringFromBlob(blob) {
+  /* já decodificado ao endireitar esta foto: não decodifica de novo (14/10/2026). Só vale se for QR de nota (link ou
+     chave de 44/50 dígitos) — a foto pode ter outro código, e aí o leitor completo escolhe o melhor. */
+  const pronto = blob && typeof blob === 'object' ? _qrDaFoto.get(blob) : null;
+  if (pronto && (/^https?:\/\//i.test(pronto) || /(?<!\d)(\d{44}|\d{50})(?!\d)/.test(String(pronto).replace(/\s/g, '')))) return pronto;
   // prepara o detector nativo (se houver)
   let detector = null;
   try {
@@ -6861,6 +6921,10 @@ async function _lerNotaPorIa(blob) {
 async function _lerNota(blob) {
   const ia = await _lerNotaPorIa(blob);
   if (ia?.valor) return ia;                                  // IA trouxe o valor: basta
+  /* 14/10/2026 (pedido do Cleiton: "com internet, IA no lugar do OCR"): a IA respondeu com parte dos dados e há
+     internet — não espera o Tesseract (segundos a mais). O que faltar (o valor, em geral) o aviso da tela diz e a pessoa
+     digita. O Tesseract fica para quando NÃO há IA: offline, sem chave/saldo, limite do dia ou IA que não leu nada. */
+  if (ia && navigator.onLine) return ia;
   const prog = $('ocr-progress'); if (prog) prog.textContent = 'Lendo o texto no aparelho…';
   let ocr;
   try { ocr = (await OCR.processar(blob)) || {}; } catch (_) { ocr = {}; }
@@ -6884,6 +6948,9 @@ async function onFotoNota(e) {
   const dados = { metodo_captura: 'foto' };
   let porIa = false;
 
+  /* 14/10/2026: a IA é espera de REDE; a leitura do QR é CPU. Começam juntas (antes: QR primeiro, IA depois) */
+  const leituraDaNota = _lerNota(file).catch(() => ({}));
+
   // 1) tenta ler o QR Code da própria foto (chave NFC-e)
   try {
     await _ensureJsQR().catch(() => {});
@@ -6904,7 +6971,7 @@ async function onFotoNota(e) {
   // 2) OCR do texto p/ preencher o que o QR não traz (valor, data, CNPJ, razão)
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
-    const r = await _lerNota(file);
+    const r = await leituraDaNota;
     porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
@@ -6917,8 +6984,15 @@ async function onFotoNota(e) {
   ov.style.display = 'none';
   e.target.value = '';
 
+  /* 14/10/2026: leitura PARCIAL também avisa o que faltou (cupom amassado: o valor vem, o CNPJ não). Antes só
+     avisava quando NADA era lido, e a pessoa seguia sem notar o campo em branco. */
+  const faltou = [];
+  if (!dados.valor) faltou.push('o valor');
+  if (!dados.cnpj && !dados.chave) faltou.push('o CNPJ');
   if (!dados.chave && !dados.cnpj && !dados.valor) {
     toast('Não consegui ler a nota. Tente uma foto mais nítida ou use "Manual".', 'err');
+  } else if (faltou.length) {
+    toast(`${porIa ? 'Preenchido pela IA, mas não' : 'Não'} consegui ler ${faltou.join(' nem ')}. Preencha à mão e confira o resto.`, 'err', 6000);
   } else if (porIa) {
     toast('Preenchido pela IA. Confira o valor, o CNPJ e a data.', 'ok');
   }
@@ -7027,6 +7101,7 @@ function selecionarTipoLancamento(tipo, subtipo = null) {
      aqui, e não um "abrir sozinho" que o celular bloquearia. */
   if (dados._manual) {
     _dadosLancamentoPendentes = dados;
+    if (dados._direitoParaFoto) { lancarManualComAnexo('foto', { automatico: true }); return; }   // QR/chave já lidos: foto direto
     const pill = $('tipo-lancamento-passo2-aba');
     const s = dados._sugestao;
     if (pill) {
@@ -7055,9 +7130,9 @@ function voltarEscolhaAba() {
   const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
   if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; }
 }
-function lancarManualComAnexo(modo) {
+function lancarManualComAnexo(modo, opts = {}) {
   const dados = { ...(_dadosLancamentoPendentes || {}) };
-  delete dados._manual; delete dados._sugestao;
+  delete dados._manual; delete dados._sugestao; delete dados._direitoParaFoto;
   fecharSeletorTipoLancamento();
   abrirFormNota(dados);                // parte síncrona: campos preenchidos e overlay aberto
   if (modo === 'foto' || modo === 'arquivo') {
@@ -7066,7 +7141,7 @@ function lancarManualComAnexo(modo) {
        a câmera, o formulário aparece do mesmo jeito (evento cancel). */
     _formEsperandoLeitura = true;
     $('nota-form-overlay').style.display = 'none';
-    if (modo === 'foto') { abrirCameraNota(_mostrarFormAposLeitura); return; }
+    if (modo === 'foto') { abrirCameraNota(_mostrarFormAposLeitura, { automatico: !!opts.automatico }); return; }
     const inp = $('f-arq-nota');
     inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
     inp?.click();
@@ -7074,6 +7149,90 @@ function lancarManualComAnexo(modo) {
     _pedirFotoPasso2();
   }
 }
+/* ── Câmera: qualidade máxima, flash (lanterna) e foto nítida (14/10/2026) ──────────────────────────
+   Pedido do campo: foto à noite ou em lugar escuro, e celulares que "seguram" a qualidade da câmera deixavam a nota
+   borrada. Aqui, para cada câmera aberta (nota e leitor de QR):
+   · foco, exposição e balanço de branco CONTÍNUOS (o que o aparelho declarar) e a MAIOR resolução da câmera;
+   · lanterna (torch) quando o aparelho expõe — no Android/Chrome; o iPhone não deixa o site ligar a lanterna;
+   · na hora do disparo, foto na resolução máxima do sensor (ImageCapture) e checagem de nitidez: se saiu borrada, o
+     app oferece tirar de novo antes de seguir.
+   Tudo é "o que o aparelho declarar": sem a capacidade, a parte some e o resto segue como antes. */
+const _camEstado = new WeakMap();   // track → { torch, zoom }
+
+function _capsDaCamera(track) {
+  try { return (track && track.getCapabilities) ? track.getCapabilities() : {}; } catch (_) { return {}; }
+}
+
+/* Aplica TUDO de uma vez: foco, lanterna e zoom saem juntos, sempre com o estado completo. ATENÇÃO: no Chrome/Android
+   uma propriedade OMITIDA em applyConstraints não volta ao padrão (a lanterna ligada continua ligada) — por isso a
+   lanterna vai SEMPRE com torch:true ou torch:false explícito. O estado só é guardado se o aparelho aceitou. */
+async function _aplicarCamera(track, mudanca = {}) {
+  if (!track || track.readyState === 'ended') return false;
+  const est = { ...(_camEstado.get(track) || { torch: false, zoom: undefined }), ...mudanca };
+  const caps = _capsDaCamera(track);
+  const tem = (k, v) => Array.isArray(caps[k]) && caps[k].includes(v);
+  const adv = [];
+  if (tem('focusMode', 'continuous')) adv.push({ focusMode: 'continuous' });
+  if (tem('exposureMode', 'continuous')) adv.push({ exposureMode: 'continuous' });
+  if (tem('whiteBalanceMode', 'continuous')) adv.push({ whiteBalanceMode: 'continuous' });
+  if (caps.torch) adv.push({ torch: !!est.torch });
+  if (est.zoom !== undefined && caps.zoom) adv.push({ zoom: est.zoom });
+  const c = { advanced: adv };
+  /* resolução: a maior que a câmera declara (alguns celulares abrem em 720p e só entregam mais se pedirem) */
+  if (!est.semResolucao && caps.width?.max && caps.height?.max) {
+    c.width = { ideal: Math.min(caps.width.max, 3840) }; c.height = { ideal: Math.min(caps.height.max, 2160) };   // 4K ao vivo no máximo
+  }
+  try { await track.applyConstraints(c); _camEstado.set(track, est); return true; }
+  catch (_) {
+    /* a combinação foi recusada: tenta só o essencial (foco + lanterna), sem resolução */
+    try { await track.applyConstraints({ advanced: adv }); _camEstado.set(track, est); return true; } catch (_2) { return false; }
+  }
+}
+
+function _temLanterna(track) { return !!_capsDaCamera(track).torch; }
+
+/* Brilho médio (0–255) do que a câmera está vendo agora: poucos pixels bastam. */
+function _brilhoDoVideo(video) {
+  try {
+    if (!video?.videoWidth) return null;
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(video, 0, 0, 32, 32);
+    const d = cx.getImageData(0, 0, 32, 32).data; let soma = 0;
+    for (let i = 0; i < d.length; i += 4) soma += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    return soma / (d.length / 4);
+  } catch (_) { return null; }
+}
+
+/* Nitidez da foto: variância do laplaciano numa versão reduzida. Texto nítido tem muitas bordas (valor alto); foto
+   borrada, mexida ou fora de foco fica com pouco (valor baixo). null = não deu para medir (nunca barra a foto). */
+const _NITIDEZ_MIN = 50;
+async function _nitidezDaFoto(blob) {
+  let url;
+  try {
+    url = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img')); i.src = url; });
+    const L = 640, k = Math.min(1, L / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(8, Math.round(img.naturalWidth * k)), h = Math.max(8, Math.round(img.naturalHeight * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, w, h);
+    const d = cx.getImageData(0, 0, w, h).data;
+    const g = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    let soma = 0, soma2 = 0, n = 0;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const lap = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+      soma += lap; soma2 += lap * lap; n++;
+    }
+    if (!n) return null;
+    const m = soma / n;
+    return soma2 / n - m * m;
+  } catch (_) { return null; }
+  finally { if (url) URL.revokeObjectURL(url); }
+}
+
 /* ── Câmera da nota DENTRO do app (06/10/2026) ──────────────
    Relato do campo: na RDA, depois de ler o QR, ao tirar a foto da nota o
    app fechava e reiniciava. Era a câmera do SISTEMA (input capture): ela
@@ -7083,29 +7242,108 @@ function lancarManualComAnexo(modo) {
    Sem getUserMedia ou com erro, cai na câmera do sistema como antes. */
 let _camNotaStream = null;
 let _camNotaAoCancelar = null;
-async function abrirCameraNota(aoCancelar) {
+let _camNotaFlash = 'auto';        // 'auto' | 'ligado' | 'desligado' (lembrado entre as fotos)
+let _camNotaLuzTimer = null;
+let _camNotaSeq = 0;               // número da abertura: fechar enquanto abre invalida a câmera que ainda está chegando
+let _camNotaFlashSeq = 0;          // idem para o flash (toques rápidos no botão não deixam temporizador órfão)
+try { const f = localStorage.getItem('cam_flash'); if (['auto', 'ligado', 'desligado'].includes(f)) _camNotaFlash = f; } catch (_) {}
+/* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
+   sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
+function _semCameraNoAutomatico() {
+  const cb = _camNotaAoCancelar;
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  if (cb) cb();
+}
+async function abrirCameraNota(aoCancelar, opts = {}) {
   _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
-  if (!navigator.mediaDevices?.getUserMedia) { cameraNotaDoSistema(); return; }
+  const automatico = !!opts.automatico;
+  if (!navigator.mediaDevices?.getUserMedia) { if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema(); return; }
   const ov = $('cam-nota-overlay');
   const video = $('cam-nota-video');
   const btn = $('cam-nota-disparo');
+  const seq = ++_camNotaSeq;
   ov.style.display = 'flex';
   if (btn) btn.disabled = true;
+  { const bf = $('cam-nota-flash'); if (bf) bf.style.display = 'none'; }   // só reaparece quando a câmera disser que tem lanterna
   try {
-    _camNotaStream = await navigator.mediaDevices.getUserMedia({
+    const pedir = () => navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
     }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
-    if (ov.style.display !== 'flex') { _pararCameraNota(); return; }   // fechou enquanto abria
+    let aberta;
+    try { aberta = await pedir(); }
+    catch (e) {
+      if (!automatico) throw e;
+      await new Promise(r => setTimeout(r, 400));          // a câmera do leitor de QR acabou de ser solta: dá um instante e tenta de novo
+      if (seq !== _camNotaSeq) return;                      // fechou nesse meio tempo
+      aberta = await pedir();
+    }
+    /* fechou (ou fechou e abriu de novo) enquanto esta câmera abria: ela chegou atrasada, é desta abertura que já passou — para */
+    if (seq !== _camNotaSeq || ov.style.display !== 'flex') { aberta.getTracks().forEach(t => t.stop()); return; }
+    _camNotaStream = aberta;
     video.srcObject = _camNotaStream;
     await video.play().catch(() => {});
     if (btn) btn.disabled = false;
+    _iniciarFlashNota();
   } catch (e) {
     console.warn('câmera interna da nota:', e);
-    cameraNotaDoSistema();
+    if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema();
   }
 }
+/* PDF, XML ou imagem já no aparelho, no lugar da foto (NFS-e costuma vir em PDF). Parte de um toque, então o seletor
+   de arquivo abre normalmente; cancelar o seletor mostra o formulário, como em "Anexar arquivo". */
+function anexarArquivoNoLugarDaFoto() {
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  const inp = $('f-arq-nota');
+  inp?.addEventListener('cancel', _mostrarFormAposLeitura, { once: true });
+  inp?.click();
+}
+/* Flash da câmera da nota: Automático (acende sozinho no escuro), Ligado ou Desligado. Só aparece onde o aparelho
+   deixa o site ligar a lanterna (Android/Chrome). */
+function _rotuloFlashNota() {
+  return '🔦 Flash: ' + ({ auto: 'Automático', ligado: 'Ligado', desligado: 'Desligado' }[_camNotaFlash] || 'Automático');
+}
+async function _iniciarFlashNota() {
+  const vez = ++_camNotaFlashSeq;                     // chamadas sobrepostas: só a última vale
+  clearInterval(_camNotaLuzTimer);
+  const track = _camNotaStream?.getVideoTracks()[0];
+  const btn = $('cam-nota-flash');
+  const dica = $('cam-nota-dica');
+  if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';   // aviso de "escuro" de uma sessão anterior não fica
+  if (!track) return;
+  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado' });
+  if (vez !== _camNotaFlashSeq || _camNotaStream?.getVideoTracks()[0] !== track) return;   // fechou/trocou durante a espera
+  const temLanterna = _temLanterna(track);
+  if (btn) { btn.style.display = temLanterna ? '' : 'none'; btn.textContent = _rotuloFlashNota(); }
+  if (_camNotaFlash !== 'auto') return;
+  /* Automático: depois de a câmera acertar a exposição, se está escuro acende (e não apaga sozinho — apagar mudaria o
+     brilho medido e ficaria piscando). Sem lanterna, só avisa. */
+  let medidas = 0;
+  const timer = setInterval(() => {
+    const t = _camNotaStream?.getVideoTracks()[0];
+    if (vez !== _camNotaFlashSeq || !t || t !== track) { clearInterval(timer); return; }
+    medidas++;
+    if (medidas < 2) return;                                   // 1ª medida: a exposição ainda está se ajustando
+    const b = _brilhoDoVideo($('cam-nota-video'));
+    if (b !== null && b < 55) {
+      if (temLanterna) { _aplicarCamera(track, { torch: true }); if (dica) dica.textContent = 'Está escuro: flash ligado. Enquadre a nota inteira e toque no botão'; }
+      else if (dica) dica.textContent = 'Pouca luz: procure um lugar mais claro ou use a câmera do celular (com flash)';
+    }
+    if (temLanterna ? (_camEstado.get(track)?.torch || medidas >= 8) : medidas >= 8) clearInterval(timer);
+  }, 600);
+  _camNotaLuzTimer = timer;
+}
+async function alternarFlashNota() {
+  _camNotaFlash = _camNotaFlash === 'auto' ? 'ligado' : _camNotaFlash === 'ligado' ? 'desligado' : 'auto';
+  try { localStorage.setItem('cam_flash', _camNotaFlash); } catch (_) {}
+  const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';
+  await _iniciarFlashNota();
+}
 function _pararCameraNota() {
-  _camNotaStream?.getTracks().forEach(t => t.stop());
+  _camNotaSeq++; _camNotaFlashSeq++;                  // invalida abertura e flash que ainda estejam a caminho
+  clearInterval(_camNotaLuzTimer);
+  _camNotaStream?.getTracks().forEach(t => t.stop());   // parar a câmera apaga a lanterna
   _camNotaStream = null;
   const video = $('cam-nota-video');
   if (video) video.srcObject = null;
@@ -7130,36 +7368,68 @@ function cameraNotaDoSistema() {
 async function dispararCameraNota() {
   const video = $('cam-nota-video');
   const btn = $('cam-nota-disparo');
-  const track = _camNotaStream?.getVideoTracks()[0];
+  const stream = _camNotaStream;
+  const track = stream?.getVideoTracks()[0];
   if (!track || !video?.videoWidth) return;
   if (btn) btn.disabled = true;
   let blob = null;
-  /* Foto na resolução cheia do sensor quando o navegador deixa (Chrome no
-     Android); senão, o quadro do vídeo. */
+  /* Foto na resolução cheia do sensor quando o navegador deixa (Chrome no Android); senão, o quadro do vídeo.
+     14/10/2026: pede a MAIOR resolução que a câmera declara e respeita o flash escolhido; uma pausa curta antes do
+     disparo deixa o foco e o tremor da mão assentarem (foto mexida era o borrão mais comum). */
   try {
     if (typeof ImageCapture !== 'undefined') {
-      blob = await Promise.race([
-        new ImageCapture(track).takePhoto(),
-        new Promise(r => setTimeout(() => r(null), 5000)),   // celular que trava no takePhoto
-      ]);
+      await new Promise(r => setTimeout(r, 250));
+      const ic = new ImageCapture(track);
+      let opcoes = {};
+      try {
+        const pc = await Promise.race([ic.getPhotoCapabilities(), new Promise(r => setTimeout(() => r(null), 1500))]);
+        if (pc?.imageWidth?.max && pc?.imageHeight?.max) {
+          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, 4096 / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
+          opcoes.imageWidth = Math.round(mw * k); opcoes.imageHeight = Math.round(mh * k);
+        }
+        const luz = pc?.fillLightMode;
+        if (Array.isArray(luz)) {
+          const torchLigada = !!_camEstado.get(track)?.torch;                  // a lanterna já ilumina: não dispara outro flash
+          if (_camNotaFlash === 'desligado' || torchLigada) { if (luz.includes('off')) opcoes.fillLightMode = 'off'; }
+          else if (_camNotaFlash === 'ligado' && luz.includes('flash')) opcoes.fillLightMode = 'flash';
+          else if (_camNotaFlash === 'auto' && luz.includes('auto')) opcoes.fillLightMode = 'auto';
+        }
+      } catch (_) { opcoes = {}; }
+      const tirar = async (o) => Promise.race([ic.takePhoto(o), new Promise(r => setTimeout(() => r(null), 9000))]);   // celular que trava no takePhoto
+      let rejeitou = false;
+      try { blob = await tirar(opcoes); } catch (_) { blob = null; rejeitou = true; }
+      /* opção recusada (rejeitou): repete sem opções. Se só demorou (travou 9 s), NÃO repete — vai direto ao quadro do vídeo */
+      if (!blob && rejeitou && Object.keys(opcoes).length) { try { blob = await tirar(undefined); } catch (_) { blob = null; } }
     }
   } catch (_) { blob = null; }
+  if (_camNotaStream !== stream) return;       // cancelou (✕ / "câmera do celular") durante o disparo: não segue
   if (blob && blob.type !== 'image/jpeg') {   // anexo da nota é sempre .jpg
     try {
       const bmp = await createImageBitmap(blob);
       const c = document.createElement('canvas');
       c.width = bmp.width; c.height = bmp.height;
       c.getContext('2d').drawImage(bmp, 0, 0);
-      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
     } catch (_) { blob = null; }
   }
   if (!blob) {
     const c = document.createElement('canvas');
     c.width = video.videoWidth; c.height = video.videoHeight;
     c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
-    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
   if (!blob) { if (btn) btn.disabled = false; toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  /* foto borrada? oferece tirar de novo AGORA, com a câmera ainda aberta (depois de fechar, ela não volta) */
+  const nit = await _nitidezDaFoto(blob);
+  if (_camNotaStream !== stream) return;       // cancelou enquanto media a nitidez: sem diálogo, sem anexar
+  if (nit !== null && nit < _NITIDEZ_MIN) {
+    const denovo = await pedirConfirmacao({
+      titulo: 'A foto saiu borrada',
+      mensagem: 'O texto da nota está sem nitidez. Segure o celular firme, deixe a câmera focar e tente de novo — com pouca luz, ligue o flash.',
+      confirmar: 'Tirar de novo', cancelar: 'Usar assim mesmo',
+    });
+    if (denovo) { if (btn) btn.disabled = false; return; }
+  }
   _camNotaAoCancelar = null;
   _pararCameraNota();
   const file = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -7174,7 +7444,7 @@ function _mostrarFormAposLeitura() {
 }
 
 async function abrirFormNota(dados = {}) {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
+  if (_ehContabilidade() && !dados.id) { toast('Contador corrige notas existentes; não lança nota nova', 'err'); return; }
   if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
     abrirSeletorTipoLancamento(dados);
     return;
@@ -7265,13 +7535,13 @@ async function abrirFormNota(dados = {}) {
   _atualizarLinkConsulta();
 
   // título e banner de correção por gestor/admin (ou nota de Faturamento)
-  const isGestorEdit = _ehGestorOuAdmin() && !!dados.id && _ehNotaDeOutroUsuario(dados);
+  const isGestorEdit = _corrigeNotaDeOutro() && !!dados.id && _ehNotaDeOutroUsuario(dados);
   const isFaturamento = _pagamentoForcado === 'empresa';
   const banner = $('gestor-edit-banner');
   const bannerTitle = $('gestor-edit-title');
   const bannerText = $('gestor-edit-text');
   if (banner) banner.style.display = (isGestorEdit || isFaturamento) ? 'flex' : 'none';
-  if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : 'Correção de gestor';
+  if (bannerTitle) bannerTitle.textContent = isFaturamento ? '🏢 Nota de Faturamento' : (_ehContabilidade() ? 'Correção do contador' : 'Correção de gestor');
   if (bannerText) bannerText.textContent = isFaturamento
     ? (_semColaboradorForcado
         ? 'Paga direto pela empresa, sem colaborador específico — não entra no saldo nem no cartão de ninguém, só no painel geral da equipe.'
@@ -7611,10 +7881,15 @@ function _mostrarChaveNota() {
 async function extrairDadosDaFoto(file, ocrPronto = null) {
   const ov = $('ocr-overlay');
   ov.style.display = 'flex';
-  $('ocr-progress').textContent = 'Procurando QR Code…';
+  $('ocr-progress').textContent = 'Lendo a nota…';
   try {
-    // Busca 1: QR Code na foto INTEIRA — o QR pode cair fora do recorte
-    const qr = await _lerQRdaImagem(file);
+    /* Busca 1: QR Code na foto INTEIRA — o QR pode cair fora do recorte.
+       14/10/2026: (a) se a chave já veio do escaneamento ao vivo ("Escanear QR" → foto), NÃO lê de novo — era a leitura
+       repetida; (b) quando precisa ler, começa JÁ e termina enquanto o recorte e a IA trabalham, em vez de uma espera
+       à parte antes de tudo (o resultado só é usado depois da leitura da nota). */
+    const chaveJaLida = _digitos($('nf-chave').value).length === 44;
+    const nfseJaLida = !!$('nf-qr-url').value && _ehUrlNfse($('nf-qr-url').value);
+    const qrEmCurso = (chaveJaLida || nfseJaLida) ? Promise.resolve(null) : _lerQRdaImagem(file).catch(() => null);
 
     // OCR do texto impresso — usado principalmente para o VALOR
     let ocr = ocrPronto || {};
@@ -7643,6 +7918,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       $('ocr-progress').textContent = 'Lendo a nota…';
       ocr = await _lerNota(alvo);
     }
+    const qr = await qrEmCurso;
 
     if (qr?.documento === 'nfse' && !$('nf-qr-url').value) { $('nf-qr-url').value = qr.qr_url; _atualizarDocumentoAuto(); }
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido
@@ -7704,9 +7980,12 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     // SEFAZ em background p/ tentar o valor, se ainda faltar
     if (daChave && !$('nf-valor').value) enriquecerViaSefaz(chave);
 
+    /* 14/10/2026: com internet a IA lê no lugar do Tesseract e, quando traz só parte, o valor pode ficar em branco —
+       a mensagem diz isso (a consulta oficial da SEFAZ ainda tenta o valor em segundo plano, logo acima/abaixo). */
+    const semValor = !$('nf-valor').value;
     toast(preencheu.length
-      ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. Confira o valor e o tipo.`
-      : 'Confira os campos manualmente', preencheu.length ? 'ok' : 'err');
+      ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. ${semValor ? 'Não li o valor: digite-o (ou aguarde a consulta oficial).' : 'Confira o valor e o tipo.'}`
+      : 'Confira os campos manualmente', preencheu.length && !semValor ? 'ok' : 'err', semValor ? 6000 : undefined);
 
     // valor oficial (se a consulta do QR já respondeu, aplica por cima do OCR)
     const _k = _digitos($('nf-chave').value);
@@ -7945,7 +8224,7 @@ async function salvarNota() {
 }
 
 async function _salvarNotaInterno() {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
+  if (_ehContabilidade() && !$('nf-id').value) { toast('Contador corrige notas existentes; não lança nota nova', 'err'); return; }
   const tipo  = $('nf-tipo').value;
   let   valor = parseFloat($('nf-valor').value);
   const data  = $('nf-data').value;
@@ -8159,13 +8438,21 @@ async function _salvarNotaInterno() {
     }
     await syncBadge(false);
     fecharFormNota();
+    /* 15/10/2026: corrigindo a nota pela ficha do colaborador (Equipe), a pessoa continua NA ficha, no mesmo ponto da tela — antes
+       caía na lista de "Minhas notas" (gestor) ou voltava ao topo (Contador). A ficha lê do servidor: manda a fila primeiro. */
+    const _naEquipe = viewAtual === 'equipe';
+    if (_naEquipe) await _enviarFilaAntesDaFicha();
     await carregarDadosLocais();
-    renderNotas();
+    /* A tela é reconferida DEPOIS da espera (a pessoa pode ter saído da Equipe). Sem rede a ficha não carrega (ela lê do servidor
+       e só mostraria "Erro ao carregar"): fica como está, a correção segue na fila e o aviso abaixo diz isso. */
+    if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }
+    else if (_ehContabilidade()) renderEquipe(); else renderNotas();   // Contador não tem 'Minhas notas'
     const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
       semValor ? '⚠️ Nota salva SEM valor — edite para completar'
       : _atraso >= LANC_DIAS_LIMITE ? `⏰ Nota salva, mas é de ${_atraso} dias atrás. Lance as notas no dia do gasto.`
       : _removeuRepetida ? 'Nota salva — a repetida anterior foi para a lixeira'
+      : (_naEquipe && !navigator.onLine) ? 'Nota salva no aparelho — vai para o servidor quando a rede voltar'
       : 'Nota salva!',
       semValor || _atraso >= LANC_DIAS_LIMITE ? 'err' : 'ok', _atraso >= LANC_DIAS_LIMITE ? 6000 : 3000);
     syncToDrive().catch(() => {});
@@ -8174,7 +8461,6 @@ async function _salvarNotaInterno() {
 }
 
 async function editarNota(id) {
-  if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
   const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);
@@ -8267,8 +8553,12 @@ async function excluirNota(id) {
   if (!(await confirmarExclusaoNota(id))) return;
   await DB.softDeleteNota(id);
   await syncBadge(false);
+  /* excluindo pela ficha do colaborador (Equipe): fica na ficha, no mesmo ponto — e ela lê do servidor, então a fila vai antes */
+  const _naEquipe = viewAtual === 'equipe';
+  if (_naEquipe) { setLoading(true, 'Atualizando a ficha…'); try { await _enviarFilaAntesDaFicha(); } finally { setLoading(false); } }
   await carregarDadosLocais();
   if (viewAtual === 'lixeira') renderNotasApagadas();
+  else if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }   // sem rede a ficha não carrega: fica como está, a exclusão segue na fila
   else renderNotas();
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
@@ -8374,12 +8664,7 @@ async function excluirNotasSelecionadas() {
     }
     await syncBadge(false);
     /* a ficha do colaborador lê do servidor: sem enviar antes, a nota reapareceria */
-    if (feitas && sb && navigator.onLine) {
-      if ((await DB.sync(sb, user.id).catch(() => undefined)) === null) {
-        await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
-        await DB.sync(sb, user.id).catch(() => {});     // garante uma rodada completa depois
-      }
-    }
+    if (feitas && sb && navigator.onLine) await _enviarFilaAntesDaFicha();
     await carregarDadosLocais();
     if (viewAtual === 'equipe') renderEquipe();
     else if (viewAtual === 'lixeira') renderNotasApagadas();
@@ -8567,7 +8852,7 @@ async function compartilharFotoViewer() {
    dinheiro envolvido, só texto de ajuda. abrirAjuda()/fecharAjuda() viraram
    uma ponte fina para window.SvelteAjuda (js/svelte-ajuda.js); o resto do
    app nem percebe a troca, chama do mesmo jeito de sempre. */
-function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _veEquipe(), onFechar: fecharAjuda }); }
+function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), onFechar: fecharAjuda }); }
 function fecharAjuda() { window.SvelteAjuda?.desmontar(); }
 
 /* ── Form Repasse ────────────────────────────────────────── */

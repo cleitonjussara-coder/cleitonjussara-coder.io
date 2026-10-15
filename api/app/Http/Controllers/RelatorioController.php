@@ -31,6 +31,11 @@ class RelatorioController extends Controller
         abort_unless($alvoId === $u->id || $u->veTudo(), 403, 'Sem permissão para o relatório de outro colaborador');
         $alvo = Colaborador::findOrFail($alvoId);
         $formato = $d['formato'] ?? 'xlsx';
+        /* 14/10/2026: a Planilha de C.V. é do regime CV. Para quem é RDM/RDA o modelo de CV ficava com as abas CV ALELO e
+           CV REEMBOLSO repetindo as mesmas notas — entrega a planilha de RDM e RDA dele, que é a que existe para ele. */
+        if (! $alvo->usaCartao()) {
+            return $this->rdmrda($r);
+        }
 
         @ini_set('memory_limit', '512M');
         @set_time_limit(120);

@@ -28,6 +28,16 @@ class RelatorioCvPdf
 
     public function gerar(Colaborador $c, int $ano, string $arquivo): void
     {
+        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $d->setPaper('A4', 'landscape');
+        $d->loadHtml($this->html($c, $ano));
+        $d->render();
+        file_put_contents($arquivo, $d->output());
+    }
+
+    /** O HTML que vira PDF (separado de gerar() para poder ser conferido sem renderizar). */
+    public function html(Colaborador $c, int $ano): string
+    {
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai da planilha individual dele, só soma no painel geral. */
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
@@ -49,12 +59,16 @@ class RelatorioCvPdf
         $notasAjuda = $ehCv ? $notas->filter(fn ($n) => $n->pagamento === 'ajuda') : collect();
         $gastoAjuda = (float) $notasAjuda->sum('valor');
 
-        /* agrupa: mês → categoria → notas */
-        $grade = [];
-        foreach ($notas as $n) {
-            $grade[(int) $n->mes][$this->categoria($n)][] = $n;
-        }
-        ksort($grade);
+        /* agrupa: mês → categoria → notas (uma grade por aba: ver mais abaixo) */
+        $montarGrade = function ($lista) {
+            $g = [];
+            foreach ($lista as $n) {
+                $g[(int) $n->mes][$this->categoria($n)][] = $n;
+            }
+            ksort($g);
+
+            return $g;
+        };
         $gastoTotal = (float) $notas->sum('valor');
         $gastoCartao = $ehCv ? $gastoTotal - $gastoAjuda : $gastoTotal;
         $recebido = (float) $reps->sum('valor');
@@ -97,19 +111,34 @@ class RelatorioCvPdf
             .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.(($ehCv ? $totalRecarga : $recebido) - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl(($ehCv ? $totalRecarga : $recebido) - $gastoTotal).'</span></td>'
             .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
             .'<table class="tres"><tr><td class="col">'
-            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/RECARGA ALELO' : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
+            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
             .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
             .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
 
-        /* ── RDM_RDA e CV REEMBOLSO (mesma grade) ──────────── */
-        foreach ([$ehCv ? 'CV ALELO' : 'RDM_RDA', 'CV REEMBOLSO'] as $aba) {
+        /* ── CARTÃO CORPORATIVO (aba "CV ALELO" do modelo) e CV REEMBOLSO ───────────────────────── */
+        /* 14/10/2026: as duas páginas listavam as MESMAS notas ("tudo junto"). No CV cada uma tem as suas, como na
+           planilha em Excel: ALELO ← gasto no cartão corporativo (tudo que não é carteira); REEMBOLSO ← gasto da
+           carteira do colaborador (pagamento=carteira), que a empresa repõe com depósito. O "recebido" de cada página
+           também é o seu: recarga do cartão numa, repasse de reembolso na outra. Fora do CV (RDM/RDA) segue como antes:
+           a mesma grade nas duas. */
+        if ($ehCv) {
+            $paginas = [
+                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga],
+                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso],
+            ];
+        } else {
+            $paginas = [['RDM_RDA', $notas, $recebido], ['CV REEMBOLSO', $notas, $recebido]];
+        }
+        foreach ($paginas as [$aba, $listaDaAba, $recebidoAba]) {
+            $grade = $montarGrade($listaDaAba);
+            $gastoAba = (float) $listaDaAba->sum('valor');
             $s = '<div class="pagina"><div class="faixa verde">CUSTOS VARIÁVEIS (C.V.) — '.$aba.' — '.$e($nome).'</div>'
-                .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoTotal).'</td>'
-                .'<td><b>TOTAL RECEBIDO</b> '.$brl($recebido).'</td>'
-                .'<td><b>SALDO</b> <span class="'.($recebido - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl($recebido - $gastoTotal).'</span></td></tr></table>';
+                .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoAba).'</td>'
+                .'<td><b>TOTAL RECEBIDO</b> '.$brl($recebidoAba).'</td>'
+                .'<td><b>SALDO</b> <span class="'.($recebidoAba - $gastoAba < 0 ? 'vermelho' : '').'">'.$brl($recebidoAba - $gastoAba).'</span></td></tr></table>';
             if (! $grade) {
                 $s .= '<p class="vazio">Nenhum lançamento em '.$ano.'.</p>';
             }
@@ -184,12 +213,7 @@ class RelatorioCvPdf
         h3 { font-size: 9.5pt; margin: 4px 0; }
         .vazio { color: #777; text-align: center; }
         ';
-        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.implode('', $h).'</body></html>';
-        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
-        $d->setPaper('A4', 'landscape');
-        $d->loadHtml($html);
-        $d->render();
-        file_put_contents($arquivo, $d->output());
+        return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.implode('', $h).'</body></html>';
     }
 
     private function categoria(Nota $n): string

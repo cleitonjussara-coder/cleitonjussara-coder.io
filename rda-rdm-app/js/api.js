@@ -10,7 +10,7 @@
      (foto_path). Para <img> usa-se URL assinada (fotos.urls); para
      baixar, fotos.download (Bearer).
 ───────────────────────────────────────────────────────────── */
-window.API = (() => {
+globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e no service worker (envio em segundo plano)
   /* Produção: subdomínio da API. Em desenvolvimento local (http-server na
      8080 + `php artisan serve` na 8000) cai no segundo. */
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -34,14 +34,34 @@ window.API = (() => {
   const _listeners = [];
   let _googleOk = null;
 
+  /* Espelho da sessão para o ENVIO EM SEGUNDO PLANO (12/10/2026): o service worker não enxerga o localStorage,
+     então o par token+uid da conta logada é copiado para o IndexedDB (DB.espelharSessao) — sempre o PAR, nunca
+     um pedaço: token novo apaga o espelho e só o perfil (_setUser) o grava de novo, senão o token da conta nova
+     poderia ficar casado com o uid da antiga e mandar a fila de uma conta com a chave da outra. */
+  function _espelhar(completo, tokenAnterior) {
+    try { globalThis.DB?.espelharSessao?.(completo ? _token : null, completo && _user ? _user.id : null, tokenAnterior); } catch (_) {}
+  }
+
+  /* Só GRAVA o espelho quando há token E perfil. Apagar é coisa do _setToken (mudança de token): _setUser(null) logo
+     depois de um logout/401 não pode apagar de novo — no service worker isso furaria o "só apaga se for o mesmo token". */
   function _setUser(u) {
     _user = u || null;
     try { u ? localStorage.setItem(K_USER, JSON.stringify(u)) : localStorage.removeItem(K_USER); } catch (_) {}
+    if (_token && _user) _espelhar(true);
   }
 
   function _setToken(t) {
+    const antigo = _token;
+    const mudou = (t || null) !== antigo;
     _token = t || null;
     try { t ? localStorage.setItem(K_TOKEN, t) : localStorage.removeItem(K_TOKEN); } catch (_) {}
+    if (mudou) {
+      /* o perfil guardado (_user) pertence ao token ANTIGO: com token novo ele não vale — o par token+perfil só volta a
+         existir quando o perfil da conta nova chegar (_setUser). Sem isso o espelho podia casar token de uma conta com
+         o uid de outra (ex.: retorno do Google sem rede). */
+      if (t && _user) { _user = null; try { localStorage.removeItem(K_USER); } catch (_) {} }
+      _espelhar(false, antigo);
+    }
   }
 
   function _emit(ev, extra) {
@@ -138,6 +158,10 @@ window.API = (() => {
     get token() { return _token; },
     get user()  { return _user; },
     isLogged: () => !!_token,
+
+    /* Só para o service worker (envio em segundo plano): usa este token SÓ na memória, sem tocar no localStorage
+       nem no espelho. Um 401 ainda derruba a sessão (_setToken(null) apaga o espelho). */
+    usarToken(t) { _token = t || null; },
 
     onChange(cb) { _listeners.push(cb); },
 

@@ -17,7 +17,8 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  * colaborador no ano. Nada do formato é recriado — abas, fórmulas, molduras
  * e fontes são as do arquivo; só entram valores nas linhas de dados.
  *
- * Mapa (aba CV ALELO — "RDM_RDA" nos modelos antigos —, 12 blocos mensais
+ * Mapa (aba CARTÃO CORPORATIVO — "CV ALELO" no arquivo-modelo, renomeada ao
+ * gerar (14/10/2026); "RDM_RDA" nos modelos antigos —, 12 blocos mensais
  * de 4 categorias):
  *   RDM · Abastecimento → colunas A–D     RDM · Hospedagem → E–H
  *   RDA (alimentação)   → colunas I–L     RDM · Outros     → M–P
@@ -39,6 +40,12 @@ class RelatorioCv
     /** coluna inicial de cada categoria (A=1) */
     private const COL = ['abastecimento' => 1, 'hospedagem' => 5, 'alimentacao' => 9, 'outros' => 13];
 
+    /** Nome da aba dos gastos no cartão corporativo (pedido de 14/10/2026; o modelo ainda a chama "CV ALELO"). */
+    public const ABA_CARTAO = 'CARTÃO CORPORATIVO';
+
+    /** Como o extrato dos valores de recarga do cartão se chama (pedido de 15/10/2026; o modelo diz "RECARGA ALELO"). */
+    public const ROTULO_RECARGA = 'RECARGA DE CARTÃO';
+
 
     public function modelo(): string
     {
@@ -48,6 +55,11 @@ class RelatorioCv
     public function gerar(Colaborador $c, int $ano): Spreadsheet
     {
         $ss = IOFactory::load($this->modelo());
+        /* 14/10/2026: "CV ALELO" passa a se chamar CARTÃO CORPORATIVO na planilha entregue. setTitle() já troca o nome
+           dentro das fórmulas (BANCO DE DADOS!B9 = 'CV ALELO'!F2 vira 'CARTÃO CORPORATIVO'!F2, com as aspas). */
+        if (($abaCartao = $this->abaDoCartao($ss)) && $abaCartao->getTitle() !== self::ABA_CARTAO) {
+            $abaCartao->setTitle(self::ABA_CARTAO);
+        }
 
         /* ── CABEÇALHO ─────────────────────────────────────── */
         $cab = $ss->getSheetByName('CABEÇALHO');
@@ -88,6 +100,13 @@ class RelatorioCv
 
         /* ── BANCO DE DADOS: extrato de valor recebido ─────── */
         $bd = $ss->getSheetByName('BANCO DE DADOS');
+        /* 15/10/2026: o rótulo do extrato de recarga deixa de citar a marca do cartão. O título é mesclado (B13:C13) e
+           ganha 2 letras; o texto encolhe para caber em vez de ser cortado na borda. */
+        $rotulo = (string) $bd->getCell('B13')->getValue();
+        if (str_contains($rotulo, 'RECARGA ALELO')) {
+            $bd->setCellValue('B13', str_replace('RECARGA ALELO', self::ROTULO_RECARGA, $rotulo));
+            $bd->getStyle('B13')->getAlignment()->setShrinkToFit(true);
+        }
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
         /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
@@ -160,14 +179,14 @@ class RelatorioCv
     }
 
     /**
-     * A aba dos gastos no cartão: na planilha oficial de 2026 ela se chama
-     * "CV ALELO"; nos modelos anteriores era "RDM_RDA". Aceitar os dois
-     * evita que uma planilha antiga volte com a grade vazia e sem aviso
-     * (24/09/2026).
+     * A aba dos gastos no cartão: na planilha entregue chama-se CARTÃO CORPORATIVO;
+     * no arquivo-modelo oficial de 2026 ainda é "CV ALELO"; nos modelos anteriores
+     * era "RDM_RDA". Aceitar os três evita que uma planilha antiga volte com a
+     * grade vazia e sem aviso (24/09/2026).
      */
     private function abaDoCartao(\PhpOffice\PhpSpreadsheet\Spreadsheet $ss): ?\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet
     {
-        foreach (['CV ALELO', 'RDM_RDA'] as $nome) {
+        foreach ([self::ABA_CARTAO, 'CV ALELO', 'RDM_RDA'] as $nome) {
             if ($ws = $ss->getSheetByName($nome)) {
                 return $ws;
             }
@@ -207,7 +226,7 @@ class RelatorioCv
      * biblioteca troca o nome dentro das fórmulas (=CABEÇALHO!B5 vira
      * =Ana_CABEÇALHO!B5) mas não põe as aspas que o Excel exige quando há
      * espaço — com "Ana · CABEÇALHO" a fórmula quebrava. Limite do Excel: 31
-     * caracteres por aba; a maior das quatro tem 14, sobra 16 para o prefixo.
+     * caracteres por aba; a maior das quatro (CARTÃO CORPORATIVO) tem 18, sobram 12 para o prefixo.
      */
     public function gerarUnico(iterable $colabs, int $ano): Spreadsheet
     {
@@ -439,16 +458,24 @@ class RelatorioCv
         $w->save($arquivo);
     }
 
-    /** Primeiro nome sem acento/espaço, até 14 letras, único entre os já usados (Ana, Ana2, Ana3…). */
+    /**
+     * Primeiro nome sem acento/espaço, único entre os já usados (Ana, Ana2, Ana3…).
+     * Prefixo + "_" + a maior aba (CARTÃO CORPORATIVO, 18) cabe nos 31 caracteres do Excel
+     * com no máximo 12 — o limite conta o número que desempata (14/10/2026: eram 14 letras
+     * quando a maior aba tinha 14; com o nome novo a aba estouraria e o setTitle() lançaria exceção).
+     */
     private function prefixoAba(string $nome, array &$usados): string
     {
         $primeiro = strtok(trim($nome), " \t@") ?: 'Colab';
         $ascii = \Illuminate\Support\Str::ascii($primeiro);
         $base = preg_replace('/[^A-Za-z0-9]/', '', $ascii) ?: 'Colab';
-        $base = mb_substr($base, 0, 14);
-        $p = $base;
-        for ($i = 2; isset($usados[$p]); $i++) {
-            $p = $base.$i;
+        $max = 31 - 1 - mb_strlen(self::ABA_CARTAO);
+        for ($i = 1;; $i++) {
+            $sufixo = $i > 1 ? (string) $i : '';
+            $p = mb_substr($base, 0, $max - strlen($sufixo)).$sufixo;
+            if (! isset($usados[$p])) {
+                break;
+            }
         }
         $usados[$p] = true;
 

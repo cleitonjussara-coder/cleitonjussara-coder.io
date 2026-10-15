@@ -7,6 +7,7 @@ use App\Models\Nota;
 use App\Services\FotoStorage;
 use App\Services\PastaModelo;
 use App\Services\RelatorioCv;
+use App\Services\RelatorioRdmRda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -162,14 +163,19 @@ class ArquivosController extends Controller
         $xlsx = null;
         if ($comPlanilha) {
             try {
-                $cv = app(RelatorioCv::class);
+                /* 14/10/2026: cada um recebe a planilha do SEU regime. Antes era sempre a de CV: para quem é RDM/RDA as
+                   abas CV ALELO e CV REEMBOLSO ficavam com as mesmas notas ("tudo junto") e a planilha dele ficava
+                   igual à de quem é CV. */
+                $ehCv = $alvo->usaCartao();
+                $svc = $ehCv ? app(RelatorioCv::class) : app(RelatorioRdmRda::class);
+                $rotulo = $ehCv ? 'CV' : 'RDM_RDA';
                 $xlsx = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
-                $ss = $cv->gerar($alvo, $ano);
-                $cv->xlsx($ss, $xlsx);
+                $ss = $svc->gerar($alvo, $ano);
+                $svc->xlsx($ss, $xlsx);
                 $ss->disconnectWorksheets();
-                $zip->addFile($xlsx, "{$pastaColab}/Planilha_CV_{$ano}.xlsx");
+                $zip->addFile($xlsx, "{$pastaColab}/Planilha_{$rotulo}_{$ano}.xlsx");
             } catch (\Throwable $e) {
-                $zip->addFromString("{$pastaColab}/PLANILHA NAO GERADA.txt", 'A Planilha CV não pôde ser gerada: '.$e->getMessage());
+                $zip->addFromString("{$pastaColab}/PLANILHA NAO GERADA.txt", 'A planilha não pôde ser gerada: '.$e->getMessage());
             }
         }
 
