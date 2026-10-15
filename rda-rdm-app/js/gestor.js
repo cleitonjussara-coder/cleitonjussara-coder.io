@@ -27,6 +27,7 @@ window.Gestor = (() => {
   let _evoScroll = null;               // rolagem da tela, devolvida depois do redesenho
   const _previasAbertas = new Set();   // colaboradores com a prévia dos gastos aberta (lista da Equipe)
   let _acoesAbertas = false;           // grade de relatórios/ações da ficha aberta
+  let _fichaSeq = 0;                   // número do último redesenho da ficha; fechar a ficha também o avança
   const _restaurarRolagem = el => { if (_evoScroll !== null) { const y = _evoScroll; _evoScroll = null; if (el) el.scrollTop = y; } };
   const _evoDica = '<div class="db-hint">Toque numa coluna para ver esse mês</div>';
   const _evoDrillHtml = (d, i) => {
@@ -171,7 +172,7 @@ window.Gestor = (() => {
   let _ctx = null;
   let _cvEquipe = null;   // { collabs, mes, ano, comLancAno, comLancMes } do último dashboard, para o seletor de colaboradores
   let _anoFicha = null;   // ano da ficha aberta (as setas da ficha mudam o ano sem passar por renderDashboard)
-  function abrir(id)  { _detalheId = id;   _ctx?.onRebuild?.(); }
+  function abrir(id)  { if (id !== _detalheId) _evoScroll = null; _detalheId = id;   _ctx?.onRebuild?.(); }   // outra pessoa não herda a rolagem da ficha anterior
   /* Busca (20/09/2026): filtra os cartões na hora, sem ir ao servidor;
      abre a seção de desativados se algum deles bater. */
   let _buscaTxt = '';
@@ -189,7 +190,7 @@ window.Gestor = (() => {
     const vazio = document.getElementById('busca-vazio');
     if (vazio) vazio.style.display = (termos.length && !vistos) ? '' : 'none';
   }
-  function fechar()   { _detalheId = null; _ctx?.onRebuild?.(); }
+  function fechar()   { _detalheId = null; _fichaSeq++; _desarmarFicha(); _ctx?.onRebuild?.(); }   // a rolagem guardada era da ficha: a lista começa do topo
 
   /* Setas da lista de repasses na ficha: delta -1/+1 muda o mês, 0 volta ao
      mês atual. Reaproveita o seletor da Equipe (filMes/filAno), então o resto
@@ -199,7 +200,10 @@ window.Gestor = (() => {
     _rolarParaRepasses = true;
     if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
   }
-  function reset()    { _detalheId = null; }
+  function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); }
+  /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
+     não vale mais quando a ficha é fechada antes de ele terminar */
+  function _desarmarFicha() { _evoScroll = null; _rolarParaRepasses = false; _evoMantem = null; }
 
   /* Exclusão em lote dos repasses da ficha (05/10/2026): "Selecionar" mostra
      uma caixinha em cada linha; "todos" marca só o que está na tela (o mês
@@ -513,6 +517,14 @@ window.Gestor = (() => {
      cardNotaHTML) — miniatura, ver anexo, editar, excluir — e os saldos. */
   async function renderColaborador(el, sb, currentUser, id, mes, ano) {
     _anoFicha = ano;
+    /* 15/10/2026: a MESMA ficha redesenhada (nota corrigida, grupo trocado, repasse mexido) fica onde estava — antes o "Carregando…"
+       encolhia a tela e a ficha voltava ao topo. Outro colaborador ou outro mês começam do topo, como sempre. A guarda de
+       sequência impede que uma resposta atrasada de um redesenho antigo pinte por cima do mais novo (ou da lista, se a ficha
+       foi fechada). */
+    const chaveFicha = `${id}|${ano}|${mes}`;
+    const seq = ++_fichaSeq;
+    const fichaAntes = el.querySelector('.cdet');
+    if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando…</p></div>';
     try {
       const [colab, ns, rs, nsAno, histNotas, histReps] = await Promise.all([
@@ -524,7 +536,8 @@ window.Gestor = (() => {
         sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento' }).catch(() => null),
         sb.repasses.list({ user_id: id, deleted: '0' }).catch(() => null),
       ]);
-      if (!colab) { fechar(); return; }
+      if (seq !== _fichaSeq) return;   // chegou depois de outro redesenho (ou de a ficha ser fechada): não pinta por cima
+      if (!colab) { _evoScroll = null; fechar(); return; }
       const notas = ns || [], reps = rs || [];
       /* 24/09/2026: o app precisa achar o repasse pelo id para corrigir ou
          apagar — a ficha é quem tem a lista mais fresca. */
@@ -596,7 +609,7 @@ window.Gestor = (() => {
         </div>
       </div>`}
 
-      <div class="cdet">
+      <div class="cdet" data-ficha="${chaveFicha}">
         <div class="cdet-hero">
           <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${esc(colab.foto_path||'')}" data-nome="${esc(colab.nome||colab.email)}" data-sub="${esc(colab.email)} · ${esc(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
@@ -737,6 +750,8 @@ window.Gestor = (() => {
       if (be) be.onclick = () => showEditModal(colab, sb, () => _ctx?.onRebuild?.(), currentUser);
       if (typeof _carregarMiniaturas === 'function') _carregarMiniaturas(notas, 'eqthumb-').catch(() => {});
     } catch (e) {
+      if (seq !== _fichaSeq) return;
+      _evoScroll = null;   // a rolagem guardada era desta ficha; não deve sobrar para o próximo desenho
       el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>
         <div style="padding:14px"><button class="btn btn-outline" onclick="Gestor.fechar()">‹ Voltar</button></div>`;
     }

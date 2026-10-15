@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 408;
+const APP_BUILD = 409;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2399,6 +2399,19 @@ async function excluirRepassesDeOutro(ids) {
     await _recarregarEquipe();
   } finally { setLoading(false); }
   return ok > 0;
+}
+
+/* A ficha do colaborador lê do SERVIDOR; correção ou exclusão de nota é gravada primeiro neste aparelho e vai na fila. Antes de
+   redesenhar a ficha, manda a fila — senão ela voltaria com o valor antigo, como se a correção não tivesse pegado. */
+async function _enviarFilaAntesDaFicha() {
+  if (!sb || !user || !navigator.onLine) return;
+  let r = await DB.sync(sb, user.id).catch(() => undefined);
+  if (r === null) {
+    await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
+    r = await DB.sync(sb, user.id).catch(() => undefined);   // garante uma rodada completa depois
+  }
+  /* o envio em segundo plano (service worker) ainda segurava a vez: tenta mais uma ou duas vezes */
+  for (let k = 0; r && r.ocupado && k < 2; k++) r = await DB.sync(sb, user.id).catch(() => undefined);
 }
 
 /* redesenha a ficha do colaborador com os dados novos do servidor */
@@ -8417,13 +8430,21 @@ async function _salvarNotaInterno() {
     }
     await syncBadge(false);
     fecharFormNota();
+    /* 15/10/2026: corrigindo a nota pela ficha do colaborador (Equipe), a pessoa continua NA ficha, no mesmo ponto da tela — antes
+       caía na lista de "Minhas notas" (gestor) ou voltava ao topo (Contador). A ficha lê do servidor: manda a fila primeiro. */
+    const _naEquipe = viewAtual === 'equipe';
+    if (_naEquipe) await _enviarFilaAntesDaFicha();
     await carregarDadosLocais();
-    if (_ehContabilidade()) renderEquipe(); else renderNotas();   // Contador não tem 'Minhas notas'
+    /* A tela é reconferida DEPOIS da espera (a pessoa pode ter saído da Equipe). Sem rede a ficha não carrega (ela lê do servidor
+       e só mostraria "Erro ao carregar"): fica como está, a correção segue na fila e o aviso abaixo diz isso. */
+    if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }
+    else if (_ehContabilidade()) renderEquipe(); else renderNotas();   // Contador não tem 'Minhas notas'
     const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
       semValor ? '⚠️ Nota salva SEM valor — edite para completar'
       : _atraso >= LANC_DIAS_LIMITE ? `⏰ Nota salva, mas é de ${_atraso} dias atrás. Lance as notas no dia do gasto.`
       : _removeuRepetida ? 'Nota salva — a repetida anterior foi para a lixeira'
+      : (_naEquipe && !navigator.onLine) ? 'Nota salva no aparelho — vai para o servidor quando a rede voltar'
       : 'Nota salva!',
       semValor || _atraso >= LANC_DIAS_LIMITE ? 'err' : 'ok', _atraso >= LANC_DIAS_LIMITE ? 6000 : 3000);
     syncToDrive().catch(() => {});
@@ -8524,8 +8545,12 @@ async function excluirNota(id) {
   if (!(await confirmarExclusaoNota(id))) return;
   await DB.softDeleteNota(id);
   await syncBadge(false);
+  /* excluindo pela ficha do colaborador (Equipe): fica na ficha, no mesmo ponto — e ela lê do servidor, então a fila vai antes */
+  const _naEquipe = viewAtual === 'equipe';
+  if (_naEquipe) { setLoading(true, 'Atualizando a ficha…'); try { await _enviarFilaAntesDaFicha(); } finally { setLoading(false); } }
   await carregarDadosLocais();
   if (viewAtual === 'lixeira') renderNotasApagadas();
+  else if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }   // sem rede a ficha não carrega: fica como está, a exclusão segue na fila
   else renderNotas();
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
@@ -8631,15 +8656,7 @@ async function excluirNotasSelecionadas() {
     }
     await syncBadge(false);
     /* a ficha do colaborador lê do servidor: sem enviar antes, a nota reapareceria */
-    if (feitas && sb && navigator.onLine) {
-      let r = await DB.sync(sb, user.id).catch(() => undefined);
-      if (r === null) {
-        await DB.aguardarSync().catch(() => {});        // já havia uma sincronização rodando (e a que este pedido enfileirou)
-        r = await DB.sync(sb, user.id).catch(() => undefined);   // garante uma rodada completa depois
-      }
-      /* o envio em segundo plano (service worker) ainda segurava a vez: tenta mais uma ou duas vezes */
-      for (let k = 0; r && r.ocupado && k < 2; k++) r = await DB.sync(sb, user.id).catch(() => undefined);
-    }
+    if (feitas && sb && navigator.onLine) await _enviarFilaAntesDaFicha();
     await carregarDadosLocais();
     if (viewAtual === 'equipe') renderEquipe();
     else if (viewAtual === 'lixeira') renderNotasApagadas();
