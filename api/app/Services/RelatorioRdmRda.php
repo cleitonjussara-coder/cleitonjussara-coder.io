@@ -67,7 +67,46 @@ class RelatorioRdmRda
 
         /* ── R.D.M. ─────────────────────────────────────────── */
         $rdm = $ss->getSheetByName('R.D.M.');
-        foreach (self::RDM as [$ini, $tot]) {
+        $rda = $ss->getSheetByName('R.D.A');
+
+        /* 15/10/2026: lançou mais do que cabe no bloco do mês → o bloco ganha linhas (antes as notas excedentes eram descartadas
+           com um aviso). As linhas entram antes da última de dados, para que as fórmulas SUM do TOTAL e as referências da aba
+           BANCO DE DADOS acompanhem; os blocos seguintes descem junto, e $blocosRdm/$blocosRda guardam as posições já deslocadas. */
+        $contaRdm = [];
+        foreach ($notas->where('tipo', 'RDM') as $n) {
+            $contaRdm[(int) $n->mes][$this->categoriaRdm($n)] = ($contaRdm[(int) $n->mes][$this->categoriaRdm($n)] ?? 0) + 1;
+        }
+        $contaRda = [];
+        foreach ($notas->where('tipo', 'RDA') as $n) {
+            $contaRda[(int) $n->mes] = ($contaRda[(int) $n->mes] ?? 0) + 1;
+        }
+        $extraRdm = [];
+        foreach (self::RDM as $m => [$ini, $tot]) {
+            $extraRdm[$m] = max(0, max($contaRdm[$m] ?? [0]) - ($tot - $ini - 1));
+        }
+        $extraRda = [];
+        foreach (self::RDA as $m => [$ini, $tot]) {
+            $extraRda[$m] = max(0, (int) ceil(($contaRda[$m] ?? 0) / 2) - ($tot - $this->primeiraLinhaRda($rda, $ini)));
+        }
+        $this->abrirLinhas($rdm, self::RDM, $extraRdm, 10);
+        $this->abrirLinhas($rda, self::RDA, $extraRda, 7);
+        $blocosRdm = $this->deslocar(self::RDM, $extraRdm);
+        $blocosRda = $this->deslocar(self::RDA, $extraRda);
+        if (array_sum($extraRdm) + array_sum($extraRda) > 0) {
+            /* o PhpSpreadsheet não reescreve referências a abas com ponto no nome (R.D.M., R.D.A): refaz as da BANCO DE DADOS */
+            $bd0 = $ss->getSheetByName('BANCO DE DADOS');
+            $somaRda = [];
+            foreach ($blocosRdm as $m => [$ini, $tot]) {
+                $bd0->setCellValue([12 + $m, 6], '=R.D.M.!E'.($tot + 1));       // M6:X6 — total do mês, 1 linha abaixo do TOTAL
+            }
+            foreach ($blocosRda as $m => [$ini, $tot]) {
+                $bd0->setCellValue([12 + $m, 8], '=R.D.A!G'.$tot);               // M8:X8
+                $somaRda[] = 'R.D.A!G'.$tot;
+            }
+            $bd0->setCellValue('F9', '=SUM('.implode('+', $somaRda).')');
+        }
+
+        foreach ($blocosRdm as [$ini, $tot]) {
             $this->limpar($rdm, 2, $ini + 1, 10, $tot - 1);
         }
         $prox = [];
@@ -75,10 +114,10 @@ class RelatorioRdmRda
         $doRdm = $notas->where('tipo', 'RDM');
         foreach ($doRdm as $n) {
             $m = (int) $n->mes;
-            if (! isset(self::RDM[$m])) {
+            if (! isset($blocosRdm[$m])) {
                 continue;
             }
-            [$ini, $tot] = self::RDM[$m];
+            [$ini, $tot] = $blocosRdm[$m];
             $cat = $this->categoriaRdm($n);
             $row = $prox[$m][$cat] ?? ($ini + 1);
             if ($row >= $tot) {
@@ -91,17 +130,16 @@ class RelatorioRdmRda
         }
 
         /* ── R.D.A (duas colunas por mês) ───────────────────── */
-        $rda = $ss->getSheetByName('R.D.A');
-        foreach (self::RDA as [$ini, $tot]) {
+        foreach ($blocosRda as [$ini, $tot]) {
             $this->limpar($rda, 2, $this->primeiraLinhaRda($rda, $ini), 7, $tot - 1);
         }
         $idx = [];
         foreach ($notas->where('tipo', 'RDA') as $n) {
             $m = (int) $n->mes;
-            if (! isset(self::RDA[$m])) {
+            if (! isset($blocosRda[$m])) {
                 continue;
             }
-            [$ini, $tot] = self::RDA[$m];
+            [$ini, $tot] = $blocosRda[$m];
             $primeira = $this->primeiraLinhaRda($rda, $ini);
             $linhas = $tot - $primeira;                   // 15 (14 em fevereiro, que tem cabeçalho e uma linha a menos)
             $i = $idx[$m] ?? 0;
@@ -115,11 +153,11 @@ class RelatorioRdmRda
             $idx[$m] = $i + 1;
         }
         /* 15/10/2026 (pedido do cliente): linhas em branco ficam ocultas — cada mês só mostra as linhas usadas. */
-        foreach (self::RDM as $m => [$ini, $tot]) {
-            $usadas = max(0, ...array_map(fn ($r) => $r - ($ini + 1), $prox[$m] ?? [$ini + 1]));
+        foreach ($blocosRdm as $m => [$ini, $tot]) {
+            $usadas = max(0, ...array_values(array_map(fn ($r) => $r - ($ini + 1), $prox[$m] ?? [$ini + 1])));
             $this->ocultarLinhas($rdm, $ini + 1 + $usadas, $tot - 1);
         }
-        foreach (self::RDA as $m => [$ini, $tot]) {
+        foreach ($blocosRda as $m => [$ini, $tot]) {
             $primeira = $this->primeiraLinhaRda($rda, $ini);
             $usadas = min($idx[$m] ?? 0, $tot - $primeira);   // a 2ª coluna só começa depois da 1ª cheia
             $this->ocultarLinhas($rda, $primeira + $usadas, $tot - 1);
@@ -200,6 +238,38 @@ class RelatorioRdmRda
         }
 
         return 'Outros';
+    }
+
+    /** insere $extra[mês] linhas no fim de cada bloco (de baixo para cima, para não deslocar as posições ainda por usar) */
+    private function abrirLinhas(Worksheet $ws, array $blocos, array $extra, int $ultimaColuna): void
+    {
+        $ultima = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($ultimaColuna + 1);   // uma coluna além da última de dados
+        foreach (array_reverse($blocos, true) as $m => [$ini, $tot]) {
+            $n = $extra[$m] ?? 0;
+            if ($n < 1) {
+                continue;
+            }
+            $modelo = $tot - 2;                       // penúltima linha de dados: fonte do estilo
+            $ws->insertNewRowBefore($tot - 1, $n);    // a última linha de dados desce; a faixa do SUM cresce
+            $altura = $ws->getRowDimension($modelo)->getRowHeight();
+            for ($r = $tot - 1; $r < $tot - 1 + $n; $r++) {
+                $ws->duplicateStyle($ws->getStyle("A{$modelo}:{$ultima}{$modelo}"), "A{$r}:{$ultima}{$r}");
+                $ws->getRowDimension($r)->setRowHeight($altura);
+            }
+        }
+    }
+
+    /** posições [rótulo, TOTAL] de cada mês depois das linhas inseridas nos meses anteriores e nele mesmo */
+    private function deslocar(array $blocos, array $extra): array
+    {
+        $saida = [];
+        $acum = 0;
+        foreach ($blocos as $m => [$ini, $tot]) {
+            $saida[$m] = [$ini + $acum, $tot + $acum + ($extra[$m] ?? 0)];
+            $acum += $extra[$m] ?? 0;
+        }
+
+        return $saida;
     }
 
     private function ocultarLinhas(Worksheet $ws, int $r1, int $r2): void

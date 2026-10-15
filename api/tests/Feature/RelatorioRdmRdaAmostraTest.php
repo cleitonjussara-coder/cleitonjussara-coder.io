@@ -158,6 +158,44 @@ class RelatorioRdmRdaAmostraTest extends TestCase
         $ss->disconnectWorksheets();
     }
 
+    public function test_lancamento_a_mais_que_as_linhas_do_modelo_cria_linhas(): void
+    {
+        $c = $this->colaborador();
+        $soma = 0;
+        for ($i = 1; $i <= 34; $i++) {              // março cabe 30 (15 × 2): 4 a mais → 2 linhas novas
+            $this->notaRda($c, 3, 1 + ($i % 28), 10);
+            $soma += 10;
+        }
+        $this->notaRda($c, 4, 5, 7.00);             // abril desce 2 linhas e continua certo
+        for ($i = 1; $i <= 50; $i++) {              // R.D.M. janeiro: 31 linhas por categoria; 50 outros → 19 novas
+            (new Nota([
+                'id' => (string) Str::uuid(), 'user_id' => $c->id, 'tipo' => 'RDM', 'subtipo' => 'outros', 'valor' => 1,
+                'data' => '2026-01-05', 'mes' => 1, 'ano' => self::ANO, 'razao_social' => 'X', 'cnpj' => '12345678000199',
+                'pagamento' => null, 'deleted' => false,
+            ]))->save();
+        }
+        $ss = app(RelatorioRdmRda::class)->gerar($c, self::ANO);
+        $ws = $ss->getSheetByName('R.D.A');
+
+        $this->assertNull($ss->getSheetByName('CABEÇALHO')->getCell('A10')->getValue(), 'nada deve ser descartado');
+        /* março: rótulo 39, dados 40–54 + 2 novas (55, 56), TOTAL desce de 55 para 57 */
+        $this->assertSame(340.0, (float) $ws->getCell('G57')->getCalculatedValue() - 0.0);
+        $this->assertSame('=SUM(D40:D56,G40:G56)', $ws->getCell('G57')->getValue());
+        $this->assertEquals(10, $ws->getCell('D56')->getValue(), 'a 17ª nota da 1ª coluna usa a linha nova');
+        $this->assertTrue($ws->getRowDimension(56)->getVisible());
+        /* abril desceu 2: rótulo 58, total 74 */
+        $this->assertEquals(7, $ws->getCell('D59')->getValue());
+        $this->assertEqualsWithDelta(7.0, (float) $ws->getCell('G74')->getCalculatedValue(), 0.001);
+        /* a aba BANCO DE DADOS acompanha o total deslocado */
+        $this->assertSame('=R.D.A!G57', $ss->getSheetByName('BANCO DE DADOS')->getCell('O8')->getValue());
+        $this->assertSame('=R.D.A!G74', $ss->getSheetByName('BANCO DE DADOS')->getCell('P8')->getValue());
+
+        $rdm = $ss->getSheetByName('R.D.M.');
+        $this->assertEqualsWithDelta(50.0, (float) $rdm->getCell('J56')->getCalculatedValue(), 0.001);   // TOTAL de janeiro desceu 19
+        $this->assertSame('=R.D.M.!E57', $ss->getSheetByName('BANCO DE DADOS')->getCell('M6')->getValue());
+        $ss->disconnectWorksheets();
+    }
+
     public function test_o_total_do_mes_continua_somando_o_que_foi_lancado(): void
     {
         $c = $this->colaborador();
