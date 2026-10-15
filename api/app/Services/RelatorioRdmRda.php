@@ -22,7 +22,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  *   CABEÇALHO       B6 funcionário · B7 safra · I7 ano
  *   R.D.M.          12 blocos mensais; 3 categorias lado a lado com DATA | CNPJ | R$:
  *                   Abastecimento B–D · Hospedagens E–G · Outros H–J
- *   R.D.A           12 blocos de 15 linhas em DUAS colunas (B–D e E–G): 30 notas/mês
+ *   R.D.A           12 blocos de 15 linhas em DUAS colunas (B–D e E–G): 30 notas/mês (fevereiro: 14 linhas).
+ *                   Jan e Fev têm uma linha de cabeçalho abaixo do rótulo; Mar–Dez começam os dados na linha
+ *                   seguinte — ver primeiraLinhaRda().
  *   BANCO DE DADOS  extrato RDM recebido B15:C94 (80 linhas) · RDA recebido F15:H26 (12 linhas)
  */
 class RelatorioRdmRda
@@ -91,7 +93,7 @@ class RelatorioRdmRda
         /* ── R.D.A (duas colunas por mês) ───────────────────── */
         $rda = $ss->getSheetByName('R.D.A');
         foreach (self::RDA as [$ini, $tot]) {
-            $this->limpar($rda, 2, $ini + 2, 7, $tot - 1);
+            $this->limpar($rda, 2, $this->primeiraLinhaRda($rda, $ini), 7, $tot - 1);
         }
         $idx = [];
         foreach ($notas->where('tipo', 'RDA') as $n) {
@@ -100,16 +102,27 @@ class RelatorioRdmRda
                 continue;
             }
             [$ini, $tot] = self::RDA[$m];
-            $linhas = $tot - 1 - ($ini + 2) + 1;          // 15
+            $primeira = $this->primeiraLinhaRda($rda, $ini);
+            $linhas = $tot - $primeira;                   // 15 (14 em fevereiro, que tem cabeçalho e uma linha a menos)
             $i = $idx[$m] ?? 0;
             if ($i >= $linhas * 2) {
                 $fora++;
                 continue;
             }
             $col = $i < $linhas ? 2 : 5;                 // B–D depois E–G
-            $row = $ini + 2 + ($i % $linhas);
+            $row = $primeira + ($i % $linhas);
             $this->linha($rda, $col, $row, $n);
             $idx[$m] = $i + 1;
+        }
+        /* 15/10/2026 (pedido do cliente): linhas em branco ficam ocultas — cada mês só mostra as linhas usadas. */
+        foreach (self::RDM as $m => [$ini, $tot]) {
+            $usadas = max(0, ...array_map(fn ($r) => $r - ($ini + 1), $prox[$m] ?? [$ini + 1]));
+            $this->ocultarLinhas($rdm, $ini + 1 + $usadas, $tot - 1);
+        }
+        foreach (self::RDA as $m => [$ini, $tot]) {
+            $primeira = $this->primeiraLinhaRda($rda, $ini);
+            $usadas = min($idx[$m] ?? 0, $tot - $primeira);   // a 2ª coluna só começa depois da 1ª cheia
+            $this->ocultarLinhas($rda, $primeira + $usadas, $tot - 1);
         }
         if ($fora) {
             $cab->setCellValue('A10', "ATENÇÃO: {$fora} nota(s) não couberam no bloco do mês (limite do modelo).");
@@ -148,6 +161,20 @@ class RelatorioRdmRda
         return $ss;
     }
 
+    /**
+     * Primeira linha de dados do bloco do mês no R.D.A (15/10/2026). O modelo NÃO é uniforme: janeiro e fevereiro trazem uma
+     * linha de cabeçalho (DATA | CNPJ | R$) logo abaixo do rótulo do mês; de março a dezembro os dados começam já na linha
+     * seguinte ao rótulo (as fórmulas SUM do modelo confirmam: =SUM(D40:D54,…) em março, =SUM(D6:D20,…) em janeiro). Assumir
+     * "rótulo + 2" sempre deixava a linha de exemplo do modelo — de outra pessoa — em março a setembro, e a planilha do Edson
+     * (só RDA de outubro) saía com lançamentos de meses em que ele não tinha nada. Detecta pelo cabeçalho, não pelo número do mês.
+     */
+    private function primeiraLinhaRda(Worksheet $ws, int $ini): int
+    {
+        $abaixoDoRotulo = mb_strtolower(trim((string) $ws->getCell([2, $ini + 1])->getValue()));
+
+        return $abaixoDoRotulo === 'data' ? $ini + 2 : $ini + 1;
+    }
+
     /** DATA | CNPJ (formatado, como o modelo traz) | R$ a partir de $col */
     private function linha(Worksheet $ws, int $col, int $row, Nota $n): void
     {
@@ -173,6 +200,13 @@ class RelatorioRdmRda
         }
 
         return 'Outros';
+    }
+
+    private function ocultarLinhas(Worksheet $ws, int $r1, int $r2): void
+    {
+        for ($r = $r1; $r <= $r2; $r++) {
+            $ws->getRowDimension($r)->setVisible(false);
+        }
     }
 
     /** Apaga só os VALORES do retângulo (o modelo veio com dados de exemplo); estilos ficam. */
