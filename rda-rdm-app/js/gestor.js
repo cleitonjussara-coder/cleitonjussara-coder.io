@@ -21,6 +21,23 @@ window.Gestor = (() => {
      Paulo: tocar numa coluna mostra os valores do mês (RDM, RDA, Total), igual ao
      gráfico do Painel; "Abrir" leva a tela para aquele mês. Redesenha só a faixa. */
   const _tipoEvo = n => (n.tipo === 'RDM' || n.tipo === 'RDA') ? n.tipo : (n.tipo || 'Outros');
+  /* Estado entre redesenhos (a tela é refeita quando o mês muda): a coluna tocada continua aberta no mês novo, a rolagem
+     volta para onde estava, e as prévias abertas dos colaboradores e a grade de ações da ficha não fecham sozinhas. */
+  let _evoMantem = null;               // mês cuja faixa de valores já volta aberta depois de redesenhar
+  let _evoScroll = null;               // rolagem da tela, devolvida depois do redesenho
+  const _previasAbertas = new Set();   // colaboradores com a prévia dos gastos aberta (lista da Equipe)
+  let _acoesAbertas = false;           // grade de relatórios/ações da ficha aberta
+  const _restaurarRolagem = el => { if (_evoScroll !== null) { const y = _evoScroll; _evoScroll = null; if (el) el.scrollTop = y; } };
+  const _evoDica = '<div class="db-hint">Toque numa coluna para ver esse mês</div>';
+  const _evoDrillHtml = (d, i) => {
+    const tipos = [...new Set(['RDM', 'RDA', ...Object.keys(d.por)])];
+    return `<div class="db-drill">
+      <span><b>${MESES[i]}</b></span>
+      ${tipos.map(t => `<span>${esc(t)} <b>${brl(d.por[t] || 0)}</b></span>`).join('')}
+      <span>Total <b>${brl(d.total)}</b></span>
+      <span class="sp"><button class="btn btn-sm btn-outline" onclick="Gestor.tocarBarra(this.closest('.evo-card').querySelectorAll('.evo-col')[${i}],${i})">Fechar</button></span>
+    </div>`;
+  };
   function _evoCard(titulo, direita, mes, lista) {
     const dados = [];
     for (let m = 1; m <= 12; m++) {
@@ -30,15 +47,17 @@ window.Gestor = (() => {
       dados.push({ por, total: Object.values(por).reduce((a, b) => a + b, 0) });
     }
     const max = Math.max(1, ...dados.map(d => d.total));
+    const sel = _evoMantem === mes ? mes - 1 : -1;      // veio de um toque numa coluna: a faixa deste mês já abre
+    if (sel >= 0) _evoMantem = null;
     return `<div class="dash-card evo-card" data-mes="${mes}" data-evo="${encodeURIComponent(JSON.stringify(dados))}">
       <div class="dash-card-title">${titulo}${direita ? ` <span style="float:right">${direita}</span>` : ''}</div>
       <div class="evo">
-        ${dados.map((d, i) => `<div class="evo-col evo-tap ${i + 1 === mes ? 'cur' : ''}" title="${MESES[i]}: ${brl(d.total)}" onclick="Gestor.tocarBarra(this,${i})">
+        ${dados.map((d, i) => `<div class="evo-col evo-tap ${i + 1 === mes ? 'cur' : ''} ${i === sel ? 'sel' : ''}" title="${MESES[i]}: ${brl(d.total)}" onclick="Gestor.tocarBarra(this,${i})">
           <div class="evo-bar" style="height:${Math.max(2, Math.round(d.total / max * 100))}%"></div>
         </div>`).join('')}
       </div>
       <div class="evo-labels">${MESES.map((m, i) => `<span class="${i + 1 === mes ? 'cur' : ''}">${m.slice(0,1)}</span>`).join('')}</div>
-      <div class="evo-drill" style="margin-top:8px"><div class="db-hint">Toque numa coluna para ver os valores do mês</div></div>
+      <div class="evo-drill" style="margin-top:8px">${sel >= 0 ? _evoDrillHtml(dados[sel], sel) : _evoDica}</div>
     </div>`;
   }
 
@@ -56,25 +75,42 @@ window.Gestor = (() => {
     if (!card) return;
     const dados = JSON.parse(decodeURIComponent(card.dataset.evo || '%5B%5D'));
     const mesAberto = Number(card.dataset.mes);
+    /* Outro mês: a tela INTEIRA vai para ele — cartão de Faturamento da equipe, cartões e notas dos colaboradores
+       (pedido do Paulo, 14/10/2026). Não há mais botão "Abrir": o próprio toque abre. */
+    if (i + 1 !== mesAberto && dados[i]) {
+      _evoMantem = i + 1;
+      const rol = document.getElementById('app-content'); _evoScroll = rol ? rol.scrollTop : null;
+      mudarMesEquipe(i + 1 - mesAberto);
+      return;
+    }
     const area = card.querySelector('.evo-drill');
     const jaSel = el.classList.contains('sel');
     card.querySelectorAll('.evo-col.sel').forEach(c => c.classList.remove('sel'));
-    if (jaSel || !dados[i]) {
-      area.innerHTML = '<div class="db-hint">Toque numa coluna para ver os valores do mês</div>';
-      return;
-    }
+    if (jaSel || !dados[i]) { area.innerHTML = _evoDica; return; }
     el.classList.add('sel');
-    const d = dados[i];
-    const tipos = [...new Set(['RDM', 'RDA', ...Object.keys(d.por)])];
-    area.innerHTML = `<div class="db-drill">
-      <span><b>${MESES[i]}</b></span>
-      ${tipos.map(t => `<span>${esc(t)} <b>${brl(d.por[t] || 0)}</b></span>`).join('')}
-      <span>Total <b>${brl(d.total)}</b></span>
-      <span class="sp">
-        ${i + 1 !== mesAberto ? `<button class="btn btn-sm btn-primary" onclick="mudarMesEquipe(${i + 1 - mesAberto})">Abrir</button>` : ''}
-        <button class="btn btn-sm btn-outline" onclick="Gestor.tocarBarra(this.closest('.evo-card').querySelectorAll('.evo-col')[${i}],${i})">Fechar</button>
-      </span>
-    </div>`;
+    area.innerHTML = _evoDrillHtml(dados[i], i);
+  }
+
+  /* ⋯ no cartão do colaborador: abre e recolhe a prévia dos gastos (pedido do Paulo, 14/10/2026 — muita informação de
+     várias pessoas ao mesmo tempo numa página só). Quem foi aberto continua aberto quando o mês muda. */
+  function alternarPrevia(btn, id) {
+    const prev = btn.closest('.colab-card')?.querySelector('.colab-previa');
+    if (!prev) return;
+    const abrir = prev.style.display === 'none';
+    prev.style.display = abrir ? 'block' : 'none';
+    btn.classList.toggle('on', abrir);
+    btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    if (abrir) _previasAbertas.add(id); else _previasAbertas.delete(id);
+  }
+  /* ⋯ na ficha: recolhe a grade de relatórios e ações (mesmo pedido) */
+  function alternarAcoes(btn) {
+    const g = document.querySelector('.cdet-acoes');
+    if (!g) return;
+    const abrir = g.style.display === 'none';
+    g.style.display = abrir ? 'grid' : 'none';
+    btn.classList.toggle('on', abrir);
+    btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    _acoesAbertas = abrir;
   }
 
   const fmtData = d => { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; };
@@ -381,6 +417,7 @@ window.Gestor = (() => {
 
           /* o Contador só visualiza e baixa relatórios: não lança nota nem tem saldo (14/10/2026) */
           const ehContador = m.role === 'contabilidade';
+          const previaAberta = _previasAbertas.has(m.id);
           const canEdit = currentUser.role==='admin' || currentUser.role==='gestor';
           const semFotoM  = mns.filter(n => !n.foto_path).length;
           const semValorM = mns.filter(n => Number(n.valor || 0) <= 0).length;
@@ -400,8 +437,10 @@ window.Gestor = (() => {
               <span class="role-pill role-${m.role}">${m.role}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
               ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
               ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
+              ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" onclick="event.stopPropagation();Gestor.alternarPrevia(this,'${m.id}')">⋯</button>`}
               <span class="colab-seta">›</span>
             </div>
+            <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
             ${ehContador ? '' : `<div class="colab-bal">
               <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
                 <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
@@ -422,6 +461,7 @@ window.Gestor = (() => {
             ${mns.length && !ehContador ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
             ${pagoEmpresaM && !ehContador ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
             ${ehContador ? '' : `<div class="colab-resumo">${resumo}</div>`}
+            </div>
           </div>`;
         });
 
@@ -451,6 +491,7 @@ window.Gestor = (() => {
       }
 
       el.innerHTML = html;
+      _restaurarRolagem(el);
 
       el.querySelectorAll('[data-eid]').forEach(btn =>
         btn.addEventListener('click', e => {
@@ -560,7 +601,7 @@ window.Gestor = (() => {
           <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${esc(colab.foto_path||'')}" data-nome="${esc(colab.nome||colab.email)}" data-sub="${esc(colab.email)} · ${esc(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
           <div class="cdet-email">${esc(colab.email)}</div>
-          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${ehContador ? '' : (colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>')}${colab.nucleo ? `<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">📍 ${esc(colab.nucleo)}</span>` : ''}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}${('confirmado_em' in colab) && !colab.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e">🙋 aguardando liberação</span>' : ''}</div>
+          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${ehContador ? '' : (colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>')}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}${('confirmado_em' in colab) && !colab.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e">🙋 aguardando liberação</span>' : ''}</div>
         </div>
 
         ${podeEditar && ('confirmado_em' in colab) && !colab.confirmado_em ? `
@@ -573,7 +614,8 @@ window.Gestor = (() => {
           </div>
         </div>` : ''}
 
-        <div class="cdet-acoes">
+        ${ehContador ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_acoesAbertas ? 'on' : ''}" aria-expanded="${_acoesAbertas}" onclick="Gestor.alternarAcoes(this)">⋯ Relatórios e ações</button></div>`}
+        <div class="cdet-acoes" style="display:${ehContador || _acoesAbertas ? 'grid' : 'none'}">
           ${ehContador ? '' : `${colab.regime === 'cv' ? `
           <button class="cdet-acao" onclick="baixarRelatorioCv('xlsx','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
           <button class="cdet-acao" onclick="baixarRelatorioCv('pdf','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
@@ -683,6 +725,7 @@ window.Gestor = (() => {
       }
 
       el.innerHTML = html;
+      _restaurarRolagem(el);
       _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
       if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
@@ -1081,5 +1124,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { tocarBarra, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
