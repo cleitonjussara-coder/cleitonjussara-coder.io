@@ -111,7 +111,7 @@ class RelatorioCvPdf
             .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.(($ehCv ? $totalRecarga : $recebido) - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl(($ehCv ? $totalRecarga : $recebido) - $gastoTotal).'</span></td>'
             .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
             .'<table class="tres"><tr><td class="col">'
-            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/RECARGA ALELO' : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
+            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
             .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'

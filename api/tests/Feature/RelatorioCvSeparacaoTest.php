@@ -126,6 +126,22 @@ class RelatorioCvSeparacaoTest extends TestCase
         $this->assertStringNotContainsString('999,00', $html, 'Faturamento fica fora do PDF do colaborador');
     }
 
+    /** 15/10/2026: "RECARGA ALELO" → "RECARGA DE CARTÃO", nos dois formatos. */
+    public function test_extrato_de_recarga_nao_cita_mais_a_marca_do_cartao(): void
+    {
+        $c = $this->cenario();
+
+        $ss = app(RelatorioCv::class)->gerar($c, self::ANO);
+        $rotulo = (string) $ss->getSheetByName('BANCO DE DADOS')->getCell('B13')->getValue();
+        $this->assertSame('EXTRATO DE VALOR RECEBIDO/RECARGA DE CARTÃO', $rotulo);
+        $this->assertTrue($ss->getSheetByName('BANCO DE DADOS')->getStyle('B13')->getAlignment()->getShrinkToFit(), 'o título ficou 2 letras maior: tem de encolher, não cortar');
+        $ss->disconnectWorksheets();
+
+        $html = app(RelatorioCvPdf::class)->html($c, self::ANO);
+        $this->assertStringContainsString('EXTRATO DE VALOR RECEBIDO/RECARGA DE CARTÃO', $html);
+        $this->assertStringNotContainsString('RECARGA ALELO', $html);
+    }
+
     /** A fórmula do BANCO DE DADOS que lê o saldo do cartão tem de seguir a aba renomeada (senão o Excel mostra #REF!). */
     public function test_formula_do_banco_de_dados_segue_a_aba_renomeada(): void
     {

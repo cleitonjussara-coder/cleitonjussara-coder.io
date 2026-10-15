@@ -12,7 +12,7 @@ class Repasse extends Model
     public const KINDS = ['received', 'requested'];
 
     /** Só para o regime CV: para onde o dinheiro foi (24/09/2026).
-     *  recarga  → cartão pré-pago Alelo (BANCO DE DADOS, colunas B/C)
+     *  recarga  → cartão pré-pago (BANCO DE DADOS, colunas B/C — "RECARGA DE CARTÃO")
      *  carteira → conta do colaborador, pelo que ele pagou do bolso (I/J)
      *  25/09/2026: era 'reembolso' — renomeado para 'carteira' ao unificar Reembolso e Repasse
      *  como a mesma coisa (dinheiro que cai na conta do colaborador). */

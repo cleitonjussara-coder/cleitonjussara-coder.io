@@ -43,6 +43,9 @@ class RelatorioCv
     /** Nome da aba dos gastos no cartão corporativo (pedido de 14/10/2026; o modelo ainda a chama "CV ALELO"). */
     public const ABA_CARTAO = 'CARTÃO CORPORATIVO';
 
+    /** Como o extrato dos valores de recarga do cartão se chama (pedido de 15/10/2026; o modelo diz "RECARGA ALELO"). */
+    public const ROTULO_RECARGA = 'RECARGA DE CARTÃO';
+
 
     public function modelo(): string
     {
@@ -97,6 +100,13 @@ class RelatorioCv
 
         /* ── BANCO DE DADOS: extrato de valor recebido ─────── */
         $bd = $ss->getSheetByName('BANCO DE DADOS');
+        /* 15/10/2026: o rótulo do extrato de recarga deixa de citar a marca do cartão. O título é mesclado (B13:C13) e
+           ganha 2 letras; o texto encolhe para caber em vez de ser cortado na borda. */
+        $rotulo = (string) $bd->getCell('B13')->getValue();
+        if (str_contains($rotulo, 'RECARGA ALELO')) {
+            $bd->setCellValue('B13', str_replace('RECARGA ALELO', self::ROTULO_RECARGA, $rotulo));
+            $bd->getStyle('B13')->getAlignment()->setShrinkToFit(true);
+        }
         $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
         /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
