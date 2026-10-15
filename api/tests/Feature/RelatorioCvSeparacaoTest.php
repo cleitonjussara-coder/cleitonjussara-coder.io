@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * 14/10/2026 — "na aba CV ALELO (cartão corporativo) e CV REEMBOLSO (carteira do colaborador, a empresa repõe com
+ * 14/10/2026 — "na aba CV ALELO (cartão corporativo, hoje CARTÃO CORPORATIVO) e CV REEMBOLSO (carteira do colaborador, a empresa repõe com
  * depósito) a planilha está listando tudo junto". A planilha em Excel já separava no regime CV, mas o PDF desenhava as
  * duas páginas com as MESMAS notas. Aqui os dois formatos têm de listar cada nota só na aba dela, e o Faturamento
  * (pago direto pela empresa) em nenhuma.
@@ -80,7 +80,8 @@ class RelatorioCvSeparacaoTest extends TestCase
         $c = $this->cenario();
         $ss = app(RelatorioCv::class)->gerar($c, self::ANO);
 
-        $alelo = $this->textoDaAba($ss, 'CV ALELO');
+        $this->assertNull($ss->getSheetByName('CV ALELO'), 'a aba CV ALELO passou a se chamar CARTÃO CORPORATIVO');
+        $alelo = $this->textoDaAba($ss, 'CARTÃO CORPORATIVO');
         $reemb = $this->textoDaAba($ss, 'CV REEMBOLSO');
 
         $this->assertStringContainsString('POSTO NO CARTAO', $alelo);
@@ -102,9 +103,10 @@ class RelatorioCvSeparacaoTest extends TestCase
         $c = $this->cenario();
         $html = app(RelatorioCvPdf::class)->html($c, self::ANO);
 
-        $ini = strpos($html, '— CV ALELO —');
+        $this->assertStringNotContainsString('CV ALELO', $html, 'o nome antigo não aparece mais no PDF');
+        $ini = strpos($html, '— CARTÃO CORPORATIVO —');
         $meio = strpos($html, '— CV REEMBOLSO —');
-        $this->assertNotFalse($ini, 'página CV ALELO');
+        $this->assertNotFalse($ini, 'página CARTÃO CORPORATIVO');
         $this->assertNotFalse($meio, 'página CV REEMBOLSO');
         $this->assertLessThan($meio, $ini);
         $alelo = substr($html, $ini, $meio - $ini);
@@ -122,5 +124,35 @@ class RelatorioCvSeparacaoTest extends TestCase
         $this->assertStringNotContainsString('120,00', $reemb);
 
         $this->assertStringNotContainsString('999,00', $html, 'Faturamento fica fora do PDF do colaborador');
+    }
+
+    /** A fórmula do BANCO DE DADOS que lê o saldo do cartão tem de seguir a aba renomeada (senão o Excel mostra #REF!). */
+    public function test_formula_do_banco_de_dados_segue_a_aba_renomeada(): void
+    {
+        $ss = app(RelatorioCv::class)->gerar($this->cenario(), self::ANO);
+
+        $this->assertSame("='CARTÃO CORPORATIVO'!F2", $ss->getSheetByName('BANCO DE DADOS')->getCell('B9')->getValue());
+        $ss->disconnectWorksheets();
+    }
+
+    /**
+     * Excel único da equipe: cada aba leva o primeiro nome na frente, e o Excel só aceita 31 caracteres.
+     * "CARTÃO CORPORATIVO" tem 18 — um primeiro nome comprido não pode estourar (o setTitle lançaria exceção).
+     */
+    public function test_excel_unico_da_equipe_nao_estoura_31_caracteres_na_aba_do_cartao(): void
+    {
+        $c = $this->cenario();
+        $c->forceFill(['nome' => 'Anastacianoalberto Silva'])->save();
+
+        $ss = app(RelatorioCv::class)->gerarUnico([$c], self::ANO);
+        $titulos = array_map(fn ($w) => $w->getTitle(), $ss->getAllSheets());
+
+        foreach ($titulos as $t) {
+            $this->assertLessThanOrEqual(31, mb_strlen($t), "aba '$t' passa de 31 caracteres");
+        }
+        $cartao = array_values(array_filter($titulos, fn ($t) => str_ends_with($t, '_CARTÃO CORPORATIVO')));
+        $this->assertCount(1, $cartao, implode(' | ', $titulos));
+        $this->assertSame("='".$cartao[0]."'!F2", $ss->getSheetByName(str_replace('CARTÃO CORPORATIVO', 'BANCO DE DADOS', $cartao[0]))->getCell('B9')->getValue());
+        $ss->disconnectWorksheets();
     }
 }

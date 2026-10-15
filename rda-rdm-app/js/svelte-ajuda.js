@@ -48,7 +48,7 @@
         <li><b>👛 Repasse</b> — o que você pagou do próprio bolso porque o cartão não passou ou estava sem saldo. Essas notas vão para a aba <b>CV REEMBOLSO</b> da planilha, e a empresa devolve o valor na sua conta.</li>\r
         <li><b>💳 Recarga do cartão</b> — quando o gestor transferir para o cartão pré-pago, <b>você registra o recebimento</b> aqui (07/10/2026) e o gestor é avisado. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>\r
       </ul>\r
-      <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CV ALELO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>\r
+      <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CARTÃO CORPORATIVO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>\r
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>\r
     </div>\r
 \r
@@ -293,7 +293,7 @@
     <div class="ajuda-sec ajuda-contador">\r
       <h4>📊 Planilha de C.V. e pastas</h4>\r
       <p>Na aba <b>RDM/RDA e Planilhas</b>, o quadro <b>⬇️ Baixar relatório</b> reúne tudo: <b>Excel anual</b> e <b>CSV do mês</b> (RDM/RDA) e a <b>Planilha de C.V.</b>. Os botões <b>Planilha de C.V.</b> (Excel ou PDF) geram a sua planilha do ano no <b>modelo padrão da empresa</b>, preenchida pelo servidor com as notas e repasses lançados — abas CABEÇALHO, BANCO DE DADOS, RDM_RDA e CV REEMBOLSO. O PDF sai em A4 paisagem, um mês por bloco. O gestor gera a de qualquer colaborador em <b>Equipe → cartão do colaborador</b>.</p>\r
-      <p><b>CV ALELO × CV REEMBOLSO (14/10/2026):</b> na Planilha de C.V. (Excel e PDF), cada nota aparece <b>só na aba dela</b> — <b>CV ALELO</b> traz o que foi pago no <b>cartão corporativo</b> e <b>CV REEMBOLSO</b> o que saiu da <b>carteira do colaborador</b> (a empresa repõe com depósito). A forma de pagamento é a que você marca na nota (Cartão ou Carteira); nota de Faturamento não entra em nenhuma das duas.</p>
+      <p><b>CARTÃO CORPORATIVO × CV REEMBOLSO (14/10/2026):</b> na Planilha de C.V. (Excel e PDF), cada nota aparece <b>só na aba dela</b> — <b>CARTÃO CORPORATIVO</b> (antes chamada CV ALELO) traz o que foi pago no <b>cartão corporativo</b> e <b>CV REEMBOLSO</b> o que saiu da <b>carteira do colaborador</b> (a empresa repõe com depósito). A forma de pagamento é a que você marca na nota (Cartão ou Carteira); nota de Faturamento não entra em nenhuma das duas.</p>\r
       <p>No ZIP de <b>Início → Arquivos</b>, as <b>fotos</b> vêm na árvore oficial:</p>\r
       <ul>\r
         <li><b>RDM</b> → Seu nome / Ano / <b>RDM DESPESAS CORPORATIVAS</b> / categoria / mês</li>\r

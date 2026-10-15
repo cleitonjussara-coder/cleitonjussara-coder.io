@@ -118,7 +118,7 @@ class RelatorioCvPdf
             .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
             .'<tr class="tot"><td>TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
 
-        /* ── CV ALELO e CV REEMBOLSO ───────────────────────── */
+        /* ── CARTÃO CORPORATIVO (aba "CV ALELO" do modelo) e CV REEMBOLSO ───────────────────────── */
         /* 14/10/2026: as duas páginas listavam as MESMAS notas ("tudo junto"). No CV cada uma tem as suas, como na
            planilha em Excel: ALELO ← gasto no cartão corporativo (tudo que não é carteira); REEMBOLSO ← gasto da
            carteira do colaborador (pagamento=carteira), que a empresa repõe com depósito. O "recebido" de cada página
@@ -126,7 +126,7 @@ class RelatorioCvPdf
            a mesma grade nas duas. */
         if ($ehCv) {
             $paginas = [
-                ['CV ALELO', $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga],
+                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga],
                 ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso],
             ];
         } else {

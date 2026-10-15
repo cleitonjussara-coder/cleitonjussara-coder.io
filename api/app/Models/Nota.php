@@ -17,7 +17,7 @@ class Nota extends Model
        para a conta do colaborador) com nomes diferentes por regime; unificado como Repasse na tela.
        'empresa' é novo: nota de faturamento que a empresa paga direto, sem passar pelo colaborador. */
     /** Com que dinheiro a despesa foi paga:
-     *  cv        → cartão corporativo Alelo, no regime CV (aba CV ALELO)
+     *  cv        → cartão corporativo Alelo, no regime CV (aba CARTÃO CORPORATIVO)
      *  carteira  → bolso do colaborador, a devolver por repasse (aba CV REEMBOLSO)
      *  empresa   → nota de faturamento paga direto pela empresa; não entra no saldo de ninguém */
     public const PAGAMENTOS = ['cv', 'carteira', 'empresa'];

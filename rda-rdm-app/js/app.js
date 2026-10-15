@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 406;
+const APP_BUILD = 407;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2705,7 +2705,7 @@ function trocarPagamentoCV() {
 
 /* 24/09/2026 — regime de cartão corporativo: não existe RDA x RDM. O gasto
    é dividido nas MESMAS quatro categorias da planilha (as quatro colunas de
-   CV ALELO), todas juntas. O banco continua guardando tipo/subtipo, que é o
+   CARTÃO CORPORATIVO), todas juntas. O banco continua guardando tipo/subtipo, que é o
    que o relatório lê; para quem é CV o app só deixa de PERGUNTAR a aba. */
 const CATEGORIAS_CV = [
   { chave: 'alimentacao',   ico: '🍽️', nome: 'Alimentação',   tipo: 'RDA', subtipo: null,
