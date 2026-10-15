@@ -68,6 +68,9 @@ class RelatorioRdmRda
         /* ── R.D.M. ─────────────────────────────────────────── */
         $rdm = $ss->getSheetByName('R.D.M.');
         $rda = $ss->getSheetByName('R.D.A');
+        /* 15/10/2026: o modelo traz SALDO = gasto − recebido (J2 =D2-G2), o que dá negativo para quem recebeu mais do que gastou.
+           Saldo é recebido − gasto, como no PDF e na aba BANCO DE DADOS. */
+        $rdm->setCellValue('J2', '=G2-D2');
 
         /* 15/10/2026: lançou mais do que cabe no bloco do mês → o bloco ganha linhas (antes as notas excedentes eram descartadas
            com um aviso). As linhas entram antes da última de dados, para que as fórmulas SUM do TOTAL e as referências da aba
