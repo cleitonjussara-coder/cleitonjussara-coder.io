@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=411">
+  <link rel="manifest" href="manifest.json?v=412">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1868,7 +1868,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=411" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=412" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2470,6 +2470,14 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
                  background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;
                  width:44px;height:44px;font-size:24px;cursor:pointer;display:flex;
                  align-items:center;justify-content:center">✕</button>
+  <button id="foto-viewer-ant" onclick="fotoViewerVizinha(-1)" aria-label="Foto anterior"
+          style="display:none;position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:1;
+                 background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:50%;
+                 width:52px;height:52px;font-size:30px;cursor:pointer;align-items:center;justify-content:center">‹</button>
+  <button id="foto-viewer-prox" onclick="fotoViewerVizinha(1)" aria-label="Próxima foto"
+          style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;
+                 background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:50%;
+                 width:52px;height:52px;font-size:30px;cursor:pointer;align-items:center;justify-content:center">›</button>
   <img id="foto-viewer-img" src="" alt="Foto da nota"
        style="max-width:95vw;max-height:78vh;object-fit:contain;border-radius:10px;
               box-shadow:0 4px 30px rgba(0,0,0,.6)">
@@ -2529,33 +2537,33 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=411"></script>
-<script defer src="js/db.js?v=411"></script>
-<script defer src="js/nfce.js?v=411"></script>
-<script defer src="js/sefaz.js?v=411"></script>
-<script defer src="js/brasilapi.js?v=411"></script>
-<script defer src="js/ocr.js?v=411"></script>
-<script defer src="js/recorte.js?v=411"></script>
-<script defer src="js/excel.js?v=411"></script>
-<script defer src="js/gestor.js?v=411"></script>
-<script defer src="js/frota.js?v=411"></script>
-<script defer src="js/ponto.js?v=411"></script>
-<script defer src="js/rastreio.js?v=411"></script>
-<script defer src="js/gdrive.js?v=411"></script>
+<script defer src="js/api.js?v=412"></script>
+<script defer src="js/db.js?v=412"></script>
+<script defer src="js/nfce.js?v=412"></script>
+<script defer src="js/sefaz.js?v=412"></script>
+<script defer src="js/brasilapi.js?v=412"></script>
+<script defer src="js/ocr.js?v=412"></script>
+<script defer src="js/recorte.js?v=412"></script>
+<script defer src="js/excel.js?v=412"></script>
+<script defer src="js/gestor.js?v=412"></script>
+<script defer src="js/frota.js?v=412"></script>
+<script defer src="js/ponto.js?v=412"></script>
+<script defer src="js/rastreio.js?v=412"></script>
+<script defer src="js/gdrive.js?v=412"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=411"></script>
+<script defer src="js/svelte-ajuda.js?v=412"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=411"></script>
+<script defer src="js/svelte-historico.js?v=412"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=411"></script>
+<script defer src="js/svelte-arquivos.js?v=412"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=411"></script>
-<script defer src="js/app.js?v=411"></script>
+<script defer src="js/svelte-perfil.js?v=412"></script>
+<script defer src="js/app.js?v=412"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=411').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=412').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 411;
+const APP_BUILD = 412;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -8748,9 +8748,45 @@ async function apagarDefinitivoSelecionadas() {
   return feitas > 0;
 }
 
-async function verFoto(id) {
+/* Anterior/próxima no visualizador (pedido 16/10/2026): a sequência é a dos
+   botões de anexo VISÍVEIS na tela no momento em que a foto abre (Minhas
+   notas, ficha da Equipe, lista da faixa) — na ordem em que aparecem. */
+let _fotoSeq = [];
+
+function _sequenciaDeAnexosVisiveis() {
+  const ids = [];
+  document.querySelectorAll('[onclick*="verFoto(\'"]').forEach(el => {
+    if (!el.offsetParent) return;                       // fora da tela / aba escondida
+    const m = /(?:^|[^.\w])verFoto\('([^']+)'\)/.exec(el.getAttribute('onclick') || '');
+    if (m && !ids.includes(m[1])) ids.push(m[1]);
+  });
+  return ids;
+}
+
+function _atualizarSetasFoto(id) {
+  const i = _fotoSeq.indexOf(id);
+  const mostra = _fotoSeq.length > 1 && i >= 0;
+  const ant = $('foto-viewer-ant'), prox = $('foto-viewer-prox');
+  if (!ant || !prox) return;
+  ant.style.display  = mostra ? 'flex' : 'none';
+  prox.style.display = mostra ? 'flex' : 'none';
+  ant.style.opacity  = i > 0 ? '1' : '.3';
+  prox.style.opacity = i >= 0 && i < _fotoSeq.length - 1 ? '1' : '.3';
+}
+
+async function fotoViewerVizinha(dir) {
+  const atual = _fotoViewerAtual?.id;
+  let i = _fotoSeq.indexOf(atual);
+  if (i < 0) return;
+  for (i += dir; i >= 0 && i < _fotoSeq.length; i += dir) {
+    if (await verFoto(_fotoSeq[i], true)) return;       // pula PDF/XML e anexos sem imagem
+  }
+}
+
+async function verFoto(id, navegando) {
   const n = _notaPorId(id);
-  if (!n) return;
+  if (!n) return false;
+  if (!navegando) _fotoSeq = _sequenciaDeAnexosVisiveis();
 
   let url = null, ext = null;
 
@@ -8773,13 +8809,14 @@ async function verFoto(id) {
     if (driveUrl) { url = driveUrl; ext = GDrive.getFotoExt?.(id) || _extDeUrl(n.foto_path || ''); }
   }
 
-  if (!url) { toast('Anexo não encontrado', 'err'); return; }
+  if (!url) { if (!navegando) toast('Anexo não encontrado', 'err'); return false; }
 
-  // PDF/XML → abre em nova aba (o navegador renderiza/baixa)
-  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { window.open(url, '_blank'); return; }
+  // PDF/XML → abre em nova aba (o navegador renderiza/baixa); ao navegar, só pula
+  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { if (!navegando) window.open(url, '_blank'); return false; }
 
   // imagem (ou tipo desconhecido) → visualizador
   _fotoViewerAtual = {
+    id,
     url,
     nome: `${n.tipo}_${String(n.data || '').slice(0, 10)}_${Math.round((Number(n.valor) || 0) * 100)}.${ext || 'jpg'}`
       .replace(/[^\w.-]+/g, '_'),
@@ -8788,6 +8825,8 @@ async function verFoto(id) {
   $('foto-viewer-info').textContent =
     `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;
   $('foto-viewer-overlay').style.display = 'flex';
+  _atualizarSetasFoto(id);
+  return true;
 }
 
 function fecharFotoViewer() {
@@ -8795,6 +8834,8 @@ function fecharFotoViewer() {
   ov.style.display = 'none';
   $('foto-viewer-img').src = '';
   _fotoViewerAtual = null;
+  _fotoSeq = [];
+  _atualizarSetasFoto(null);
 }
 
 /* Baixar / compartilhar o anexo aberto (pedido do Paulo, 14/10/2026). */
@@ -9521,5 +9562,17 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAuth('login');
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') fecharFotoViewer();
+    const aberto = $('foto-viewer-overlay')?.style.display === 'flex';
+    if (aberto && e.key === 'ArrowLeft')  fotoViewerVizinha(-1);
+    if (aberto && e.key === 'ArrowRight') fotoViewerVizinha(1);
   });
+  // deslizar o dedo na foto também troca (esquerda = próxima)
+  let _x0 = null;
+  const _img = $('foto-viewer-img');
+  _img?.addEventListener('touchstart', e => { _x0 = e.touches[0].clientX; }, { passive: true });
+  _img?.addEventListener('touchend', e => {
+    if (_x0 == null) return;
+    const dx = e.changedTouches[0].clientX - _x0; _x0 = null;
+    if (Math.abs(dx) > 60) fotoViewerVizinha(dx < 0 ? 1 : -1);
+  }, { passive: true });
 });
