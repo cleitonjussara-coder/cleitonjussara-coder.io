@@ -227,6 +227,11 @@ window.Gestor = (() => {
     _rolarParaRepasses = true;
     if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
   }
+  /* Toque no cartão "Recebido" da ficha (16/10/2026, Paulo/Cleiton): desce até a lista de repasses do mês aberto. Antes o
+     cartão parecia botão e não fazia nada. */
+  function irParaRepasses() {
+    document.getElementById('cdet-repasses')?.scrollIntoView({ block: 'start' });   // direto, como as setas da lista (sem animação: não depende do aparelho)
+  }
   function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); }
   /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
      não vale mais quando a ficha é fechada antes de ele terminar */
@@ -692,7 +697,7 @@ window.Gestor = (() => {
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Cartão corporativo</span><span class="cdet-kpi-val">${brl(gastoCartao)}</span><span class="cdet-kpi-sub">${nCartao.length} nota${nCartao.length === 1 ? '' : 's'} · a empresa já pagou</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">👛</span><span class="cdet-kpi-lbl">Carteira (do bolso)</span><span class="cdet-kpi-val">${brl(gastoCarteira)}</span><span class="cdet-kpi-sub">${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} · a empresa reembolsa</span></div>` : `
           <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>`}
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Reembolso recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
+          <div class="cdet-kpi link" role="button" tabindex="0" title="Ver a lista de repasses do mês" onclick="Gestor.irParaRepasses()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaRepasses()}"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Reembolso recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'} <span aria-hidden="true">↓</span></span></div>
           ${ehCVcolab ? (aReembolsar > 0.004
             ? `<div class="cdet-kpi warn"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(aReembolsar)}</span><span class="cdet-kpi-sub">carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
             : aReembolsar < -0.004
@@ -1191,5 +1196,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
