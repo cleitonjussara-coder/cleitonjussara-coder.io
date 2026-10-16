@@ -368,6 +368,11 @@ window.Frota = (() => {
     if (tit) tit.textContent = antes[0];
     if (usar) usar.textContent = antes[1];
     if (inteira) inteira.textContent = antes[2];
+    if (recorte === false) {                                // X: descarta a foto do odômetro
+      _fotoKm = null; e.target.value = '';
+      $('km-foto-nome').textContent = '';
+      return;
+    }
     if (!recorte) return;                                   // "Pular leitura": fica só a foto anexada
     _avisoOdo('Lendo o número da foto…');
     try {

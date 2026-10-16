@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 412;
+const APP_BUILD = 413;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -5588,8 +5588,11 @@ async function enviarFotoPerfil(e) {
   if (window.Recorte) {
     const tit = $('crop-overlay')?.querySelector('.crop-tit');
     if (tit) tit.textContent = 'Enquadre o rosto';
-    try { escolhida = (await Recorte.abrir(file, { semTexto: true })) || file; } catch (_) { escolhida = file; }
+    let rec = null;
+    try { rec = await Recorte.abrir(file, { semTexto: true }); } catch (_) { rec = null; }
     if (tit) tit.textContent = 'Enquadre a nota';
+    if (rec === false) { e.target.value = ''; return; }   // X: desistiu da foto, nada é enviado
+    escolhida = rec || file;
   }
   setLoading(true);
   try {
@@ -7867,6 +7870,16 @@ function _mostrarChaveNota() {
   _atualizarNumeroSerieAuto(); // número/série saem da chave
 }
 
+/* X na tela de recorte (16/10/2026, Paulo): a foto recém-anexada é descartada e o formulário volta a pedir o anexo
+   (_mostrarFormAposLeitura → _pedirFotoPasso2), sem ler nada da imagem. */
+function _descartarFotoCancelada() {
+  if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+  fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
+  atualizarPreviewFoto(null);
+  ['f-foto-nota', 'f-foto-ocr'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+  toast('Foto descartada — tire outra quando quiser');
+}
+
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
    Combina os resultados e preenche só os campos vazios.
    ocrPronto: resultado de parse já extraído (ex.: texto embutido de PDF) — pula o OCR. */
@@ -7897,7 +7910,10 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       let alvo = file;
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
-        try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
+        let rec = null;
+        try { rec = await Recorte.abrir(file); } catch (_) { rec = null; }
+        if (rec === false) { _descartarFotoCancelada(); ov.style.display = 'none'; return; }   // X: sem leitura, sem anexo
+        alvo = rec || file;
         ov.style.display = 'flex';
         if (alvo !== file) {
           fotoBlob = alvo;
