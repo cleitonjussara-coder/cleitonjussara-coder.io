@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 417;
+const APP_BUILD = 418;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3376,8 +3376,10 @@ function _agregaPeriodo(mes, ano, modo) {
      diferencia pra quem é CV, mesma ideia do _saldoAcumuladoAte. */
   const gastoCartao = _soma(ns.filter(x => _naoEhFaturamento(x) && _notaDoCartao(x)));
   const gasto = rdmG + rdaG;
+  /* recarga do cartão à parte (16/10/2026): só leitura, continua fora do "recebido" e do saldo */
+  const recargaCartao = _soma(repasses.filter(doPeriodo).filter(_repasseEhRecebido).filter(x => x.destino === 'recarga'));
   return { ns, rs, rdmG, rdaG, rdmR, rdaR,
-           gasto, recebido: rdmR + rdaR,
+           gasto, recebido: rdmR + rdaR, recargaCartao,
            gastoCartao, gastoBolso: gasto - gastoCartao };
 }
 
@@ -4031,6 +4033,12 @@ function renderHome() {
           ? `<span>Pend. anterior <b style="color:${(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior) < 0 ? 'var(--danger)' : 'inherit'}">${brl(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior)}</b></span>`
           : ''}</span>
         ${_usaCartao() ? `<span>💳 C.V. <b>${brl(A.gastoCartao)}</b></span><span>👛 Carteira <b>${brl(A.gastoBolso)}</b></span>` : ''}
+      </div>
+      <!-- 16/10/2026 (pedido do Cleiton): o recebido aberto em RDM, RDA e recarga do cartão (a recarga não entra no saldo) -->
+      <div class="db-hero-meta" style="margin-top:4px">
+        <span style="white-space:nowrap">Recebido RDM <b>${brl(A.rdmR)}</b></span>
+        <span style="white-space:nowrap">Recebido RDA <b>${brl(A.rdaR)}</b></span>
+        ${_usaCartao() ? `<span style="white-space:nowrap">💳 Recarga do cartão <b>${brl(A.recargaCartao)}</b></span>` : ''}
       </div>
       <div class="db-consumo">
         <div class="db-consumo-fill ${consumoPct > 100 ? 'over' : ''}"
@@ -5110,11 +5118,12 @@ function renderSaldo() {
   const itemHtml = r => {
     const pedido = _repasseEhPedido(r);
     const cvR = _ehCV();
-    const label = pedido ? 'Pedido' : 'Recebido';
-    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
+    const recarga = r.destino === 'recarga';   // 16/10/2026: a recarga vai para o cartão — antes aparecia como "Recebido · Abate dos repasses"
+    const label = pedido ? 'Pedido' : (recarga ? '💳 Recarga do cartão' : 'Recebido');
+    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : (recarga ? 'Recarga do cartão' : 'Repasse recebido')));
     const detail = pedido
       ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
-      : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido');
+      : (recarga ? 'Vai para o cartão — não abate os repasses' : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido'));
     return `
       <div class="rep-item">
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
@@ -5132,7 +5141,17 @@ function renderSaldo() {
     <div style="font-weight:800;font-size:14px;color:var(--text2);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.3px">${lbl} · ${doTipo.length}</div>
     ${doTipo.length ? doTipo.map(itemHtml).join('') : `<p class="muted-p">Nenhum repasse ${tipo} neste mês.</p>`}`;
   };
-  const repHtml = rs.length ? secaoTipo('RDM', '💼 RDM') + secaoTipo('RDA', '🍽️ RDA') : '<p class="muted-p">Nenhum repasse registrado.</p>';
+  /* Recebido do mês aberto em RDM, RDA e recarga do cartão (16/10/2026, pedido do Cleiton) — mesma leitura da ficha da Equipe */
+  const recebidosMes = rs.filter(_repasseEhRecebido);
+  const somaRecebido = f => recebidosMes.filter(f).reduce((a, x) => a + Number(x.valor || 0), 0);
+  const recargaMes = somaRecebido(x => x.destino === 'recarga');
+  const resumoRecebido = recebidosMes.length ? `<div class="rep-resumo-mes" style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;margin:0 0 10px;padding:0 6px;color:#cfe8d6">
+      <span>Recebido em ${MESES_LONGO_ARQUIVOS[filMes]}:</span>
+      <span><b>RDM</b> ${brl(somaRecebido(x => x.tipo === 'RDM' && _repasseEhCarteira(x)))}</span>
+      <span><b>RDA</b> ${brl(somaRecebido(x => x.tipo === 'RDA' && _repasseEhCarteira(x)))}</span>
+      ${recargaMes ? `<span>💳 <b>Recarga do cartão</b> ${brl(recargaMes)}</span>` : ''}
+    </div>` : '';
+  const repHtml = rs.length ? resumoRecebido + secaoTipo('RDM', '💼 RDM') + secaoTipo('RDA', '🍽️ RDA') : '<p class="muted-p">Nenhum repasse registrado.</p>';
 
   /* card independente do tipo */
   const cardTipo = (lbl, d) => {
@@ -5195,7 +5214,7 @@ function renderSaldo() {
     <div class="saldo-card ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? 'neg' : ''}">
       <div class="saldo-label">💳 Saldo do cartão ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? '<span class="dl dl-ruim" style="margin-left:6px">Acabando</span>' : ''}</div>
       <div class="saldo-val">${brl(saldoCartao || 0)}</div>
-      <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
+      <div class="saldo-detail"><span>Recarga em ${MESES[filMes-1]} <b>${brl(recargaMes)}</b></span><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
       ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Quando a recarga cair, registre pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
     <div class="saldo-card">

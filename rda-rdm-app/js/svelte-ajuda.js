@@ -49,6 +49,7 @@
         <li><b>💳 Recarga do cartão</b> — quando o gestor transferir para o cartão pré-pago, <b>você registra o recebimento</b> aqui (07/10/2026) e o gestor é avisado. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>\r
       </ul>\r
       <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CARTÃO CORPORATIVO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>\r
+      <p><b>Recebido separado (16/10/2026):</b> no <b>Painel</b>, o recebido do mês aparece aberto em <b>Recebido RDM</b>, <b>Recebido RDA</b> e <b>💳 Recarga do cartão</b>. Em <b>RDM/RDA e Planilhas</b>, a lista de repasses ganha o resumo <b>Recebido em (mês)</b> e a recarga vem identificada como <b>💳 Recarga do cartão</b> — ela vai para o cartão e <b>não abate os repasses</b> nem entra no saldo.</p>
       <p class="ajuda-gestor"><b>Gestor:</b> quando o cartão de alguém cai abaixo de <b>R$ 300,00</b>, chega um aviso no sino — <b>"Cartão de (nome) com R$ …"</b> — para você fazer a recarga antes que a pessoa passe a pagar do bolso.</p>\r
     </div>\r
 \r
