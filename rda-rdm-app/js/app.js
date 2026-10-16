@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 413;
+const APP_BUILD = 414;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4937,6 +4937,18 @@ function _notaIncompletaParaPlanilha(n) {
   return !temCnpj || !temNumero;
 }
 
+/* Etiqueta de QUEM PAGOU (16/10/2026, pedido do Cleiton): no regime CV a nota é do cartão da empresa ou da
+   carteira do colaborador (a reembolsar). Quem não é CV não tem essa distinção, então não ganha etiqueta.
+   Faturamento (pagamento='empresa') já é outra coisa e fica sem. `opts.cv` força o regime (a ficha da Equipe
+   já sabe de quem é); sem ele, olha o dono da nota. */
+function _pagamentoBadgeHTML(n, opts = {}) {
+  if (n.pagamento === 'empresa') return '';
+  if (n.pagamento === 'carteira') return `<span class="doc-tag pag-carteira" title="Pago do bolso — a empresa reembolsa">👛 Carteira</span>`;
+  const dono = n.user_id && n.user_id !== user?.id ? equipePorId[n.user_id] : user;
+  const cv = opts.cv != null ? opts.cv : _ehCV(dono);
+  return cv ? `<span class="doc-tag pag-cartao" title="Pago no cartão corporativo — a empresa já pagou">💳 Cartão</span>` : '';
+}
+
 function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
@@ -4949,6 +4961,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${docBadgeHTML(n)}
+          ${_pagamentoBadgeHTML(n, opts)}
           ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${esc(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
           ${!opts.semDono && _ehGestorOuAdmin() && (_ehNotaDeOutroUsuario(n) || !n.user_id)

@@ -605,6 +605,19 @@ window.Gestor = (() => {
       const gasto = g('RDM') + g('RDA');
       const rec = r('RDM') + r('RDA');
       const saldo = rec - gasto;
+
+      /* Regime CV (16/10/2026, pedido do Cleiton): o gasto do mês se divide por QUEM PAGOU — o cartão da empresa
+         ou a carteira do colaborador (a reembolsar). Só leitura: o saldo acima continua com a conta de sempre
+         (decisão de 01/10/2026). "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
+         igual a _devedorDe() do app do colaborador (a recarga do cartão fica fora). */
+      const ehCVcolab = colab.regime === 'cv' && colab.role !== 'contabilidade';
+      const nCartao = notasProprias.filter(n => n.pagamento !== 'carteira');
+      const nCarteira = notasProprias.filter(n => n.pagamento === 'carteira');
+      const gastoCartao = soma(nCartao), gastoCarteira = soma(nCarteira);
+      const aReembolsar = acumOk
+        ? soma(histNotas.filter(n => n.pagamento === 'carteira' && chave(n) <= kAberto))
+          - soma(histReps.filter(x => recebido(x) && !ehRecargaR(x) && chave(x) <= kAberto))
+        : gastoCarteira - rec;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
       const pendReps = reps.filter(x => !recebido(x) && !x.atendido_em).length;   // pedido já pago não é pendência (21/09/2026)
@@ -675,8 +688,16 @@ window.Gestor = (() => {
         </div>
 
         ${ehContador ? '' : `<div class="cdet-kpis">
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">Recebido</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
+          ${ehCVcolab ? `
+          <div class="cdet-kpi"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Cartão corporativo</span><span class="cdet-kpi-val">${brl(gastoCartao)}</span><span class="cdet-kpi-sub">${nCartao.length} nota${nCartao.length === 1 ? '' : 's'} · a empresa já pagou</span></div>
+          <div class="cdet-kpi"><span class="cdet-kpi-ico">👛</span><span class="cdet-kpi-lbl">Carteira (do bolso)</span><span class="cdet-kpi-val">${brl(gastoCarteira)}</span><span class="cdet-kpi-sub">${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} · a empresa reembolsa</span></div>` : `
+          <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>`}
+          <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Reembolso recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
+          ${ehCVcolab ? (aReembolsar > 0.004
+            ? `<div class="cdet-kpi warn"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(aReembolsar)}</span><span class="cdet-kpi-sub">carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
+            : aReembolsar < -0.004
+              ? `<div class="cdet-kpi"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">Reembolsado a mais</span><span class="cdet-kpi-val">${brl(-aReembolsar)}</span><span class="cdet-kpi-sub">acima da carteira${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
+              : `<div class="cdet-kpi"><span class="cdet-kpi-ico">✅</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(0)}</span><span class="cdet-kpi-sub">carteira em dia${acumOk ? ' (acumulado)' : ' no mês'}</span></div>`) : ''}
           <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
@@ -707,7 +728,7 @@ window.Gestor = (() => {
       } else if (typeof cardNotaHTML === 'function') {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
         if (_podeSelNotas) html += selNotasBarraHTML();
-        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
+        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
