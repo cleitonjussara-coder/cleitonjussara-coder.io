@@ -138,9 +138,45 @@ class RelatorioCv
             }
         }
 
+        $this->abrirTotalRecebido($ss);
+
         $ss->setActiveSheetIndex(0);
 
         return $ss;
+    }
+
+    /**
+     * Faixa do topo das abas de gasto — TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO (16/10/2026, pedido do Cleiton).
+     *
+     * No modelo, "TOTAL RECEBIDO" é um rótulo mesclado em G2:J2 e o valor fica em K2 — coluna OCULTA (C, G, K e O são as
+     * colunas "Nº DA NOTA"), então o valor nunca aparecia na tela. Aqui o rótulo encolhe para G2:I2 e o valor passa para
+     * J2, visível, como nos outros dois quadros (rótulo mesclado + valor ao lado).
+     *
+     * Cada aba usa o SEU recebido, o mesmo que o PDF já usava: CARTÃO CORPORATIVO = recargas (BANCO DE DADOS!C95) e
+     * CV REEMBOLSO = reembolsos pagos (BANCO DE DADOS!J95). O modelo ligava as duas ao total de recargas.
+     *
+     * O SALDO do modelo era "=D2-H2", células vazias de rótulos mesclados: dava sempre R$ 0,00. Vira recebido − gasto,
+     * como o "SALDO DE C.V. RECEBIDO" do BANCO DE DADOS e como o PDF (negativo = a empresa ainda deve).
+     */
+    private function abrirTotalRecebido(Spreadsheet $ss): void
+    {
+        $abas = [
+            [$this->abaDoCartao($ss), "='BANCO DE DADOS'!C95"],
+            [$ss->getSheetByName('CV REEMBOLSO'), "='BANCO DE DADOS'!J95"],
+        ];
+        foreach ($abas as [$ws, $recebido]) {
+            /* só mexe se o modelo for o que conhecemos (rótulo em G2): outro layout fica como está */
+            if (! $ws || (string) $ws->getCell('G2')->getValue() !== 'TOTAL RECEBIDO') {
+                continue;
+            }
+            $ws->unmergeCells('G2:J2');
+            $ws->mergeCells('G2:I2');
+            $ws->duplicateStyle($ws->getStyle('K2'), 'J2');   // cinza, negrito 16, centralizado, contorno do quadro
+            $ws->getStyle('J2')->getNumberFormat()->setFormatCode('"R$"\\ #,##0.00');   // o mesmo formato dos outros valores
+            $ws->setCellValue('J2', $recebido);
+            $ws->setCellValue('K2', null);
+            $ws->setCellValue('P2', '=J2-F2');
+        }
     }
 
     /** Lança as notas na grade mensal de 4 categorias (RDM_RDA / CV REEMBOLSO). */
