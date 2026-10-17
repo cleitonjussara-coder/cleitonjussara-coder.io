@@ -890,7 +890,9 @@ window.Recorte = (() => {
     /* 16/10/2026 (Paulo): depois de capturar não havia como desistir — só "Foto inteira" ou "Usar recorte", e quem
        tirou a foto errada tinha que fechar o app e entrar de novo. O X descarta a foto (resolve `false`, que o
        chamador distingue de `null` = "Foto inteira"). Durante o corte em andamento o toque é ignorado. */
-    $('crop-cancelar').addEventListener('click', () => { if (!_ocupado) _fechar(false); });
+    /* opcional (`?.`): um index.html em cache, de antes do botão existir, dava TypeError aqui, o recorte nem abria e a nota
+       era salva sem recortar (relatado em 16/10/2026) */
+    $('crop-cancelar')?.addEventListener('click', () => { if (!_ocupado) _fechar(false); });
     window.addEventListener('resize', () => {
       if ($('crop-overlay').style.display !== 'flex') return;
       _medirImagem(); _rect = _limitar(_rect); _aplicarRect();

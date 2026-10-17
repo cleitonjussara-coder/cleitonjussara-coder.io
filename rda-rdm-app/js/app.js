@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 420;
+const APP_BUILD = 421;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7947,7 +7947,12 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         let rec = null;
-        try { rec = await Recorte.abrir(file); } catch (_) { rec = null; }
+        try { rec = await Recorte.abrir(file); }
+        catch (err) {
+          rec = null;
+          console.error('Recorte não abriu', err);
+          toast('O recorte não abriu — a foto ficou inteira. Feche e abra o app e tente de novo.', 'err');   // antes pulava em silêncio
+        }
         if (rec === false) { _descartarFotoCancelada(); ov.style.display = 'none'; return; }   // X: sem leitura, sem anexo
         alvo = rec || file;
         ov.style.display = 'flex';
