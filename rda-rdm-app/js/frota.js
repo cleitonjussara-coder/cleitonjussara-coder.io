@@ -312,7 +312,7 @@ window.Frota = (() => {
     const meuUltimo = registros.find(x => x.user_id === user?.id);
     const meu = ativos.find(v => v.responsavel_id === user?.id);
     sel.value = r?.veiculo_id || meuUltimo?.veiculo_id || meu?.id || ativos[0].id;
-    $('km-data').value = r?.data || new Date().toISOString().slice(0, 10);
+    $('km-data').value = r?.data || FusoBR.hojeISO();
     $('km-odometro').value = r?.odometro ?? '';
     $('km-obs').value = r?.observacao || '';
     $('km-foto-nome').textContent = r?.foto_path || r?._foto ? '📷 foto já guardada — escolha outra para trocar' : '';

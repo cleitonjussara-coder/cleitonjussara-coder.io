@@ -22,8 +22,10 @@ window.Ponto = (() => {
   ];
   const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const hm = min => { min = Math.max(0, Math.round(Number(min) || 0)); return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`; };
-  const hoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  const agoraHM = () => new Date().toTimeString().slice(0, 5);
+  /* dia e hora SEMPRE de Brasília (16/10/2026), não os do fuso do aparelho */
+  const hoje = () => FusoBR.hojeISO();
+  const agoraHM = () => FusoBR.hora(new Date(), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const diaSemanaBR = () => new Date(hoje() + 'T12:00:00').getDay();
 
   let dias = [];          // registros do mês (visíveis)
   let resumo = null;      // GET /ponto/resumo
@@ -114,13 +116,13 @@ window.Ponto = (() => {
       </button>
 
       <div class="db-card">
-        <div class="db-card-title"><span>Hoje · ${fmtData(hoje())} (${DIAS[new Date().getDay()]})</span>
+        <div class="db-card-title"><span>Hoje · ${fmtData(hoje())} (${DIAS[diaSemanaBR()]})</span>
           ${h.meu ? `<button class="btn btn-sm btn-outline" onclick="Ponto.abrirForm('${h.meu.id}')">Corrigir</button>` : ''}</div>
         <div class="ponto-marcs">
           ${h.feitas.map(m => `<div class="ponto-marc ${m.hora ? 'ok' : ''} ${m.pendente ? 'pend' : ''}"><span class="ponto-marc-ico">${m.ico}</span><span class="ponto-marc-rot">${m.rot}</span><span class="ponto-marc-h">${m.hora || '—'}${m.pendente ? ' ⏳' : ''}</span></div>`).join('')}
         </div>
         ${h.meu && h.meu.minutos ? `<div class="ponto-hoje-tot">Trabalhado: <b>${hm(h.meu.minutos)}</b>${h.meu.extra50 ? ` · extra 50%: <b>${hm(h.meu.extra50)}</b>` : ''}${h.meu.extra100 ? ` · extra 100%: <b>${hm(h.meu.extra100)}</b>` : ''}</div>` : ''}
-        ${h.meu?.feriado ? `<div class="ponto-hoje-tot">🎉 Feriado: ${esc(h.meu.feriado)} — horas contam como extra 100%</div>` : (new Date().getDay() === 0 ? '<div class="ponto-hoje-tot">Domingo — horas contam como extra 100%</div>' : '')}
+        ${h.meu?.feriado ? `<div class="ponto-hoje-tot">🎉 Feriado: ${esc(h.meu.feriado)} — horas contam como extra 100%</div>` : (diaSemanaBR() === 0 ? '<div class="ponto-hoje-tot">Domingo — horas contam como extra 100%</div>' : '')}
       </div>
 
       <div class="page-hd" style="padding:0">
@@ -185,7 +187,7 @@ window.Ponto = (() => {
     el.innerHTML = html;
     _timer = setInterval(() => { const r = $('ponto-relogio'); if (r) r.textContent = _relogioTxt(); }, 1000);
   }
-  function _relogioTxt() { const d = new Date(); return `${d.toLocaleDateString('pt-BR', { weekday: 'long' })}, ${d.toLocaleTimeString('pt-BR')}`; }
+  function _relogioTxt() { const d = new Date(); return `${FusoBR.data(d, { weekday: 'long' })}, ${FusoBR.hora(d)}`; }
 
   /* ── Dashboard ──────────────────────────────────────────── */
   function _dashboardHTML(gestor, periodo) {

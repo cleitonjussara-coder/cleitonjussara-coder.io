@@ -290,8 +290,16 @@ class NotaController extends Controller
         }
 
         if ($r->boolean('detalhe')) {
+            /* 16/10/2026: DB::table devolve a data crua ("2026-10-17 00:57:00", em UTC e SEM fuso), diferente dos models, que
+               saem em ISO com "Z". O Histórico lia essa data como horário local — mostrava 00:57 de 17/10 para um apagamento
+               das 21:57 de 16/10 — e a ordenava como texto, fora de lugar. Agora sai em ISO UTC, como o resto. */
             return response()->json(
                 $q->orderByDesc('apagada_em')->limit(500)->get(['id', 'user_id', 'apagada_por', 'apagada_em'])
+                    ->map(function ($l) {
+                        $l->apagada_em = $l->apagada_em ? \Carbon\Carbon::parse($l->apagada_em, 'UTC')->toISOString() : null;
+
+                        return $l;
+                    })->values()
             );
         }
 

@@ -104,7 +104,7 @@ class BackupController extends Controller
         $this->completo->copiarBanco($tmp);   // VACUUM INTO ou SQLite3::backup (Locaweb tem SQLite 3.26)
 
         return response()
-            ->download($tmp, 'petermann-'.now()->format('Y-m-d').'.sqlite', ['Content-Type' => 'application/vnd.sqlite3'])
+            ->download($tmp, 'petermann-'.now(\App\Services\PontoCalculo::TZ)->format('Y-m-d').'.sqlite', ['Content-Type' => 'application/vnd.sqlite3'])   // data de Brasília no nome
             ->deleteFileAfterSend(true);
     }
 }

@@ -341,8 +341,8 @@ window.Gestor = (() => {
 
   /* ── Dashboard principal ──────────────────────────────── */
   async function renderDashboard(el, sb, currentUser, onRebuild, options = {}) {
-    const mes = options.mes || new Date().getMonth() + 1;
-    const ano = options.ano || new Date().getFullYear();
+    const mes = options.mes || FusoBR.partes().mes;
+    const ano = options.ano || FusoBR.partes().ano;
 
     _ctx = { el, sb, currentUser, onRebuild };
     if (_detalheId) return renderColaborador(el, sb, currentUser, _detalheId, mes, ano);
@@ -578,7 +578,7 @@ window.Gestor = (() => {
                 <div class="avatar" data-foto="${esc(m.foto_path||'')}">${esc(ini(m.nome))}</div>
                 <div class="colab-info">
                   <div class="colab-nome">${esc(m.nome||m.email)}</div>
-                  <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + new Date(m.desativado_em).toLocaleDateString('pt-BR') : ''}</div>
+                  <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + FusoBR.data(m.desativado_em) : ''}</div>
                 </div>
                 ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>` : ''}
               </div>
@@ -813,8 +813,8 @@ window.Gestor = (() => {
          navegação — o seletor lá do alto ficava fora de vista, e o repasse
          lançado para outro mês parecia ter sumido. A conferência mês a mês
          agora se faz sem sair daqui. */
-      const _hojeD = new Date();
-      const _ehMesAtual = mes === _hojeD.getMonth() + 1 && ano === _hojeD.getFullYear();
+      const _hojeD = FusoBR.partes();
+      const _ehMesAtual = mes === _hojeD.mes && ano === _hojeD.ano;
       const recebidos = reps.filter(recebido);
       const ehRecarga = x => x.destino === 'recarga';
       const recRDM = soma(recebidos.filter(x => x.tipo === 'RDM' && !ehRecarga(x)));
@@ -1110,7 +1110,7 @@ window.Gestor = (() => {
   async function excelAnualColab(id) {
     const colab = _cvEquipe?.collabs.find(c => c.id === id) || (typeof equipePorId !== "undefined" ? equipePorId[id] : null);
     if (!colab) { toast('Colaborador não encontrado', 'err'); return; }
-    const ano = _anoFicha || _cvEquipe?.ano || new Date().getFullYear();
+    const ano = _anoFicha || _cvEquipe?.ano || FusoBR.partes().ano;
     const ns = (typeof notasEquipe !== "undefined" ? notasEquipe : []).filter(n => n.user_id === id && !n.deleted);   // let global do app.js: visível aqui, mas não em window.*
     const rs = (typeof repassesEquipe !== "undefined" ? repassesEquipe : []).filter(r => r.user_id === id && !r.deleted);
     if (!ns.length && !rs.length) { toast(`Sem lançamentos de ${colab.nome || colab.email} neste aparelho`, 'err'); return; }
@@ -1166,7 +1166,7 @@ window.Gestor = (() => {
             <label class="lbl">Situação</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               ${inativo
-                ? `🚫 <b>Desativado</b>${colab.desativado_em ? ' em ' + new Date(colab.desativado_em).toLocaleDateString('pt-BR') : ''}. Não entra no app e não aparece na equipe; o histórico continua.`
+                ? `🚫 <b>Desativado</b>${colab.desativado_em ? ' em ' + FusoBR.data(colab.desativado_em) : ''}. Não entra no app e não aparece na equipe; o histórico continua.`
                 : '✅ <b>Ativo.</b> Desativar tira a pessoa do app e das listas, sem apagar nada — dá para reativar depois.'}
             </p>
             <button class="btn btn-outline btn-full" id="g-ativo">${inativo ? '↩️ Reativar colaborador' : '🚫 Desativar colaborador'}</button>

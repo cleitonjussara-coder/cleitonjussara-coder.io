@@ -10,6 +10,30 @@
      (foto_path). Para <img> usa-se URL assinada (fotos.urls); para
      baixar, fotos.download (Bearer).
 ───────────────────────────────────────────────────────────── */
+/* Fuso de Brasília (16/10/2026, pedido do Cleiton: "usar sempre o fuso horário de Brasília"). Toda hora mostrada e todo
+   "hoje"/mês atual tirado do relógio passam por aqui, qualquer que seja o fuso do aparelho. Antes cada tela usava o relógio
+   local do aparelho — e o "hoje" por toISOString() era o dia em UTC, que vira "amanhã" depois das 21h em Brasília. O mesmo
+   arquivo roda na página e no service worker, por isso globalThis. */
+globalThis.FusoBR = (() => {
+  const TZ = 'America/Sao_Paulo';
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  /** Partes do instante `d` no horário de Brasília: { ano, mes, dia, hora, min, seg }. */
+  const partes = (d = new Date()) => {
+    const o = {};
+    fmt.formatToParts(new Date(d)).forEach(p => { o[p.type] = p.value; });
+    return { ano: +o.year, mes: +o.month, dia: +o.day, hora: +o.hour % 24, min: +o.minute, seg: +o.second };
+  };
+  const p2 = n => String(n).padStart(2, '0');
+  /** O dia de Brasília do instante `d`, como aaaa-mm-dd. */
+  const hojeISO = d => { const p = partes(d); return p.ano + '-' + p2(p.mes) + '-' + p2(p.dia); };
+  const dataHora = (d, opts) => new Date(d).toLocaleString('pt-BR', { timeZone: TZ, ...opts });
+  const data = (d, opts) => new Date(d).toLocaleDateString('pt-BR', { timeZone: TZ, ...opts });
+  const hora = (d, opts) => new Date(d).toLocaleTimeString('pt-BR', { timeZone: TZ, ...opts });
+  return { TZ, partes, hojeISO, dataHora, data, hora };
+})();
+
 globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e no service worker (envio em segundo plano)
   /* Produção: subdomínio da API. Em desenvolvimento local (http-server na
      8080 + `php artisan serve` na 8000) cai no segundo. */
@@ -79,9 +103,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     const agora = _horaServidor
       ? new Date(_horaServidor.hora + (Date.now() - _horaServidor.lidoEm))
       : new Date();
-    const p = n => String(n).padStart(2, '0');
 
-    return agora.getFullYear() + '-' + p(agora.getMonth() + 1) + '-' + p(agora.getDate());
+    return FusoBR.hojeISO(agora);   // o dia de Brasília, não o do fuso do aparelho
   }
 
   /* Instante atual segundo o servidor, em ms (ou do aparelho, se ninguém

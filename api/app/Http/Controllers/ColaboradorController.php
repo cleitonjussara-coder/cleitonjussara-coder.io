@@ -272,8 +272,14 @@ class ColaboradorController extends Controller
             $q->where('alterado_em', '>=', $since);
         }
 
+        /* 16/10/2026: data em ISO UTC com "Z" (DB::table a devolve crua, sem fuso, e o Histórico a lia como horário local). */
         return response()->json(
             $q->orderByDesc('alterado_em')->limit(500)->get(['id', 'colaborador_id', 'campo', 'de', 'para', 'alterado_por', 'alterado_em'])
+                ->map(function ($l) {
+                    $l->alterado_em = $l->alterado_em ? \Carbon\Carbon::parse($l->alterado_em, 'UTC')->toISOString() : null;
+
+                    return $l;
+                })->values()
         );
     }
 

@@ -4,6 +4,20 @@
    Servidor: Petermann API (Laravel + MySQL na Locaweb) — ver js/api.js.
    O endereço da API está lá; aqui não há credencial nenhuma.
 ───────────────────────────────────────────────────────────── */
+/* Rede de segurança do fuso de Brasília (16/10/2026). FusoBR mora no api.js; se um aparelho ficar com um api.js de versão
+   anterior em cache (sem ele), `FusoBR.partes()` aqui embaixo derrubava o app inteiro já no carregamento — o mesmo tipo de
+   descompasso que fez a tela de recorte ser pulada. Esta cópia mínima só entra quando o api.js não trouxe o dele. */
+globalThis.FusoBR ||= (() => {
+  const TZ = 'America/Sao_Paulo';
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  const partes = (d = new Date()) => { const o = {}; f.formatToParts(new Date(d)).forEach(p => { o[p.type] = p.value; }); return { ano: +o.year, mes: +o.month, dia: +o.day, hora: +o.hour % 24, min: +o.minute, seg: +o.second }; };
+  const hojeISO = d => { const p = partes(d); return p.ano + '-' + String(p.mes).padStart(2, '0') + '-' + String(p.dia).padStart(2, '0'); };
+  return { TZ, partes, hojeISO,
+    dataHora: (d, o) => new Date(d).toLocaleString('pt-BR', { timeZone: TZ, ...o }),
+    data: (d, o) => new Date(d).toLocaleDateString('pt-BR', { timeZone: TZ, ...o }),
+    hora: (d, o) => new Date(d).toLocaleTimeString('pt-BR', { timeZone: TZ, ...o }) };
+})();
+
 const DEMO_MODE = false;   // modo demo antigo (sem servidor); "Usar sem conta" continua existindo
 
 /* Login social. Só o Google está ligado: o backend faz o OAuth
@@ -34,8 +48,8 @@ function _notaPorId(id) {
 let repasses  = [];
 let driveOk   = false;
 let viewAtual = 'home';
-let filMes    = new Date().getMonth() + 1;
-let filAno    = new Date().getFullYear();
+let filMes    = FusoBR.partes().mes;
+let filAno    = FusoBR.partes().ano;   // mês e ano de Brasília
 let _drivePullInterval = null;
 let filtroPeriodo = 'mensal';
 let equipePorId = {};
@@ -65,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 424;
+const APP_BUILD = 426;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -95,7 +109,7 @@ const TRIMESTRES = [
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
-const hoje = () => new Date().toISOString().split('T')[0];
+const hoje = () => FusoBR.hojeISO();   // o dia de BRASÍLIA (antes: o dia em UTC, que virava "amanhã" depois das 21h)
 const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const $    = id => document.getElementById(id);
 const fmtData = d => { try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR'); } catch(_){return d;} };
@@ -919,13 +933,13 @@ function _pintarBarraUsuario() {
   const conteudo = $('barra-usuario-conteudo');
   if (!el || !conteudo) return;
   if (!user || _telaAtual !== 'app') { el.style.display = 'none'; if (avEl) avEl.innerHTML = ''; return; }
-  const hora = new Date().getHours();
+  const hora = FusoBR.partes().hora;
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
-  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, weekday: 'long', day: '2-digit', month: 'long' });
   /* versão curta para o celular: "23 set" cabe ao lado da etiqueta do papel
      sem empurrar a saudação para a segunda linha (23/09/2026) */
-  const hojeCurto = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+  const hojeCurto = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: 'short' }).replace('.', '');
   const papel = user?.role || 'colaborador';
   el.style.display = '';
   if (avEl) avEl.innerHTML = `
@@ -2267,7 +2281,7 @@ function _dataNoFuturo(data) {
   /* 24/09/2026: "hoje" vem do SERVIDOR quando ele já respondeu alguma coisa.
      Com o relógio do aparelho adiantado, o app achava que amanhã era hoje e
      deixava passar — e o lançamento nascia no futuro. */
-  const hoje = new Date((sb?.hojeDoServidor?.() || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
+  const hoje = new Date((sb?.hojeDoServidor?.() || FusoBR.hojeISO()) + 'T00:00:00');
   hoje.setHours(23, 59, 59, 999);
   if (d <= hoje) return null;
   const dias = Math.round((d - hoje) / 86400000);
@@ -3127,9 +3141,11 @@ const LANC_DIAS_AVISO = 4;    // a partir daqui a faixa fica amarela
 const LANC_DIAS_LIMITE = 7;   // uma semana: faixa vermelha / nota atrasada
 function _diaLocalMs(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
-  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  const d = new Date(v);
   if (isNaN(d)) return null;
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const p = FusoBR.partes(d);   // um instante (agora, updated_at…) vale pelo DIA de Brasília
+  return new Date(p.ano, p.mes - 1, p.dia).getTime();
 }
 function _diasAtras(v) {
   const dia = _diaLocalMs(v);
@@ -3158,10 +3174,10 @@ function _faixaLancamentoDiarioHTML() {
 
 function renderInicio() {
   const A = _agregaPeriodo(filMes, filAno, 'mensal');
-  const hora = new Date().getHours();
+  const hora = FusoBR.partes().hora;
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
-  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, weekday: 'long', day: '2-digit', month: 'long' });
 
   _recalcularDuplicatas(notas);
   /* 24/09/2026: os contadores separados (sem anexo, sem valor, sem CNPJ…)
@@ -3467,8 +3483,8 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
    em foco: uma nota fora da janela é, por definição, invisível no período. */
 const JANELA_PASSADO_MESES = 24;
 function _dataImplausivel(n) {
-  const agora = new Date();
-  const kAgora = agora.getFullYear() * 12 + (agora.getMonth() + 1);
+  const _ag = FusoBR.partes();
+  const kAgora = _ag.ano * 12 + _ag.mes;
   const k = Number(n.ano) * 12 + Number(n.mes);
   if (!Number.isFinite(k)) return true;                 // mes/ano ausente ou corrompido
   return k > kAgora || k < kAgora - JANELA_PASSADO_MESES;
@@ -3875,10 +3891,10 @@ function renderHome() {
   /* ── Ritmo de gasto e projeção (só no modo mês) ──────────── */
   let ritmoHtml = '';
   if (modo === 'mensal') {
-    const agora     = new Date();
-    const ehAtual   = filMes === agora.getMonth()+1 && filAno === agora.getFullYear();
+    const agora     = FusoBR.partes();
+    const ehAtual   = filMes === agora.mes && filAno === agora.ano;
     const diasMes   = new Date(filAno, filMes, 0).getDate();
-    const corridos  = ehAtual ? agora.getDate() : diasMes;
+    const corridos  = ehAtual ? agora.dia : diasMes;
     const mediaDia  = corridos ? A.gasto / corridos : 0;
     const projecao  = mediaDia * diasMes;
     const diasComNota = new Set(A.ns.map(n => _dataDe(n).slice(0,10)).filter(Boolean)).size;
@@ -4413,7 +4429,7 @@ async function renderNotasApagadas() {
   }
   const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
   const fmtHora = d => {
-    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    try { return new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return '—'; }
   };
 
@@ -4867,7 +4883,7 @@ function _notasComPendencia() {
 function _fmtEnvioServidor(n) {
   if (!n.updated_at) return null;
   try {
-    return new Date(n.updated_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return new Date(n.updated_at).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   } catch (_) { return null; }
 }
 
@@ -5328,8 +5344,8 @@ function garantirNotasNaLista(lista) {
 }
 
 function irParaMesAtualEquipe() {
-  const h = new Date();
-  filMes = h.getMonth() + 1; filAno = h.getFullYear();
+  const h = FusoBR.partes();
+  filMes = h.mes; filAno = h.ano;
   renderEquipe();
   _garantirAnoEmFoco();
 }
@@ -5817,7 +5833,7 @@ async function _mostrarBackupDrive() {
     _pintarCartaoPush().catch(() => {});
     const el = $('backup-drive');
     if (!el) return;
-    const q = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const q = d => d ? new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
     if (!s.conectado) {
       el.innerHTML = `
         <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
@@ -5940,7 +5956,7 @@ async function _mostrarArmazenamento() {
       <p style="margin-top:10px">${tend}</p>
       <p style="margin-top:4px">${backup}</p>
       ${vol}
-      <p style="margin-top:6px;opacity:.7;font-size:13.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR')}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
+      <p style="margin-top:6px;opacity:.7;font-size:13.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR', { timeZone: FusoBR.TZ })}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
   } catch (e) {
     const el = $('armazenamento-card');
     if (el) el.textContent = 'Não consegui medir o armazenamento: ' + (e.message || 'erro');
