@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 421;
+const APP_BUILD = 422;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3188,6 +3188,24 @@ function renderInicio() {
   if (!_ehContabilidade()) {
     if (_ehCartaoIni) {
       _cats = _composicaoGastos(A);
+      /* 16/10/2026 (pedido do Cleiton): o resumo também aparece para o C.V., com gasto do cartão e da carteira, o saldo do
+         cartão e o reembolso a receber — as mesmas contas do Saldo (_saldoCartao e _devedorDe), só leitura. As duas linhas
+         aparecem sempre: o saldo do cartão e o que falta reembolsar valem mesmo num mês sem gasto de um dos lados. */
+      const _nsCv = notas.filter(n => !n.deleted), _rsCv = repasses.filter(r => !r.deleted);
+      const _saldoCart = _saldoCartao();
+      const _aReemb = _devedorDe(_nsCv, _rsCv, filMes, filAno, true);
+      /* RDM e RDA lançados no cartão e lançados na carteira (pedido do Cleiton): o gasto de cada lado aberto por aba */
+      const _gasto = (carteira, tipo) => _soma(A.ns.filter(x => _naoEhFaturamento(x) && x.tipo === tipo
+        && (carteira ? x.pagamento === 'carteira' : _notaDoCartao(x))));
+      const _det = carteira => 'RDM ' + brlCurto(_gasto(carteira, 'RDM')) + ' · RDA ' + brlCurto(_gasto(carteira, 'RDA'));
+      _tipos = [
+        { sigla: '💳 Cartão', cor: 'var(--accent-d)', gasto: A.gastoCartao,
+          txt: _saldoCart == null ? '' : 'saldo ' + brlCurto(_saldoCart) + (_saldoCart < CARTAO_SALDO_MINIMO ? ' · acabando' : ''),
+          cls: _saldoCart != null && _saldoCart < CARTAO_SALDO_MINIMO ? 'receber' : 'adiantado', det: _det(false) },
+        { sigla: '👛 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
+          txt: _aReemb > 0.004 ? brlCurto(_aReemb) + ' a receber' : _aReemb < -0.004 ? brlCurto(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
+          cls: _aReemb > 0.004 ? 'receber' : 'adiantado', det: _det(true) },
+      ];
     } else {
       const _nsAll = notas.filter(n => !n.deleted), _rsAll = repasses.filter(r => !r.deleted);
       _cats = [
@@ -3211,9 +3229,10 @@ function renderInicio() {
         <span class="ini-resumo-seta">›</span>
       </div>
       ${_tipos.length ? `<div class="ini-resumo-tipos">${_tipos.map(t => `
-        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}<span class="ini-resumo-saldo ${t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : ''}">${
-          t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
-        }</span></div>`).join('')}</div>`
+        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}${t.txt === '' ? '' : `<span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
+          t.txt != null ? esc(t.txt)
+          : t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
+        }</span>`}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}</div>`).join('')}</div>`
         : `<div class="ini-resumo-tipos">${_cats.slice(0, 3).map(c => `<div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}</div>`}
     </div>` : '';
 
