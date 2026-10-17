@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 418;
+const APP_BUILD = 419;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4961,7 +4961,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
   return `
-      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
+      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}" data-pag="${n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao'}">
         ${_ehContabilidade() ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">`}
         ${n.foto_path||n.foto_local ? `
         <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
