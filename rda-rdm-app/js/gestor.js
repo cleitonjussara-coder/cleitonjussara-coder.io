@@ -227,6 +227,8 @@ window.Gestor = (() => {
      daquele pagamento. Vale para a ficha/mês abertos (chave) e sobrevive ao redesenho depois de corrigir/excluir nota. */
   let _filtroNotas = null;      // { chave, tipo: 'cartao' | 'carteira' }
   let _chaveFichaAtual = null;
+  /* Idem para a lista de repasses (16/10/2026): Repasse recebido lista os repasses, Recarga do cartão lista as recargas. */
+  let _filtroReps = null;       // { chave, tipo: 'repasse' | 'recarga' }
   function mesRepasses(delta) {
     _rolarParaRepasses = true;
     if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
@@ -234,6 +236,32 @@ window.Gestor = (() => {
   /* Toque no cartão "Recebido" da ficha (16/10/2026, Paulo/Cleiton): desce até a lista de repasses do mês aberto. Antes o
      cartão parecia botão e não fazia nada. */
   /* Cartões de gasto da ficha (Cartão, Carteira, Gasto no mês) descem até a lista de notas do mês. */
+  const _ROT_FILTRO_REP = { repasse: 'Repasses', recarga: 'Recargas do cartão' };
+  function _aplicarFiltroReps() {
+    const f = _filtroReps && _filtroReps.chave === _chaveFichaAtual ? _filtroReps.tipo : null;
+    const itens = [...document.querySelectorAll('#cdet-replista .cdet-rep')];
+    itens.forEach(it => { it.style.display = (!f || it.dataset.dest === f) ? '' : 'none'; });
+    document.querySelectorAll('.cdet-kpi[data-filtro-rep]').forEach(k => k.classList.toggle('ativo', k.dataset.filtroRep === f));
+    const info = document.getElementById('cdet-filtro-reps');
+    const visiveis = itens.filter(it => it.style.display !== 'none');
+    if (info) {
+      info.style.display = f ? 'flex' : 'none';
+      if (f) info.querySelector('.txt').textContent = !visiveis.length
+        ? `Nenhum item de ${_ROT_FILTRO_REP[f]} neste mês.`
+        : `Só ${_ROT_FILTRO_REP[f]}: ${visiveis.length} de ${itens.length}`;
+    }
+    const n = document.getElementById('cdet-seltodos-n'); if (n) n.textContent = visiveis.length;
+    const ocultos = new Set(itens.filter(it => it.style.display === 'none').map(it => it.querySelector('.rep-chk')?.value).filter(Boolean));
+    [..._selRep].forEach(id => { if (ocultos.has(id)) _selRep.delete(id); });   // escondido não fica selecionado: nunca se exclui o que não se vê
+    _selAtualizar();
+  }
+  /* tipo = 'repasse' | 'recarga'; tocar de novo no mesmo cartão (ou "Mostrar todos") volta à lista inteira */
+  function filtrarRepasses(tipo) {
+    if (!tipo || (_filtroReps && _filtroReps.tipo === tipo)) _filtroReps = null;
+    else _filtroReps = { chave: _chaveFichaAtual, tipo };
+    _aplicarFiltroReps();
+    if (_filtroReps) irParaRepasses();
+  }
   const _ROT_FILTRO = { cartao: 'Cartão corporativo', carteira: 'Carteira (do bolso)' };
   function _aplicarFiltroNotas() {
     const f = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas.tipo : null;
@@ -301,7 +329,7 @@ window.Gestor = (() => {
   function marcarTodosRepasses(on) {
     const s = _selBarra(); if (!s) return;
     _selRep.clear();
-    if (on) s.chks.forEach(c => _selRep.add(c.value));
+    if (on) s.chks.filter(c => c.closest('.cdet-rep')?.style.display !== 'none').forEach(c => _selRep.add(c.value));   // o que o filtro escondeu não entra
     _selAtualizar();
   }
   async function excluirSelecionados() {
@@ -593,6 +621,7 @@ window.Gestor = (() => {
     const chaveFicha = `${id}|${ano}|${mes}`;
     _chaveFichaAtual = chaveFicha;
     if (_filtroNotas && _filtroNotas.chave !== chaveFicha) _filtroNotas = null;   // outro mês ou outra pessoa: lista inteira
+    if (_filtroReps && _filtroReps.chave !== chaveFicha) _filtroReps = null;
     const seq = ++_fichaSeq;
     const fichaAntes = el.querySelector('.cdet');
     if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
@@ -657,6 +686,7 @@ window.Gestor = (() => {
          (decisão de 01/10/2026). "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
          igual a _devedorDe() do app do colaborador (a recarga do cartão fica fora). */
       const ehCVcolab = colab.regime === 'cv' && colab.role !== 'contabilidade';
+      const acaoRec = ehCVcolab ? "Gestor.filtrarRepasses('repasse')" : 'Gestor.irParaRepasses()';
       const nCartao = notasProprias.filter(n => n.pagamento !== 'carteira');
       const nCarteira = notasProprias.filter(n => n.pagamento === 'carteira');
       const gastoCartao = soma(nCartao), gastoCarteira = soma(nCarteira);
@@ -738,8 +768,8 @@ window.Gestor = (() => {
           <div class="cdet-kpi link" role="button" tabindex="0" data-filtro="cartao" title="Listar só as notas do cartão" onclick="Gestor.filtrarNotas('cartao')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('cartao')}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Cartão corporativo</span><span class="cdet-kpi-val">${brl(gastoCartao)}</span><span class="cdet-kpi-sub">${nCartao.length} nota${nCartao.length === 1 ? '' : 's'} · a empresa já pagou <span aria-hidden="true">↓</span></span></div>
           <div class="cdet-kpi link" role="button" tabindex="0" data-filtro="carteira" title="Listar só as notas de carteira" onclick="Gestor.filtrarNotas('carteira')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('carteira')}"><span class="cdet-kpi-ico">👛</span><span class="cdet-kpi-lbl">Carteira (do bolso)</span><span class="cdet-kpi-val">${brl(gastoCarteira)}</span><span class="cdet-kpi-sub">${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} · a empresa reembolsa <span aria-hidden="true">↓</span></span></div>` : `
           <div class="cdet-kpi link" role="button" tabindex="0" title="Ver as notas do mês" onclick="Gestor.irParaNotas()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaNotas()}"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span></span></div>`}
-          <div class="cdet-kpi link" role="button" tabindex="0" title="Ver a lista de repasses do mês" onclick="Gestor.irParaRepasses()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaRepasses()}"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(r('RDM'), r('RDA'))}</div>
-          ${ehCVcolab ? `<div class="cdet-kpi link" role="button" tabindex="0" title="Ver a lista de repasses e recargas do mês" onclick="Gestor.irParaRepasses()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaRepasses()}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}</div>` : ''}
+          <div class="cdet-kpi link" role="button" tabindex="0" title="${ehCVcolab ? 'Listar só os repasses' : 'Ver a lista de repasses do mês'}" onclick="${acaoRec}" ${ehCVcolab ? 'data-filtro-rep="repasse"' : ''} onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${acaoRec}}"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(r('RDM'), r('RDA'))}</div>
+          ${ehCVcolab ? `<div class="cdet-kpi link" role="button" tabindex="0" data-filtro-rep="recarga" title="Listar só as recargas" onclick="Gestor.filtrarRepasses('recarga')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarRepasses('recarga')}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}</div>` : ''}
           ${ehCVcolab ? (aReembolsar > 0.004
             ? `<div class="cdet-kpi warn"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(aReembolsar)}</span><span class="cdet-kpi-sub">carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
             : aReembolsar < -0.004
@@ -808,18 +838,19 @@ window.Gestor = (() => {
           ${recCartao ? `<span>💳 <b>Recarga do cartão</b> ${brl(recCartao)}</span>` : ''}
         </div>`;
       }
+      if (ehCVcolab && reps.length) html += '<div id="cdet-filtro-reps" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarRepasses(null)">Mostrar todos</button></div>';
       if (!reps.length) {
         html += `<div class="empty-state" style="padding:24px 14px">Nenhum repasse em ${MESES_LONGO[mes-1]} de ${ano}. Use ‹ › para ver outros meses.</div>`;
       } else {
         if (podeEditar) html += `<div id="cdet-selbar" class="cdet-selbar" style="display:none">
           <span class="sel-qtd"></span>
-          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(true)">marcar todos (${reps.length})</a>
+          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(true)">marcar todos (<span id="cdet-seltodos-n">${reps.length}</span>)</a>
           <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(false)">limpar</a>
           <button class="btn btn-sm btn-danger-outline sel-excluir" onclick="Gestor.excluirSelecionados()" disabled>🗑 Excluir</button>
           <button class="btn btn-sm btn-outline" onclick="Gestor.selecionarRepasses(false)">Cancelar</button>
         </div>`;
         html += `<div class="colab-list" id="cdet-replista">${reps.map(x => `
-          <div class="rep-item cdet-rep" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
+          <div class="rep-item cdet-rep" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
             ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${x.id}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
             <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
             <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
@@ -842,6 +873,7 @@ window.Gestor = (() => {
       _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
       if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
       _aplicarFiltroNotas();   // o filtro por Cartão/Carteira continua depois de corrigir ou excluir uma nota
+      _aplicarFiltroReps();    // idem para Repasse/Recarga
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
@@ -1240,5 +1272,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

@@ -65,7 +65,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 419;
+const APP_BUILD = 420;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -4749,6 +4749,8 @@ function renderNotas() {
     </div>
     <div class="fil-tipo">
       <button class="chip active" data-fil="all"  onclick="filtrarTipo(this)">Todas</button>
+      ${_usaCartao() ? `<button class="chip" data-fil="cartao"   onclick="filtrarTipo(this)">💳 Cartão</button>
+      <button class="chip" data-fil="carteira" onclick="filtrarTipo(this)">👛 Carteira</button>` : ''}
       <button class="chip"        data-fil="RDA"  onclick="filtrarTipo(this)">RDA</button>
       <button class="chip"        data-fil="RDM"  onclick="filtrarTipo(this)">RDM</button>
       <button class="chip" onclick="switchView('lixeira')">🗑 Apagados</button>
@@ -5087,8 +5089,10 @@ function filtrarTipo(btn) {
   document.querySelectorAll('.fil-tipo .chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const f = btn.dataset.fil;
+  /* 16/10/2026: Cartão/Carteira (regime CV) olham quem pagou (data-pag); RDA/RDM olham a aba (data-tipo) */
+  const porPagamento = f === 'cartao' || f === 'carteira';
   document.querySelectorAll('.nota-card').forEach(c =>
-    c.style.display = (f==='all' || c.dataset.tipo===f) ? '' : 'none'
+    c.style.display = (f==='all' || (porPagamento ? c.dataset.pag === f : c.dataset.tipo === f)) ? '' : 'none'
   );
   _selNotasAtualizar();   // o que o filtro escondeu sai da seleção — nunca se exclui o que não se vê
 }
