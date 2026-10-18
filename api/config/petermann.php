@@ -70,6 +70,17 @@ return [
         'limite_dia_notas' => (int) env('NOTA_IA_LIMITE_DIA', 80),
     ],
 
+    /* Assistente de código (RAG sobre o próprio app). Desligado por padrão.
+       O índice (rag.sqlite) fica FORA do banco de produção e fora do web root. */
+    'rag' => [
+        'ativo' => filter_var(env('RAG_ATIVO', false), FILTER_VALIDATE_BOOLEAN),
+        'caminho' => env('RAG_CAMINHO', storage_path('app/rag.sqlite')),
+        'openai_key' => env('OPENAI_API_KEY'),
+        'modelo_embedding' => env('RAG_MODELO_EMBEDDING', 'text-embedding-3-small'),
+        'modelo_resposta' => env('RAG_MODELO_RESPOSTA', 'claude-sonnet-5-5'),
+        'limite_dia' => (int) env('RAG_LIMITE_DIA', 50),
+    ],
+
     /* Só para desenvolvimento no Windows (curl do PHP sem CA): caminho de um
        ca-bundle.crt. Em produção fica vazio e o PHP usa o do sistema. */
     'ca_bundle' => env('CA_BUNDLE'),

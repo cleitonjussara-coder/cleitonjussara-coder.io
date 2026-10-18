@@ -14,6 +14,7 @@ use App\Http\Controllers\NotaController;
 use App\Http\Controllers\PontoController;
 use App\Http\Controllers\RastreioController;
 use App\Http\Controllers\RelatorioController;
+use App\Http\Controllers\RagController;
 use App\Http\Controllers\RepasseController;
 use App\Http\Middleware\ExigeConfirmacao;
 use App\Http\Middleware\SomenteLeitura;
@@ -138,4 +139,8 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
 
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);
     Route::put('/cnpj/{cnpj}', [CnpjController::class, 'upsert']);
+
+    /* assistente de código (RAG sobre o próprio app) — desligado por RAG_ATIVO.
+       Não está na lista do SomenteLeitura: o perfil Contador fica fora por padrão. */
+    Route::post('/rag/perguntar', [RagController::class, 'perguntar'])->middleware('throttle:30,1');
 });
