@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v427';
+const CACHE   = 'petermann-v428';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -59,7 +59,7 @@ const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
    db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
    normal e só o envio em segundo plano fica de fora. */
 let _importErro = null;
-try { importScripts('./js/api.js?v=427', './js/db.js?v=427'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
+try { importScripts('./js/api.js?v=428', './js/db.js?v=428'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
