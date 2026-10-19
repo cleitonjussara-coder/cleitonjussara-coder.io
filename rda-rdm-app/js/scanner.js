@@ -26,7 +26,7 @@ window.Scanner = (() => {
   const AREA_MIN  = 0.10;        // menor fração do quadro que vale como "a nota"
   const AREA_MAX  = 0.95;        // acima disso o "papel" é o fundo (mesa branca)
   const PREENCHE  = 0.80;        // quanto do quadrilátero tem que ser papel (letra e QR são buracos, mas poucos)
-  const FOLGA     = 0.015;       // folga do contorno, fração do lado médio do papel
+  const FOLGA     = 0.01;        // folga do contorno, fração do lado médio do papel
   const MAX_SAIDA = 3000;        // maior lado da página endireitada
   const GRAD_BORDA = 22;         // degrau de brilho (0..255, entre vizinhos a 2 px) que já é borda do papel e barra o crescimento
   const BORDA     = 0.012;       // canto a menos que isto da borda do quadro = papel cortado
@@ -229,7 +229,7 @@ window.Scanner = (() => {
        dobrado), mais a folga (1 px da erosão + FOLGA do tamanho do papel) para a letra da borda não encostar no corte */
     const cx = (px[0].x + px[1].x + px[2].x + px[3].x) / 4, cy = (px[0].y + px[1].y + px[2].y + px[3].y) / 4;
     const lado = (lados[0] + lados[1] + lados[2] + lados[3]) / 4;
-    const margem = 2 + lado * FOLGA;                  // 2 px: a erosão e a borda excluída do crescimento
+    const margem = 1.5 + lado * FOLGA;                // 1,5 px: a erosão e a borda excluída do crescimento
     const retas = [];
     for (let i = 0; i < 4; i++) {
       const a = px[i], b = px[(i + 1) % 4];
@@ -261,7 +261,68 @@ window.Scanner = (() => {
     }
     if (!_convexo(quad.map(c => ({ x: c.x * W, y: c.y * H }))) || _area(quad) * n > n * AREA_MAX) return null;
     const cortada = quad.some(c => c.x < BORDA || c.x > 1 - BORDA || c.y < BORDA || c.y > 1 - BORDA);
-    return { quad, area: areaPx / n, cortada };
+
+    /* Recorte CURVO (19/10/2026): o quadrilátero envolve o papel, então numa nota enrolada ou de bordas onduladas ele
+       leva junto fundo nos trechos onde a borda entra. Aqui cada lado ganha a forma real: de pontos ao longo do lado,
+       anda-se para dentro até achar papel (a distância é o "vão"), a curva do vão é suavizada (mediana) e a folga é
+       mantida. O contorno ao vivo e o recorte final seguem essa curva; os cantos continuam sendo os do quadrilátero. */
+    const K = 48, dmax = Math.min(W, H) * 0.2, passo = 0.5;
+    /* fechamento morfológico (dilata e erode 7×7, por imagem integral): texto e QR até a borda esfarelam a máscara em
+       pontos, e "o primeiro pixel de papel" pararia dentro da nota. Fechada, a máscara é papel contínuo; o contorno
+       externo praticamente não muda (só tampa vãos de até ~6 px, o que só aumenta o recorte). */
+    const integral = m => {
+      const I = new Int32Array((W + 1) * (H + 1));
+      for (let y = 0; y < H; y++) {
+        let linha = 0;
+        for (let x = 0; x < W; x++) { linha += m[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + linha; }
+      }
+      return I;
+    };
+    const caixa = (I, x, y, r) => {
+      const xa = Math.max(0, x - r), xb = Math.min(W, x + r + 1), ya = Math.max(0, y - r), yb = Math.min(H, y + r + 1);
+      return [I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa], (xb - xa) * (yb - ya)];
+    };
+    const RF = 3, dil = new Uint8Array(n), fec = new Uint8Array(n), I1 = integral(sel);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) dil[y * W + x] = caixa(I1, x, y, RF)[0] > 0 ? 1 : 0;
+    const I2 = integral(dil);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = caixa(I2, x, y, RF); fec[y * W + x] = c[0] === c[1] ? 1 : 0; }
+    const qp = quad.map(c => ({ x: c.x * W, y: c.y * H }));
+    const curvas = [], contorno = [];
+    let algumaCurva = false;
+    for (let i = 0; i < 4; i++) {
+      const a = qp[i], b = qp[(i + 1) % 4], nx = retas[i].nx, ny = retas[i].ny;     // n aponta para fora
+      const g = new Float32Array(K + 1);
+      for (let k = 0; k <= K; k++) {
+        const t = k / K, ex = a.x + (b.x - a.x) * t, ey = a.y + (b.y - a.y) * t;
+        let achou = -1;
+        for (let d = 0; d <= dmax; d += passo) {
+          const x1 = Math.floor(ex - nx * d), y1 = Math.floor(ey - ny * d), x2 = Math.floor(ex - nx * (d + 1.5)), y2 = Math.floor(ey - ny * (d + 1.5));
+          if (x1 < 0 || y1 < 0 || x1 >= W || y1 >= H || x2 < 0 || y2 < 0 || x2 >= W || y2 >= H) continue;
+          if (fec[y1 * W + x1] && fec[y2 * W + x2]) { achou = d; break; }             // papel confirmado logo adiante (não conta pontinho solto)
+        }
+        g[k] = achou < 0 ? margem : achou;                                        // sem papel à vista: não entra (mantém a folga)
+      }
+      // mediana de 7 amostras: letra, QR e ruído não viram degrau no contorno
+      const gm = new Float32Array(K + 1);
+      for (let k = 0; k <= K; k++) {
+        const w = [];
+        for (let j = Math.max(0, k - 3); j <= Math.min(K, k + 3); j++) w.push(g[j]);
+        w.sort((p1, p2) => p1 - p2);
+        gm[k] = w[w.length >> 1];
+      }
+      const lim = Math.min(W, H) * 0.12;
+      const desl = new Float32Array((K + 1) * 2), pts = [];
+      for (let k = 0; k <= K; k++) {
+        const t = k / K, taper = Math.min(1, t / 0.05, (1 - t) / 0.05);           // os cantos ficam exatos
+        const e = Math.min(lim, Math.max(0, gm[k] - margem)) * taper;
+        if (e > 1.2) algumaCurva = true;
+        desl[k * 2] = -nx * e / W; desl[k * 2 + 1] = -ny * e / H;                  // para dentro, em fração do quadro
+        pts.push({ x: (a.x + (b.x - a.x) * t - nx * e) / W, y: (a.y + (b.y - a.y) * t - ny * e) / H });
+      }
+      curvas.push(desl);
+      for (let k = 0; k < K; k++) contorno.push(pts[k]);                           // o último ponto de um lado é o primeiro do seguinte
+    }
+    return { quad, area: areaPx / n, cortada, curvas: algumaCurva ? curvas : null, contorno: algumaCurva ? contorno : null, K };
   }
 
   /* ── 2. Ao vivo ─────────────────────────────────────────────
@@ -279,7 +340,7 @@ window.Scanner = (() => {
 
     function _estado(e) { if (e !== estado) { estado = e; try { opts.aoEstado && opts.aoEstado(e); } catch (_) {} } }
 
-    function _desenhar(quad, cor) {
+    function _desenhar(quad, cor) {                           // quad = polígono em frações 0..1 (contorno curvo, ou os 4 cantos)
       const g = canvas.getContext('2d');
       const cw = canvas.clientWidth, ch = canvas.clientHeight;
       if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
@@ -311,9 +372,9 @@ window.Scanner = (() => {
         const parou = ultimo && r.quad.every((c, i) => Math.hypot(c.x - ultimo[i].x, c.y - ultimo[i].y) < MOVE_MAX);
         if (!parou) { desde = agora; }
         ultimo = r.quad;
-        if (r.cortada) { desde = agora; _desenhar(r.quad, 'azul'); _estado('cortada'); return; }
+        if (r.cortada) { desde = agora; _desenhar(r.contorno || r.quad, 'azul'); _estado('cortada'); return; }
         const firme = parou && agora - desde >= PARADO_MS;
-        _desenhar(r.quad, firme ? 'verde' : 'azul');
+        _desenhar(r.contorno || r.quad, firme ? 'verde' : 'azul');
         _estado(firme ? 'parado' : 'achou');
         if (firme && auto && !disparou && agora >= liberaEm) { disparou = true; try { opts.aoEstabilizar && opts.aoEstabilizar(); } catch (_) {} }
       } catch (_) { /* quadro falhou (vídeo trocando de resolução, memória): tenta no próximo */ }
@@ -369,15 +430,40 @@ window.Scanner = (() => {
   }
 
   /* Recorta e endireita `quad` (px do quadro de origem) de src (RGBA, sw×sh) numa página dw×dh. */
-  function aplanar(src, sw, sh, quad, dw, dh) {
+  /* `curvas` (opcional, de achar): deslocamento para dentro de cada lado ao longo dele (K+1 amostras por lado, em fração
+     do quadro). Entra como correção sobre a homografia, com mistura de Coons: o centro da página mexe pela metade do
+     que mexem os lados, e a borda curva do cupom vira a borda reta da página. */
+  function aplanar(src, sw, sh, quad, dw, dh, curvas, K) {
     const h = _homografia([{ x: 0, y: 0 }, { x: dw, y: 0 }, { x: dw, y: dh }, { x: 0, y: dh }], quad);
     if (!h) return null;
     const out = new Uint8ClampedArray(dw * dh * 4);
+    let dT = null, dB = null, dL = null, dR = null;
+    if (curvas && K) {
+      const amostra = (c, t, rev) => {                                    // c = lado (K+1 pares), t em 0..1 ao longo da página
+        const f = (rev ? 1 - t : t) * K, i = Math.min(K - 1, Math.floor(f)), r = f - i;
+        return [(c[i * 2] * (1 - r) + c[(i + 1) * 2] * r) * sw, (c[i * 2 + 1] * (1 - r) + c[(i + 1) * 2 + 1] * r) * sh];
+      };
+      dT = new Float32Array(dw * 2); dB = new Float32Array(dw * 2);
+      for (let u = 0; u < dw; u++) {
+        const t = (u + 0.5) / dw, a = amostra(curvas[0], t, false), b = amostra(curvas[2], t, true);   // topo TL→TR; base BR→BL lida ao contrário
+        dT[u * 2] = a[0]; dT[u * 2 + 1] = a[1]; dB[u * 2] = b[0]; dB[u * 2 + 1] = b[1];
+      }
+      dL = new Float32Array(dh * 2); dR = new Float32Array(dh * 2);
+      for (let v = 0; v < dh; v++) {
+        const t = (v + 0.5) / dh, a = amostra(curvas[3], t, true), b = amostra(curvas[1], t, false);   // esquerda BL→TL lida ao contrário; direita TR→BR
+        dL[v * 2] = a[0]; dL[v * 2 + 1] = a[1]; dR[v * 2] = b[0]; dR[v * 2 + 1] = b[1];
+      }
+    }
     for (let v = 0; v < dh; v++) {
       for (let u = 0; u < dw; u++) {
         const w = h[6] * (u + 0.5) + h[7] * (v + 0.5) + 1;
-        const x = (h[0] * (u + 0.5) + h[1] * (v + 0.5) + h[2]) / w - 0.5;
-        const y = (h[3] * (u + 0.5) + h[4] * (v + 0.5) + h[5]) / w - 0.5;
+        let x = (h[0] * (u + 0.5) + h[1] * (v + 0.5) + h[2]) / w - 0.5;
+        let y = (h[3] * (u + 0.5) + h[4] * (v + 0.5) + h[5]) / w - 0.5;
+        if (dT) {
+          const s = (u + 0.5) / dw, t = (v + 0.5) / dh;
+          x += (1 - t) * dT[u * 2] + t * dB[u * 2] + (1 - s) * dL[v * 2] + s * dR[v * 2];
+          y += (1 - t) * dT[u * 2 + 1] + t * dB[u * 2 + 1] + (1 - s) * dL[v * 2 + 1] + s * dR[v * 2 + 1];
+        }
         const o = (v * dw + u) * 4;
         const x0 = Math.floor(x), y0 = Math.floor(y);
         if (x0 < 0 || y0 < 0 || x0 >= sw - 1 || y0 >= sh - 1) {       // fora da foto (ou na última linha): vizinho mais próximo, ou branco
@@ -459,7 +545,7 @@ window.Scanner = (() => {
       dw = Math.max(1, Math.round(dw * esc)); dh = Math.max(1, Math.round(dh * esc));
       if (dw < 200 || dh < 200) return { blob, endireitou: false };
 
-      const px = aplanar(src, sw, sh, q, dw, dh);
+      const px = aplanar(src, sw, sh, q, dw, dh, r.curvas, r.K);
       if (!px) return { blob, endireitou: false };
       clarear(px);
       const cv = document.createElement('canvas'); cv.width = dw; cv.height = dh;
