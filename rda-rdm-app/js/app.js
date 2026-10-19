@@ -4,6 +4,20 @@
    Servidor: Petermann API (Laravel + MySQL na Locaweb) — ver js/api.js.
    O endereço da API está lá; aqui não há credencial nenhuma.
 ───────────────────────────────────────────────────────────── */
+/* Rede de segurança do fuso de Brasília (16/10/2026). FusoBR mora no api.js; se um aparelho ficar com um api.js de versão
+   anterior em cache (sem ele), `FusoBR.partes()` aqui embaixo derrubava o app inteiro já no carregamento — o mesmo tipo de
+   descompasso que fez a tela de recorte ser pulada. Esta cópia mínima só entra quando o api.js não trouxe o dele. */
+globalThis.FusoBR ||= (() => {
+  const TZ = 'America/Sao_Paulo';
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  const partes = (d = new Date()) => { const o = {}; f.formatToParts(new Date(d)).forEach(p => { o[p.type] = p.value; }); return { ano: +o.year, mes: +o.month, dia: +o.day, hora: +o.hour % 24, min: +o.minute, seg: +o.second }; };
+  const hojeISO = d => { const p = partes(d); return p.ano + '-' + String(p.mes).padStart(2, '0') + '-' + String(p.dia).padStart(2, '0'); };
+  return { TZ, partes, hojeISO,
+    dataHora: (d, o) => new Date(d).toLocaleString('pt-BR', { timeZone: TZ, ...o }),
+    data: (d, o) => new Date(d).toLocaleDateString('pt-BR', { timeZone: TZ, ...o }),
+    hora: (d, o) => new Date(d).toLocaleTimeString('pt-BR', { timeZone: TZ, ...o }) };
+})();
+
 const DEMO_MODE = false;   // modo demo antigo (sem servidor); "Usar sem conta" continua existindo
 
 /* Login social. Só o Google está ligado: o backend faz o OAuth
@@ -34,8 +48,8 @@ function _notaPorId(id) {
 let repasses  = [];
 let driveOk   = false;
 let viewAtual = 'home';
-let filMes    = new Date().getMonth() + 1;
-let filAno    = new Date().getFullYear();
+let filMes    = FusoBR.partes().mes;
+let filAno    = FusoBR.partes().ano;   // mês e ano de Brasília
 let _drivePullInterval = null;
 let filtroPeriodo = 'mensal';
 let equipePorId = {};
@@ -65,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 411;
+const APP_BUILD = 426;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -95,7 +109,7 @@ const TRIMESTRES = [
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
-const hoje = () => new Date().toISOString().split('T')[0];
+const hoje = () => FusoBR.hojeISO();   // o dia de BRASÍLIA (antes: o dia em UTC, que virava "amanhã" depois das 21h)
 const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const $    = id => document.getElementById(id);
 const fmtData = d => { try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR'); } catch(_){return d;} };
@@ -919,13 +933,13 @@ function _pintarBarraUsuario() {
   const conteudo = $('barra-usuario-conteudo');
   if (!el || !conteudo) return;
   if (!user || _telaAtual !== 'app') { el.style.display = 'none'; if (avEl) avEl.innerHTML = ''; return; }
-  const hora = new Date().getHours();
+  const hora = FusoBR.partes().hora;
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
-  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, weekday: 'long', day: '2-digit', month: 'long' });
   /* versão curta para o celular: "23 set" cabe ao lado da etiqueta do papel
      sem empurrar a saudação para a segunda linha (23/09/2026) */
-  const hojeCurto = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+  const hojeCurto = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: 'short' }).replace('.', '');
   const papel = user?.role || 'colaborador';
   el.style.display = '';
   if (avEl) avEl.innerHTML = `
@@ -2276,7 +2290,7 @@ function _dataNoFuturo(data) {
   /* 24/09/2026: "hoje" vem do SERVIDOR quando ele já respondeu alguma coisa.
      Com o relógio do aparelho adiantado, o app achava que amanhã era hoje e
      deixava passar — e o lançamento nascia no futuro. */
-  const hoje = new Date((sb?.hojeDoServidor?.() || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
+  const hoje = new Date((sb?.hojeDoServidor?.() || FusoBR.hojeISO()) + 'T00:00:00');
   hoje.setHours(23, 59, 59, 999);
   if (d <= hoje) return null;
   const dias = Math.round((d - hoje) / 86400000);
@@ -3136,9 +3150,11 @@ const LANC_DIAS_AVISO = 4;    // a partir daqui a faixa fica amarela
 const LANC_DIAS_LIMITE = 7;   // uma semana: faixa vermelha / nota atrasada
 function _diaLocalMs(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
-  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  const d = new Date(v);
   if (isNaN(d)) return null;
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const p = FusoBR.partes(d);   // um instante (agora, updated_at…) vale pelo DIA de Brasília
+  return new Date(p.ano, p.mes - 1, p.dia).getTime();
 }
 function _diasAtras(v) {
   const dia = _diaLocalMs(v);
@@ -3167,10 +3183,10 @@ function _faixaLancamentoDiarioHTML() {
 
 function renderInicio() {
   const A = _agregaPeriodo(filMes, filAno, 'mensal');
-  const hora = new Date().getHours();
+  const hora = FusoBR.partes().hora;
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
-  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, weekday: 'long', day: '2-digit', month: 'long' });
 
   _recalcularDuplicatas(notas);
   /* 24/09/2026: os contadores separados (sem anexo, sem valor, sem CNPJ…)
@@ -3197,6 +3213,24 @@ function renderInicio() {
   if (!_ehContabilidade()) {
     if (_ehCartaoIni) {
       _cats = _composicaoGastos(A);
+      /* 16/10/2026 (pedido do Cleiton): o resumo também aparece para o C.V., com gasto do cartão e da carteira, o saldo do
+         cartão e o reembolso a receber — as mesmas contas do Saldo (_saldoCartao e _devedorDe), só leitura. As duas linhas
+         aparecem sempre: o saldo do cartão e o que falta reembolsar valem mesmo num mês sem gasto de um dos lados. */
+      const _nsCv = notas.filter(n => !n.deleted), _rsCv = repasses.filter(r => !r.deleted);
+      const _saldoCart = _saldoCartao();
+      const _aReemb = _devedorDe(_nsCv, _rsCv, filMes, filAno, true);
+      /* RDM e RDA lançados no cartão e lançados na carteira (pedido do Cleiton): o gasto de cada lado aberto por aba */
+      const _gasto = (carteira, tipo) => _soma(A.ns.filter(x => _naoEhFaturamento(x) && x.tipo === tipo
+        && (carteira ? x.pagamento === 'carteira' : _notaDoCartao(x))));
+      const _det = carteira => 'RDM ' + brlCurto(_gasto(carteira, 'RDM')) + ' · RDA ' + brlCurto(_gasto(carteira, 'RDA'));
+      _tipos = [
+        { sigla: '💳 Cartão', cor: 'var(--accent-d)', gasto: A.gastoCartao,
+          txt: _saldoCart == null ? '' : 'saldo ' + brlCurto(_saldoCart) + (_saldoCart < CARTAO_SALDO_MINIMO ? ' · acabando' : ''),
+          cls: _saldoCart != null && _saldoCart < CARTAO_SALDO_MINIMO ? 'receber' : 'adiantado', det: _det(false) },
+        { sigla: '👛 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
+          txt: _aReemb > 0.004 ? brlCurto(_aReemb) + ' a receber' : _aReemb < -0.004 ? brlCurto(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
+          cls: _aReemb > 0.004 ? 'receber' : 'adiantado', det: _det(true) },
+      ];
     } else {
       const _nsAll = notas.filter(n => !n.deleted), _rsAll = repasses.filter(r => !r.deleted);
       _cats = [
@@ -3220,9 +3254,10 @@ function renderInicio() {
         <span class="ini-resumo-seta">›</span>
       </div>
       ${_tipos.length ? `<div class="ini-resumo-tipos">${_tipos.map(t => `
-        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}<span class="ini-resumo-saldo ${t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : ''}">${
-          t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
-        }</span></div>`).join('')}</div>`
+        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}${t.txt === '' ? '' : `<span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
+          t.txt != null ? esc(t.txt)
+          : t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
+        }</span>`}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}</div>`).join('')}</div>`
         : `<div class="ini-resumo-tipos">${_cats.slice(0, 3).map(c => `<div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}</div>`}
     </div>` : '';
 
@@ -3385,8 +3420,10 @@ function _agregaPeriodo(mes, ano, modo) {
      diferencia pra quem é CV, mesma ideia do _saldoAcumuladoAte. */
   const gastoCartao = _soma(ns.filter(x => _naoEhFaturamento(x) && _notaDoCartao(x)));
   const gasto = rdmG + rdaG;
+  /* recarga do cartão à parte (16/10/2026): só leitura, continua fora do "recebido" e do saldo */
+  const recargaCartao = _soma(repasses.filter(doPeriodo).filter(_repasseEhRecebido).filter(x => x.destino === 'recarga'));
   return { ns, rs, rdmG, rdaG, rdmR, rdaR,
-           gasto, recebido: rdmR + rdaR,
+           gasto, recebido: rdmR + rdaR, recargaCartao,
            gastoCartao, gastoBolso: gasto - gastoCartao };
 }
 
@@ -3455,8 +3492,8 @@ function _saldoAcumuladoAte(targetMes, targetAno, tipo) {
    em foco: uma nota fora da janela é, por definição, invisível no período. */
 const JANELA_PASSADO_MESES = 24;
 function _dataImplausivel(n) {
-  const agora = new Date();
-  const kAgora = agora.getFullYear() * 12 + (agora.getMonth() + 1);
+  const _ag = FusoBR.partes();
+  const kAgora = _ag.ano * 12 + _ag.mes;
   const k = Number(n.ano) * 12 + Number(n.mes);
   if (!Number.isFinite(k)) return true;                 // mes/ano ausente ou corrompido
   return k > kAgora || k < kAgora - JANELA_PASSADO_MESES;
@@ -3863,10 +3900,10 @@ function renderHome() {
   /* ── Ritmo de gasto e projeção (só no modo mês) ──────────── */
   let ritmoHtml = '';
   if (modo === 'mensal') {
-    const agora     = new Date();
-    const ehAtual   = filMes === agora.getMonth()+1 && filAno === agora.getFullYear();
+    const agora     = FusoBR.partes();
+    const ehAtual   = filMes === agora.mes && filAno === agora.ano;
     const diasMes   = new Date(filAno, filMes, 0).getDate();
-    const corridos  = ehAtual ? agora.getDate() : diasMes;
+    const corridos  = ehAtual ? agora.dia : diasMes;
     const mediaDia  = corridos ? A.gasto / corridos : 0;
     const projecao  = mediaDia * diasMes;
     const diasComNota = new Set(A.ns.map(n => _dataDe(n).slice(0,10)).filter(Boolean)).size;
@@ -4040,6 +4077,12 @@ function renderHome() {
           ? `<span>Pend. anterior <b style="color:${(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior) < 0 ? 'var(--danger)' : 'inherit'}">${brl(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior)}</b></span>`
           : ''}</span>
         ${_usaCartao() ? `<span>💳 C.V. <b>${brl(A.gastoCartao)}</b></span><span>👛 Carteira <b>${brl(A.gastoBolso)}</b></span>` : ''}
+      </div>
+      <!-- 16/10/2026 (pedido do Cleiton): o recebido aberto em RDM, RDA e recarga do cartão (a recarga não entra no saldo) -->
+      <div class="db-hero-meta" style="margin-top:4px">
+        <span style="white-space:nowrap">Recebido RDM <b>${brl(A.rdmR)}</b></span>
+        <span style="white-space:nowrap">Recebido RDA <b>${brl(A.rdaR)}</b></span>
+        ${_usaCartao() ? `<span style="white-space:nowrap">💳 Recarga do cartão <b>${brl(A.recargaCartao)}</b></span>` : ''}
       </div>
       <div class="db-consumo">
         <div class="db-consumo-fill ${consumoPct > 100 ? 'over' : ''}"
@@ -4395,7 +4438,7 @@ async function renderNotasApagadas() {
   }
   const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
   const fmtHora = d => {
-    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+    try { return new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return '—'; }
   };
 
@@ -4750,6 +4793,8 @@ function renderNotas() {
     </div>
     <div class="fil-tipo">
       <button class="chip active" data-fil="all"  onclick="filtrarTipo(this)">Todas</button>
+      ${_usaCartao() ? `<button class="chip" data-fil="cartao"   onclick="filtrarTipo(this)">💳 Cartão</button>
+      <button class="chip" data-fil="carteira" onclick="filtrarTipo(this)">👛 Carteira</button>` : ''}
       <button class="chip"        data-fil="RDA"  onclick="filtrarTipo(this)">RDA</button>
       <button class="chip"        data-fil="RDM"  onclick="filtrarTipo(this)">RDM</button>
       <button class="chip" onclick="switchView('lixeira')">🗑 Apagados</button>
@@ -4847,7 +4892,7 @@ function _notasComPendencia() {
 function _fmtEnvioServidor(n) {
   if (!n.updated_at) return null;
   try {
-    return new Date(n.updated_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    return new Date(n.updated_at).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   } catch (_) { return null; }
 }
 
@@ -4946,11 +4991,23 @@ function _notaIncompletaParaPlanilha(n) {
   return !temCnpj || !temNumero;
 }
 
+/* Etiqueta de QUEM PAGOU (16/10/2026, pedido do Cleiton): no regime CV a nota é do cartão da empresa ou da
+   carteira do colaborador (a reembolsar). Quem não é CV não tem essa distinção, então não ganha etiqueta.
+   Faturamento (pagamento='empresa') já é outra coisa e fica sem. `opts.cv` força o regime (a ficha da Equipe
+   já sabe de quem é); sem ele, olha o dono da nota. */
+function _pagamentoBadgeHTML(n, opts = {}) {
+  if (n.pagamento === 'empresa') return '';
+  if (n.pagamento === 'carteira') return `<span class="doc-tag pag-carteira" title="Pago do bolso — a empresa reembolsa">👛 Carteira</span>`;
+  const dono = n.user_id && n.user_id !== user?.id ? equipePorId[n.user_id] : user;
+  const cv = opts.cv != null ? opts.cv : _ehCV(dono);
+  return cv ? `<span class="doc-tag pag-cartao" title="Pago no cartão corporativo — a empresa já pagou">💳 Cartão</span>` : '';
+}
+
 function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
   return `
-      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}">
+      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}" data-pag="${n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao'}">
         ${_ehContabilidade() ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">`}
         ${n.foto_path||n.foto_local ? `
         <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
@@ -4958,6 +5015,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
         <div class="nota-head">
           <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
           ${docBadgeHTML(n)}
+          ${_pagamentoBadgeHTML(n, opts)}
           ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${esc(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
           ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
           ${!opts.semDono && _ehGestorOuAdmin() && (_ehNotaDeOutroUsuario(n) || !n.user_id)
@@ -5075,8 +5133,10 @@ function filtrarTipo(btn) {
   document.querySelectorAll('.fil-tipo .chip').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const f = btn.dataset.fil;
+  /* 16/10/2026: Cartão/Carteira (regime CV) olham quem pagou (data-pag); RDA/RDM olham a aba (data-tipo) */
+  const porPagamento = f === 'cartao' || f === 'carteira';
   document.querySelectorAll('.nota-card').forEach(c =>
-    c.style.display = (f==='all' || c.dataset.tipo===f) ? '' : 'none'
+    c.style.display = (f==='all' || (porPagamento ? c.dataset.pag === f : c.dataset.tipo === f)) ? '' : 'none'
   );
   _selNotasAtualizar();   // o que o filtro escondeu sai da seleção — nunca se exclui o que não se vê
 }
@@ -5106,11 +5166,12 @@ function renderSaldo() {
   const itemHtml = r => {
     const pedido = _repasseEhPedido(r);
     const cvR = _ehCV();
-    const label = pedido ? 'Pedido' : 'Recebido';
-    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : 'Repasse recebido'));
+    const recarga = r.destino === 'recarga';   // 16/10/2026: a recarga vai para o cartão — antes aparecia como "Recebido · Abate dos repasses"
+    const label = pedido ? 'Pedido' : (recarga ? '💳 Recarga do cartão' : 'Recebido');
+    const desc = esc(r.descricao || (pedido ? 'Pedido de repasse' : (recarga ? 'Recarga do cartão' : 'Repasse recebido')));
     const detail = pedido
       ? (r.atendido_em ? `Pago pelo gestor em ${fmtDataBR(String(r.atendido_em).slice(0, 10))} ✅` : (cvR ? 'Aguardando o gestor pagar' : 'Solicitação pendente para o gestor'))
-      : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido');
+      : (recarga ? 'Vai para o cartão — não abate os repasses' : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido'));
     return `
       <div class="rep-item">
         <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
@@ -5128,7 +5189,17 @@ function renderSaldo() {
     <div style="font-weight:800;font-size:14px;color:var(--text2);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.3px">${lbl} · ${doTipo.length}</div>
     ${doTipo.length ? doTipo.map(itemHtml).join('') : `<p class="muted-p">Nenhum repasse ${tipo} neste mês.</p>`}`;
   };
-  const repHtml = rs.length ? secaoTipo('RDM', '💼 RDM') + secaoTipo('RDA', '🍽️ RDA') : '<p class="muted-p">Nenhum repasse registrado.</p>';
+  /* Recebido do mês aberto em RDM, RDA e recarga do cartão (16/10/2026, pedido do Cleiton) — mesma leitura da ficha da Equipe */
+  const recebidosMes = rs.filter(_repasseEhRecebido);
+  const somaRecebido = f => recebidosMes.filter(f).reduce((a, x) => a + Number(x.valor || 0), 0);
+  const recargaMes = somaRecebido(x => x.destino === 'recarga');
+  const resumoRecebido = recebidosMes.length ? `<div class="rep-resumo-mes" style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;margin:0 0 10px;padding:0 6px;color:#cfe8d6">
+      <span>Recebido em ${MESES_LONGO_ARQUIVOS[filMes]}:</span>
+      <span><b>RDM</b> ${brl(somaRecebido(x => x.tipo === 'RDM' && _repasseEhCarteira(x)))}</span>
+      <span><b>RDA</b> ${brl(somaRecebido(x => x.tipo === 'RDA' && _repasseEhCarteira(x)))}</span>
+      ${recargaMes ? `<span>💳 <b>Recarga do cartão</b> ${brl(recargaMes)}</span>` : ''}
+    </div>` : '';
+  const repHtml = rs.length ? resumoRecebido + secaoTipo('RDM', '💼 RDM') + secaoTipo('RDA', '🍽️ RDA') : '<p class="muted-p">Nenhum repasse registrado.</p>';
 
   /* card independente do tipo */
   const cardTipo = (lbl, d) => {
@@ -5191,7 +5262,7 @@ function renderSaldo() {
     <div class="saldo-card ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? 'neg' : ''}">
       <div class="saldo-label">💳 Saldo do cartão ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? '<span class="dl dl-ruim" style="margin-left:6px">Acabando</span>' : ''}</div>
       <div class="saldo-val">${brl(saldoCartao || 0)}</div>
-      <div class="saldo-detail"><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
+      <div class="saldo-detail"><span>Recarga em ${MESES[filMes-1]} <b>${brl(recargaMes)}</b></span><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
       ${saldoCartao != null && saldoCartao < CARTAO_SALDO_MINIMO ? `<div class="sub-breakdown"><div class="sub-row"><span>Quando a recarga cair, registre pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
     <div class="saldo-card">
@@ -5282,8 +5353,8 @@ function garantirNotasNaLista(lista) {
 }
 
 function irParaMesAtualEquipe() {
-  const h = new Date();
-  filMes = h.getMonth() + 1; filAno = h.getFullYear();
+  const h = FusoBR.partes();
+  filMes = h.mes; filAno = h.ano;
   renderEquipe();
   _garantirAnoEmFoco();
 }
@@ -5597,8 +5668,11 @@ async function enviarFotoPerfil(e) {
   if (window.Recorte) {
     const tit = $('crop-overlay')?.querySelector('.crop-tit');
     if (tit) tit.textContent = 'Enquadre o rosto';
-    try { escolhida = (await Recorte.abrir(file, { semTexto: true })) || file; } catch (_) { escolhida = file; }
+    let rec = null;
+    try { rec = await Recorte.abrir(file, { semTexto: true }); } catch (_) { rec = null; }
     if (tit) tit.textContent = 'Enquadre a nota';
+    if (rec === false) { e.target.value = ''; return; }   // X: desistiu da foto, nada é enviado
+    escolhida = rec || file;
   }
   setLoading(true);
   try {
@@ -5768,7 +5842,7 @@ async function _mostrarBackupDrive() {
     _pintarCartaoPush().catch(() => {});
     const el = $('backup-drive');
     if (!el) return;
-    const q = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const q = d => d ? new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
     if (!s.conectado) {
       el.innerHTML = `
         <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
@@ -5892,7 +5966,7 @@ async function _mostrarArmazenamento() {
       <p style="margin-top:10px">${tend}</p>
       <p style="margin-top:4px">${backup}</p>
       ${vol}
-      <p style="margin-top:6px;opacity:.7;font-size:13.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR')}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
+      <p style="margin-top:6px;opacity:.7;font-size:13.5px">Medido agora (${new Date(m.em).toLocaleString('pt-BR', { timeZone: FusoBR.TZ })}). O servidor mede sozinho todo dia às 04:10 e avisa por e-mail se passar de ${m.limites?.aviso_pct ?? 80} % ou o backup atrasar.</p>`;
   } catch (e) {
     const el = $('armazenamento-card');
     if (el) el.textContent = 'Não consegui medir o armazenamento: ' + (e.message || 'erro');
@@ -7877,6 +7951,16 @@ function _mostrarChaveNota() {
   _atualizarNumeroSerieAuto(); // número/série saem da chave
 }
 
+/* X na tela de recorte (16/10/2026, Paulo): a foto recém-anexada é descartada e o formulário volta a pedir o anexo
+   (_mostrarFormAposLeitura → _pedirFotoPasso2), sem ler nada da imagem. */
+function _descartarFotoCancelada() {
+  if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+  fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
+  atualizarPreviewFoto(null);
+  ['f-foto-nota', 'f-foto-ocr'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+  toast('Foto descartada — tire outra quando quiser');
+}
+
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
    Combina os resultados e preenche só os campos vazios.
    ocrPronto: resultado de parse já extraído (ex.: texto embutido de PDF) — pula o OCR. */
@@ -7907,7 +7991,15 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       let alvo = file;
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
-        try { alvo = (await Recorte.abrir(file)) || file; } catch (_) { alvo = file; }
+        let rec = null;
+        try { rec = await Recorte.abrir(file); }
+        catch (err) {
+          rec = null;
+          console.error('Recorte não abriu', err);
+          toast('O recorte não abriu — a foto ficou inteira. Feche e abra o app e tente de novo.', 'err');   // antes pulava em silêncio
+        }
+        if (rec === false) { _descartarFotoCancelada(); ov.style.display = 'none'; return; }   // X: sem leitura, sem anexo
+        alvo = rec || file;
         ov.style.display = 'flex';
         if (alvo !== file) {
           fotoBlob = alvo;
@@ -8758,9 +8850,45 @@ async function apagarDefinitivoSelecionadas() {
   return feitas > 0;
 }
 
-async function verFoto(id) {
+/* Anterior/próxima no visualizador (pedido 16/10/2026): a sequência é a dos
+   botões de anexo VISÍVEIS na tela no momento em que a foto abre (Minhas
+   notas, ficha da Equipe, lista da faixa) — na ordem em que aparecem. */
+let _fotoSeq = [];
+
+function _sequenciaDeAnexosVisiveis() {
+  const ids = [];
+  document.querySelectorAll('[onclick*="verFoto(\'"]').forEach(el => {
+    if (!el.offsetParent) return;                       // fora da tela / aba escondida
+    const m = /(?:^|[^.\w])verFoto\('([^']+)'\)/.exec(el.getAttribute('onclick') || '');
+    if (m && !ids.includes(m[1])) ids.push(m[1]);
+  });
+  return ids;
+}
+
+function _atualizarSetasFoto(id) {
+  const i = _fotoSeq.indexOf(id);
+  const mostra = _fotoSeq.length > 1 && i >= 0;
+  const ant = $('foto-viewer-ant'), prox = $('foto-viewer-prox');
+  if (!ant || !prox) return;
+  ant.style.display  = mostra ? 'flex' : 'none';
+  prox.style.display = mostra ? 'flex' : 'none';
+  ant.style.opacity  = i > 0 ? '1' : '.3';
+  prox.style.opacity = i >= 0 && i < _fotoSeq.length - 1 ? '1' : '.3';
+}
+
+async function fotoViewerVizinha(dir) {
+  const atual = _fotoViewerAtual?.id;
+  let i = _fotoSeq.indexOf(atual);
+  if (i < 0) return;
+  for (i += dir; i >= 0 && i < _fotoSeq.length; i += dir) {
+    if (await verFoto(_fotoSeq[i], true)) return;       // pula PDF/XML e anexos sem imagem
+  }
+}
+
+async function verFoto(id, navegando) {
   const n = _notaPorId(id);
-  if (!n) return;
+  if (!n) return false;
+  if (!navegando) _fotoSeq = _sequenciaDeAnexosVisiveis();
 
   let url = null, ext = null;
 
@@ -8783,13 +8911,14 @@ async function verFoto(id) {
     if (driveUrl) { url = driveUrl; ext = GDrive.getFotoExt?.(id) || _extDeUrl(n.foto_path || ''); }
   }
 
-  if (!url) { toast('Anexo não encontrado', 'err'); return; }
+  if (!url) { if (!navegando) toast('Anexo não encontrado', 'err'); return false; }
 
-  // PDF/XML → abre em nova aba (o navegador renderiza/baixa)
-  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { window.open(url, '_blank'); return; }
+  // PDF/XML → abre em nova aba (o navegador renderiza/baixa); ao navegar, só pula
+  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { if (!navegando) window.open(url, '_blank'); return false; }
 
   // imagem (ou tipo desconhecido) → visualizador
   _fotoViewerAtual = {
+    id,
     url,
     nome: `${n.tipo}_${String(n.data || '').slice(0, 10)}_${Math.round((Number(n.valor) || 0) * 100)}.${ext || 'jpg'}`
       .replace(/[^\w.-]+/g, '_'),
@@ -8798,6 +8927,8 @@ async function verFoto(id) {
   $('foto-viewer-info').textContent =
     `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;
   $('foto-viewer-overlay').style.display = 'flex';
+  _atualizarSetasFoto(id);
+  return true;
 }
 
 function fecharFotoViewer() {
@@ -8805,6 +8936,8 @@ function fecharFotoViewer() {
   ov.style.display = 'none';
   $('foto-viewer-img').src = '';
   _fotoViewerAtual = null;
+  _fotoSeq = [];
+  _atualizarSetasFoto(null);
 }
 
 /* Baixar / compartilhar o anexo aberto (pedido do Paulo, 14/10/2026). */
@@ -9531,5 +9664,17 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAuth('login');
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') fecharFotoViewer();
+    const aberto = $('foto-viewer-overlay')?.style.display === 'flex';
+    if (aberto && e.key === 'ArrowLeft')  fotoViewerVizinha(-1);
+    if (aberto && e.key === 'ArrowRight') fotoViewerVizinha(1);
   });
+  // deslizar o dedo na foto também troca (esquerda = próxima)
+  let _x0 = null;
+  const _img = $('foto-viewer-img');
+  _img?.addEventListener('touchstart', e => { _x0 = e.touches[0].clientX; }, { passive: true });
+  _img?.addEventListener('touchend', e => {
+    if (_x0 == null) return;
+    const dx = e.changedTouches[0].clientX - _x0; _x0 = null;
+    if (Math.abs(dx) > 60) fotoViewerVizinha(dx < 0 ? 1 : -1);
+  }, { passive: true });
 });

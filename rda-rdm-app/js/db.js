@@ -951,7 +951,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
   async function _revisaoCompleta(sb) {
     if (Number(await getMeta(REVISAO_KEY, 0)) >= REVISAO_VERSAO) return 0;
     const locais = await _getAll('notas');
-    const anos = new Set([new Date().getFullYear()]);
+    const anos = new Set([FusoBR.partes().ano]);
     for (const n of locais) {
       const a = Number(n.ano) || parseInt(String(n.data || '').slice(0, 4), 10);
       if (a >= 2000 && a <= 2100) anos.add(a);
@@ -979,7 +979,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
          poucos e vêm inteiros */
       try {
         await setMeta(ANOS_KEY, []);
-        const anoAtual = new Date().getFullYear();
+        const anoAtual = FusoBR.partes().ano;
         pulled += await garantirAno(sb, userId, anoAtual);
         const reps = await sb.repasses.list({});
         pulled += await _mesclarRemotas('repasses', reps);

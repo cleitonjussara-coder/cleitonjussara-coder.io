@@ -71,6 +71,33 @@ window.Gestor = (() => {
     card.querySelector('.fat-dica').style.display = abrindo ? 'none' : '';
   }
 
+  /* Notas do Faturamento (pagamento='empresa') do mês, em lista única — sem nome de colaborador (15/10/2026).
+     O painel só traz colunas resumidas, então a lista vem do servidor ao tocar em "Ver notas". */
+  async function verNotasFaturamento(btn, ano, mes) {
+    const box = btn.closest('.dash-card').querySelector('.fat-notas');
+    if (box.style.display !== 'none') { box.style.display = 'none'; btn.textContent = '👁 Ver notas'; return; }
+    box.style.display = 'block';
+    btn.textContent = '🙈 Esconder notas';
+    box.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:8px 0">Carregando…</div>';
+    try {
+      const todas = await _ctx.sb.notas.list({ ano, mes, deleted: '0', fields: 'data,tipo,subtipo,valor,razao_social,cnpj,foto_path,pagamento' });
+      const lista = (todas || []).filter(n => n.pagamento === 'empresa').sort((a, b) => String(b.data).localeCompare(String(a.data)));
+      box.innerHTML = lista.length ? lista.map(n => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;padding:7px 0;border-top:1px solid var(--border)">
+          <div style="min-width:0">
+            <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
+            <div style="color:var(--text2);font-size:12.5px">${fmtDataBR(n.data)} · ${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
+            <b>${brl(n.valor)}</b>
+            ${n.foto_path ? `<button class="btn-icon-sm" onclick="verFoto('${esc(n.id)}')" title="Ver o anexo">📎</button>` : ''}
+          </div>
+        </div>`).join('') : '<div style="color:var(--text2);font-size:13px;padding:8px 0">Nenhuma nota neste mês.</div>';
+    } catch (e) {
+      box.innerHTML = '<div style="color:var(--danger,#c0392b);font-size:13px;padding:8px 0">Não foi possível carregar as notas. Tente de novo.</div>';
+    }
+  }
+
   function tocarBarra(el, i) {
     const card = el.closest('.evo-card');
     if (!card) return;
@@ -196,9 +223,75 @@ window.Gestor = (() => {
      mês atual. Reaproveita o seletor da Equipe (filMes/filAno), então o resto
      da ficha acompanha. */
   let _rolarParaRepasses = false;
+  /* Filtro das notas da ficha (16/10/2026, pedido do Cleiton): tocar em Cartão corporativo ou Carteira lista SÓ as notas
+     daquele pagamento. Vale para a ficha/mês abertos (chave) e sobrevive ao redesenho depois de corrigir/excluir nota. */
+  let _filtroNotas = null;      // { chave, tipo: 'cartao' | 'carteira' }
+  let _chaveFichaAtual = null;
+  /* Idem para a lista de repasses (16/10/2026): Repasse recebido lista os repasses, Recarga do cartão lista as recargas. */
+  let _filtroReps = null;       // { chave, tipo: 'repasse' | 'recarga' }
   function mesRepasses(delta) {
     _rolarParaRepasses = true;
     if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
+  }
+  /* Toque no cartão "Recebido" da ficha (16/10/2026, Paulo/Cleiton): desce até a lista de repasses do mês aberto. Antes o
+     cartão parecia botão e não fazia nada. */
+  /* Cartões de gasto da ficha (Cartão, Carteira, Gasto no mês) descem até a lista de notas do mês. */
+  const _ROT_FILTRO_REP = { repasse: 'Repasses', recarga: 'Recargas do cartão' };
+  function _aplicarFiltroReps() {
+    const f = _filtroReps && _filtroReps.chave === _chaveFichaAtual ? _filtroReps.tipo : null;
+    const itens = [...document.querySelectorAll('#cdet-replista .cdet-rep')];
+    itens.forEach(it => { it.style.display = (!f || it.dataset.dest === f) ? '' : 'none'; });
+    document.querySelectorAll('.cdet-kpi[data-filtro-rep]').forEach(k => k.classList.toggle('ativo', k.dataset.filtroRep === f));
+    const info = document.getElementById('cdet-filtro-reps');
+    const visiveis = itens.filter(it => it.style.display !== 'none');
+    if (info) {
+      info.style.display = f ? 'flex' : 'none';
+      if (f) info.querySelector('.txt').textContent = !visiveis.length
+        ? `Nenhum item de ${_ROT_FILTRO_REP[f]} neste mês.`
+        : `Só ${_ROT_FILTRO_REP[f]}: ${visiveis.length} de ${itens.length}`;
+    }
+    const n = document.getElementById('cdet-seltodos-n'); if (n) n.textContent = visiveis.length;
+    const ocultos = new Set(itens.filter(it => it.style.display === 'none').map(it => it.querySelector('.rep-chk')?.value).filter(Boolean));
+    [..._selRep].forEach(id => { if (ocultos.has(id)) _selRep.delete(id); });   // escondido não fica selecionado: nunca se exclui o que não se vê
+    _selAtualizar();
+  }
+  /* tipo = 'repasse' | 'recarga'; tocar de novo no mesmo cartão (ou "Mostrar todos") volta à lista inteira */
+  function filtrarRepasses(tipo) {
+    if (!tipo || (_filtroReps && _filtroReps.tipo === tipo)) _filtroReps = null;
+    else _filtroReps = { chave: _chaveFichaAtual, tipo };
+    _aplicarFiltroReps();
+    if (_filtroReps) irParaRepasses();
+  }
+  const _ROT_FILTRO = { cartao: 'Cartão corporativo', carteira: 'Carteira (do bolso)' };
+  function _aplicarFiltroNotas() {
+    const f = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas.tipo : null;
+    const cards = [...document.querySelectorAll('#notas-list .nota-card')];
+    cards.forEach(c => { c.style.display = (!f || c.dataset.pag === f) ? '' : 'none'; });
+    document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', k.dataset.filtro === f));
+    const info = document.getElementById('cdet-filtro-info');
+    if (info) {
+      info.style.display = f ? 'flex' : 'none';
+      if (f) {
+        const n = cards.filter(c => c.style.display !== 'none').length;
+        info.querySelector('.txt').textContent = !cards.length ? 'Nenhuma nota neste mês.'
+          : !n ? `Nenhuma nota de ${_ROT_FILTRO[f]} neste mês.`
+          : `Só ${_ROT_FILTRO[f]}: ${n} de ${cards.length} nota${cards.length === 1 ? '' : 's'}`;
+      }
+    }
+    if (typeof _selNotasAtualizar === 'function') _selNotasAtualizar();   // o que o filtro escondeu sai da seleção
+  }
+  /* tipo = 'cartao' | 'carteira'; tocar de novo no mesmo cartão (ou "Mostrar todas") volta à lista inteira */
+  function filtrarNotas(tipo) {
+    if (!tipo || (_filtroNotas && _filtroNotas.tipo === tipo)) _filtroNotas = null;
+    else _filtroNotas = { chave: _chaveFichaAtual, tipo };
+    _aplicarFiltroNotas();
+    if (_filtroNotas) irParaNotas();
+  }
+  function irParaNotas() {
+    document.getElementById('cdet-notas')?.scrollIntoView({ block: 'start' });
+  }
+  function irParaRepasses() {
+    document.getElementById('cdet-repasses')?.scrollIntoView({ block: 'start' });   // direto, como as setas da lista (sem animação: não depende do aparelho)
   }
   function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); }
   /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
@@ -236,7 +329,7 @@ window.Gestor = (() => {
   function marcarTodosRepasses(on) {
     const s = _selBarra(); if (!s) return;
     _selRep.clear();
-    if (on) s.chks.forEach(c => _selRep.add(c.value));
+    if (on) s.chks.filter(c => c.closest('.cdet-rep')?.style.display !== 'none').forEach(c => _selRep.add(c.value));   // o que o filtro escondeu não entra
     _selAtualizar();
   }
   async function excluirSelecionados() {
@@ -248,8 +341,8 @@ window.Gestor = (() => {
 
   /* ── Dashboard principal ──────────────────────────────── */
   async function renderDashboard(el, sb, currentUser, onRebuild, options = {}) {
-    const mes = options.mes || new Date().getMonth() + 1;
-    const ano = options.ano || new Date().getFullYear();
+    const mes = options.mes || FusoBR.partes().mes;
+    const ano = options.ano || FusoBR.partes().ano;
 
     _ctx = { el, sb, currentUser, onRebuild };
     if (_detalheId) return renderColaborador(el, sb, currentUser, _detalheId, mes, ano);
@@ -381,7 +474,11 @@ window.Gestor = (() => {
             <span>Lançado por <b>${esc(p.nome)}</b></span>
             <span style="font-weight:700">${brl(p.val)} · ${p.qtd} nota${p.qtd===1?'':'s'}</span>
           </div>`).join('')}
-          <button class="btn btn-sm btn-outline" style="margin-top:10px" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn btn-sm btn-outline" onclick="Gestor.verNotasFaturamento(this, ${ano}, ${mes})">👁 Ver notas</button>
+            <button class="btn btn-sm btn-outline" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
+          </div>
+          <div class="fat-notas" style="display:none;margin-top:8px"></div>
         </div>`;
       }
 
@@ -481,7 +578,7 @@ window.Gestor = (() => {
                 <div class="avatar" data-foto="${esc(m.foto_path||'')}">${esc(ini(m.nome))}</div>
                 <div class="colab-info">
                   <div class="colab-nome">${esc(m.nome||m.email)}</div>
-                  <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + new Date(m.desativado_em).toLocaleDateString('pt-BR') : ''}</div>
+                  <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + FusoBR.data(m.desativado_em) : ''}</div>
                 </div>
                 ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>` : ''}
               </div>
@@ -522,6 +619,9 @@ window.Gestor = (() => {
        sequência impede que uma resposta atrasada de um redesenho antigo pinte por cima do mais novo (ou da lista, se a ficha
        foi fechada). */
     const chaveFicha = `${id}|${ano}|${mes}`;
+    _chaveFichaAtual = chaveFicha;
+    if (_filtroNotas && _filtroNotas.chave !== chaveFicha) _filtroNotas = null;   // outro mês ou outra pessoa: lista inteira
+    if (_filtroReps && _filtroReps.chave !== chaveFicha) _filtroReps = null;
     const seq = ++_fichaSeq;
     const fichaAntes = el.querySelector('.cdet');
     if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
@@ -573,7 +673,27 @@ window.Gestor = (() => {
       const recebidos0 = reps.filter(x => recebido(x) && !ehRecargaR(x));
       const gasto = g('RDM') + g('RDA');
       const rec = r('RDM') + r('RDA');
+      /* Recebido dividido (16/10/2026, pedido do Cleiton): repasse com RDM e RDA, e a recarga do cartão à parte (regime CV).
+         Só leitura — o saldo continua com a conta de sempre, que deixa a recarga de fora. */
+      const recargas = reps.filter(x => recebido(x) && ehRecargaR(x));
+      const recargaTotal = soma(recargas);
+      const _splitLinha = (rot, v) => `<span class="cdet-kpi-split"><span>${rot}</span><b>${brl(v)}</b></span>`;
+      const _splitRDMRDA = (rdm, rda) => `<span class="cdet-kpi-splits">${_splitLinha('RDM', rdm)}${_splitLinha('RDA', rda)}</span>`;
       const saldo = rec - gasto;
+
+      /* Regime CV (16/10/2026, pedido do Cleiton): o gasto do mês se divide por QUEM PAGOU — o cartão da empresa
+         ou a carteira do colaborador (a reembolsar). Só leitura: o saldo acima continua com a conta de sempre
+         (decisão de 01/10/2026). "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
+         igual a _devedorDe() do app do colaborador (a recarga do cartão fica fora). */
+      const ehCVcolab = colab.regime === 'cv' && colab.role !== 'contabilidade';
+      const acaoRec = ehCVcolab ? "Gestor.filtrarRepasses('repasse')" : 'Gestor.irParaRepasses()';
+      const nCartao = notasProprias.filter(n => n.pagamento !== 'carteira');
+      const nCarteira = notasProprias.filter(n => n.pagamento === 'carteira');
+      const gastoCartao = soma(nCartao), gastoCarteira = soma(nCarteira);
+      const aReembolsar = acumOk
+        ? soma(histNotas.filter(n => n.pagamento === 'carteira' && chave(n) <= kAberto))
+          - soma(histReps.filter(x => recebido(x) && !ehRecargaR(x) && chave(x) <= kAberto))
+        : gastoCarteira - rec;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
       const pendReps = reps.filter(x => !recebido(x) && !x.atendido_em).length;   // pedido já pago não é pendência (21/09/2026)
@@ -644,8 +764,17 @@ window.Gestor = (() => {
         </div>
 
         ${ehContador ? '' : `<div class="cdet-kpis">
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'}</span></div>
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">Recebido</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'}</span></div>
+          ${ehCVcolab ? `
+          <div class="cdet-kpi link" role="button" tabindex="0" data-filtro="cartao" title="Listar só as notas do cartão" onclick="Gestor.filtrarNotas('cartao')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('cartao')}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Cartão corporativo</span><span class="cdet-kpi-val">${brl(gastoCartao)}</span><span class="cdet-kpi-sub">${nCartao.length} nota${nCartao.length === 1 ? '' : 's'} · a empresa já pagou <span aria-hidden="true">↓</span></span></div>
+          <div class="cdet-kpi link" role="button" tabindex="0" data-filtro="carteira" title="Listar só as notas de carteira" onclick="Gestor.filtrarNotas('carteira')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('carteira')}"><span class="cdet-kpi-ico">👛</span><span class="cdet-kpi-lbl">Carteira (do bolso)</span><span class="cdet-kpi-val">${brl(gastoCarteira)}</span><span class="cdet-kpi-sub">${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} · a empresa reembolsa <span aria-hidden="true">↓</span></span></div>` : `
+          <div class="cdet-kpi link" role="button" tabindex="0" title="Ver as notas do mês" onclick="Gestor.irParaNotas()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaNotas()}"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span></span></div>`}
+          <div class="cdet-kpi link" role="button" tabindex="0" title="${ehCVcolab ? 'Listar só os repasses' : 'Ver a lista de repasses do mês'}" onclick="${acaoRec}" ${ehCVcolab ? 'data-filtro-rep="repasse"' : ''} onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${acaoRec}}"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(r('RDM'), r('RDA'))}</div>
+          ${ehCVcolab ? `<div class="cdet-kpi link" role="button" tabindex="0" data-filtro-rep="recarga" title="Listar só as recargas" onclick="Gestor.filtrarRepasses('recarga')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarRepasses('recarga')}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}</div>` : ''}
+          ${ehCVcolab ? (aReembolsar > 0.004
+            ? `<div class="cdet-kpi warn"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(aReembolsar)}</span><span class="cdet-kpi-sub">carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
+            : aReembolsar < -0.004
+              ? `<div class="cdet-kpi"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">Reembolsado a mais</span><span class="cdet-kpi-val">${brl(-aReembolsar)}</span><span class="cdet-kpi-sub">acima da carteira${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
+              : `<div class="cdet-kpi"><span class="cdet-kpi-ico">✅</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(0)}</span><span class="cdet-kpi-sub">carteira em dia${acumOk ? ' (acumulado)' : ' no mês'}</span></div>`) : ''}
           <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
@@ -670,21 +799,22 @@ window.Gestor = (() => {
 
       if (!ehContador) {
       const _podeSelNotas = podeEditar && notas.length && typeof selNotasBarraHTML === 'function';
-      html += `<div class="section-hd" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
+      html += `<div class="section-hd" id="cdet-notas" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
+      if (ehCVcolab) html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
       if (!notas.length) {
         html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
       } else if (typeof cardNotaHTML === 'function') {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
         if (_podeSelNotas) html += selNotasBarraHTML();
-        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true })).join('')}</div>`;
+        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
          navegação — o seletor lá do alto ficava fora de vista, e o repasse
          lançado para outro mês parecia ter sumido. A conferência mês a mês
          agora se faz sem sair daqui. */
-      const _hojeD = new Date();
-      const _ehMesAtual = mes === _hojeD.getMonth() + 1 && ano === _hojeD.getFullYear();
+      const _hojeD = FusoBR.partes();
+      const _ehMesAtual = mes === _hojeD.mes && ano === _hojeD.ano;
       const recebidos = reps.filter(recebido);
       const ehRecarga = x => x.destino === 'recarga';
       const recRDM = soma(recebidos.filter(x => x.tipo === 'RDM' && !ehRecarga(x)));
@@ -708,18 +838,19 @@ window.Gestor = (() => {
           ${recCartao ? `<span>💳 <b>Recarga do cartão</b> ${brl(recCartao)}</span>` : ''}
         </div>`;
       }
+      if (ehCVcolab && reps.length) html += '<div id="cdet-filtro-reps" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarRepasses(null)">Mostrar todos</button></div>';
       if (!reps.length) {
         html += `<div class="empty-state" style="padding:24px 14px">Nenhum repasse em ${MESES_LONGO[mes-1]} de ${ano}. Use ‹ › para ver outros meses.</div>`;
       } else {
         if (podeEditar) html += `<div id="cdet-selbar" class="cdet-selbar" style="display:none">
           <span class="sel-qtd"></span>
-          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(true)">marcar todos (${reps.length})</a>
+          <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(true)">marcar todos (<span id="cdet-seltodos-n">${reps.length}</span>)</a>
           <a href="#" onclick="event.preventDefault();Gestor.marcarTodosRepasses(false)">limpar</a>
           <button class="btn btn-sm btn-danger-outline sel-excluir" onclick="Gestor.excluirSelecionados()" disabled>🗑 Excluir</button>
           <button class="btn btn-sm btn-outline" onclick="Gestor.selecionarRepasses(false)">Cancelar</button>
         </div>`;
         html += `<div class="colab-list" id="cdet-replista">${reps.map(x => `
-          <div class="rep-item cdet-rep" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
+          <div class="rep-item cdet-rep" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
             ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${x.id}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
             <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
             <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
@@ -741,6 +872,8 @@ window.Gestor = (() => {
       _restaurarRolagem(el);
       _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
       if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
+      _aplicarFiltroNotas();   // o filtro por Cartão/Carteira continua depois de corrigir ou excluir uma nota
+      _aplicarFiltroReps();    // idem para Repasse/Recarga
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
@@ -977,7 +1110,7 @@ window.Gestor = (() => {
   async function excelAnualColab(id) {
     const colab = _cvEquipe?.collabs.find(c => c.id === id) || (typeof equipePorId !== "undefined" ? equipePorId[id] : null);
     if (!colab) { toast('Colaborador não encontrado', 'err'); return; }
-    const ano = _anoFicha || _cvEquipe?.ano || new Date().getFullYear();
+    const ano = _anoFicha || _cvEquipe?.ano || FusoBR.partes().ano;
     const ns = (typeof notasEquipe !== "undefined" ? notasEquipe : []).filter(n => n.user_id === id && !n.deleted);   // let global do app.js: visível aqui, mas não em window.*
     const rs = (typeof repassesEquipe !== "undefined" ? repassesEquipe : []).filter(r => r.user_id === id && !r.deleted);
     if (!ns.length && !rs.length) { toast(`Sem lançamentos de ${colab.nome || colab.email} neste aparelho`, 'err'); return; }
@@ -1033,7 +1166,7 @@ window.Gestor = (() => {
             <label class="lbl">Situação</label>
             <p style="font-size:15px;color:var(--text2);line-height:1.5;margin-bottom:8px">
               ${inativo
-                ? `🚫 <b>Desativado</b>${colab.desativado_em ? ' em ' + new Date(colab.desativado_em).toLocaleDateString('pt-BR') : ''}. Não entra no app e não aparece na equipe; o histórico continua.`
+                ? `🚫 <b>Desativado</b>${colab.desativado_em ? ' em ' + FusoBR.data(colab.desativado_em) : ''}. Não entra no app e não aparece na equipe; o histórico continua.`
                 : '✅ <b>Ativo.</b> Desativar tira a pessoa do app e das listas, sem apagar nada — dá para reativar depois.'}
             </p>
             <button class="btn btn-outline btn-full" id="g-ativo">${inativo ? '↩️ Reativar colaborador' : '🚫 Desativar colaborador'}</button>
@@ -1139,5 +1272,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

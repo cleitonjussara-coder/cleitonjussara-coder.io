@@ -86,14 +86,17 @@ class RelatorioCvPdf
             .'<div class="titulo-capa">RELATÓRIO DE CUSTOS VARIÁVEIS (C.V.).</div></div>';
 
         /* ── BANCO DE DADOS ─────────────────────────────────── */
+        /* 16/10/2026 (pedido do Cleiton): o recebido aparece aberto em RDM e RDA — no extrato (coluna TIPO), nos totais do
+           BANCO DE DADOS e na faixa de cada aba —, e a recarga do cartão fica separada do repasse, como nas telas do app. */
         $linhas = function ($lista) use ($dt, $brl) {
             $h = '';
             foreach ($lista as $r) {
-                $h .= '<tr><td>'.$dt($r->data).'</td><td class="num">'.$brl($r->valor).'</td></tr>';
+                $h .= '<tr><td>'.$dt($r->data).'</td><td class="tipo">'.htmlspecialchars((string) $r->tipo, ENT_QUOTES, 'UTF-8').'</td><td class="num">'.$brl($r->valor).'</td></tr>';
             }
 
             return $h;
         };
+        $detTipo = fn ($lista) => '<span class="det">RDM '.$brl($lista->where('tipo', 'RDM')->sum('valor')).' · RDA '.$brl($lista->where('tipo', 'RDA')->sum('valor')).'</span>';
         $extratoRecarga = $linhas($recargas);
         $extratoReembolso = $linhas($reembolsos);
         $extratoAjuda = $linhas($ajudas);
@@ -102,21 +105,21 @@ class RelatorioCvPdf
         $totalAjuda = (float) $ajudas->sum('valor');
         $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'
             .'<table class="resumo"><tr>'
-            .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span></td>'
+            .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span><br>'.$detTipo($ehCv ? $recargas : $reps).'</td>'
             .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>'
             .'<td><b>REEMBOLSO DE:</b><br><span class="big">'.$brl($gastoTotal - $recebido).'</span></td></tr><tr>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE C.V.</b><br><span class="big">'.$brl($gastoTotal).'</span></td>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>'
-            .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span></td></tr><tr>'
+            .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span><br>'.$detTipo($ehCv ? $reembolsos : $reps).'</td></tr><tr>'
             .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.(($ehCv ? $totalRecarga : $recebido) - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl(($ehCv ? $totalRecarga : $recebido) - $gastoTotal).'</span></td>'
             .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
             .'<table class="tres"><tr><td class="col">'
-            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
-            .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
-            .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="2" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td>TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
+            .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
+            .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
+            .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td colspan="2">TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
 
         /* ── CARTÃO CORPORATIVO (aba "CV ALELO" do modelo) e CV REEMBOLSO ───────────────────────── */
         /* 14/10/2026: as duas páginas listavam as MESMAS notas ("tudo junto"). No CV cada uma tem as suas, como na
@@ -126,18 +129,18 @@ class RelatorioCvPdf
            a mesma grade nas duas. */
         if ($ehCv) {
             $paginas = [
-                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga],
-                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso],
+                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga, $recargas],
+                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso, $reembolsos],
             ];
         } else {
-            $paginas = [['RDM_RDA', $notas, $recebido], ['CV REEMBOLSO', $notas, $recebido]];
+            $paginas = [['RDM_RDA', $notas, $recebido, $reps], ['CV REEMBOLSO', $notas, $recebido, $reps]];
         }
-        foreach ($paginas as [$aba, $listaDaAba, $recebidoAba]) {
+        foreach ($paginas as [$aba, $listaDaAba, $recebidoAba, $repsDaAba]) {
             $grade = $montarGrade($listaDaAba);
             $gastoAba = (float) $listaDaAba->sum('valor');
             $s = '<div class="pagina"><div class="faixa verde">CUSTOS VARIÁVEIS (C.V.) — '.$aba.' — '.$e($nome).'</div>'
                 .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoAba).'</td>'
-                .'<td><b>TOTAL RECEBIDO</b> '.$brl($recebidoAba).'</td>'
+                .'<td><b>TOTAL RECEBIDO</b> '.$brl($recebidoAba).'<br>'.$detTipo($repsDaAba).'</td>'
                 .'<td><b>SALDO</b> <span class="'.($recebidoAba - $gastoAba < 0 ? 'vermelho' : '').'">'.$brl($recebidoAba - $gastoAba).'</span></td></tr></table>';
             if (! $grade) {
                 $s .= '<p class="vazio">Nenhum lançamento em '.$ano.'.</p>';
@@ -199,6 +202,8 @@ class RelatorioCvPdf
         table.grade4 tr.larg td { border: none; padding: 0; height: 0; font-size: 0; line-height: 0; }
         table.grade4 th.cat { font-size: 8pt; background: #e2efda; white-space: normal; line-height: 1.15; }
         td.num { text-align: right; }
+        td.tipo { text-align: center; }
+        .det { font-size: 7pt; color: #444; }
         td.cnpj { font-size: 6pt; letter-spacing: -0.2px; }
         tr.tot td { font-weight: bold; background: #fafafa; }
         tr.totmes td { font-weight: bold; font-size: 9pt; text-align: right; background: #fff8c5; }

@@ -21,8 +21,18 @@
      o papel vai junto do nome, para o gestor ver de relance que não foi o colaborador. */
   const nomeAutor = id => nome(id) + (equipePorId[id]?.role === 'contabilidade' ? ' (Contador)' : '');
   const mesmoInstante = (a, b) => a && b && Math.abs(new Date(b).getTime() - new Date(a).getTime()) < 3000;
+  /* 16/10/2026: normaliza o instante antes de mostrar e ordenar. A data crua do servidor ("2026-10-17 00:57:00") é UTC SEM fuso:
+     o navegador a lê como horário local (3 h adiantada, caindo no dia seguinte) e, como texto, ela ordena fora de lugar —
+     foi o "apagou em definitivo" do Paulo aparecendo em 17/10 00:57 no meio da lista. Com o "Z" vira o instante certo. O
+     servidor já manda ISO; isto cobre resposta antiga e qualquer outra fonte sem fuso. */
+  const instante = v => {
+    if (!v) return '';
+    const s = String(v);
+    return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? s.replace(' ', 'T') + 'Z' : s;
+  };
   const fmtHora = d => {
-    try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    /* sempre o horário de Brasília (pedido do Cleiton, 16/10/2026), qualquer que seja o fuso do aparelho */
+    try { return new Date(d).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
     catch { return '—'; }
   };
 
@@ -60,7 +70,7 @@
       resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
     }));
     (apagadasDet || []).forEach(a => lista.push({
-      quando: a.apagada_em,
+      quando: instante(a.apagada_em),
       acao: 'apagou em definitivo',
       tipoItem: 'nota',
       quem: nome(a.apagada_por),
@@ -71,7 +81,7 @@
       const ehPapel = h.campo === 'role';
       const rot = ehPapel ? PAPEL_NOME : REGIME_NOME;
       lista.push({
-        quando: h.alterado_em,
+        quando: instante(h.alterado_em),
         acao: ehPapel ? 'trocou o papel' : 'trocou o regime',
         tipoItem: '',
         quem: nome(h.alterado_por),
@@ -79,7 +89,7 @@
         resumo: `de ${esc(rot[h.de] || h.de || '—')} para ${esc(rot[h.para] || h.para || '—')}`,
       });
     });
-    lista.sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
+    lista.sort((a, b) => (new Date(b.quando).getTime() || 0) - (new Date(a.quando).getTime() || 0));   // pelo instante, não pelo texto
     entradas = lista.slice(0, 200);
     estado = 'ok';
   }

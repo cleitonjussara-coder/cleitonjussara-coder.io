@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=411">
+  <link rel="manifest" href="manifest.json?v=426">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -422,7 +422,7 @@ select.inp{cursor:pointer}
              padding:2px 4px;border-radius:6px;line-height:1}
 .btn-mes-nav:active{background:var(--bg)}
 
-.fil-tipo{display:flex;gap:6px}
+.fil-tipo{display:flex;gap:6px;flex-wrap:wrap}
 .chip{padding:5px 12px;border-radius:20px;font-size:15.5px;font-weight:600;
       border:1.5px solid var(--border);background:var(--surface);cursor:pointer;color:var(--text2)}
 .chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
@@ -479,6 +479,7 @@ select.inp{cursor:pointer}
 .doc-tag{font-size:13px;font-weight:700;padding:2px 6px;border-radius:4px;background:#eef2f7;color:#3b4a5e;white-space:nowrap}
 .doc-tag.nfce{background:#e6f4ea;color:#1e6b3a}.doc-tag.nfe{background:#e8effc;color:#24488f}.doc-tag.danfe{background:#f3ecfb;color:#5b3b8f}
 .doc-tag.dup{background:#fdecec;color:#a12626}
+.doc-tag.pag-cartao{background:#e6f1fb;color:#0c447c}.doc-tag.pag-carteira{background:#faeeda;color:#633806}
 /* ── Ponto ─────────────────────────────────────────────── */
 .ponto-marcs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ponto-marc{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.07);border:1px dashed rgba(185,226,74,.35)}
@@ -739,7 +740,12 @@ select.inp{cursor:pointer}
               flex-direction:column;gap:10px;padding:14px;
               padding-top:calc(14px + env(safe-area-inset-top,0px));
               padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
-.crop-hd{color:#fff;text-align:center;display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.crop-hd{color:#fff;text-align:center;display:flex;flex-direction:column;gap:2px;flex-shrink:0;
+         padding:0 52px}   /* folga dos dois lados: o X de cancelar ocupa o canto direito */
+#crop-cancelar{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:12px;
+               width:44px;height:44px;border:none;border-radius:50%;cursor:pointer;
+               background:rgba(255,255,255,.18);color:#fff;font-size:24px;line-height:1;
+               display:flex;align-items:center;justify-content:center}
 .crop-tit{font-size:17px;font-weight:800}
 #crop-dica{font-size:13.5px;opacity:.72;line-height:1.3}
 .crop-palco{flex:1;position:relative;display:flex;align-items:center;justify-content:center;
@@ -1265,12 +1271,20 @@ body{font-size:18.5px}
 .cdet-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cdet-kpi{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;min-width:0;overflow-wrap:anywhere;
   background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.cdet-kpi.link{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cdet-kpi.link:active{opacity:.8}
+.cdet-kpi.link.ativo{box-shadow:inset 0 0 0 2px #b8e986}
+.cdet-filtro-info{align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;margin:0 14px 10px;border-radius:12px;background:rgba(184,233,134,.14);border:1px solid rgba(184,233,134,.4);color:#eaf7ee;font-size:15px}
+.cdet-kpi.link:focus-visible{outline:2px solid #b8e986;outline-offset:2px}
 .cdet-kpi-ico{font-size:31px;line-height:1;margin-bottom:4px}
 .cdet-kpi-lbl{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:rgba(234,247,238,.8)}
 .cdet-kpi-val{font-size:26px;font-weight:900;color:#fff;line-height:1.1}
 .cdet-kpi.neg .cdet-kpi-val{color:#ffb4a8}
 .cdet-kpi.warn .cdet-kpi-val{color:#ffd166}
 .cdet-kpi-sub{font-size:14px;color:rgba(234,247,238,.75)}
+.cdet-kpi-splits{display:flex;flex-direction:column;margin-top:6px;border-top:1px solid rgba(234,247,238,.22)}
+.cdet-kpi-split{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:3px 0;color:rgba(234,247,238,.82)}
+.cdet-kpi-split b{color:#fff;font-weight:800;white-space:nowrap}
 .cdet-bals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cdet-bal{display:flex;flex-direction:column;gap:2px;padding:12px 14px;min-width:0;overflow-wrap:anywhere;border-radius:14px;background:var(--surface);border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35);color:#eef9f0}
 .cdet-bal-ico{font-size:29px;line-height:1}
@@ -1776,6 +1790,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 .ini-resumo-saldo{display:block;font-size:11px;color:var(--text2);padding-left:12px}
 .ini-resumo-saldo.receber{color:#b45309;font-weight:700}
 .ini-resumo-saldo.adiantado{color:var(--primary-d);font-weight:700}
+.ini-resumo-det{display:block;font-size:11px;color:var(--text2);padding-left:12px;line-height:1.5}
 /* Sub-abas RDA/RDM do repasse (23/09/2026; maiores em 24/09 a pedido do
    Cleiton). Cada uma já nasce com a cor da sua conta, para dar vontade de
    tocar e para não haver dúvida de qual está marcada. */
@@ -1868,7 +1883,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=411" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=426" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2030,6 +2045,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Recorte: enquadra a nota antes do OCR. Só alimenta a leitura —
      o anexo salvo continua sendo a foto inteira. -->
 <div id="crop-overlay">
+  <button type="button" id="crop-cancelar" aria-label="Cancelar e descartar esta foto" title="Cancelar e descartar esta foto">✕</button>
   <div class="crop-hd">
     <span class="crop-tit">Enquadre a nota</span>
     <span id="crop-dica">Arraste os cantos para enquadrar a nota</span>
@@ -2470,6 +2486,14 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
                  background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;
                  width:44px;height:44px;font-size:24px;cursor:pointer;display:flex;
                  align-items:center;justify-content:center">✕</button>
+  <button id="foto-viewer-ant" onclick="fotoViewerVizinha(-1)" aria-label="Foto anterior"
+          style="display:none;position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:1;
+                 background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:50%;
+                 width:52px;height:52px;font-size:30px;cursor:pointer;align-items:center;justify-content:center">‹</button>
+  <button id="foto-viewer-prox" onclick="fotoViewerVizinha(1)" aria-label="Próxima foto"
+          style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;
+                 background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:50%;
+                 width:52px;height:52px;font-size:30px;cursor:pointer;align-items:center;justify-content:center">›</button>
   <img id="foto-viewer-img" src="" alt="Foto da nota"
        style="max-width:95vw;max-height:78vh;object-fit:contain;border-radius:10px;
               box-shadow:0 4px 30px rgba(0,0,0,.6)">
@@ -2529,33 +2553,33 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=411"></script>
-<script defer src="js/db.js?v=411"></script>
-<script defer src="js/nfce.js?v=411"></script>
-<script defer src="js/sefaz.js?v=411"></script>
-<script defer src="js/brasilapi.js?v=411"></script>
-<script defer src="js/ocr.js?v=411"></script>
-<script defer src="js/recorte.js?v=411"></script>
-<script defer src="js/excel.js?v=411"></script>
-<script defer src="js/gestor.js?v=411"></script>
-<script defer src="js/frota.js?v=411"></script>
-<script defer src="js/ponto.js?v=411"></script>
-<script defer src="js/rastreio.js?v=411"></script>
-<script defer src="js/gdrive.js?v=411"></script>
+<script defer src="js/api.js?v=426"></script>
+<script defer src="js/db.js?v=426"></script>
+<script defer src="js/nfce.js?v=426"></script>
+<script defer src="js/sefaz.js?v=426"></script>
+<script defer src="js/brasilapi.js?v=426"></script>
+<script defer src="js/ocr.js?v=426"></script>
+<script defer src="js/recorte.js?v=426"></script>
+<script defer src="js/excel.js?v=426"></script>
+<script defer src="js/gestor.js?v=426"></script>
+<script defer src="js/frota.js?v=426"></script>
+<script defer src="js/ponto.js?v=426"></script>
+<script defer src="js/rastreio.js?v=426"></script>
+<script defer src="js/gdrive.js?v=426"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=411"></script>
+<script defer src="js/svelte-ajuda.js?v=426"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=411"></script>
+<script defer src="js/svelte-historico.js?v=426"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=411"></script>
+<script defer src="js/svelte-arquivos.js?v=426"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=411"></script>
-<script defer src="js/app.js?v=411"></script>
+<script defer src="js/svelte-perfil.js?v=426"></script>
+<script defer src="js/app.js?v=426"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=411').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=426').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

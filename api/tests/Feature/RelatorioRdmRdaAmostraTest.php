@@ -196,6 +196,15 @@ class RelatorioRdmRdaAmostraTest extends TestCase
         $ss->disconnectWorksheets();
     }
 
+    public function test_saldo_do_rdm_e_recebido_menos_gasto(): void
+    {
+        $c = $this->colaborador();
+        $ss = app(RelatorioRdmRda::class)->gerar($c, self::ANO);
+
+        $this->assertSame('=G2-D2', $ss->getSheetByName('R.D.M.')->getCell('J2')->getValue());
+        $ss->disconnectWorksheets();
+    }
+
     public function test_o_total_do_mes_continua_somando_o_que_foi_lancado(): void
     {
         $c = $this->colaborador();

@@ -154,7 +154,7 @@ window.Excel = (() => {
 
     // Geração
     merge(ws, r, 0, r, 8);
-    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — Petermann App`);
+    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Gerado em ${FusoBR.data(new Date())} às ${FusoBR.hora(new Date(), {hour:'2-digit',minute:'2-digit'})} — Petermann App`);
     r++;
 
     ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:8}});
@@ -293,7 +293,7 @@ window.Excel = (() => {
     ws[XLSX.utils.encode_cell({r, c:0})] = titCell(`PETERMANN — RELATÓRIO DA EQUIPE`);
     r++;
     merge(ws, r, 0, r, 9);
-    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Mês: ${MESES[mes-1]}/${ano}      Gerado em ${new Date().toLocaleDateString('pt-BR')}      `
+    ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Mês: ${MESES[mes-1]}/${ano}      Gerado em ${FusoBR.data(new Date())}      `
       + (anterior ? 'Saldo Acum. = Anterior (todos os meses antes deste) + Repasse − Gasto' : 'Saldo anterior NÃO incluído (histórico indisponível): saldo só do mês'));
     r += 2;
 
