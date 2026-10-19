@@ -36,20 +36,27 @@ class Justificativa extends Model
         ];
     }
 
-    /* A tabela existe? (memorizado). Protege o período entre publicar a API nova e a
-       migração rodar: o Rastreio e a exclusão de colaborador não podem quebrar por isso. */
+    /* A tabela existe? (memorizado por requisição/processo). Protege o período entre publicar a API nova e a
+       migração rodar: o Rastreio, o sino e a exclusão de colaborador não podem quebrar por isso. */
+    private static ?bool $existe = null;
+
     public static function tabelaExiste(): bool
     {
-        static $existe = null;
-        if ($existe === null) {
+        if (self::$existe === null) {
             try {
-                $existe = Schema::hasTable('justificativas');
+                self::$existe = Schema::hasTable('justificativas');
             } catch (\Throwable) {
-                $existe = false;
+                self::$existe = false;
             }
         }
 
-        return $existe;
+        return self::$existe;
+    }
+
+    /** Só para teste: esquece o que foi memorizado. */
+    public static function esquecerTabela(): void
+    {
+        self::$existe = null;
     }
 
     public function colaborador(): BelongsTo

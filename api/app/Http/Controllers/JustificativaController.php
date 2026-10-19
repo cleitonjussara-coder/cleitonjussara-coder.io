@@ -29,6 +29,9 @@ class JustificativaController extends Controller
     public function index(Request $r): JsonResponse
     {
         abort_unless($r->user()->gerencia(), 403, 'Só gestor ou administrador vê as justificativas da equipe');
+        if (! Justificativa::tabelaExiste()) {
+            return response()->json([]);   // API publicada antes da migração: Histórico segue sem elas
+        }
         $q = Justificativa::query()->with(['colaborador:id,nome', 'autor:id,nome'])->orderByDesc('created_at');
         if ($since = $r->query('since')) {
             try {
@@ -46,15 +49,23 @@ class JustificativaController extends Controller
     /**
      * GET /justificativas/sino — o que cabe no sino de QUEM pergunta:
      *   colaborador  → os pedidos abertos para ele;
-     *   gestor/admin → as respostas dos pedidos que ELE fez e ainda não marcou como vistas.
+     *   gestor/admin → as respostas dos pedidos que ELE fez e ainda não marcou como vistas; se quem pediu
+     *                  saiu (excluído, desativado ou sem papel de gestão), a resposta vai para TODA a gestão —
+     *                  o push da JustificativaAviso já avisa a gestão nesse caso e o sino não pode estar vazio.
      */
     public function sino(Request $r): JsonResponse
     {
         $u = $r->user();
         abort_if($u->soLeitura(), 403, 'Contabilidade não usa as justificativas');
+        if (! Justificativa::tabelaExiste()) {
+            return response()->json([]);   // API publicada antes da migração: o sino segue sem elas, sem erro
+        }
         $q = Justificativa::query()->with(['colaborador:id,nome', 'autor:id,nome'])->whereNull('cancelada_em');
         if ($u->gerencia()) {
-            $q->where('pedido_por', $u->id)->whereNotNull('resposta')->whereNull('visto_em');
+            $gestaoAtiva = Colaborador::whereIn('role', ['gestor', 'admin'])->where('ativo', true)->select('id');
+            $q->whereNotNull('resposta')->whereNull('visto_em')->where(function ($w) use ($u, $gestaoAtiva) {
+                $w->where('pedido_por', $u->id)->orWhereNull('pedido_por')->orWhereNotIn('pedido_por', $gestaoAtiva);
+            });
         } else {
             $q->where('colaborador_id', $u->id)->whereNull('resposta');
         }
@@ -66,6 +77,7 @@ class JustificativaController extends Controller
     public function store(Request $r): JsonResponse
     {
         $u = $r->user();
+        $this->exigeTabela();
         abort_unless($u->gerencia(), 403, 'Só gestor ou administrador pede justificativa');
         $d = $r->validate([
             'colaborador_id' => ['required', 'string'],
@@ -114,6 +126,7 @@ class JustificativaController extends Controller
     public function responder(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
+        $this->exigeTabela();
         $j = Justificativa::where('colaborador_id', $u->id)->find($id);
         abort_unless($j, 404, 'Pedido não encontrado');   // de outra pessoa = não existe (nada de 403 que confirme o id)
         $d = $r->validate([
@@ -135,6 +148,7 @@ class JustificativaController extends Controller
     /** PATCH /justificativas/{id}/visto — o gestor deu "OK, vi" na resposta. Só gestor/admin. */
     public function visto(Request $r, string $id): JsonResponse
     {
+        $this->exigeTabela();
         abort_unless($r->user()->gerencia(), 403, 'Só gestor ou administrador');
         $j = Justificativa::findOrFail($id);
         if ($j->resposta !== null && ! $j->visto_em) {
@@ -148,6 +162,7 @@ class JustificativaController extends Controller
     public function cancelar(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
+        $this->exigeTabela();
         abort_unless($u->gerencia(), 403, 'Só gestor ou administrador');
         $j = Justificativa::findOrFail($id);
         abort_if($j->resposta !== null, 422, 'Este pedido já foi respondido — não dá para cancelar.');
@@ -156,6 +171,12 @@ class JustificativaController extends Controller
         }
 
         return response()->json($j->fresh(['colaborador', 'autor'])->paraApp());
+    }
+
+    /** Janela entre publicar a API e rodar a migração: responde 503 claro (não 500 com e-mail de alerta ao dono). */
+    private function exigeTabela(): void
+    {
+        abort_unless(Justificativa::tabelaExiste(), 503, 'O servidor ainda está atualizando o banco de dados — tente de novo em alguns minutos.');
     }
 
     /** "19/10 às 14:30" no horário de Brasília (o servidor roda em UTC). */

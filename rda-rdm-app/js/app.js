@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 433;
+const APP_BUILD = 434;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -657,7 +657,8 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, camp
       }
       fechar(saida);
     };
-    const alterado = () => inputs.some((inp, i) => inp.value !== (campos[i].valor == null ? '' : String(campos[i].valor)));
+    /* campo de várias linhas já com texto (reaberto depois de uma falha de envio) conta como digitado: tocar fora não o descarta */
+    const alterado = () => inputs.some((inp, i) => inp.value !== (campos[i].valor == null ? '' : String(campos[i].valor)) || (campos[i].linhas && inp.value.trim()));
 
     const linha = document.createElement('div');
     linha.style.cssText = 'display:flex;gap:8px';
@@ -680,7 +681,11 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, camp
     el.onclick = e => { if (e.target === el && !alterado()) fechar(null); };
 
     abrir();
-    if (inputs[0]) { inputs[0].focus(); try { inputs[0].select(); } catch (_) {} }
+    if (inputs[0]) {
+      inputs[0].focus();
+      /* textarea com texto mantido: cursor no fim (selecionar tudo faria a primeira tecla apagar o que a pessoa escreveu) */
+      try { if (campos[0].linhas) { const f = inputs[0].value.length; inputs[0].setSelectionRange(f, f); } else inputs[0].select(); } catch (_) {}
+    }
   });
 }
 
@@ -1259,7 +1264,7 @@ async function carregarDadosLocais() {
     }
   }
 
-  atualizarNotificacoes().then(_abrirSinoPelaUrl).catch(() => {});
+  atualizarNotificacoes({ esperarJust: true }).then(_abrirSinoPelaUrl).catch(() => {});
 
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
@@ -2138,7 +2143,7 @@ function _notificacoes() {
         titulo: `${j.pedido_por_nome || 'A gestão'} pediu uma justificativa`,
         sub: `${j.motivo}${j.mensagem ? ' — ' + j.mensagem : ''} · pedido ${_quandoJust(j.pedido_em)}`,
       });
-    } else if (j.status === 'respondida' && !j.visto_em && j.pedido_por === user.id) {
+    } else if (j.status === 'respondida' && !j.visto_em && _ehGestorOuAdmin()) {   // o servidor já separou o que é seu (ou da gestão, se quem pediu saiu)
       out.push({
         id: 'just:' + j.id, tipo: 'justresp', just: j,
         titulo: `${j.colaborador_nome || 'O colaborador'} respondeu a justificativa`,
@@ -2237,14 +2242,22 @@ function _resumirTexto(t, max) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-async function atualizarNotificacoes() {
-  /* o sino só traz pedido de repasse, cadastro novo e cartão baixo: nada disso é do Contador */
-  if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
-  if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
-  /* Justificativas (19/10/2026): do servidor, e só com rede. Falhou (offline, API ainda sem a rota) → mantém o que já veio. */
-  if (sb?.justificativas && user && !DEMO_MODE && navigator.onLine) {
-    try { justificativasSino = await sb.justificativas.sino() || []; } catch (_) { /* fica a lista anterior */ }
-  }
+/* Busca as justificativas do sino no servidor. Nunca rejeita e nunca é esperada por quem só quer repintar o sino:
+   atualizarNotificacoes() roda no fim do registro de repasse/recarga, que é local e não pode ficar presa à rede
+   (campo, sinal ruim — a revisão de 19/10/2026 pegou isso). Uma busca por vez; resposta de outra conta é descartada. */
+let _justBuscando = null;
+function _buscarJustificativas() {
+  if (!(sb?.justificativas && user && !DEMO_MODE && navigator.onLine) || _ehContabilidade()) return Promise.resolve(false);
+  if (_justBuscando) return _justBuscando;
+  const uid = user.id;
+  _justBuscando = sb.justificativas.sino()
+    .then(l => { if (user?.id !== uid) return false; justificativasSino = l || []; return true; })
+    .catch(() => false)           // offline, API ainda sem a rota: fica a lista anterior
+    .finally(() => { _justBuscando = null; });
+  return _justBuscando;
+}
+
+async function _pintarSino() {
   const n = _notificacoes().length;
   const sino = $('hdr-sino'), num = $('hdr-sino-num');
   if (sino) { sino.style.display = user ? '' : 'none'; sino.classList.toggle('tem', n > 0); }
@@ -2254,6 +2267,18 @@ async function atualizarNotificacoes() {
     else if (navigator.clearAppBadge) await navigator.clearAppBadge();
   } catch (_) {}
   return n;
+}
+
+/* esperarJust: só quem precisa da lista de justificativas ATUAL logo em seguida (abrir o sino, depois de responder) espera a rede. */
+async function atualizarNotificacoes({ esperarJust = false } = {}) {
+  /* o sino só traz pedido de repasse, cadastro novo e cartão baixo: nada disso é do Contador */
+  if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
+  if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
+  /* Justificativas (19/10/2026): vêm do servidor. Em segundo plano; quando chegam, o número do sino é repintado. */
+  const busca = _buscarJustificativas();
+  if (esperarJust) await busca;
+  else busca.then(mudou => { if (mudou) _pintarSino(); });
+  return _pintarSino();
 }
 
 function abrirNotificacoes() {
@@ -2327,13 +2352,20 @@ async function confirmarEntrada(id, aceita, btn) {
 ═══════════════════════════════════════════════════════════ */
 async function _atualizarSinoDepoisDeJustificativa() {
   document.getElementById('notif-overlay')?.remove();
-  const n = await atualizarNotificacoes();
+  const n = await atualizarNotificacoes({ esperarJust: true });
   if (n > 0) abrirNotificacoes();
+}
+
+/* O item sumiu da lista (outro aparelho respondeu, o gestor cancelou, a lista foi atualizada com o sino aberto):
+   em vez de botão morto, avisa e mostra o sino como está agora. */
+async function _justSumiu() {
+  toast('Esse pedido não está mais na lista — o sino foi atualizado', 'err', 3500);
+  await _atualizarSinoDepoisDeJustificativa();
 }
 
 async function responderJustificativa(id) {
   const j = _just(id);
-  if (!j) return;
+  if (!j) { await _justSumiu(); return; }
   if (!sb || !navigator.onLine) { toast('Precisa de internet para responder', 'err'); return; }
   const quem = j.pedido_por_nome || 'A gestão';
   let texto = '';
@@ -2364,19 +2396,21 @@ async function responderJustificativa(id) {
         await _atualizarSinoDepoisDeJustificativa();
         return;
       }
-      toast('Não enviou: ' + (e.message || 'erro') + ' — o texto foi mantido', 'err', 4500);   // rede: reabre com o texto
+      /* rede: aviso EM JANELA (o toast ficava atrás da janela que reabre na hora) e volta com o texto mantido */
+      await mostrarAviso(`Não enviou${_NL}${e.message || 'erro de conexão'}${_NL}${_NL}O que você escreveu foi mantido — toque em OK e envie de novo.`);
     }
   }
 }
 
-function verRespostaJustificativa(id) {
+async function verRespostaJustificativa(id) {
   const j = _just(id);
-  if (!j) return;
+  if (!j) { await _justSumiu(); return; }
   mostrarAviso(`Justificativa de ${j.colaborador_nome || 'colaborador'}${_NL}Pedido (${_quandoJust(j.pedido_em)}): ${j.motivo}${j.mensagem ? _NL + j.mensagem : ''}${_NL}${_NL}Resposta (${_quandoJust(j.respondido_em)}):${_NL}${j.resposta}`);
 }
 
 async function dispensarJustificativa(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet', 'err'); return; }
+  if (!_just(id)) { await _justSumiu(); return; }
   if (btn) btn.disabled = true;
   try {
     await sb.justificativas.visto(id);

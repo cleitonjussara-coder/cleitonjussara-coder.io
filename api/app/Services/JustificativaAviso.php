@@ -51,21 +51,25 @@ class JustificativaAviso
     {
         $j->loadMissing(['colaborador', 'autor']);
         $quem = $j->colaborador?->nome ?: 'O colaborador';
+        /* Só é "quem pediu" para efeito de aviso se AINDA gerencia e está ativo. Rebaixado a colaborador/contador,
+           desativado ou excluído: a resposta (que pode ser pessoal) não vai para ele — nem push nem e-mail — e a
+           gestão atual é avisada; o sino dela mostra a resposta (JustificativaController::sino). */
         $autor = $j->autor;
+        $autorValido = $autor && $autor->ativo && $autor->gerencia();
 
         try {
             $titulo = 'Justificativa respondida';
             $corpo = "{$quem} respondeu: ".$this->curto((string) $j->resposta, 110);
-            if ($autor && $autor->ativo) {
+            if ($autorValido) {
                 $this->push->enviar($autor, $titulo, $corpo, './?abrir=sino', 'justificativa-resp-'.$j->id);
             } else {
-                $this->push->avisarGestores($titulo, $corpo, './?abrir=sino', 'justificativa-resp-'.$j->id);   // quem pediu saiu: avisa a gestão
+                $this->push->avisarGestores($titulo, $corpo, './?abrir=sino', 'justificativa-resp-'.$j->id);
             }
         } catch (Throwable $e) {
             Log::warning('push da resposta de justificativa falhou: '.$e->getMessage());
         }
 
-        if ($autor?->email) {
+        if ($autorValido && $autor->email) {
             $texto = "Olá, {$autor->nome}.\n\n{$quem} respondeu ao seu pedido de justificativa.\n\n"
                 ."Motivo do pedido: {$j->motivo}\n\nResposta:\n{$j->resposta}\n\n"
                 .'No app: Rastreio da equipe (ou o sino 🔔) → '.config('petermann.front_url');

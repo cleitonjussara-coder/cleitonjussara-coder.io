@@ -222,7 +222,7 @@ window.Rastreio = (() => {
           carregar();
           return;
         }
-        toast('Não enviou: ' + (e.message || 'erro') + ' — o texto foi mantido', 'err', 4500);
+        await mostrarAviso(`Não enviou${String.fromCharCode(10)}${e.message || 'erro de conexão'}${String.fromCharCode(10)}${String.fromCharCode(10)}O que você escreveu foi mantido — toque em OK e envie de novo.`);
       }
     }
   }

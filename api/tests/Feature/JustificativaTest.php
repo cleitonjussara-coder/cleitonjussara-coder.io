@@ -7,6 +7,7 @@ use App\Models\Justificativa;
 use App\Services\PushService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Resend\Laravel\Facades\Resend;
@@ -46,7 +47,147 @@ class JustificativaTest extends TestCase
     protected function tearDown(): void
     {
         Carbon::setTestNow();
+        Justificativa::esquecerTabela();
+
         parent::tearDown();
+    }
+
+    /** Pedido do Paulo respondido pela Ana, com o Paulo "saindo" (função $sai) antes da resposta. Devolve [gestorQueSaiu, outroGestor, ana, id]. */
+    private function pedidoRespondidoComAutorFora(callable $sai, array &$emails, array &$pushes): array
+    {
+        config(['resend.api_key' => 're_teste']);
+        $falso = new class
+        {
+            public array $enviados = [];
+
+            public function emails(): object
+            {
+                return new class($this)
+                {
+                    public function __construct(private object $dono) {}
+
+                    public function send(array $p): array
+                    {
+                        $this->dono->enviados[] = $p;
+
+                        return ['id' => 'abc'];
+                    }
+                };
+            }
+        };
+        Resend::swap($falso);
+        $this->mock(PushService::class, function ($m) use (&$pushes) {
+            $m->shouldReceive('enviar')->andReturnUsing(function ($destino, $titulo) use (&$pushes) {
+                $pushes[] = ['enviar', $destino->id, $titulo];
+
+                return 1;
+            });
+            $m->shouldReceive('avisarGestores')->andReturnUsing(function ($titulo) use (&$pushes) {
+                $pushes[] = ['gestores', null, $titulo];
+
+                return 1;
+            });
+        });
+
+        $paulo = $this->pessoa('Paulo', 'gestor');
+        $cleiton = $this->pessoa('Cleiton', 'admin');
+        $ana = $this->pessoa('Ana');
+        $this->pedir($paulo, $ana)->assertCreated();
+        $id = Justificativa::first()->id;
+        $antes = count($falso->enviados);
+        $pushes = [];
+        $sai($paulo);
+
+        Sanctum::actingAs($ana);
+        $this->postJson("/api/justificativas/$id/responder", ['resposta' => 'Motivo pessoal sigiloso'])->assertOk();
+        $emails = array_slice($falso->enviados, $antes);
+
+        return [$paulo, $cleiton, $ana, $id];
+    }
+
+    public function test_autor_rebaixado_nao_recebe_a_resposta_e_a_gestao_ve_no_sino(): void
+    {
+        $emails = [];
+        $pushes = [];
+        [$paulo, $cleiton] = $this->pedidoRespondidoComAutorFora(function ($p) {
+            $p->forceFill(['role' => 'contabilidade'])->save();   // o ex-gestor virou Contador
+        }, $emails, $pushes);
+
+        $this->assertSame([], $emails, 'e-mail com a resposta não pode ir para quem não gerencia mais');
+        $this->assertSame([['gestores', null, 'Justificativa respondida']], $pushes);   // gestão atual avisada, ex-gestor não
+
+        Sanctum::actingAs($cleiton);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(1)->assertJsonPath('0.resposta', 'Motivo pessoal sigiloso');
+    }
+
+    public function test_autor_desativado_ou_excluido_a_resposta_vai_para_toda_a_gestao(): void
+    {
+        $emails = [];
+        $pushes = [];
+        [$paulo, $cleiton] = $this->pedidoRespondidoComAutorFora(function ($p) {
+            $p->forceFill(['ativo' => false])->save();
+        }, $emails, $pushes);
+        $this->assertSame([], $emails);
+        $this->assertSame('gestores', $pushes[0][0]);
+        Sanctum::actingAs($cleiton);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(1);
+
+        /* excluído de vez: pedido_por fica solto, o sino da gestão continua mostrando */
+        $paulo->forceFill(['ativo' => true, 'role' => 'gestor'])->save();
+        $gestorB = $this->pessoa('Gestor B', 'gestor');
+        Sanctum::actingAs($gestorB);
+        $this->postJson("/api/colaboradores/{$paulo->id}/excluir", ['confirmacao' => 'EXCLUIR'])->assertOk();
+        $item = collect($this->getJson('/api/justificativas/sino')->assertOk()->json())->first();
+        $this->assertNotNull($item);
+        $this->assertNull($item['pedido_por_nome']);
+
+        /* "OK, vi" de qualquer gestor tira do sino de todos */
+        $this->patchJson('/api/justificativas/'.$item['id'].'/visto')->assertOk();
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(0);
+        Sanctum::actingAs($cleiton);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(0);
+    }
+
+    public function test_autor_ativo_continua_sendo_o_unico_a_ver_a_resposta(): void
+    {
+        $emails = [];
+        $pushes = [];
+        [$paulo, $cleiton] = $this->pedidoRespondidoComAutorFora(function ($p) {
+            // nada: o Paulo segue gestor e ativo
+        }, $emails, $pushes);
+
+        $this->assertCount(1, $emails);
+        $this->assertSame(['paulo@teste.local'], $emails[0]['to']);
+        $this->assertSame([['enviar', $paulo->id, 'Justificativa respondida']], $pushes);
+        Sanctum::actingAs($cleiton);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(0);   // o admin NÃO vê a do Paulo
+        Sanctum::actingAs($paulo);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertJsonCount(1);
+    }
+
+    public function test_antes_da_migracao_nada_quebra_com_500(): void
+    {
+        $gestor = $this->pessoa('Paulo', 'gestor');
+        $ana = $this->pessoa('Ana');
+        Schema::drop('justificativas');
+        Justificativa::esquecerTabela();
+        
+
+        Sanctum::actingAs($gestor);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertExactJson([]);
+        $this->getJson('/api/justificativas')->assertOk()->assertExactJson([]);
+        $eq = collect($this->getJson('/api/colaboradores/atividade')->assertOk()->json('equipe'));
+        $this->assertNull($eq->firstWhere('nome', 'Ana')['justificativa']);
+        $this->postJson('/api/justificativas', ['colaborador_id' => $ana->id, 'motivo' => 'Sem lançar há 4 dias'])->assertStatus(503);
+        $this->postJson('/api/justificativas/x/responder', ['resposta' => 'abc'])->assertStatus(503);
+        $this->deleteJson('/api/justificativas/x')->assertStatus(503);
+
+        Sanctum::actingAs($ana);
+        $this->getJson('/api/justificativas/sino')->assertOk()->assertExactJson([]);
+        $this->postJson('/api/justificativas/x/responder', ['resposta' => 'abc'])->assertStatus(503);
+
+        Sanctum::actingAs($gestor);
+        $this->postJson("/api/colaboradores/{$ana->id}/excluir", ['confirmacao' => 'EXCLUIR'])->assertOk()->assertJsonPath('justificativas', 0);
     }
 
     public function test_gestor_pede_e_o_colaborador_ve_no_sino_so_o_dele(): void
