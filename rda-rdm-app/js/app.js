@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 432;
+const APP_BUILD = 433;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -627,17 +627,18 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, camp
         lab.style.cssText = 'font-size:13px;color:#b8d9c2;margin:0 0 4px';
         caixa.appendChild(lab);
       }
-      const inp = document.createElement('input');
-      inp.type = 'text';
-      inp.inputMode = c.inputmode || 'text';
+      /* c.linhas (19/10/2026): campo de texto de várias linhas (justificativa). Enter vira quebra de linha em vez de enviar. */
+      const inp = document.createElement(c.linhas ? 'textarea' : 'input');
+      if (c.linhas) { inp.rows = c.linhas; }
+      else { inp.type = 'text'; inp.inputMode = c.inputmode || 'text'; }
       if (c.maxlength) inp.maxLength = c.maxlength;
       inp.placeholder = c.placeholder || '';
       inp.value = c.valor == null ? '' : String(c.valor);
       inp.autocomplete = 'off';
-      inp.spellcheck = false;
-      inp.setAttribute('autocapitalize', 'off');
+      inp.spellcheck = !!c.linhas;
+      inp.setAttribute('autocapitalize', c.linhas ? 'sentences' : 'off');
       inp.style.cssText = 'width:100%;box-sizing:border-box;background:#062d16;color:#eef9f0;border:1px solid #b9e24a;'
-        + 'border-radius:8px;padding:11px 12px;font-size:16px;margin:0 0 10px';
+        + 'border-radius:8px;padding:11px 12px;font-size:16px;margin:0 0 10px' + (c.linhas ? ';font-family:inherit;resize:vertical;line-height:1.4' : '');
       inputs.push(inp);
       caixa.appendChild(inp);
     });
@@ -1258,7 +1259,7 @@ async function carregarDadosLocais() {
     }
   }
 
-  atualizarNotificacoes().catch(() => {});
+  atualizarNotificacoes().then(_abrirSinoPelaUrl).catch(() => {});
 
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
@@ -1850,7 +1851,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = [];
+  notasEquipe = []; repassesEquipe = []; justificativasSino = [];
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
@@ -2118,11 +2119,33 @@ function _notifMarcarVistos(ids) {
 }
 function _repassePendente(r) { return _repasseEhPedido(r) && !r.atendido_em && !r.deleted; }
 
+/* Pedido de justificativa (19/10/2026, pedido do Paulo). Diferente do resto do sino, isto NÃO sai do banco local: vem
+   do servidor (GET /justificativas/sino), pronto para quem está logado — colaborador: pedidos abertos para ele;
+   gestor/admin: respostas dos pedidos que ele fez e ainda não deu "OK, vi". Sem rede, fica o que já veio. */
+let justificativasSino = [];
+const _just = id => justificativasSino.find(j => j.id === id);
+
 /* lista de notificações do usuário atual */
 function _notificacoes() {
   if (!user) return [];
   const out = [];
   const vistos = _notifVistos();
+  /* o pedido do gestor vem primeiro: é o que o colaborador precisa responder */
+  justificativasSino.forEach(j => {
+    if (j.status === 'pendente' && j.colaborador_id === user.id) {
+      out.push({
+        id: 'just:' + j.id, tipo: 'justificativa', just: j,
+        titulo: `${j.pedido_por_nome || 'A gestão'} pediu uma justificativa`,
+        sub: `${j.motivo}${j.mensagem ? ' — ' + j.mensagem : ''} · pedido ${_quandoJust(j.pedido_em)}`,
+      });
+    } else if (j.status === 'respondida' && !j.visto_em && j.pedido_por === user.id) {
+      out.push({
+        id: 'just:' + j.id, tipo: 'justresp', just: j,
+        titulo: `${j.colaborador_nome || 'O colaborador'} respondeu a justificativa`,
+        sub: `${j.motivo} — “${_resumirTexto(j.resposta, 140)}”`,
+      });
+    }
+  });
   if (_ehGestorOuAdmin()) {
     repassesEquipe.filter(_repassePendente)
       .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))
@@ -2200,10 +2223,28 @@ function _notificacoes() {
 }
 function fmtDataBR(d) { const s = String(d || '').slice(0, 10); const [a, m, dd] = s.split('-'); return dd ? `${dd}/${m}/${a}` : s; }
 
+/* "hoje 14:30" / "ontem 09:10" / "17/10 08:00" — sempre no horário de Brasília */
+function _quandoJust(iso) {
+  if (!iso) return '';
+  const hora = FusoBR.hora(iso, { hour: '2-digit', minute: '2-digit' });
+  const dia = FusoBR.hojeISO(iso), hoje = FusoBR.hojeISO(new Date()), ontem = FusoBR.hojeISO(new Date(Date.now() - 86400_000));
+  if (dia === hoje) return `hoje ${hora}`;
+  if (dia === ontem) return `ontem ${hora}`;
+  return `${FusoBR.data(iso, { day: '2-digit', month: '2-digit' })} ${hora}`;
+}
+function _resumirTexto(t, max) {
+  const s = String(t || '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 async function atualizarNotificacoes() {
   /* o sino só traz pedido de repasse, cadastro novo e cartão baixo: nada disso é do Contador */
   if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
   if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
+  /* Justificativas (19/10/2026): do servidor, e só com rede. Falhou (offline, API ainda sem a rota) → mantém o que já veio. */
+  if (sb?.justificativas && user && !DEMO_MODE && navigator.onLine) {
+    try { justificativasSino = await sb.justificativas.sino() || []; } catch (_) { /* fica a lista anterior */ }
+  }
   const n = _notificacoes().length;
   const sino = $('hdr-sino'), num = $('hdr-sino-num');
   if (sino) { sino.style.display = user ? '' : 'none'; sino.classList.toggle('tem', n > 0); }
@@ -2222,11 +2263,16 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'cartao' ? `<div class="notif-acoes">
+        ${it.tipo === 'justificativa' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" onclick="responderJustificativa('${it.just.id}')">✍️ Responder</button>
+        </div>` : it.tipo === 'justresp' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" onclick="verRespostaJustificativa('${it.just.id}')">💬 Ler resposta</button>
+          <button class="btn btn-sm btn-outline" onclick="dispensarJustificativa('${it.just.id}', this)">OK, vi</button>
+        </div>` : it.tipo === 'cartao' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: '${it.userId}', nome: '${esc((it.nome || '').replace(/'/g, ''))}' }, 'recarga')">💳 Registrar recarga</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
           <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}')">Fechar</button>
@@ -2270,6 +2316,95 @@ async function confirmarEntrada(id, aceita, btn) {
     if (viewAtual === 'equipe') renderEquipe();
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PEDIDO DE JUSTIFICATIVA (19/10/2026, pedido do Paulo, gestor)
+   O gestor pede pelo Rastreio (rastreio.js); aqui é o lado de quem recebe e a volta:
+   • colaborador: "Responder" no sino → texto de várias linhas → POST /justificativas/{id}/responder;
+   • gestor: "Ler resposta" / "OK, vi" no sino (o "visto" é gravado no servidor, vale em todos os aparelhos).
+   Tudo direto no servidor, sem fila offline — é conversa, não lançamento. Se a janela fechar com erro de
+   rede, ela reabre com o texto que a pessoa já tinha escrito (nunca perde o que digitou).
+═══════════════════════════════════════════════════════════ */
+async function _atualizarSinoDepoisDeJustificativa() {
+  document.getElementById('notif-overlay')?.remove();
+  const n = await atualizarNotificacoes();
+  if (n > 0) abrirNotificacoes();
+}
+
+async function responderJustificativa(id) {
+  const j = _just(id);
+  if (!j) return;
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para responder', 'err'); return; }
+  const quem = j.pedido_por_nome || 'A gestão';
+  let texto = '';
+  for (;;) {
+    const r = await pedirCampos({
+      titulo: 'Justificar',
+      dica: `${quem} pediu: ${j.motivo}${j.mensagem ? _NL + j.mensagem : ''}${_NL}${_NL}Sua resposta chega direto para ${quem}.`,
+      confirmar: 'Enviar resposta',
+      campos: [{
+        id: 'resposta', rotulo: 'Sua justificativa', linhas: 5, maxlength: 2000, valor: texto,
+        placeholder: 'Conte o que aconteceu',
+        validar: t => (t.length < 3 ? 'Escreva a justificativa (pelo menos 3 letras).' : ''),
+      }],
+    });
+    if (!r) return;
+    texto = r.resposta;
+    setLoading(true);
+    try {
+      await sb.justificativas.responder(id, texto);
+      setLoading(false);
+      toast('Justificativa enviada ✅');
+      await _atualizarSinoDepoisDeJustificativa();
+      return;
+    } catch (e) {
+      setLoading(false);
+      if (e.status === 404 || e.status === 422) {            // cancelado, já respondido ou não é seu: não adianta tentar de novo
+        await mostrarAviso(`Não deu para enviar${_NL}${e.message || 'O pedido não existe mais.'}`);
+        await _atualizarSinoDepoisDeJustificativa();
+        return;
+      }
+      toast('Não enviou: ' + (e.message || 'erro') + ' — o texto foi mantido', 'err', 4500);   // rede: reabre com o texto
+    }
+  }
+}
+
+function verRespostaJustificativa(id) {
+  const j = _just(id);
+  if (!j) return;
+  mostrarAviso(`Justificativa de ${j.colaborador_nome || 'colaborador'}${_NL}Pedido (${_quandoJust(j.pedido_em)}): ${j.motivo}${j.mensagem ? _NL + j.mensagem : ''}${_NL}${_NL}Resposta (${_quandoJust(j.respondido_em)}):${_NL}${j.resposta}`);
+}
+
+async function dispensarJustificativa(id, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet', 'err'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    await sb.justificativas.visto(id);
+    justificativasSino = justificativasSino.filter(j => j.id !== id);
+    await _atualizarSinoDepoisDeJustificativa();
+    if (viewAtual === 'rastreio') window.Rastreio?.atualizar?.();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+
+/* Tocar na notificação do celular com o app FECHADO abre ./?abrir=sino: abre o sino direto, uma vez só. */
+function _abrirSinoPelaUrl() {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get('abrir') !== 'sino') return;
+    q.delete('abrir');
+    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    if (user && !_ehContabilidade()) abrirNotificacoes();
+  } catch (_) {}
+}
+
+/* Voltou ao app (aba/janela em primeiro plano): confere se chegou pedido ou resposta nova — a notificação do
+   celular só traz o app para a frente, e o sino não se atualizava sozinho. No máximo uma vez a cada 20 s. */
+let _sinoConferidoEm = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !user || Date.now() - _sinoConferidoEm < 20_000) return;
+  _sinoConferidoEm = Date.now();
+  atualizarNotificacoes().catch(() => {});
+});
 
 /* ═══════════════════════════════════════════════════════════
    REPASSE DE OUTRO COLABORADOR (24/09/2026)

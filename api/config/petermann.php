@@ -23,6 +23,14 @@ return [
         'to' => env('REPASSE_EMAIL_TO', 'repasse@pmservicosagronomicos.com.br'),
     ],
 
+    /* Pedido de justificativa (19/10/2026): o gestor pede, pelo Rastreio, que um
+       colaborador explique por que está sem lançar. Freio contra insistência:
+       só um pedido aberto por pessoa e, depois de qualquer pedido, um intervalo
+       mínimo antes do próximo (pedido cancelado não conta). */
+    'justificativa' => [
+        'intervalo_horas' => (int) env('JUSTIFICATIVA_INTERVALO_HORAS', 24),
+    ],
+
     /* Login com Google (mesmo cliente OAuth do projeto CLEITON-PM). A URL de
        callback precisa estar cadastrada lá em "URIs de redirecionamento". */
     'google' => [

@@ -444,6 +444,17 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     zip: (userId, ano, mes) => req('GET', '/arquivos/zip', { query: { user_id: userId || undefined, ano, mes: mes || undefined }, blob: true, timeout: 300_000 }),
   };
 
+  /* Pedido de justificativa (19/10/2026): o gestor pede pelo Rastreio, o colaborador responde pelo sino.
+     Sempre direto no servidor (não passa pela fila offline: é conversa entre duas pessoas). */
+  const justificativas = {
+    list: ({ since, colaborador_id } = {}) => req('GET', '/justificativas', { query: { since: since || undefined, colaborador_id: colaborador_id || undefined } }),   // Histórico (gestor/admin)
+    sino: () => req('GET', '/justificativas/sino'),                                       // o que cabe no sino de quem está logado
+    pedir: ({ colaborador_id, motivo, mensagem }) => req('POST', '/justificativas', { body: { colaborador_id, motivo, mensagem: mensagem || null } }),
+    responder: (id, resposta) => req('POST', `/justificativas/${id}/responder`, { body: { resposta } }),
+    visto: id => req('PATCH', `/justificativas/${id}/visto`),
+    cancelar: id => req('DELETE', `/justificativas/${id}`),
+  };
+
   /* Manutenção do servidor — só admin (a hospedagem não tem terminal). */
   const admin = {
     status: () => req('GET', '/admin/status'),
@@ -456,5 +467,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas };
 })();

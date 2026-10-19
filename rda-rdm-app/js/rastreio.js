@@ -8,8 +8,10 @@
    mais de 3 dias; cinza = sem notas nos últimos 60 dias.
    Complementa o Histórico (lista cronológica de tudo): aqui a visão é POR pessoa.
    Dados: GET /colaboradores/atividade (RastreioController).
+   Pedido de justificativa (19/10/2026): cada cartão de colaborador tem o botão 📨 que avisa a pessoa (sino, celular, e-mail)
+   e mostra, no próprio cartão, o pedido aguardando ou a resposta. Dados vêm no mesmo GET /colaboradores/atividade.
    Depende de globais do app.js: $, sb, esc, brl, toast, _ehGestorOuAdmin,
-   switchView, PAPEL_NOME.
+   switchView, PAPEL_NOME, pedirCampos, pedirConfirmacao, mostrarAviso, setLoading.
 ───────────────────────────────────────────────────────────── */
 window.Rastreio = (() => {
   const TZ = 'America/Sao_Paulo';
@@ -45,6 +47,31 @@ window.Rastreio = (() => {
     return { cor: '#f87171', txt: `Sem lançar há ${dias} dias`, parado: true };
   }
 
+  /* quando um novo pedido é liberado: "hoje 15:00" ou "20/10 12:00" */
+  function quandoFuturo(iso) {
+    const hora = hhmm(iso);
+    return diaBR(iso) === diaBR(Date.now()) ? `hoje ${hora}` : `${ddmm(iso)} ${hora}`;
+  }
+  const resumir = (t, max) => { const x = String(t || '').trim(); return x.length > max ? x.slice(0, max - 1) + '…' : x; };
+
+  /* Pedido de justificativa (19/10/2026): estado do último pedido + botão de ação do cartão (só colaborador). */
+  function _blocoJustificativa(p, abre) {
+    const j = p.justificativa;
+    let estado = '';
+    if (j?.status === 'pendente') {
+      estado = `<div class="rs-just pend">📨 Justificativa pedida <b>${esc(quando(j.pedido_em))}</b>${j.pedido_por_nome ? ' por ' + esc(j.pedido_por_nome) : ''} — aguardando resposta.<br>${esc(j.motivo)}</div>`;
+    } else if (j?.status === 'respondida') {
+      estado = `<div class="rs-just ok">✅ <b>Justificou ${esc(quando(j.respondido_em))}</b> <span class="rs-nota">(pedido: ${esc(j.motivo)})</span><span class="tx"><q>${esc(resumir(j.resposta, abre ? 2000 : 160))}</q></span></div>`;
+    }
+    if (p.role !== 'colaborador') return estado;
+    const livre = !p.justificativa_libera_em || Date.parse(p.justificativa_libera_em) <= Date.now();
+    const botao = j?.status === 'pendente'
+      ? `<button class="rs-bt suave" onclick="event.stopPropagation();Rastreio.cancelarJustificativa('${esc(p.id)}')">↩ Cancelar pedido</button>`
+      : `<button class="rs-bt" ${livre ? '' : 'disabled'} onclick="event.stopPropagation();Rastreio.pedirJustificativa('${esc(p.id)}')">📨 Pedir justificativa</button>`;
+    const nota = j?.status !== 'pendente' && !livre ? `<span class="rs-nota">Novo pedido liberado ${esc(quandoFuturo(p.justificativa_libera_em))}.</span>` : '';
+    return `${estado}<div class="rs-ac">${botao}${nota}</div>`;
+  }
+
   const ativoHoje = p => p.hoje > 0 || (p.visto_em && diaBR(p.visto_em) === diaBR(Date.now()));
 
   function _css() {
@@ -74,6 +101,16 @@ window.Rastreio = (() => {
       .rs-it .t{margin-left:auto;color:var(--text2);white-space:nowrap;font-size:12.5px;padding-left:6px}
       .rs-it.ap{opacity:.62;text-decoration:line-through}
       .rs-leg{font-size:12.5px;color:var(--text2);text-align:center;padding:0 14px 18px}
+      .rs-just{font-size:14px;line-height:1.45;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.08);overflow-wrap:anywhere}
+      .rs-just.pend{background:rgba(251,191,36,.16);color:#fde68a}
+      .rs-just.ok{background:rgba(74,222,128,.14)}
+      .rs-just q{quotes:none;font-style:italic;color:var(--text)}
+      .rs-just .tx{display:block;white-space:pre-wrap;margin-top:2px}
+      .rs-ac{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .rs-bt{font-size:14px;font-weight:700;min-height:40px;padding:8px 14px;border-radius:10px;border:1px solid #b9e24a;background:transparent;color:#d4f27a;cursor:pointer}
+      .rs-bt:disabled{opacity:.5;border-color:var(--border);color:var(--text2);cursor:default}
+      .rs-bt.suave{border-color:var(--border);color:var(--text2);font-weight:600}
+      .rs-nota{font-size:12.5px;color:var(--text2)}
     `;
     document.head.appendChild(s);
   }
@@ -105,6 +142,7 @@ window.Rastreio = (() => {
       ${linhaUlt}
       ${sit.txt && sit.parado ? `<div class="rs-warn">${esc(sit.txt)}</div>` : ''}
       <div class="rs-kp"><span class="rs-k">Hoje: ${p.hoje}</span><span class="rs-k">Semana: ${p.semana}</span><span class="rs-k">Mês: ${p.mes}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>
+      ${_blocoJustificativa(p, abre)}
       ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>` : ''}
     </div>`;
   }
@@ -144,6 +182,66 @@ window.Rastreio = (() => {
     } finally { carregando = false; }
   }
 
+  /* Pedir justificativa (19/10/2026): motivo já vem preenchido com o que o cartão mostra ("Sem lançar há 4 dias");
+     o gestor ajusta e pode somar uma mensagem. Se a rede falhar, a janela volta com o que ele escreveu. */
+  function _motivoSugerido(p) {
+    if (!p.ultimo_lancamento_em) return 'Sem lançar notas há mais de 60 dias';
+    const dias = diasDeDiferenca(p.ultimo_lancamento_em);
+    return dias > 0 ? `Sem lançar há ${dias} ${dias === 1 ? 'dia' : 'dias'}` : '';
+  }
+
+  async function pedirJustificativa(id) {
+    const p = (dados?.equipe || []).find(x => x.id === id);
+    if (!p) return;
+    if (!sb || !navigator.onLine) { toast('Precisa de internet para pedir a justificativa', 'err'); return; }
+    let motivo = _motivoSugerido(p), mensagem = '';
+    for (;;) {
+      const r = await pedirCampos({
+        titulo: `Pedir justificativa a ${p.nome}`,
+        dica: 'A pessoa recebe um aviso no celular, no sino do app e por e-mail, e responde pelo app. A resposta volta para você aqui.',
+        confirmar: 'Enviar pedido',
+        campos: [
+          { id: 'motivo', rotulo: 'Motivo', valor: motivo, maxlength: 200, placeholder: 'Ex.: nota de combustível sem anexo',
+            validar: t => (t.length < 3 ? 'Diga o motivo do pedido.' : '') },
+          { id: 'mensagem', rotulo: 'Mensagem (opcional)', valor: mensagem, linhas: 3, maxlength: 1000, placeholder: 'Algo mais que a pessoa deva saber' },
+        ],
+      });
+      if (!r) return;
+      motivo = r.motivo; mensagem = r.mensagem;
+      setLoading(true);
+      try {
+        const j = await sb.justificativas.pedir({ colaborador_id: id, motivo, mensagem });
+        setLoading(false);
+        toast(j?.email_enviado === false ? `Pedido enviado a ${p.nome} — aparece no sino dela (o e-mail não saiu) 📨` : `Pedido enviado a ${p.nome} 📨`, 'ok', 4500);
+        carregar();
+        return;
+      } catch (e) {
+        setLoading(false);
+        if (e.status === 422 || e.status === 403 || e.status === 404) {        // regra do servidor (já há pedido aberto, intervalo mínimo…): explicar
+          await mostrarAviso(`Não foi possível pedir${String.fromCharCode(10)}${e.message || 'O servidor recusou o pedido.'}`);
+          carregar();
+          return;
+        }
+        toast('Não enviou: ' + (e.message || 'erro') + ' — o texto foi mantido', 'err', 4500);
+      }
+    }
+  }
+
+  async function cancelarJustificativa(id) {
+    const p = (dados?.equipe || []).find(x => x.id === id);
+    const j = p?.justificativa;
+    if (!j || j.status !== 'pendente') return;
+    if (!sb || !navigator.onLine) { toast('Precisa de internet', 'err'); return; }
+    if (!(await pedirConfirmacao({ titulo: `Cancelar o pedido a ${p.nome}?`, mensagem: `${p.nome} deixa de ver o pedido no sino. Depois você pode fazer outro na hora.`, confirmar: 'Cancelar pedido', cancelar: 'Voltar' }))) return;
+    setLoading(true);
+    try {
+      await sb.justificativas.cancelar(j.id);
+      toast('Pedido cancelado');
+    } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); }
+    finally { setLoading(false); }
+    carregar();
+  }
+
   function render() {
     if (typeof _ehGestorOuAdmin === 'function' && !_ehGestorOuAdmin()) { switchView('inicio'); return; }
     _css();
@@ -157,5 +255,7 @@ window.Rastreio = (() => {
     atualizar: () => carregar(),
     filtrar: k => { filtro = k; _pintar(); },
     abrir: id => { aberto = aberto === id ? null : id; _pintar(); },
+    pedirJustificativa,
+    cancelarJustificativa,
   };
 })();

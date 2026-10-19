@@ -10,6 +10,7 @@ use App\Http\Controllers\ColaboradorController;
 use App\Http\Controllers\ConviteController;
 use App\Http\Controllers\FotoController;
 use App\Http\Controllers\FrotaController;
+use App\Http\Controllers\JustificativaController;
 use App\Http\Controllers\NotaController;
 use App\Http\Controllers\PontoController;
 use App\Http\Controllers\RastreioController;
@@ -135,6 +136,14 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/feriados', [PontoController::class, 'feriados']);
     Route::put('/feriados', [PontoController::class, 'feriadoUpsert']);
     Route::delete('/feriados/{data}', [PontoController::class, 'feriadoDelete']);
+
+    /* pedido de justificativa (19/10/2026): gestor pede pelo Rastreio, colaborador responde */
+    Route::get('/justificativas', [JustificativaController::class, 'index']);
+    Route::get('/justificativas/sino', [JustificativaController::class, 'sino']);
+    Route::post('/justificativas', [JustificativaController::class, 'store'])->middleware('throttle:20,1');
+    Route::post('/justificativas/{id}/responder', [JustificativaController::class, 'responder'])->middleware('throttle:20,1');
+    Route::patch('/justificativas/{id}/visto', [JustificativaController::class, 'visto']);
+    Route::delete('/justificativas/{id}', [JustificativaController::class, 'cancelar']);
 
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);
     Route::put('/cnpj/{cnpj}', [CnpjController::class, 'upsert']);

@@ -6,7 +6,7 @@
 
   const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
   const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁' };
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
 
   let estado = $state('carregando'); // 'carregando' | 'offline' | 'erro' | 'ok'
   let erroMsg = $state('');
@@ -40,13 +40,15 @@
     if (!sb || !navigator.onLine) { estado = 'offline'; return; }
     estado = 'carregando';
     const sinceIso = new Date(Date.now() - 60 * 86400_000).toISOString();
-    let notasMudadas, repassesMudados, apagadasDet, papelRegime;
+    let notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas;
     try {
-      [notasMudadas, repassesMudados, apagadasDet, papelRegime] = await Promise.all([
+      [notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas] = await Promise.all([
         sb.notas.list({ since: sinceIso, fields: 'id,user_id,tipo,subtipo,valor,data,razao_social,cnpj,deleted,created_at,updated_at,created_by,updated_by' }),
         sb.repasses.list({ since: sinceIso }),
         sb.notas.apagadasDetalhe(sinceIso),
         sb.colaboradores.historico(sinceIso),
+        /* pedidos de justificativa (19/10/2026) — se a API ainda não tem a rota, o Histórico segue sem eles */
+        (sb.justificativas ? sb.justificativas.list({ since: sinceIso }) : Promise.resolve([])).catch(() => []),
       ]);
     } catch (e) {
       estado = 'erro'; erroMsg = e?.message || 'erro'; return;
@@ -89,6 +91,29 @@
         resumo: `de ${esc(rot[h.de] || h.de || '—')} para ${esc(rot[h.para] || h.para || '—')}`,
       });
     });
+    /* Justificativa: cada pedido gera até três linhas — quando foi pedido, quando respondeu, ou que cancelaram. */
+    const trecho = (t, max = 300) => { const x = String(t || '').replace(/\s+/g, ' ').trim(); return esc(x.length > max ? x.slice(0, max - 1) + '…' : x); };
+    (justificativas || []).forEach(j => {
+      const dono = j.colaborador_nome || nome(j.colaborador_id);
+      lista.push({
+        quando: instante(j.pedido_em),
+        acao: 'pediu justificativa', tipoItem: '', prep: 'a',
+        quem: j.pedido_por_nome || nome(j.pedido_por), dono,
+        resumo: `${esc(j.motivo)}${j.mensagem ? ' — ' + trecho(j.mensagem) : ''}`,
+      });
+      if (j.respondido_em) lista.push({
+        quando: instante(j.respondido_em),
+        acao: 'respondeu a justificativa', tipoItem: '', prep: 'pedida por',
+        quem: dono, dono: j.pedido_por_nome || nome(j.pedido_por),
+        resumo: `“${trecho(j.resposta)}”`,
+      });
+      if (j.cancelada_em) lista.push({
+        quando: instante(j.cancelada_em),
+        acao: 'cancelou o pedido de justificativa', tipoItem: '',
+        quem: nome(j.cancelada_por), dono,
+        resumo: esc(j.motivo),
+      });
+    });
     lista.sort((a, b) => (new Date(b.quando).getTime() || 0) - (new Date(a.quando).getTime() || 0));   // pelo instante, não pelo texto
     entradas = lista.slice(0, 200);
     estado = 'ok';
@@ -115,7 +140,7 @@
         <div class="db-pend-item item">
           <span class="ico">{ICO[e.acao] || '•'}</span>
           <div class="corpo">
-            <div class="db-pend-txt"><b>{e.quem}</b> {e.acao} {e.tipoItem} de <b>{e.dono}</b></div>
+            <div class="db-pend-txt"><b>{e.quem}</b> {e.acao} {e.tipoItem} {e.prep || 'de'} <b>{e.dono}</b></div>
             <div class="resumo">{@html e.resumo}</div>
           </div>
           <span class="hora">{fmtHora(e.quando)}</span>

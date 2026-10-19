@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
+use App\Models\Justificativa;
 use App\Models\Nota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,12 +51,24 @@ class RastreioController extends Controller
             ->get(['id', 'user_id', 'tipo', 'subtipo', 'razao_social', 'cnpj', 'valor', 'deleted', 'created_at', 'updated_at'])
             ->groupBy('user_id');
 
-        $equipe = $pessoas->map(function (Colaborador $p) use ($visto, $porPessoa, $hojeIni, $semanaIni, $mesIni) {
+        /* Pedido de justificativa (19/10/2026): o último de cada pessoa (o cancelado não vale —
+           é como se não tivesse sido feito) e quando o freio de frequência libera um novo. */
+        $ultimaJust = collect();
+        if (Justificativa::tabelaExiste()) {
+            $ultimaJust = Justificativa::query()->with(['colaborador:id,nome', 'autor:id,nome'])
+                ->whereIn('colaborador_id', $pessoas->pluck('id'))->whereNull('cancelada_em')
+                ->orderByDesc('created_at')->get()->groupBy('colaborador_id')->map->first();
+        }
+        $intervaloJust = max(0, (int) config('petermann.justificativa.intervalo_horas', 24));
+
+        $equipe = $pessoas->map(function (Colaborador $p) use ($visto, $porPessoa, $hojeIni, $semanaIni, $mesIni, $ultimaJust, $intervaloJust) {
             $todas = $porPessoa->get($p->id, collect());
             $vivas = $todas->where('deleted', false);
             $lancadas = fn (Carbon $ini) => $vivas->filter(fn ($n) => $n->created_at >= $ini);
             $doMes = $lancadas($mesIni);
             $ultimoLancamento = $vivas->max('created_at');
+            $just = $ultimaJust->get($p->id);
+            $liberaEm = $just && $intervaloJust > 0 ? $just->created_at->copy()->addHours($intervaloJust) : null;
 
             return [
                 'id' => $p->id,
@@ -69,6 +82,8 @@ class RastreioController extends Controller
                 'semana' => $lancadas($semanaIni)->count(),
                 'mes' => $doMes->count(),
                 'mes_valor' => round((float) $doMes->sum('valor'), 2),
+                'justificativa' => $just?->paraApp(),
+                'justificativa_libera_em' => $liberaEm && $liberaEm->isFuture() ? $liberaEm->toIso8601String() : null,
                 'recentes' => $todas->take(5)->map(fn ($n) => [
                     'id' => $n->id,
                     'acao' => $n->deleted ? 'apagou' : ($n->created_at && $n->updated_at && abs($n->updated_at->diffInSeconds($n->created_at)) < 3 ? 'lançou' : 'editou'),
