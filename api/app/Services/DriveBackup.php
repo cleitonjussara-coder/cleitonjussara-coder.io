@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -31,6 +34,15 @@ class DriveBackup
     private const API = 'https://www.googleapis.com/drive/v3';
 
     private const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+
+    /** Tamanho de cada pedaço do upload: múltiplo de 256 KiB, exigência do Google. Público só para os testes. */
+    public int $pedaco = 8 * 1024 * 1024;
+
+    /** Falhas seguidas, sem avanço, que o upload aguenta antes de desistir. */
+    public int $falhasMax = 6;
+
+    /** Espera base entre tentativas, em segundos (dobra a cada falha). Os testes zeram. */
+    public int $espera = 2;
 
     public function conectado(): bool
     {
@@ -98,7 +110,10 @@ class DriveBackup
                 }
             }
 
-            $tam = filesize($arquivo);
+            $tam = (int) filesize($arquivo);
+            if ($tam <= 0) {
+                throw new RuntimeException('O arquivo de backup está vazio: '.$nome);
+            }
             $inicio = Http::withToken($tok)->timeout(30)
                 ->withHeaders(['X-Upload-Content-Type' => 'application/zip', 'X-Upload-Content-Length' => (string) $tam])
                 ->post(self::UPLOAD.'?uploadType=resumable', ['name' => $nome, 'parents' => [$pasta], 'mimeType' => 'application/zip']);
@@ -106,13 +121,7 @@ class DriveBackup
             if (! $inicio->successful() || ! $local) {
                 throw new RuntimeException('Drive não abriu o upload: '.($inicio->json('error.message') ?: $inicio->status()));
             }
-            @ini_set('memory_limit', '512M');
-            $envio = Http::withToken($tok)->timeout(900)
-                ->withBody(file_get_contents($arquivo), 'application/zip')
-                ->put($local);
-            if (! $envio->successful() || ! $envio->json('id')) {
-                throw new RuntimeException('Drive não recebeu o arquivo: '.($envio->json('error.message') ?: $envio->status()));
-            }
+            $idArquivo = $this->enviarEmPedacos($tok, $local, $arquivo, $tam);
 
             $apagados = 0;
             foreach (BackupCompleto::paraApagar($this->listar($tok, $pasta), $manter, $meses) as $f) {
@@ -123,11 +132,17 @@ class DriveBackup
 
             $this->salvar(['ultimo_envio' => now(PontoCalculo::TZ)->toIso8601String(), 'ultimo_arquivo' => $nome, 'ultimo_erro' => null] + $this->dados());
 
-            return ['id' => $envio->json('id'), 'nome' => $nome, 'apagados' => $apagados];
+            return ['id' => $idArquivo, 'nome' => $nome, 'apagados' => $apagados];
         } catch (\Throwable $e) {
-            $this->salvar(['ultimo_erro' => now(PontoCalculo::TZ)->format('d/m/Y H:i').' — '.mb_substr($e->getMessage(), 0, 200)] + $this->dados());
+            $this->registrarErro($e->getMessage());
             throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
         }
+    }
+
+    /** Guarda um aviso para o Perfil mostrar, sem mexer na conexão (refresh_token) que já existe. */
+    public function registrarErro(string $msg): void
+    {
+        $this->salvar(['ultimo_erro' => now(PontoCalculo::TZ)->format('d/m/Y H:i').' — '.mb_substr($msg, 0, 200)] + $this->dados());
     }
 
     /** Arquivos petermann-*.zip na pasta do Drive, mais novo primeiro. */
@@ -198,6 +213,110 @@ class DriveBackup
         usort($out, fn ($a, $b) => strcmp($b['nome'], $a['nome']));
 
         return $out;
+    }
+
+    /**
+     * Upload resumable em pedaços. Antes o zip inteiro ia num PUT só, e um
+     * arquivo de 45 MB caía no meio com "cURL error 56 (connection reset)":
+     * o backup de 11/10/2026 nunca chegou ao Drive (visto em 15/10). Agora cada
+     * pedaço tem as suas tentativas e, se o pedido cai, pergunta ao Google até
+     * onde ele recebeu e continua dali — sem recomeçar do zero. Devolve o id do
+     * arquivo criado.
+     */
+    private function enviarEmPedacos(string $tok, string $local, string $arquivo, int $tam): string
+    {
+        $h = fopen($arquivo, 'rb');
+        if (! $h) {
+            throw new RuntimeException('Não consegui abrir o backup para enviar ao Drive');
+        }
+        try {
+            $pos = 0;
+            $falhas = 0;
+            while (true) {
+                $fim = min($pos + $this->pedaco, $tam) - 1;          // inclusive
+                fseek($h, $pos);
+                $dados = (string) fread($h, $fim - $pos + 1);
+                $r = $this->pedidoDeUpload($tok, $local, "bytes $pos-$fim/$tam", $dados);
+
+                if ($r && in_array($r->status(), [200, 201], true) && $r->json('id')) {
+                    return (string) $r->json('id');
+                }
+                if ($r && $r->status() === 308) {                      // pedaço aceito, falta o resto
+                    $novo = $this->posicaoRecebida($r);
+                    if ($novo > $pos) {
+                        $pos = $novo;
+                        $falhas = 0;
+
+                        continue;
+                    }
+                } elseif ($r && ! $this->transitorio($r)) {            // 400/401/403/404…: repetir não adianta
+                    throw new RuntimeException('Drive não recebeu o arquivo: '.($r->json('error.message') ?: $r->status()));
+                }
+
+                /* conexão caiu, 5xx/408/429 ou o Google não avançou: espera e retoma de onde ele parou */
+                $falhas++;
+                $motivo = $r ? 'HTTP '.$r->status() : 'a conexão caiu';
+                if ($falhas > $this->falhasMax) {
+                    throw new RuntimeException(sprintf('Drive não recebeu o arquivo: upload interrompido aos %d%% (%s)', (int) floor($pos * 100 / $tam), $motivo));
+                }
+                Log::warning('drive backup: pedaço falhou, tentando de novo', ['de' => $pos, 'total' => $tam, 'tentativa' => $falhas, 'motivo' => $motivo]);
+                $this->esperar($this->espera * (2 ** ($falhas - 1)));
+                $p = $this->progressoNoGoogle($tok, $local, $tam);
+                if (isset($p['id'])) {
+                    return $p['id'];
+                }
+                if (isset($p['pos'])) {
+                    $pos = $p['pos'];
+                }
+            }
+        } finally {
+            fclose($h);
+        }
+    }
+
+    private function pedidoDeUpload(string $tok, string $local, string $range, string $corpo): ?Response
+    {
+        try {
+            return Http::withToken($tok)->timeout(180)
+                ->withOptions(['allow_redirects' => false])           // 308 aqui é "continue", não redirecionamento
+                ->withHeaders(['Content-Range' => $range])
+                ->withBody($corpo, 'application/zip')
+                ->put($local);
+        } catch (ConnectionException) {
+            return null;
+        }
+    }
+
+    /** Pergunta ao Google quantos bytes ele já tem: ['id' => …] se já terminou, ['pos' => n], ou [] se nem isso respondeu. */
+    private function progressoNoGoogle(string $tok, string $local, int $tam): array
+    {
+        $r = $this->pedidoDeUpload($tok, $local, "bytes */$tam", '');
+        if (! $r) {
+            return [];
+        }
+        if (in_array($r->status(), [200, 201], true) && $r->json('id')) {
+            return ['id' => (string) $r->json('id')];
+        }
+
+        return $r->status() === 308 ? ['pos' => $this->posicaoRecebida($r)] : [];
+    }
+
+    /** Cabeçalho "Range: bytes=0-N" do Google → próximo byte a enviar; sem ele, o Google não tem nada ainda. */
+    private function posicaoRecebida(Response $r): int
+    {
+        return preg_match('/bytes=0-([0-9]+)/', (string) $r->header('Range'), $m) ? ((int) $m[1]) + 1 : 0;
+    }
+
+    private function transitorio(Response $r): bool
+    {
+        return $r->status() >= 500 || in_array($r->status(), [408, 429], true);
+    }
+
+    private function esperar(int $segundos): void
+    {
+        if ($segundos > 0) {
+            sleep($segundos);
+        }
     }
 
     /* ── arquivo local ──────────────────────────────────────── */

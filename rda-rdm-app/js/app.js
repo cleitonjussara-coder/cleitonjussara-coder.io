@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 431;
+const APP_BUILD = 432;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1035,6 +1035,7 @@ async function init() {
         _abrirPerfilAoEntrar = true;
         toast(boot.driveBackup === 'ok'        ? 'Google Drive conectado ao backup ✅'
             : boot.driveBackup === 'cancelado' ? 'Autorização do Drive cancelada'
+            : boot.driveBackup === 'sem_permissao' ? 'O Google não liberou o Drive: conecte de novo e, na tela do Google, MARQUE a caixa de permissão do Drive'
             : 'Não consegui conectar o Drive — tente de novo', boot.driveBackup === 'ok' ? 'ok' : 'err');
       }
       /* Login Google com escopo do Drive devolve o token do Google junto.
@@ -1845,6 +1846,14 @@ async function logout() {
     if (sb) await sb.auth.logout();
   } catch (_) {}
   user = null; notas = []; repasses = []; equipePorId = {};
+  /* Aparelho compartilhado: o que era da conta que saiu não pode sobrar na
+     aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
+     (colaborador herdava a lista) e o Drive seguia conectado com o token do
+     anterior. O token não é revogado — só esquecido aqui. */
+  notasEquipe = []; repassesEquipe = [];
+  driveOk = false;
+  try { window.GDrive?.esquecer(); } catch (_) {}
+  try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
   document.getElementById('demo-banner').style.display = 'none';
   showTela('auth');
   renderAuth('login');
@@ -5838,7 +5847,8 @@ async function _mostrarBackupDrive() {
       el.innerHTML = `
         <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
           <b style="color:#9A3412">☁️ Cópia fora da Locaweb: desligada</b>
-          <p style="margin-top:4px;line-height:1.5;color:inherit">Conecte o Google Drive para o backup semanal subir sozinho para a pasta <b>${esc(s.pasta)}</b> do seu Drive. O app só ganha acesso aos arquivos que ele mesmo criar.</p>
+          <p style="margin-top:4px;line-height:1.5;color:inherit">Conecte o Google Drive para o backup semanal subir sozinho para a pasta <b>${esc(s.pasta)}</b> do seu Drive. O app só ganha acesso aos arquivos que ele mesmo criar. Na tela do Google, <b>marque a caixa de permissão do Drive</b> antes de continuar.</p>
+          ${s.ultimo_erro ? `<p style="margin-top:4px;color:#b91c1c">⚠️ ${esc(s.ultimo_erro)}</p>` : ''}
           <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="conectarDriveBackup()">🔗 Conectar Google Drive ao backup</button>
         </div>`;
       return;

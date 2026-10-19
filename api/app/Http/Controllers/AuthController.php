@@ -212,6 +212,16 @@ class AuthController extends Controller
                 if (empty($tok['refresh_token'])) {
                     throw new \RuntimeException('Google não devolveu refresh_token');
                 }
+                /* A tela do Google deixa DESMARCAR a permissão do Drive: o token sai
+                   válido, mas sem drive.file, e gravá-lo por cima do que funcionava
+                   deixava o cartão "ligada" com "insufficient authentication scopes"
+                   (15/10/2026). Sem a permissão não conecta e a conexão atual fica. */
+                if (! str_contains((string) ($tok['scope'] ?? ''), \App\Services\DriveBackup::SCOPE)) {
+                    Log::warning('drive backup: Google não concedeu a permissão do Drive', ['quem' => $adm->email, 'scope' => $tok['scope'] ?? '']);
+                    app(\App\Services\DriveBackup::class)->registrarErro('A permissão do Drive não foi marcada na tela do Google — conecte de novo e marque a caixa do Drive.');
+
+                    return redirect()->away($front.'#drive_backup=sem_permissao');
+                }
                 $info = $g->userInfo($tok['access_token']);
                 app(\App\Services\DriveBackup::class)->conectar($tok['refresh_token'], strtolower($info['email']));
                 Log::info('drive backup conectado', ['quem' => $adm->email, 'papel' => $adm->role, 'conta' => $info['email']]);

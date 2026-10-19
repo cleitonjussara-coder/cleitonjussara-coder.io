@@ -207,7 +207,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
           out.authError = h.get('auth_error');
           history.replaceState(null, '', location.pathname + location.search);
         } else if (h.get('drive_backup')) {
-          // volta da autorização do Drive para o backup (21/09/2026): ok | cancelado | google | invalido
+          // volta da autorização do Drive para o backup (21/09/2026): ok | cancelado | google | invalido | sem_permissao
           out.driveBackup = h.get('drive_backup');
           history.replaceState(null, '', location.pathname + location.search);
         }

@@ -33,13 +33,32 @@ window.Frota = (() => {
   const KEY_FILA = 'frota_fila';
 
   /* ── Fila local (registros feitos sem internet) ─────────── */
-  async function _fila() { try { return (await DB.getMeta(KEY_FILA)) || []; } catch (_) { return []; } }
+  /* A fila é do APARELHO, mas cada item é de uma conta: `uid` grava quem
+     registrou. Só os itens de quem está logado sobem ou aparecem — num
+     aparelho compartilhado, o 'online' subia a fila inteira com o token de
+     quem tivesse entrado depois. `_fila()` devolve todos (para regravar sem
+     perder os dos outros); `_minhas()` filtra. */
+  async function _fila() {
+    try {
+      const f = (await DB.getMeta(KEY_FILA)) || [];
+      /* Itens anteriores ao build 392 não têm dono. Ficam com quem abrir a
+         fila primeiro — na prática 1 aparelho = 1 pessoa; sem isso ficariam
+         presos para sempre, invisíveis e sem subir. */
+      if (user?.id && f.some(it => !it.uid)) {
+        f.forEach(it => { if (!it.uid) it.uid = user.id; });
+        await DB.setMeta(KEY_FILA, f);
+      }
+      return f;
+    } catch (_) { return []; }
+  }
+  const _meu = it => !!user?.id && it.uid === user.id;
+  async function _minhas() { return (await _fila()).filter(_meu); }
   async function _salvarFila(f) { try { await DB.setMeta(KEY_FILA, f); } catch (_) {} }
 
   async function enfileirar(id, payload, foto) {
     const f = await _fila();
     const i = f.findIndex(x => x.id === id);
-    const item = { id, payload, foto: foto || (i >= 0 ? f[i].foto : null), criado_em: new Date().toISOString(), erro: null };
+    const item = { id, uid: user?.id, payload, foto: foto || (i >= 0 ? f[i].foto : null), criado_em: new Date().toISOString(), erro: null };
     if (i >= 0) f[i] = item; else f.push(item);
     await _salvarFila(f);
   }
@@ -49,12 +68,14 @@ window.Frota = (() => {
      corrigir pelo ✏️ — nunca se perde. */
   let _subindo = false;
   async function subirFila() {
-    if (_subindo || !sb || !navigator.onLine) return 0;
+    if (_subindo || !sb || !user?.id || !navigator.onLine) return 0;
     _subindo = true;
     let ok = 0;
     try {
-      const f = await _fila();
+      const todos = await _fila();
+      const f = todos.filter(_meu);
       if (!f.length) return 0;
+      const outros = todos.filter(it => !_meu(it));      // de outras contas: ficam como estão
       const resto = [];
       for (const it of f) {
         try {
@@ -70,7 +91,7 @@ window.Frota = (() => {
           if (semRede) { resto.push(...f.slice(f.indexOf(it) + 1)); break; }
         }
       }
-      await _salvarFila(resto);
+      await _salvarFila([...outros, ...resto]);
       if (ok) toast(`${ok} registro${ok > 1 ? 's' : ''} de KM enviado${ok > 1 ? 's' : ''} ✅`);
     } finally { _subindo = false; }
     return ok;
@@ -105,7 +126,7 @@ window.Frota = (() => {
   }
   /* registros da fila aparecem na lista como pendentes */
   async function _mesclarPendentes() {
-    const f = await _fila();
+    const f = await _minhas();
     const pend = f.filter(it => { const d = it.payload.data || ''; return Number(d.slice(0, 4)) === filAno && Number(d.slice(5, 7)) === filMes; })
       .map(it => {
         const v = veiculos.find(x => x.id === it.payload.veiculo_id);
@@ -134,7 +155,7 @@ window.Frota = (() => {
     await _mesclarPendentes();
     const gestor = _ehGestorOuAdmin();
     const periodo = `${MESES[filMes - 1]} ${filAno}`;
-    const fila = await _fila();
+    const fila = await _minhas();
 
     let html = `
     <div class="db-container">

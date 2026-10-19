@@ -38,15 +38,37 @@ window.Ponto = (() => {
   const KEY_FILA = 'ponto_fila';
 
   /* ── Fila offline de marcações ─────────────────────────── */
-  async function _fila() { try { return (await DB.getMeta(KEY_FILA)) || []; } catch (_) { return []; } }
+  /* A fila é do APARELHO, mas cada marcação é de uma conta: `uid` grava quem
+     bateu. Só as de quem está logado sobem ou aparecem — num aparelho
+     compartilhado, o 'online' subia a fila inteira com o token de quem
+     tivesse entrado depois, e a marcação caía no ponto da pessoa errada.
+     `_fila()` devolve todas (para regravar sem perder as dos outros);
+     `_minhas()` filtra. */
+  async function _fila() {
+    try {
+      const f = (await DB.getMeta(KEY_FILA)) || [];
+      /* Marcações anteriores ao build 392 não têm dono. Ficam com quem abrir
+         a fila primeiro — na prática 1 aparelho = 1 pessoa; sem isso ficariam
+         presas para sempre, invisíveis e sem subir. */
+      if (user?.id && f.some(it => !it.uid)) {
+        f.forEach(it => { if (!it.uid) it.uid = user.id; });
+        await DB.setMeta(KEY_FILA, f);
+      }
+      return f;
+    } catch (_) { return []; }
+  }
+  const _meu = it => !!user?.id && it.uid === user.id;
+  async function _minhas() { return (await _fila()).filter(_meu); }
   async function _salvarFila(f) { try { await DB.setMeta(KEY_FILA, f); } catch (_) {} }
   let _subindo = false;
   async function subirFila() {
-    if (_subindo || !sb || !navigator.onLine) return 0;
+    if (_subindo || !sb || !user?.id || !navigator.onLine) return 0;
     _subindo = true; let ok = 0;
     try {
-      const f = await _fila();
+      const todos = await _fila();
+      const f = todos.filter(_meu);
       if (!f.length) return 0;
+      const outros = todos.filter(it => !_meu(it));      // de outras contas: ficam como estão
       const resto = [];
       for (const it of f) {
         try { await sb.ponto.bater(it); ok++; }
@@ -56,7 +78,7 @@ window.Ponto = (() => {
           if (semRede) { resto.push(...f.slice(f.indexOf(it) + 1)); break; }
         }
       }
-      await _salvarFila(resto);
+      await _salvarFila([...outros, ...resto]);
       if (ok) toast(`${ok} marcação${ok > 1 ? 'ões' : ''} de ponto enviada${ok > 1 ? 's' : ''} ✅`);
     } finally { _subindo = false; }
     return ok;
@@ -82,7 +104,7 @@ window.Ponto = (() => {
   async function _hojeInfo() {
     const d = hoje();
     const meu = dias.find(x => x.user_id === user?.id && x.data === d) || null;
-    const fila = (await _fila()).filter(x => x.hora?.slice(0, 10) === d);
+    const fila = (await _minhas()).filter(x => x.hora?.slice(0, 10) === d);
     const feitas = MARC.map(m => ({ ...m, hora: meu?.[m.k] || fila.find(x => x.marcacao === m.k)?.hora?.slice(11, 16) || null, pendente: !meu?.[m.k] && !!fila.find(x => x.marcacao === m.k) }));
     const prox = feitas.find(m => !m.hora) || null;
     return { meu, feitas, prox, fila };
@@ -99,7 +121,7 @@ window.Ponto = (() => {
     const gestor = _ehGestorOuAdmin();
     const periodo = `${MESES[filMes - 1]} ${filAno}`;
     const h = await _hojeInfo();
-    const filaTotal = (await _fila()).length;
+    const filaTotal = (await _minhas()).length;
     clearInterval(_timer);
 
     let html = `
@@ -282,7 +304,7 @@ window.Ponto = (() => {
     } catch (e) { toast(e.message || 'Não foi possível bater o ponto', 'err'); }
     finally { setLoading(false); }
   }
-  async function _enfileirar(item) { const f = await _fila(); f.push({ ...item, erro: null }); await _salvarFila(f); }
+  async function _enfileirar(item) { const f = await _fila(); f.push({ ...item, uid: user?.id, erro: null }); await _salvarFila(f); }
 
   /* ── Formulário do dia (correção / lançamento) ─────────── */
   function abrirForm(id) {
