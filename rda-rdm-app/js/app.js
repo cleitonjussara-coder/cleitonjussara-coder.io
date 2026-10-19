@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 428;
+const APP_BUILD = 429;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7814,6 +7814,18 @@ async function onFotoNotaChange(e) {
      passam a trabalhar com a foto na posição certa. */
   try { file = await _normalizarOrientacao(file); } catch (_) {}
   file = await _endireitarComAviso(file);   // 08/10/2026: nunca de lado nem de cabeça para baixo
+  /* Câmera do celular (do sistema): o contorno ao vivo não existe fora do app, mas a foto que volta passa pelo mesmo
+     scanner — nota achada, perspectiva corrigida, papel clareado (19/10/2026). Só quando veio do seletor de câmera de
+     verdade: a câmera do app já endireitou a dela e chama esta função com um evento sintético. Sem nota à vista, a
+     foto segue como veio. */
+  if (_camNotaScannerOn && typeof Scanner !== 'undefined' && e.target instanceof HTMLInputElement) {
+    const ov = $('ocr-overlay');
+    if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Endireitando a nota…'; }
+    try {
+      const r = await Scanner.endireitar(file);
+      if (r?.endireitou && r.blob) file = new File([r.blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    } catch (_) {}
+  }
   _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
   fotoOriginal = file;
