@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 429;
+const APP_BUILD = 430;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7320,6 +7320,7 @@ let _camNotaScannerOn = true;
 let _camNotaDicaScanner = false;   // a dica atual é do scanner (pode ser trocada por ele; a do flash/escuro não)
 try { if (localStorage.getItem('cam_scanner') === 'off') _camNotaScannerOn = false; } catch (_) {}
 const _DICA_CAMERA_NOTA = 'Enquadre a nota inteira e toque no botão';
+let _fotoAntesDoScanner = null;    // a foto como a câmera tirou, quando o scanner a endireitou (recurso do "Foto inteira")
 /* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
    sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
 function _semCameraNoAutomatico() {
@@ -7543,16 +7544,6 @@ async function dispararCameraNota() {
     });
     if (denovo) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); return; }
   }
-  /* Scanner: acha a nota na foto final, corrige a perspectiva e clareia o papel. Sem nota inteira à vista (cortada pela
-     borda, fundo claro demais) ou com qualquer erro, segue com a foto original, igual a antes. */
-  if (_camNotaScannerOn && typeof Scanner !== 'undefined') {
-    const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Endireitando a nota…';
-    try {
-      const r = await Scanner.endireitar(blob);
-      if (_camNotaStream !== stream) return;       // cancelou durante o ajuste
-      if (r?.endireitou && r.blob) blob = r.blob;
-    } catch (_) {}
-  }
   _camNotaAoCancelar = null;
   _pararCameraNota();
   const file = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -7573,6 +7564,7 @@ async function abrirFormNota(dados = {}) {
     return;
   }
   fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
+  _fotoAntesDoScanner = null;
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
@@ -7814,21 +7806,23 @@ async function onFotoNotaChange(e) {
      passam a trabalhar com a foto na posição certa. */
   try { file = await _normalizarOrientacao(file); } catch (_) {}
   file = await _endireitarComAviso(file);   // 08/10/2026: nunca de lado nem de cabeça para baixo
-  /* Câmera do celular (do sistema): o contorno ao vivo não existe fora do app, mas a foto que volta passa pelo mesmo
-     scanner — nota achada, perspectiva corrigida, papel clareado (19/10/2026). Só quando veio do seletor de câmera de
-     verdade: a câmera do app já endireitou a dela e chama esta função com um evento sintético. Sem nota à vista, a
-     foto segue como veio. */
-  if (_camNotaScannerOn && typeof Scanner !== 'undefined' && e.target instanceof HTMLInputElement) {
+  /* Scanner de documento (19/10/2026): vale para a câmera do app e para a do celular (sistema) — o contorno ao vivo só
+     existe na do app, mas a foto final passa pelo mesmo ajuste: nota achada, perspectiva corrigida, papel clareado.
+     Roda DEPOIS da orientação, e a foto anterior fica guardada (_fotoAntesDoScanner): se o ajuste cortar algo, "Foto
+     inteira" na tela de recorte devolve exatamente o que a câmera tirou. Sem nota à vista, a foto segue como veio. */
+  const semScanner = file;
+  _fotoAntesDoScanner = null;
+  if (_camNotaScannerOn && typeof Scanner !== 'undefined') {
     const ov = $('ocr-overlay');
     if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Endireitando a nota…'; }
     try {
       const r = await Scanner.endireitar(file);
-      if (r?.endireitou && r.blob) file = new File([r.blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      if (r?.endireitou && r.blob) { file = new File([r.blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' }); _fotoAntesDoScanner = semScanner; }
     } catch (_) {}
   }
   _limparPedirFoto();               // foto anexada → tira o destaque do Passo 2
   fotoBlob = file;
-  fotoOriginal = file;
+  fotoOriginal = _fotoAntesDoScanner || file;   // o QR é procurado na foto inteira, sem o ajuste
   fotoExt  = 'jpg';                 // câmera sempre devolve imagem
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
@@ -7846,6 +7840,7 @@ async function onArquivoNotaChange(e) {
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
+  _fotoAntesDoScanner = null;
   if (_ehImagemExt(_extDoArquivo(file))) file = await _endireitarComAviso(file);   // 08/10/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
@@ -8051,14 +8046,15 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         let rec = null;
-        try { rec = await Recorte.abrir(file); }
+        try { rec = await Recorte.abrir(file, { corrigida: !!_fotoAntesDoScanner }); }
         catch (err) {
           rec = null;
           console.error('Recorte não abriu', err);
           toast('O recorte não abriu — a foto ficou inteira. Feche e abra o app e tente de novo.', 'err');   // antes pulava em silêncio
         }
         if (rec === false) { _descartarFotoCancelada(); ov.style.display = 'none'; return; }   // X: sem leitura, sem anexo
-        alvo = rec || file;
+        /* "Foto inteira" (rec null) com o scanner ativo = a foto como a câmera tirou, sem o ajuste de perspectiva */
+        alvo = rec || (rec === null && _fotoAntesDoScanner) || file;
         ov.style.display = 'flex';
         if (alvo !== file) {
           fotoBlob = alvo;

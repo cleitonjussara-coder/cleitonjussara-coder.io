@@ -963,6 +963,8 @@ window.Recorte = (() => {
         : _origem === 'texto' ? 'Enquadrei a nota pelo texto — arraste os cantos para ajustar'
         : 'Enquadrei a nota (modo simples) — arraste os cantos para ajustar')
       : 'Não achei a nota — arraste os cantos para enquadrar';
+    /* nota já endireitada pelo scanner: se o ajuste tirou algo, o caminho é "Foto inteira" (a foto como saiu da câmera) */
+    if (opts.corrigida && !opts.odometro) $('crop-dica').textContent += ' · Faltou algo? Toque em Foto inteira';
     _dicaPadrao = $('crop-dica').textContent;
     _bloqueio = null;
     _limparAviso();                       // aviso de texto cortado de uma foto anterior não pode sobrar na próxima

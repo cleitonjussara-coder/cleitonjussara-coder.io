@@ -26,8 +26,9 @@ window.Scanner = (() => {
   const AREA_MIN  = 0.10;        // menor fração do quadro que vale como "a nota"
   const AREA_MAX  = 0.95;        // acima disso o "papel" é o fundo (mesa branca)
   const PREENCHE  = 0.80;        // quanto do quadrilátero tem que ser papel (letra e QR são buracos, mas poucos)
-  const FOLGA     = 0.015;       // folga do contorno, fração da diagonal
+  const FOLGA     = 0.015;       // folga do contorno, fração do lado médio do papel
   const MAX_SAIDA = 3000;        // maior lado da página endireitada
+  const GRAD_BORDA = 22;         // degrau de brilho (0..255, entre vizinhos a 2 px) que já é borda do papel e barra o crescimento
   const BORDA     = 0.012;       // canto a menos que isto da borda do quadro = papel cortado
 
   function _otsu(h, de) {
@@ -128,13 +129,75 @@ window.Scanner = (() => {
     }
     if (!melhorId || melhorN < n * AREA_MIN * 0.5) return null;
 
+    /* 19/10/2026 — o contorno cortava o cupom em dois casos reais: (1) sombra no pé/topo da nota: o papel sombreado fica
+       abaixo do limiar de brilho e some da máscara; (2) borda curva/enrolada do papel: os 4 cantos formam um quadrilátero
+       que fica por dentro do papel no meio dos lados. Agora: (1) o miolo CLARO cresce para dentro da sombra (histerese:
+       pixels neutros acima de uma fração do brilho do papel e CONECTADOS ao miolo); (2) cada lado do quadrilátero é
+       empurrado para fora até envolver todo o papel achado. */
+    const sel = new Uint8Array(n);
+    let selN = 0;
+    for (let p = 0; p < n; p++) if (rot[p] === melhorId) { sel[p] = 1; selN++; }
+    {
+      const gh = new Uint32Array(256);
+      for (let p = 0; p < n; p++) if (sel[p]) gh[cinza[p]]++;
+      let c = 0, P = 255;
+      for (let v = 0; v < 256; v++) { c += gh[v]; if (c >= selN * 0.8) { P = v; break; } }
+      for (const k of [0.45, 0.6]) {
+        const thr2 = P * k;
+        if (thr2 >= thr) continue;                         // não é mais baixo que o limiar do miolo: nada a ganhar
+        const M2 = new Uint8Array(n);
+        for (let p = 0; p < n; p++) M2[p] = (cinza[p] > thr2 && croma[p] < CROMA_MAX) ? 1 : 0;
+        /* a sombra muda de brilho aos poucos; a borda do papel (contra mesa, tecido, volante) é um degrau. Pixels de borda
+           forte não entram no crescimento — ele para na borda em vez de vazar para o fundo escuro. Letra também é borda
+           forte, mas é ilha dentro do papel: o crescimento a contorna. */
+        const E2 = M2;
+        for (let y = 1; y < H - 1; y++) {
+          for (let x = 1; x < W - 1; x++) {
+            const i = y * W + x;
+            if (!M2[i]) continue;
+            const gx = cinza[i + 1] - cinza[i - 1], gy = cinza[i + W] - cinza[i - W];
+            if ((gx < 0 ? -gx : gx) > GRAD_BORDA || (gy < 0 ? -gy : gy) > GRAD_BORDA) E2[i] = 0;
+          }
+        }
+        for (let p = 0; p < n; p++) if (sel[p]) E2[p] = 1;      // o miolo claro nunca sai
+        const alc = new Uint8Array(n); let topo = 0, cont = 0;
+        for (let p = 0; p < n; p++) if (sel[p] && E2[p]) { alc[p] = 1; pilha[topo++] = p; cont++; }
+        while (topo) {
+          const p = pilha[--topo];
+          const x = p % W, y = (p - x) / W;
+          for (let dy = -1; dy <= 1; dy++) {
+            const yy = y + dy; if (yy < 0 || yy >= H) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const xx = x + dx; if (xx < 0 || xx >= W) continue;
+              const q = yy * W + xx;
+              if (E2[q] && !alc[q]) { alc[q] = 1; pilha[topo++] = q; cont++; }
+            }
+          }
+        }
+        const preenchida = m => {                           // área do bloco preenchido linha a linha (texto e QR não contam como buraco)
+          let t = 0;
+          for (let y = 0; y < H; y++) {
+            let a = -1, b = -1;
+            for (let x = 0; x < W; x++) if (m[y * W + x]) { if (a < 0) a = x; b = x; }
+            if (a >= 0) t += b - a + 1;
+          }
+          return t;
+        };
+        const antes = preenchida(sel), depois = preenchida(alc);
+        if (depois > antes * 1.6 || depois > n * AREA_MAX) continue;   // vazou para o fundo (mesa clara): tenta um limiar mais exigente
+        for (let p = 0; p < n; p++) sel[p] = alc[p];
+        selN = cont;
+        break;
+      }
+    }
+
     /* cantos do convexo pelos extremos: x+y mínimo = canto superior esquerdo, x+y máximo = inferior direito,
        x−y máximo = superior direito, x−y mínimo = inferior esquerdo. Vale para nota torta e em perspectiva. */
     let tl = null, tr = null, br = null, bl = null;
     let sMin = Infinity, sMax = -Infinity, dMax = -Infinity, dMin = Infinity;
     const lmin = new Int16Array(H).fill(W), lmax = new Int16Array(H).fill(-1);
     for (let p = 0; p < n; p++) {
-      if (rot[p] !== melhorId) continue;
+      if (!sel[p]) continue;
       const y = (p / W) | 0, x = p - y * W;
       if (x < lmin[y]) lmin[y] = x;
       if (x > lmax[y]) lmax[y] = x;
@@ -146,12 +209,10 @@ window.Scanner = (() => {
     }
     if (!tl || !tr || !br || !bl) return null;
 
-    // a erosão encolheu 1 px de cada lado; +0,5 centra o pixel; folga manda o corte para fora da letra
     const px = [tl, tr, br, bl].map(c => ({ x: c.x + 0.5, y: c.y + 0.5 }));
-    const quadPx = px;
-    const areaPx = _area(quadPx);
+    const areaPx = _area(px);
     if (areaPx < n * AREA_MIN || areaPx > n * AREA_MAX) return null;
-    if (!_convexo(quadPx)) return null;
+    if (!_convexo(px)) return null;
 
     // o quadrilátero tem que ser PAPEL: letras e QR são buracos pequenos, mas um "L" ou um bloco irregular não passa
     let cheio = 0;
@@ -164,14 +225,41 @@ window.Scanner = (() => {
     // lados opostos muito diferentes = não é papel retangular visto de frente (é o mapa de claro pegando outra coisa)
     if (Math.max(lados[0], lados[2]) / Math.min(lados[0], lados[2]) > 2.2 || Math.max(lados[1], lados[3]) / Math.min(lados[1], lados[3]) > 2.2) return null;
 
-    // folga para fora, a partir do centro
+    /* envolve o papel: cada lado vai para fora até o ponto mais distante do papel achado (laterais curvas, canto
+       dobrado), mais a folga (1 px da erosão + FOLGA do tamanho do papel) para a letra da borda não encostar no corte */
     const cx = (px[0].x + px[1].x + px[2].x + px[3].x) / 4, cy = (px[0].y + px[1].y + px[2].y + px[3].y) / 4;
-    const diag = Math.hypot(W, H) * Math.sqrt(areaPx / n);
-    const sobra = 1.4 + diag * FOLGA;                       // 1,4 px ≈ o que a erosão tirou na diagonal
-    const quad = px.map(c => {
-      const dx = c.x - cx, dy = c.y - cy, l = Math.hypot(dx, dy) || 1;
-      return { x: Math.max(0, Math.min(1, (c.x + dx / l * sobra) / W)), y: Math.max(0, Math.min(1, (c.y + dy / l * sobra) / H)) };
-    });
+    const lado = (lados[0] + lados[1] + lados[2] + lados[3]) / 4;
+    const margem = 2 + lado * FOLGA;                  // 2 px: a erosão e a borda excluída do crescimento
+    const retas = [];
+    for (let i = 0; i < 4; i++) {
+      const a = px[i], b = px[(i + 1) % 4];
+      const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+      let nx = dy / l, ny = -dx / l;
+      if (nx * (a.x - cx) + ny * (a.y - cy) < 0) { nx = -nx; ny = -ny; }
+      let maxd = 0;
+      for (let y = 0; y < H; y++) {
+        if (lmax[y] < lmin[y]) continue;
+        for (const X of [lmin[y], lmax[y] + 1]) {
+          for (const Y of [y, y + 1]) { const d = nx * (X - a.x) + ny * (Y - a.y); if (d > maxd) maxd = d; }
+        }
+      }
+      retas.push({ nx, ny, c: nx * a.x + ny * a.y + maxd + margem });
+    }
+    const quad = [];
+    for (let i = 0; i < 4; i++) {
+      const r1 = retas[(i + 3) % 4], r2 = retas[i];                 // o canto i é o encontro do lado anterior com o lado i
+      const det = r1.nx * r2.ny - r1.ny * r2.nx;
+      let X, Y;
+      if (Math.abs(det) < 1e-6) {                                    // lados paralelos (degenerado): empurra o canto pelo centro
+        const dx = px[i].x - cx, dy = px[i].y - cy, l = Math.hypot(dx, dy) || 1;
+        X = px[i].x + dx / l * margem; Y = px[i].y + dy / l * margem;
+      } else {
+        X = (r1.c * r2.ny - r1.ny * r2.c) / det;
+        Y = (r1.nx * r2.c - r1.c * r2.nx) / det;
+      }
+      quad.push({ x: Math.max(0, Math.min(1, X / W)), y: Math.max(0, Math.min(1, Y / H)) });
+    }
+    if (!_convexo(quad.map(c => ({ x: c.x * W, y: c.y * H }))) || _area(quad) * n > n * AREA_MAX) return null;
     const cortada = quad.some(c => c.x < BORDA || c.x > 1 - BORDA || c.y < BORDA || c.y > 1 - BORDA);
     return { quad, area: areaPx / n, cortada };
   }
@@ -230,9 +318,19 @@ window.Scanner = (() => {
         if (firme && auto && !disparou && agora >= liberaEm) { disparou = true; try { opts.aoEstabilizar && opts.aoEstabilizar(); } catch (_) {} }
       } catch (_) { /* quadro falhou (vídeo trocando de resolução, memória): tenta no próximo */ }
     }
-    timer = setInterval(_passo, 220);
+    /* cadência adaptativa: celular lento gasta mais por quadro; o intervalo cresce com o custo (4× o tempo medido, mínimo
+       220 ms) para a câmera e os toques nunca ficarem travados esperando o scanner */
+    function _agendar() {
+      timer = setTimeout(() => {
+        const t0 = performance.now();
+        _passo();
+        if (ativo) { espera = Math.max(220, Math.min(1500, (performance.now() - t0) * 4)); _agendar(); }
+      }, espera);
+    }
+    let espera = 220;
+    _agendar();
     return {
-      parar() { ativo = false; clearInterval(timer); try { const g = canvas.getContext('2d'); g.clearRect(0, 0, canvas.width, canvas.height); } catch (_) {} },
+      parar() { ativo = false; clearTimeout(timer); try { const g = canvas.getContext('2d'); g.clearRect(0, 0, canvas.width, canvas.height); } catch (_) {} },
       setAutomatico(b) { auto = !!b; },
       /* depois de um disparo que a pessoa recusou (foto borrada): espera um tempo antes de poder disparar sozinho de novo */
       liberar(msEspera = 2500) { disparou = false; desde = Date.now(); ultimo = null; liberaEm = Date.now() + msEspera; },
