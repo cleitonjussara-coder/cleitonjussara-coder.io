@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 426;
+const APP_BUILD = 427;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -7313,6 +7313,13 @@ let _camNotaLuzTimer = null;
 let _camNotaSeq = 0;               // número da abertura: fechar enquanto abre invalida a câmera que ainda está chegando
 let _camNotaFlashSeq = 0;          // idem para o flash (toques rápidos no botão não deixam temporizador órfão)
 try { const f = localStorage.getItem('cam_flash'); if (['auto', 'ligado', 'desligado'].includes(f)) _camNotaFlash = f; } catch (_) {}
+/* Scanner de documento (19/10/2026): contorno ao vivo, disparo quando a nota para de mexer e página endireitada.
+   Liga/desliga num botão e lembra a escolha. Tudo em js/scanner.js; sem ele (ou com qualquer erro) a câmera é a de sempre. */
+let _camNotaScanner = null;        // controle devolvido por Scanner.aoVivo
+let _camNotaScannerOn = true;
+let _camNotaDicaScanner = false;   // a dica atual é do scanner (pode ser trocada por ele; a do flash/escuro não)
+try { if (localStorage.getItem('cam_scanner') === 'off') _camNotaScannerOn = false; } catch (_) {}
+const _DICA_CAMERA_NOTA = 'Enquadre a nota inteira e toque no botão';
 /* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
    sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
 function _semCameraNoAutomatico() {
@@ -7351,6 +7358,7 @@ async function abrirCameraNota(aoCancelar, opts = {}) {
     await video.play().catch(() => {});
     if (btn) btn.disabled = false;
     _iniciarFlashNota();
+    _iniciarScannerNota();
   } catch (e) {
     console.warn('câmera interna da nota:', e);
     if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema();
@@ -7406,8 +7414,47 @@ async function alternarFlashNota() {
   const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';
   await _iniciarFlashNota();
 }
+/* Scanner de documento: contorno azul sobre a nota, verde quando firme; parada a nota, a foto é tirada sozinha. */
+function _iniciarScannerNota() {
+  _pararScannerNota();
+  const bt = $('cam-nota-auto');
+  if (typeof Scanner === 'undefined') { if (bt) bt.style.display = 'none'; return; }
+  if (bt) { bt.style.display = ''; bt.textContent = '📐 Contorno automático: ' + (_camNotaScannerOn ? 'ligado' : 'desligado'); }
+  if (!_camNotaScannerOn) return;
+  const video = $('cam-nota-video'), guia = $('cam-nota-guia'), stream = _camNotaStream;
+  if (!video || !guia) return;
+  const dica = $('cam-nota-dica');
+  const texto = {
+    achou: 'Nota encontrada — segure firme',
+    parado: 'Segure firme… tirando a foto',
+    cortada: 'Afaste um pouco: a nota passa da borda da tela',
+  };
+  _camNotaScanner = Scanner.aoVivo(video, guia, {
+    automatico: true,
+    aoEstado: e => {
+      if (!dica || _camNotaStream !== stream) return;
+      if (texto[e]) { dica.textContent = texto[e]; _camNotaDicaScanner = true; }
+      else if (_camNotaDicaScanner) { dica.textContent = _DICA_CAMERA_NOTA; _camNotaDicaScanner = false; }
+    },
+    aoEstabilizar: () => {
+      const b = $('cam-nota-disparo');
+      if (_camNotaStream === stream && b && !b.disabled) dispararCameraNota();
+    },
+  });
+}
+function _pararScannerNota() {
+  if (_camNotaScanner) { try { _camNotaScanner.parar(); } catch (_) {} _camNotaScanner = null; }
+  _camNotaDicaScanner = false;
+}
+function alternarScannerNota() {
+  _camNotaScannerOn = !_camNotaScannerOn;
+  try { localStorage.setItem('cam_scanner', _camNotaScannerOn ? 'on' : 'off'); } catch (_) {}
+  const dica = $('cam-nota-dica'); if (dica) dica.textContent = _DICA_CAMERA_NOTA;
+  _iniciarScannerNota();
+}
 function _pararCameraNota() {
   _camNotaSeq++; _camNotaFlashSeq++;                  // invalida abertura e flash que ainda estejam a caminho
+  _pararScannerNota();
   clearInterval(_camNotaLuzTimer);
   _camNotaStream?.getTracks().forEach(t => t.stop());   // parar a câmera apaga a lanterna
   _camNotaStream = null;
@@ -7484,7 +7531,7 @@ async function dispararCameraNota() {
     c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
     blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
-  if (!blob) { if (btn) btn.disabled = false; toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  if (!blob) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
   /* foto borrada? oferece tirar de novo AGORA, com a câmera ainda aberta (depois de fechar, ela não volta) */
   const nit = await _nitidezDaFoto(blob);
   if (_camNotaStream !== stream) return;       // cancelou enquanto media a nitidez: sem diálogo, sem anexar
@@ -7494,7 +7541,17 @@ async function dispararCameraNota() {
       mensagem: 'O texto da nota está sem nitidez. Segure o celular firme, deixe a câmera focar e tente de novo — com pouca luz, ligue o flash.',
       confirmar: 'Tirar de novo', cancelar: 'Usar assim mesmo',
     });
-    if (denovo) { if (btn) btn.disabled = false; return; }
+    if (denovo) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); return; }
+  }
+  /* Scanner: acha a nota na foto final, corrige a perspectiva e clareia o papel. Sem nota inteira à vista (cortada pela
+     borda, fundo claro demais) ou com qualquer erro, segue com a foto original, igual a antes. */
+  if (_camNotaScannerOn && typeof Scanner !== 'undefined') {
+    const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Endireitando a nota…';
+    try {
+      const r = await Scanner.endireitar(blob);
+      if (_camNotaStream !== stream) return;       // cancelou durante o ajuste
+      if (r?.endireitou && r.blob) blob = r.blob;
+    } catch (_) {}
   }
   _camNotaAoCancelar = null;
   _pararCameraNota();
