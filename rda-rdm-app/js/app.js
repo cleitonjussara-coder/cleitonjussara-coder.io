@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 434;
+const APP_BUILD = 435;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3119,22 +3119,62 @@ function _resumoHub() {
     ${tabelaAba('🍽️', 'RDA')}
     ${tabelaAba('💼', 'RDM')}`;
 
-  return `
-    <div class="ini-titulo">Resumo de ${MESES[filMes - 1]} ${filAno}</div>
-    <div class="res-card ${acima ? 'alerta' : ''}" onclick="switchView('saldo')">
+  /* 19/10/2026, pedido do Cleiton (print com seta: "recolher para resumir
+     informação"): o quadro todo recolhe. Recolhido, sobra só o que importa —
+     quanto há para receber, por aba (ou o repasse, no cartão) — e o aviso de
+     limite, que não pode sumir junto. O cabeçalho é o botão (alvo ≥ 44 px). */
+  const recolhido = _resumoHubRecolhido;
+  const cab = `
+    <button type="button" class="res-cab" aria-expanded="${!recolhido}" aria-controls="resumo-corpo" onclick="alternarResumoHub()">
+      <span class="res-cab-tit">Resumo de ${MESES[filMes - 1]} ${filAno}</span>
+      <span class="res-cab-acao"><span>${recolhido ? 'Expandir' : 'Recolher'}</span><span class="res-cab-seta" aria-hidden="true">${recolhido ? '▸' : '▾'}</span></span>
+    </button>`;
+  const avisoLimite = acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : '';
+  const corpo = recolhido ? `
+    <div class="res-card res-card-mini ${acima ? 'alerta' : ''}" id="resumo-corpo" onclick="alternarResumoHub()">
+      <div class="res-recs">
+        ${ehCartao
+          ? caixaRec('👛', 'Repasse', devedor)
+          : caixaRec('🍽️', 'RDA', devedorRda) + caixaRec('💼', 'RDM', devedorRdm)}
+      </div>
+      ${avisoLimite}
+    </div>` : `
+    <div class="res-card ${acima ? 'alerta' : ''}" id="resumo-corpo" onclick="switchView('saldo')">
       <div class="res-linha ${ehCartao ? 'res-linha-4' : ''}">
         ${ehCartao
           ? porCategoria.map(({ c, arr }) => linha(c.ico, c.nome, arr)).join('')
           : linha('🍽️', 'RDA', rda) + linha('💼', 'RDM', rdm)}
       </div>
       ${detalhe}
-      ${acima ? `<div class="res-alerta">⚠️ <b>RDM ${brl(devedorRdm)}</b> — acima do limite de ${brl(LIMITE_DEVEDOR)}. Veja o detalhe em <b>RDM/RDA e Planilhas</b>.</div>` : ''}
-    </div>
+      ${avisoLimite}
+    </div>`;
+
+  return `
+    <div id="resumo-hub">
+    ${cab}
+    ${corpo}
     ${outros.length ? `
     <div class="res-card alerta res-equipe" onclick="event.stopPropagation(); abrirNotificacoes()">
       <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}:
         ${outros.slice(0, 3).map(c => `${esc(c.nome)} (${brl(c.valor)})`).join(' · ')}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ''}. Toque para ver.</div>
-    </div>` : ''}`;
+    </div>` : ''}
+    </div>`;
+}
+
+/* Recolher/expandir o Resumo do mês (19/10/2026). A escolha fica no aparelho
+   (localStorage dentro de try/catch — o app funciona sem ele). Redesenha só
+   o bloco, para não perder a posição da rolagem, e devolve o foco ao botão
+   (quem navega por teclado/leitor de tela não fica perdido). */
+let _resumoHubRecolhido = false;
+try { _resumoHubRecolhido = localStorage.getItem('pm_resumo_recolhido') === '1'; } catch (_) {}
+
+function alternarResumoHub() {
+  _resumoHubRecolhido = !_resumoHubRecolhido;
+  try { localStorage.setItem('pm_resumo_recolhido', _resumoHubRecolhido ? '1' : '0'); } catch (_) {}
+  const el = $('resumo-hub');
+  if (!el) { renderDespesas(); return; }
+  el.outerHTML = _resumoHub();
+  document.querySelector('#resumo-hub .res-cab')?.focus({ preventScroll: true });
 }
 
 /* Cartão de categoria no hub (CV) — mesma cara do cartão de aba, mas

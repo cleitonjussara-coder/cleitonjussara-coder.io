@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=434">
+  <link rel="manifest" href="manifest.json?v=435">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1558,6 +1558,17 @@ html{-webkit-text-size-adjust:100%}
 .res-card:active{transform:scale(.99)}
 .res-card.alerta{border-color:#f59e0b;box-shadow:inset 2px 2px 4px rgba(255,255,255,.14),inset -2px -2px 6px rgba(0,0,0,.5),0 8px 18px rgba(0,0,0,.4),0 0 0 2px rgba(245,158,11,.45)}
 .res-equipe{margin-top:10px;background:linear-gradient(160deg,#7c3a05,#4a2203)}
+/* Recolher/expandir o resumo (19/10/2026): o cabeçalho inteiro é o botão
+   (≥ 44 px de altura); recolhido, o cartão mostra só o "a receber". */
+.res-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:46px;margin:4px 0 -6px;padding:0 2px;
+  background:none;border:0;cursor:pointer;font:inherit;text-align:left;color:var(--lima-2);-webkit-tap-highlight-color:transparent}
+.res-cab-tit{flex:1;min-width:0;overflow-wrap:anywhere;font-size:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.55)}
+.res-cab-acao{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:36px;padding:0 12px;border-radius:18px;
+  background:rgba(4,31,15,.55);border:1.5px solid rgba(185,226,74,.55);font-size:13px;font-weight:800;color:var(--lima-2)}
+.res-cab-seta{font-size:16px;line-height:1}
+.res-cab:focus-visible{outline:2px solid #b8e986;outline-offset:2px;border-radius:10px}
+.res-card-mini .res-recs{margin-top:0}
+@media (max-width:359px){.res-cab-tit{font-size:14px;letter-spacing:.4px}.res-cab-acao{padding:0 10px;gap:5px}}
 .res-linha{display:flex;align-items:stretch;gap:6px}
 /* 25/09/2026: no regime de cartão o resumo tem quatro categorias em vez
    de RDA/RDM — em fila só no celular não cabe, então vai 2x2. */
@@ -1884,7 +1895,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=434" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=435" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2557,34 +2568,34 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=434"></script>
-<script defer src="js/db.js?v=434"></script>
-<script defer src="js/nfce.js?v=434"></script>
-<script defer src="js/sefaz.js?v=434"></script>
-<script defer src="js/brasilapi.js?v=434"></script>
-<script defer src="js/ocr.js?v=434"></script>
-<script defer src="js/scanner.js?v=434"></script>
-<script defer src="js/recorte.js?v=434"></script>
-<script defer src="js/excel.js?v=434"></script>
-<script defer src="js/gestor.js?v=434"></script>
-<script defer src="js/frota.js?v=434"></script>
-<script defer src="js/ponto.js?v=434"></script>
-<script defer src="js/rastreio.js?v=434"></script>
-<script defer src="js/gdrive.js?v=434"></script>
+<script defer src="js/api.js?v=435"></script>
+<script defer src="js/db.js?v=435"></script>
+<script defer src="js/nfce.js?v=435"></script>
+<script defer src="js/sefaz.js?v=435"></script>
+<script defer src="js/brasilapi.js?v=435"></script>
+<script defer src="js/ocr.js?v=435"></script>
+<script defer src="js/scanner.js?v=435"></script>
+<script defer src="js/recorte.js?v=435"></script>
+<script defer src="js/excel.js?v=435"></script>
+<script defer src="js/gestor.js?v=435"></script>
+<script defer src="js/frota.js?v=435"></script>
+<script defer src="js/ponto.js?v=435"></script>
+<script defer src="js/rastreio.js?v=435"></script>
+<script defer src="js/gdrive.js?v=435"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=434"></script>
+<script defer src="js/svelte-ajuda.js?v=435"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=434"></script>
+<script defer src="js/svelte-historico.js?v=435"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=434"></script>
+<script defer src="js/svelte-arquivos.js?v=435"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=434"></script>
-<script defer src="js/app.js?v=434"></script>
+<script defer src="js/svelte-perfil.js?v=435"></script>
+<script defer src="js/app.js?v=435"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=434').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=435').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
