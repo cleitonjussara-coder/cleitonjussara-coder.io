@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 435;
+const APP_BUILD = 436;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3010,7 +3010,6 @@ function _resumoHub() {
   /* 22/09/2026: o aviso é SÓ pelo devedor de RDM e SÓ para gestor/admin —
      o colaborador vê os números, mas não é cobrado pelo app. */
   const acima = _ehGestorOuAdmin() && devedorRdm > LIMITE_DEVEDOR;
-  const outros = _equipeDevedora().filter(c => c.id !== user?.id);
 
   /* 25/09/2026: no regime de cartão não existe RDA x RDM — o gasto se divide
      nas quatro categorias da planilha. O resumo segue a mesma divisão. */
@@ -3153,11 +3152,20 @@ function _resumoHub() {
     <div id="resumo-hub">
     ${cab}
     ${corpo}
-    ${outros.length ? `
-    <div class="res-card alerta res-equipe" onclick="event.stopPropagation(); abrirNotificacoes()">
+    </div>`;
+}
+
+/* 19/10/2026, pedido do Cleiton (print com seta: "essa notificação pode ir
+   para a página inicial"): o aviso de colaboradores acima do limite de RDM
+   saiu do Resumo da tela Despesas e sobe para o TOPO do Início do gestor/admin,
+   onde ele vê assim que abre o app. Só aparece se houver alguém acima. */
+function _avisoEquipeDevedoraHTML() {
+  const outros = _equipeDevedora().filter(c => c.id !== user?.id);
+  if (!outros.length) return '';
+  return `
+    <div class="res-card alerta res-equipe res-equipe-topo" onclick="abrirNotificacoes()">
       <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}:
         ${outros.slice(0, 3).map(c => `${esc(c.nome)} (${brl(c.valor)})`).join(' · ')}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ''}. Toque para ver.</div>
-    </div>` : ''}
     </div>`;
 }
 
@@ -3473,6 +3481,7 @@ function renderInicio() {
   $('app-content').innerHTML = `
   <div class="db-container">
     </div>
+    ${_avisoEquipeDevedoraHTML()}
     ${resumoGastos}
 
     <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
