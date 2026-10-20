@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 439;
+const APP_BUILD = 440;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2986,6 +2986,15 @@ function _gastoBolsoPorTipo(ns, mes, ano) {
   return r;
 }
 
+/* C.V.: gasto no cartão e recargas recebidas, por aba, até o mês. */
+function _cartaoPorTipo(ns, rs, mes, ano) {
+  const k = ano * 12 + mes, ate = o => (Number(o.ano) * 12 + Number(o.mes)) <= k;
+  const r = { gasto: { RDM: 0, RDA: 0 }, recarga: { RDM: 0, RDA: 0 } };
+  ns.forEach(n => { if (!n.deleted && ate(n) && _notaDoCartao(n) && r.gasto[n.tipo] != null) r.gasto[n.tipo] += _n(n.valor); });
+  rs.forEach(x => { if (!x.deleted && ate(x) && x.destino === 'recarga' && _repasseEhRecebido(x) && r.recarga[x.tipo] != null) r.recarga[x.tipo] += _n(x.valor); });
+  return r;
+}
+
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
    no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
 function _equipeDevedora(mes = filMes, ano = filAno) {
@@ -3007,6 +3016,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
         rda: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDA'),
         cv: _usaCartao(quem),
         bolso: _usaCartao(quem) ? _gastoBolsoPorTipo(d.ns, mes, ano) : null,
+        cartao: _usaCartao(quem) ? _cartaoPorTipo(d.ns, d.rs, mes, ano) : null,
         total: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem)),
       };
     })
@@ -3186,10 +3196,10 @@ function _avisoEquipeDevedoraHTML() {
     const id = esc(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
     const info = c.cv
-      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span>`
+      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão — gasto: RDM <b>${brl(c.cartao.gasto.RDM)}</b> · RDA <b>${brl(c.cartao.gasto.RDA)}</b></span><span>Cartão — recargas: RDM <b>${brl(c.cartao.recarga.RDM)}</b> · RDA <b>${brl(c.cartao.recarga.RDA)}</b></span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
     const acoes = c.cv
-      ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
+      ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga RDM', 'lancarRecargaDoAviso', ",'RDM'") + btn('💳 Recarga RDA', 'lancarRecargaDoAviso', ",'RDA'")
       : btn('👛 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('👛 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '');
     return `
       <div class="res-eq-linha">
@@ -3214,10 +3224,10 @@ function lancarRepasseDoAviso(id, tipo) {
   if (v > 0.004) pre.valor = v.toFixed(2);
   abrirFormRepasse('received', Object.keys(pre).length ? pre : null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
 }
-function lancarRecargaDoAviso(id) {
+function lancarRecargaDoAviso(id, tipo) {
   const c = equipePorId[id];
   if (!c) return;
-  abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, 'recarga');
+  abrirFormRepasse('received', tipo ? { tipo } : null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, 'recarga');
 }
 
 /* Recolher/expandir o Resumo do mês (19/10/2026). A escolha fica no aparelho
@@ -9484,8 +9494,13 @@ function _repasseEhCarteira(r) {
    'carteira') passou a perguntar a aba também, igual pra quem é
    RDM/RDA — antes ficava sempre RDM sem dar escolha, e "RDA não
    aparecia" pro CV no repasse. Só recarga continua sem esse passo. */
+/* 19/10/2026, pedido do Cleiton: "tem colaborador que pode passar RDA no
+   cartão corporativo" — a recarga também pergunta a aba (RDM ou RDA). A
+   planilha continua lendo só DATA e R$ do extrato; o tipo fica gravado no
+   lançamento para o gestor controlar o gasto por categoria. Recargas antigas
+   foram gravadas como RDM (era fixo). */
 function _repasseSemCategoria() {
-  return _repasseDestino === 'recarga';
+  return false;
 }
 const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
 
