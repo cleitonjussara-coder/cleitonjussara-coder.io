@@ -468,6 +468,16 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     heic:'image/heic', gif:'image/gif', pdf:'application/pdf', xml:'text/xml',
   };
   const saveFotoLocal = async (nota_id, blob, ext) => {
+    /* 20/10/2026 (caso José, recibo em PDF): PDF/XML chegam como o File ORIGINAL do seletor — no iPhone é só uma
+       referência ao arquivo, e depois de um tempo o arquivo some: o blob guardado continua com o tamanho (142 KB),
+       mas o envio sai com o corpo vazio (422 sem fim). Foto passa pelo canvas e já é cópia em memória; aqui todo
+       anexo vira cópia em memória no momento de guardar. Se a leitura falhar, guarda como veio (o envio avisa). */
+    if (blob instanceof Blob) {
+      try {
+        const buf = await blob.arrayBuffer();
+        if (buf.byteLength) blob = new Blob([buf], { type: blob.type || MIME_POR_EXT[(ext || '').toLowerCase()] || '' });
+      } catch (_) {}
+    }
     /* `em`: carimbo desta versão do anexo — o envio compara antes de apagar o blob local (anexo trocado durante o upload) */
     const entry = { nota_id, blob, ext: (ext || 'jpg').toLowerCase(), em: new Date().toISOString() + ':' + Math.random().toString(36).slice(2, 8) };
     await _put('fotos', entry);
@@ -734,8 +744,12 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
           const blob = payload.blob instanceof Blob ? payload.blob : new Blob([payload.blob], { type: mime });
           /* 03/10/2026: o iPhone entrega arquivo de 0 bytes quando ele está só na nuvem (iCloud/WhatsApp). Mandar
              isso só gera 422 sem fim; recusa aqui com o motivo, que a nota passa a mostrar. */
-          if (!blob.size) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
-          const { foto_path: path } = await sb.notas.foto(item.entity_id, blob, ext, nota.user_id, nota.user_id === null);
+          /* 20/10/2026: `size` é só o tamanho declarado — referência de arquivo do iPhone que sumiu mantém o tamanho e
+             sobe sem conteúdo. Lê os bytes de verdade e envia a cópia em memória. */
+          let corpo = null;
+          try { const buf = await blob.arrayBuffer(); if (buf.byteLength) corpo = new Blob([buf], { type: mime }); } catch (_) {}
+          if (!corpo) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
+          const { foto_path: path } = await sb.notas.foto(item.entity_id, corpo, ext, nota.user_id, nota.user_id === null);
           /* 14/10/2026 (revisão): a nota é LIDA DE NOVO e só recebe o caminho do anexo — a cópia lida antes do upload
              (até 120 s atrás) desfazia a edição ou a exclusão feita nesse meio tempo. updated_at não é mexido, para o
              envio da nota perceber a edição (compara updated_at). */
