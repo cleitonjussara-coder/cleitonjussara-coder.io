@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 449;
+const APP_BUILD = 450;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3191,6 +3191,27 @@ function _resumoHub() {
    para a página inicial"): o aviso de colaboradores acima do limite de RDM
    saiu do Resumo da tela Despesas e sobe para o TOPO do Início do gestor/admin,
    onde ele vê assim que abre o app. Só aparece se houver alguém acima. */
+/* Valores do C.V. no aviso vêm do SERVIDOR, como a ficha do colaborador (20/10/2026, Cleiton: "os valores do cartão estão
+   divergentes do cartão do colaborador"). A cópia local do gestor não traz tudo (as recargas do Vinicius sumiam), então
+   buscamos o histórico da pessoa e refazemos as contas da planilha. Cache de 60 s; enquanto busca, mostra o que já tinha. */
+const _cvServ = {};   // id → { ns, rs, em, buscando }
+function _cvServidor(id) {
+  const c = _cvServ[id];
+  if ((!c || Date.now() - c.em > 60000) && sb && !(c && c.buscando)) {
+    _cvServ[id] = { ...(c || {}), buscando: true };
+    Promise.all([
+      sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento' }),
+      sb.repasses.list({ user_id: id, deleted: '0' }),
+    ]).then(([ns, rs]) => { _cvServ[id] = { ns: ns || [], rs: rs || [], em: Date.now() }; })
+      .catch(() => { _cvServ[id] = { ...(_cvServ[id] || {}), buscando: false, em: Date.now() }; })
+      .finally(() => {
+        const el = document.getElementById('aviso-equipe-topo');
+        if (el && viewAtual === 'inicio') el.outerHTML = _avisoEquipeDevedoraHTML();
+      });
+  }
+  return _cvServ[id]?.ns ? _cvServ[id] : null;
+}
+
 function _avisoEquipeDevedoraHTML() {
   const outros = _equipeDevedora().filter(c => c.id !== user?.id);
   if (!outros.length) return '';
@@ -3202,7 +3223,15 @@ function _avisoEquipeDevedoraHTML() {
   const linhas = outros.map(c => {
     const id = esc(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
-    const info = c.cv
+    const srv = c.cv ? _cvServidor(c.id) : null;
+    if (srv) {   // valores do servidor, iguais aos da ficha e da planilha
+      c.valor = _devedorDe(srv.ns, srv.rs, filMes, filAno, true);
+      c.bolso = _gastoBolsoPorTipo(srv.ns, filMes, filAno);
+      c.cartao = _cartaoPorTipo(srv.ns, srv.rs, filMes, filAno);
+    }
+    const info = c.cv && !srv
+      ? `<span>C.V. · carregando os valores do servidor…</span>`
+      : c.cv
       ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
     const acoes = c.cv
@@ -3215,7 +3244,7 @@ function _avisoEquipeDevedoraHTML() {
       </div>`;
   }).join('');
   return `
-    <div class="res-card alerta res-equipe res-equipe-topo">
+    <div class="res-card alerta res-equipe res-equipe-topo" id="aviso-equipe-topo">
       <div class="res-alerta" style="margin:0 0 6px">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}</div>
       ${linhas}
       <button type="button" class="res-eq-ver" onclick="abrirNotificacoes()">Ver notificações ›</button>
