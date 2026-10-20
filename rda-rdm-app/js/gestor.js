@@ -26,6 +26,7 @@ window.Gestor = (() => {
   let _evoMantem = null;               // mês cuja faixa de valores já volta aberta depois de redesenhar
   let _evoScroll = null;               // rolagem da tela, devolvida depois do redesenho
   const _previasAbertas = new Set();   // colaboradores com a prévia dos gastos aberta (lista da Equipe)
+  let _kpisAbertos = false;            // cartões de resumo da ficha C.V. (20/10/2026: começam escondidos, botão abre)
   let _acoesAbertas = false;           // grade de relatórios/ações da ficha aberta
   let _fichaSeq = 0;                   // número do último redesenho da ficha; fechar a ficha também o avança
   const _restaurarRolagem = el => { if (_evoScroll !== null) { const y = _evoScroll; _evoScroll = null; if (el) el.scrollTop = y; } };
@@ -131,6 +132,16 @@ window.Gestor = (() => {
     if (abrir) _previasAbertas.add(id); else _previasAbertas.delete(id);
   }
   /* ⋯ na ficha: recolhe a grade de relatórios e ações (mesmo pedido) */
+  function alternarKpis(btn) {
+    const g = document.querySelector('.cdet-kpis');
+    if (!g) return;
+    const abrir = g.style.display === 'none';
+    g.style.display = abrir ? '' : 'none';
+    btn.classList.toggle('on', abrir);
+    btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+    btn.querySelector('.txt').textContent = abrir ? 'Esconder resumo do mês' : 'Abrir resumo do mês';
+    _kpisAbertos = abrir;
+  }
   function alternarAcoes(btn) {
     const g = document.querySelector('.cdet-acoes');
     if (!g) return;
@@ -778,7 +789,8 @@ window.Gestor = (() => {
           ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
 
-        ${ehContador ? '' : `<div class="cdet-kpis">
+        ${ehContador || !ehCVcolab ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_kpisAbertos ? 'on' : ''}" aria-expanded="${_kpisAbertos}" onclick="Gestor.alternarKpis(this)">📊 <span class="txt">${_kpisAbertos ? 'Esconder resumo do mês' : 'Abrir resumo do mês'}</span></button></div>`}
+        ${ehContador ? '' : `<div class="cdet-kpis" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>
           ${ehCVcolab ? `
           <div class="cdet-kpi link ${aReembolsar > 0.004 ? 'warn' : ''}" role="button" tabindex="0" data-filtro="carteira" title="Listar só as notas de carteira" onclick="Gestor.filtrarNotas('carteira')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('carteira')}"><span class="cdet-kpi-ico">👛</span><span class="cdet-kpi-lbl">A pagar</span><span class="cdet-kpi-val">${brl(Math.max(aReembolsar, 0))}</span><span class="cdet-kpi-sub">${aReembolsar < -0.004 ? 'reembolsado a mais ' + brl(-aReembolsar) + ' · ' : ''}carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'} · ${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} no mês <span aria-hidden="true">↓</span></span></div>` : `
           <div class="cdet-kpi link" role="button" tabindex="0" title="Ver as notas do mês" onclick="Gestor.irParaNotas()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaNotas()}"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span></span></div>`}
@@ -1290,5 +1302,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
