@@ -163,7 +163,9 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       if (!quem || (entry.entity !== 'nota' && entry.entity !== 'foto')) return;
       for (const i of existingItems) {
         if (i.entity_id === entry.entity_id && i.id !== itemId && (i.entity === 'nota' || i.entity === 'foto') && i.queued_by !== quem) {
-          await _put('sync_queue', { ...i, queued_by: quem });
+          /* item de anexo antigo com blob morto (iPhone): regravar quebra ("Error preparing Blob/File…") e derrubaria a
+             edição da nota — o carimbo só ajuda a achar a conta certa, não vale esse risco */
+          try { await _put('sync_queue', { ...i, queued_by: quem }); } catch (_) {}
         }
       }
     };
@@ -625,20 +627,37 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
 
   /* Lê e grava o item da fila NA MESMA transação: o que se grava é o registro ATUAL, não uma cópia lida antes (uma
      edição que entrou no meio não é desfeita), e item já enviado e apagado não ressuscita. fn devolve o novo item ou null. */
-  const _mutarFila = (id, fn) => _tx(['sync_queue'], 'readwrite', (t, res, rej) => {
+  const _mutarFilaBruto = (id, fn) => _tx(['sync_queue'], 'readwrite', (t, res, rej) => {
     const s = t.objectStore('sync_queue');
     const g = s.get(id);
     g.onerror = e => rej(e.target.error);
     g.onsuccess = () => {
-      const cur = g.result;
-      if (!cur) { res(null); return; }
-      const novo = fn(cur);
-      if (!novo) { res(cur); return; }
-      const p = s.put(novo);
-      p.onsuccess = () => res(novo);
-      p.onerror = e => rej(e.target.error);
+      try {
+        const cur = g.result;
+        if (!cur) { res(null); return; }
+        const novo = fn(cur);
+        if (!novo) { res(cur); return; }
+        const p = s.put(novo);
+        p.onsuccess = () => res(novo);
+        p.onerror = e => rej(e.target.error);
+      } catch (err) { rej(err); }
     };
   });
+
+  /* 20/10/2026 (caso José): regravar item de ANEXO cujo blob é um File antigo do iPhone que sumiu dá "Error preparing
+     Blob/File data to be stored in object store" — quebrava o "Enviar agora" e o "Tentar de novo" inteiros. Se o blob
+     está legível, o item é curado (vira cópia em memória) e a mudança é refeita; se morreu, vira "anexo vazio". */
+  const _mutarFila = async (id, fn) => {
+    try { return await _mutarFilaBruto(id, fn); }
+    catch (e) {
+      const cur = await _get('sync_queue', id).catch(() => null);
+      if (!cur || cur.entity !== 'foto' || !cur.payload?.blob) throw e;
+      const vivo = await _copiaViva(cur.payload.blob, cur.payload.ext);
+      if (!vivo) { await _anexoMorto(cur); return _get('sync_queue', id).catch(() => null); }
+      await _put('sync_queue', { ...cur, payload: { ...cur.payload, blob: vivo } });
+      return _mutarFilaBruto(id, fn);
+    }
+  };
 
   async function _ensureQueueFromExisting() {
     const [allN, allR, allFotos, queueItems] = await Promise.all([
@@ -675,6 +694,35 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         await _queueOp({ entity: 'foto', entity_id: f.nota_id, action: 'upload', payload: f, queued_by: dono?.created_by || dono?.user_id || _sessaoUid });
       }
     }
+  }
+
+  /* Cópia em memória do anexo, lida byte a byte; null se o arquivo sumiu ou veio vazio (`size` sozinho engana: a
+     referência de arquivo do iPhone que sumiu mantém o tamanho). */
+  async function _copiaViva(blob, ext) {
+    try {
+      const buf = await (blob instanceof Blob ? blob : new Blob([blob])).arrayBuffer();
+      return buf.byteLength ? new Blob([buf], { type: blob.type || MIME_POR_EXT[String(ext || 'jpg').toLowerCase()] || '' }) : null;
+    } catch (_) { return null; }
+  }
+
+  /* Anexo que não dá mais para enviar (arquivo sumiu/veio vazio): tira o blob morto da fila e da store 'fotos' (regravá-lo
+     é o que quebra no iOS), deixa o item como "falhou" com o motivo — a nota explica e manda anexar de novo — e fora da
+     fila de tentativas. Anexar de novo reaproveita este item (saveFotoLocal → _queueOp) e ele volta a ser tentado. */
+  async function _anexoMorto(item) {
+    const msg = 'Anexo vazio (0 KB): o arquivo não chegou inteiro ao app. Anexe o arquivo de novo.';
+    const agora = new Date().toISOString();
+    const p = item.payload || {};
+    try {
+      await _put('sync_queue', { ...item, payload: { nota_id: p.nota_id || item.entity_id, ext: p.ext || null, em: p.em || null, morto: true },
+        status: 'failed', attempts: 0, contada_em: null, last_error: msg,
+        next_attempt_at: new Date(Date.now() + 365 * 86_400_000).toISOString(), updated_at: agora });
+    } catch (_) { try { await _del('sync_queue', item.id); } catch (_2) {} }
+    try { await _del('fotos', item.entity_id); } catch (_) {}
+    try {
+      const nota = await _get('notas', item.entity_id);
+      if (nota) await _put('notas', { ...nota, synced: false, sync_status: 'failed', sync_error: msg });
+    } catch (_) {}
+    return msg;
   }
 
   /* opts (12/10/2026, envio em segundo plano):
@@ -723,6 +771,16 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       /* o item pode ter mudado desde que a lista foi montada (edição da nota, "Enviar agora", envio concluído): usa o ATUAL */
       const item = await _get('sync_queue', item0.id);
       if (!item) continue;
+      /* 20/10/2026 (caso José): item de anexo ANTIGO guardava o File original do iPhone, cujo arquivo pode ter sumido.
+         Regravar esse blob (o `_put` de "running" logo abaixo, fora do try) dá "Error preparing Blob/File data to be
+         stored in object store" e derrubava o ciclo inteiro — nenhum outro item subia. Aqui o anexo é conferido ANTES:
+         legível vira cópia em memória (cura o item); morto é marcado como "vazio" sem regravar o blob, e o ciclo segue. */
+      if (item.entity === 'foto') {
+        const b = item.payload?.blob;
+        const vivo = b ? await _copiaViva(b, item.payload.ext) : null;
+        if (b && vivo) item.payload = { ...item.payload, blob: vivo };
+        else if (b || item.payload?.morto) { falhou(await _anexoMorto(item)); continue; }
+      }
       const now = new Date().toISOString();
       await _put('sync_queue', { ...item, status: 'running', updated_at: now });
       try {
@@ -818,7 +876,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
             /* o anexo fica guardado, mas marcado: sem isto _ensureQueueFromExisting o recolocava na fila a cada rodada
                e o arquivo inteiro subia de novo só para tomar 403 (revisão de 14/10/2026) */
             const f = await _get('fotos', item.entity_id);
-            if (f) await _put('fotos', { ...f, recusada: true });
+            if (f) { try { await _put('fotos', { ...f, recusada: true }); } catch (_) { await _del('fotos', item.entity_id); } }
           } else {
             const lojaRec = item.entity === 'nota' ? 'notas' : 'repasses';
             const local = await _get(lojaRec, item.entity_id);
