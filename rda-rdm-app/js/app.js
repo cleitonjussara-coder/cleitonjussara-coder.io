@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 444;
+const APP_BUILD = 445;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3211,7 +3211,7 @@ function _avisoEquipeDevedoraHTML() {
     return `
       <div class="res-eq-linha">
         <div class="res-eq-quem"><b>${esc(c.nome)}</b>${info}</div>
-        <div class="res-eq-acoes">${acoes}</div>
+        <div class="res-eq-acoes">${acoes}${btn('🔎 Ver cartão', 'verCartaoDoColaborador')}</div>
       </div>`;
   }).join('');
   return `
@@ -3230,6 +3230,12 @@ function lancarRepasseDoAviso(id, tipo) {
   if (tipo) pre.tipo = tipo;
   if (v > 0.004) pre.valor = v.toFixed(2);
   abrirFormRepasse('received', Object.keys(pre).length ? pre : null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
+}
+/* Abre o cartão (ficha) do colaborador na Equipe — o mesmo caminho do
+   "Editar nota de colaborador" do Início (20/10/2026, pedido do Cleiton). */
+function verCartaoDoColaborador(id) {
+  switchView('equipe');
+  setTimeout(() => Gestor.abrir(id), 400);
 }
 function lancarRecargaDoAviso(id) {
   const c = equipePorId[id];
