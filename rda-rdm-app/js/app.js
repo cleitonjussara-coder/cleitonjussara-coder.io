@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 443;
+const APP_BUILD = 444;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2986,11 +2986,19 @@ function _gastoBolsoPorTipo(ns, mes, ano) {
   return r;
 }
 
-/* C.V.: gasto no cartão por aba (RDM/RDA), até o mês. A recarga é um saldo só. */
+/* C.V.: cartão corporativo no ANO do filtro — é o que a planilha mostra
+   (TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO = recebido − gasto).
+   Gasto = notas pagas no cartão (nem do bolso, nem Faturamento), separado em
+   RDM/RDA só para controle; recebido = recargas, um saldo só (19/10/2026). */
 function _cartaoPorTipo(ns, rs, mes, ano) {
-  const k = ano * 12 + mes, ate = o => (Number(o.ano) * 12 + Number(o.mes)) <= k;
-  const r = { gasto: { RDM: 0, RDA: 0 } };
-  ns.forEach(n => { if (!n.deleted && ate(n) && _notaDoCartao(n) && r.gasto[n.tipo] != null) r.gasto[n.tipo] += _n(n.valor); });
+  const r = { gasto: { RDM: 0, RDA: 0 }, total: 0, recarga: 0, saldo: 0 };
+  ns.forEach(n => {
+    if (n.deleted || Number(n.ano) !== ano || !_notaDoCartao(n)) return;
+    r.total += _n(n.valor);
+    if (r.gasto[n.tipo] != null) r.gasto[n.tipo] += _n(n.valor);
+  });
+  rs.forEach(x => { if (!x.deleted && Number(x.ano) === ano && x.destino === 'recarga' && _repasseEhRecebido(x)) r.recarga += _n(x.valor); });
+  r.saldo = r.recarga - r.total;
   return r;
 }
 
@@ -3195,7 +3203,7 @@ function _avisoEquipeDevedoraHTML() {
     const id = esc(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
     const info = c.cv
-      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão — gasto: RDM <b>${brl(c.cartao.gasto.RDM)}</b> · RDA <b>${brl(c.cartao.gasto.RDA)}</b></span>`
+      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
     const acoes = c.cv
       ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
