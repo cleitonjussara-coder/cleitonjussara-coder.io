@@ -228,6 +228,9 @@ window.Gestor = (() => {
     const vazio = document.getElementById('busca-vazio');
     if (vazio) vazio.style.display = (termos.length && !vistos) ? '' : 'none';
   }
+  /* Entrada direta (20/10/2026): marca o colaborador ANTES de a tela da Equipe desenhar, então ela já nasce na ficha dele —
+     sem passar pela lista (o abrir() com atraso brigava com o carregamento da lista e podia cair nela). */
+  function abrirDireto(id) { if (id !== _detalheId) _evoScroll = null; _detalheId = id; }
   function fechar()   { _detalheId = null; _fichaSeq++; _desarmarFicha(); _ctx?.onRebuild?.(); }   // a rolagem guardada era da ficha: a lista começa do topo
 
   /* Setas da lista de repasses na ficha: delta -1/+1 muda o mês, 0 volta ao
@@ -1302,5 +1305,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { abrirDireto, filtrarRepasses, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 448;
+const APP_BUILD = 449;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3234,8 +3234,8 @@ function lancarRepasseDoAviso(id, tipo) {
 /* Abre o cartão (ficha) do colaborador na Equipe — o mesmo caminho do
    "Editar nota de colaborador" do Início (20/10/2026, pedido do Cleiton). */
 function verCartaoDoColaborador(id) {
+  Gestor.abrirDireto(id);
   switchView('equipe');
-  setTimeout(() => Gestor.abrir(id), 400);
 }
 function lancarRecargaDoAviso(id) {
   const c = equipePorId[id];
