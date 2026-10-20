@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=445">
+  <link rel="manifest" href="manifest.json?v=446">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1285,6 +1285,15 @@ body{font-size:18.5px}
 .cdet-kpi-splits{display:flex;flex-direction:column;margin-top:6px;border-top:1px solid rgba(234,247,238,.22)}
 .cdet-kpi-split{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:3px 0;color:rgba(234,247,238,.82)}
 .cdet-kpi-split b{color:#fff;font-weight:800;white-space:nowrap}
+.cdet-plan{display:flex;flex-direction:column;gap:10px}
+.cdet-plan-aba{padding:12px 14px;border-radius:14px;background:var(--surface);border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35);color:#eef9f0}
+.cdet-plan-tit{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:#c9ea62;margin-bottom:8px}
+.cdet-plan-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:8px}
+.cdet-plan-cel{display:flex;flex-direction:column;gap:2px;min-width:0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.07)}
+.cdet-plan-cel .l{font-size:12px;font-weight:700;text-transform:uppercase;color:rgba(234,247,238,.78)}
+.cdet-plan-cel b{font-size:22px;font-weight:900;color:#fff;overflow-wrap:anywhere}
+.cdet-plan-cel .d{font-size:13px;color:rgba(234,247,238,.78)}
+.cdet-plan-cel.neg b{color:#ffb4a8}
 .cdet-bals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cdet-bal{display:flex;flex-direction:column;gap:2px;padding:12px 14px;min-width:0;overflow-wrap:anywhere;border-radius:14px;background:var(--surface);border:4px solid var(--esm-frame);box-shadow:0 4px 12px rgba(0,0,0,.35);color:#eef9f0}
 .cdet-bal-ico{font-size:29px;line-height:1}
@@ -1903,7 +1912,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=445" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=446" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2576,34 +2585,34 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=445"></script>
-<script defer src="js/db.js?v=445"></script>
-<script defer src="js/nfce.js?v=445"></script>
-<script defer src="js/sefaz.js?v=445"></script>
-<script defer src="js/brasilapi.js?v=445"></script>
-<script defer src="js/ocr.js?v=445"></script>
-<script defer src="js/scanner.js?v=445"></script>
-<script defer src="js/recorte.js?v=445"></script>
-<script defer src="js/excel.js?v=445"></script>
-<script defer src="js/gestor.js?v=445"></script>
-<script defer src="js/frota.js?v=445"></script>
-<script defer src="js/ponto.js?v=445"></script>
-<script defer src="js/rastreio.js?v=445"></script>
-<script defer src="js/gdrive.js?v=445"></script>
+<script defer src="js/api.js?v=446"></script>
+<script defer src="js/db.js?v=446"></script>
+<script defer src="js/nfce.js?v=446"></script>
+<script defer src="js/sefaz.js?v=446"></script>
+<script defer src="js/brasilapi.js?v=446"></script>
+<script defer src="js/ocr.js?v=446"></script>
+<script defer src="js/scanner.js?v=446"></script>
+<script defer src="js/recorte.js?v=446"></script>
+<script defer src="js/excel.js?v=446"></script>
+<script defer src="js/gestor.js?v=446"></script>
+<script defer src="js/frota.js?v=446"></script>
+<script defer src="js/ponto.js?v=446"></script>
+<script defer src="js/rastreio.js?v=446"></script>
+<script defer src="js/gdrive.js?v=446"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=445"></script>
+<script defer src="js/svelte-ajuda.js?v=446"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=445"></script>
+<script defer src="js/svelte-historico.js?v=446"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=445"></script>
+<script defer src="js/svelte-arquivos.js?v=446"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=445"></script>
-<script defer src="js/app.js?v=445"></script>
+<script defer src="js/svelte-perfil.js?v=446"></script>
+<script defer src="js/app.js?v=446"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=445').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=446').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

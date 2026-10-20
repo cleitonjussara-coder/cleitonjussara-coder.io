@@ -694,6 +694,21 @@ window.Gestor = (() => {
         ? soma(histNotas.filter(n => n.pagamento === 'carteira' && chave(n) <= kAberto))
           - soma(histReps.filter(x => recebido(x) && !ehRecargaR(x) && chave(x) <= kAberto))
         : gastoCarteira - rec;
+      /* Faixa igual à da planilha (20/10/2026, pedido do Cleiton: "deixar igual mostra na planilha, lá os registros estão
+         corretos"): por aba, no ANO — TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO = recebido − gasto (negativo = a
+         empresa ainda deve). Cartão corporativo: gasto das notas fora da carteira × recargas. CV REEMBOLSO: gasto da
+         carteira × reembolsos (repasses que não são recarga). Mesmas regras de RelatorioCv.php. */
+      const planilhaCV = (ehCVcolab && acumOk) ? (() => {
+        const doAno = o => Number(o.ano) === Number(ano);
+        const ns1 = histNotas.filter(n => doAno(n) && n.pagamento !== 'empresa');
+        const rs1 = histReps.filter(x => doAno(x) && recebido(x));
+        const cartaoN = ns1.filter(n => n.pagamento !== 'carteira'), carteiraN = ns1.filter(n => n.pagamento === 'carteira');
+        const porTipo = (arr, t) => soma(arr.filter(x => x.tipo === t));
+        const recargasA = rs1.filter(ehRecargaR), reembA = rs1.filter(x => !ehRecargaR(x));
+        const aba = (ico, nome, gastoL, recL) => ({ ico, nome, gasto: soma(gastoL), rec: soma(recL),
+          gRDM: porTipo(gastoL, 'RDM'), gRDA: porTipo(gastoL, 'RDA'), rRDM: porTipo(recL, 'RDM'), rRDA: porTipo(recL, 'RDA') });
+        return [aba('💳', 'Cartão corporativo', cartaoN, recargasA), aba('👛', 'CV reembolso', carteiraN, reembA)];
+      })() : null;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
       const pendReps = reps.filter(x => !recebido(x) && !x.atendido_em).length;   // pedido já pago não é pendência (21/09/2026)
@@ -775,13 +790,22 @@ window.Gestor = (() => {
             : aReembolsar < -0.004
               ? `<div class="cdet-kpi"><span class="cdet-kpi-ico">🧾</span><span class="cdet-kpi-lbl">Reembolsado a mais</span><span class="cdet-kpi-val">${brl(-aReembolsar)}</span><span class="cdet-kpi-sub">acima da carteira${acumOk ? ' (acumulado)' : ' do mês'}</span></div>`
               : `<div class="cdet-kpi"><span class="cdet-kpi-ico">✅</span><span class="cdet-kpi-lbl">A reembolsar</span><span class="cdet-kpi-val">${brl(0)}</span><span class="cdet-kpi-sub">carteira em dia${acumOk ? ' (acumulado)' : ' no mês'}</span></div>`) : ''}
-          <div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>
+          ${planilhaCV ? '' : `<div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>`}
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
         </div>
 
         ${acumOk && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
-        <div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM)}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA)}</div>
+        ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(a => {
+          const sd = a.rec - a.gasto;
+          return `<div class="cdet-plan-aba">
+            <div class="cdet-plan-tit">${a.ico} ${a.nome} · ${ano}</div>
+            <div class="cdet-plan-grade">
+              <div class="cdet-plan-cel"><span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b><span class="d">RDM ${brl(a.gRDM)} · RDA ${brl(a.gRDA)}</span></div>
+              <div class="cdet-plan-cel"><span class="l">Total recebido</span><b>${brl(a.rec)}</b><span class="d">RDM ${brl(a.rRDM)} · RDA ${brl(a.rRDA)}</span></div>
+              <div class="cdet-plan-cel ${sd < -0.004 ? 'neg' : ''}"><span class="l">Saldo</span><b>${brl(sd)}</b><span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'recebido − gasto'}</span></div>
+            </div></div>`; }).join('')}</div>`
+        : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM)}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA)}</div>`}
         ${pagoEmpresaMes ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaMes)}</b> <span style="color:var(--text2)">(já incluso no Faturamento acima, não entra no saldo)</span></div>` : ''}
 
         <div class="dash-card">
