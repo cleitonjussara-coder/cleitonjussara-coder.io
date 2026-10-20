@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 438;
+const APP_BUILD = 439;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2974,6 +2974,18 @@ function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
   return _soma(ns.filter(ate)) - _soma(rs.filter(r => ate(r) && _repasseEhRecebido(r)));
 }
 
+/* C.V.: a dívida é uma só, mas o que a compõe são as notas pagas do bolso
+   (pagamento='carteira') até o mês — aqui separadas em RDM e RDA para o
+   gestor controlar o gasto por categoria (19/10/2026, pedido do Cleiton). */
+function _gastoBolsoPorTipo(ns, mes, ano) {
+  const k = ano * 12 + mes, r = { RDM: 0, RDA: 0 };
+  ns.forEach(n => {
+    if (n.deleted || n.pagamento !== 'carteira' || (Number(n.ano) * 12 + Number(n.mes)) > k) return;
+    if (n.tipo === 'RDM' || n.tipo === 'RDA') r[n.tipo] += _n(n.valor);
+  });
+  return r;
+}
+
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
    no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
 function _equipeDevedora(mes = filMes, ano = filAno) {
@@ -2994,6 +3006,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
         valor: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDM'),   // só RDM (22/09/2026)
         rda: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDA'),
         cv: _usaCartao(quem),
+        bolso: _usaCartao(quem) ? _gastoBolsoPorTipo(d.ns, mes, ano) : null,
         total: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem)),
       };
     })
@@ -3173,7 +3186,7 @@ function _avisoEquipeDevedoraHTML() {
     const id = esc(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
     const info = c.cv
-      ? `<span>C.V. · ${brl(c.valor)} a receber</span>`
+      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
     const acoes = c.cv
       ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
