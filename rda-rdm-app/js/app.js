@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 437;
+const APP_BUILD = 438;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -2992,6 +2992,8 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
         id,
         nome: (id === user?.id ? user?.nome : equipePorId[id]?.nome) || 'Colaborador',
         valor: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDM'),   // só RDM (22/09/2026)
+        rda: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem), 'RDA'),
+        cv: _usaCartao(quem),
         total: _devedorDe(d.ns, d.rs, mes, ano, _usaCartao(quem)),
       };
     })
@@ -3163,18 +3165,23 @@ function _avisoEquipeDevedoraHTML() {
   const outros = _equipeDevedora().filter(c => c.id !== user?.id);
   if (!outros.length) return '';
   /* Cartão interativo (19/10/2026, pedido do Cleiton): uma linha por
-     colaborador com o botão de repasse e, para quem usa cartão (C.V.), o de
-     recarga — abre o mesmo formulário do gestor, já com a pessoa escolhida. */
+     colaborador. Quem usa a carteira/RDA-RDM vê o a receber de RDM e de RDA
+     separados, com um botão de repasse para cada aba (já com aba e valor
+     preenchidos; o valor continua editável). No cartão corporativo (C.V.) a
+     dívida é uma só, sem divisão por aba, e há também a recarga. */
   const linhas = outros.map(c => {
-    const col = equipePorId[c.id];
     const id = esc(c.id);
+    const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
+    const info = c.cv
+      ? `<span>C.V. · ${brl(c.valor)} a receber</span>`
+      : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
+    const acoes = c.cv
+      ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
+      : btn('👛 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('👛 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '');
     return `
       <div class="res-eq-linha">
-        <div class="res-eq-quem"><b>${esc(c.nome)}</b><span>${brl(c.valor)} a receber</span></div>
-        <div class="res-eq-acoes">
-          <button type="button" class="res-eq-btn" onclick="lancarRepasseDoAviso('${id}')">👛 Repasse</button>
-          ${col && _ehCV(col) ? `<button type="button" class="res-eq-btn" onclick="lancarRecargaDoAviso('${id}')">💳 Recarga</button>` : ''}
-        </div>
+        <div class="res-eq-quem"><b>${esc(c.nome)}</b>${info}</div>
+        <div class="res-eq-acoes">${acoes}</div>
       </div>`;
   }).join('');
   return `
@@ -3184,10 +3191,15 @@ function _avisoEquipeDevedoraHTML() {
       <button type="button" class="res-eq-ver" onclick="abrirNotificacoes()">Ver notificações ›</button>
     </div>`;
 }
-function lancarRepasseDoAviso(id) {
+function lancarRepasseDoAviso(id, tipo) {
   const c = equipePorId[id];
   if (!c) return;
-  abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
+  const dev = _equipeDevedora().find(x => x.id === id);
+  const v = dev ? (dev.cv ? dev.valor : tipo === 'RDA' ? dev.rda : dev.valor) : 0;
+  const pre = {};
+  if (tipo) pre.tipo = tipo;
+  if (v > 0.004) pre.valor = v.toFixed(2);
+  abrirFormRepasse('received', Object.keys(pre).length ? pre : null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
 }
 function lancarRecargaDoAviso(id) {
   const c = equipePorId[id];
