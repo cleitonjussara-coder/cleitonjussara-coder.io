@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 450;
+const APP_BUILD = 451;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1856,7 +1856,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = []; justificativasSino = [];
+  notasEquipe = []; repassesEquipe = []; justificativasSino = []; _histEq.dados = null; _histEq.em = 0;
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
@@ -3002,6 +3002,27 @@ function _cartaoPorTipo(ns, rs, mes, ano) {
   return r;
 }
 
+const _histEq = { dados: null, em: 0, buscando: false };   // histórico de TODOS no servidor; cache de 60 s
+function _histEquipeServidor() {
+  if (!_veEquipe() || !sb || DEMO_MODE || !navigator.onLine) return _histEq.dados;
+  if (!_histEq.buscando && Date.now() - _histEq.em > 60000) {
+    _histEq.buscando = true;
+    Promise.all([
+      sb.notas.list({ deleted: '0', fields: 'user_id,tipo,valor,mes,ano,deleted,pagamento' }),
+      sb.repasses.list({ deleted: '0' }),
+    ]).then(([n, r]) => { if (Array.isArray(n) && Array.isArray(r)) _histEq.dados = { notas: n, repasses: r }; })
+      .catch(() => {})
+      .finally(() => {
+        _histEq.buscando = false; _histEq.em = Date.now();
+        if (viewAtual !== 'inicio') return;
+        const el = document.getElementById('aviso-equipe-topo');
+        if (el) el.outerHTML = _avisoEquipeDevedoraHTML();
+        else { const h = _avisoEquipeDevedoraHTML(); if (h) document.querySelector('#app-content .db-container')?.insertAdjacentHTML('afterbegin', h); }
+      });
+  }
+  return _histEq.dados;
+}
+
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
    no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
 function _equipeDevedora(mes = filMes, ano = filAno) {
@@ -3011,7 +3032,12 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
     if (o.deleted || !o.user_id) return;
     (porUser[o.user_id] = porUser[o.user_id] || { ns: [], rs: [] })[campo].push(o);
   });
-  junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs');
+  /* 20/10/2026 (Cleiton: "entra numa ficha, volta, e os outros somem"): a lista do aviso vem do histórico do SERVIDOR
+     (o mesmo que a Equipe usa), não da cópia local do aparelho, que muda de conteúdo e fazia colaboradores sumirem e
+     recargas ficarem de fora. Sem rede/antes de chegar, cai na cópia local. */
+  const srv = _histEquipeServidor();
+  if (srv) { junta(srv.notas, 'ns'); junta(srv.repasses, 'rs'); }
+  else { junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs'); }
   if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
   return Object.entries(porUser)
     .map(([id, d]) => {
@@ -3191,27 +3217,6 @@ function _resumoHub() {
    para a página inicial"): o aviso de colaboradores acima do limite de RDM
    saiu do Resumo da tela Despesas e sobe para o TOPO do Início do gestor/admin,
    onde ele vê assim que abre o app. Só aparece se houver alguém acima. */
-/* Valores do C.V. no aviso vêm do SERVIDOR, como a ficha do colaborador (20/10/2026, Cleiton: "os valores do cartão estão
-   divergentes do cartão do colaborador"). A cópia local do gestor não traz tudo (as recargas do Vinicius sumiam), então
-   buscamos o histórico da pessoa e refazemos as contas da planilha. Cache de 60 s; enquanto busca, mostra o que já tinha. */
-const _cvServ = {};   // id → { ns, rs, em, buscando }
-function _cvServidor(id) {
-  const c = _cvServ[id];
-  if ((!c || Date.now() - c.em > 60000) && sb && !(c && c.buscando)) {
-    _cvServ[id] = { ...(c || {}), buscando: true };
-    Promise.all([
-      sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento' }),
-      sb.repasses.list({ user_id: id, deleted: '0' }),
-    ]).then(([ns, rs]) => { _cvServ[id] = { ns: ns || [], rs: rs || [], em: Date.now() }; })
-      .catch(() => { _cvServ[id] = { ...(_cvServ[id] || {}), buscando: false, em: Date.now() }; })
-      .finally(() => {
-        const el = document.getElementById('aviso-equipe-topo');
-        if (el && viewAtual === 'inicio') el.outerHTML = _avisoEquipeDevedoraHTML();
-      });
-  }
-  return _cvServ[id]?.ns ? _cvServ[id] : null;
-}
-
 function _avisoEquipeDevedoraHTML() {
   const outros = _equipeDevedora().filter(c => c.id !== user?.id);
   if (!outros.length) return '';
@@ -3223,13 +3228,7 @@ function _avisoEquipeDevedoraHTML() {
   const linhas = outros.map(c => {
     const id = esc(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
-    const srv = c.cv ? _cvServidor(c.id) : null;
-    if (srv) {   // valores do servidor, iguais aos da ficha e da planilha
-      c.valor = _devedorDe(srv.ns, srv.rs, filMes, filAno, true);
-      c.bolso = _gastoBolsoPorTipo(srv.ns, filMes, filAno);
-      c.cartao = _cartaoPorTipo(srv.ns, srv.rs, filMes, filAno);
-    }
-    const info = c.cv && !srv
+    const info = c.cv && !_histEq.dados
       ? `<span>C.V. · carregando os valores do servidor…</span>`
       : c.cv
       ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
@@ -9716,6 +9715,7 @@ function fecharFormRepasse() { $('rep-overlay').style.display = 'none'; _repasse
 let _salvandoRepasse = false;
 async function salvarRepasse() {
   if (_salvandoRepasse) return;
+  _histEq.em = 0;   // o aviso do Início refaz a conta do servidor depois de um lançamento
   _salvandoRepasse = true;
   const btn = $('rep-btn-salvar');
   if (btn) btn.disabled = true;
@@ -9724,6 +9724,7 @@ async function salvarRepasse() {
   } finally {
     _salvandoRepasse = false;
     if (btn) btn.disabled = false;
+    _histEq.em = 0; if (viewAtual === 'inicio') _histEquipeServidor();   // já salvou: busca o histórico novo e o aviso se corrige sozinho
   }
 }
 
