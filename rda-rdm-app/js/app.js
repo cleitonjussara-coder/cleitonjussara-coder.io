@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 436;
+const APP_BUILD = 437;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -3162,11 +3162,37 @@ function _resumoHub() {
 function _avisoEquipeDevedoraHTML() {
   const outros = _equipeDevedora().filter(c => c.id !== user?.id);
   if (!outros.length) return '';
+  /* Cartão interativo (19/10/2026, pedido do Cleiton): uma linha por
+     colaborador com o botão de repasse e, para quem usa cartão (C.V.), o de
+     recarga — abre o mesmo formulário do gestor, já com a pessoa escolhida. */
+  const linhas = outros.map(c => {
+    const col = equipePorId[c.id];
+    const id = esc(c.id);
+    return `
+      <div class="res-eq-linha">
+        <div class="res-eq-quem"><b>${esc(c.nome)}</b><span>${brl(c.valor)} a receber</span></div>
+        <div class="res-eq-acoes">
+          <button type="button" class="res-eq-btn" onclick="lancarRepasseDoAviso('${id}')">👛 Repasse</button>
+          ${col && _ehCV(col) ? `<button type="button" class="res-eq-btn" onclick="lancarRecargaDoAviso('${id}')">💳 Recarga</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
   return `
-    <div class="res-card alerta res-equipe res-equipe-topo" onclick="abrirNotificacoes()">
-      <div class="res-alerta" style="margin:0">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}:
-        ${outros.slice(0, 3).map(c => `${esc(c.nome)} (${brl(c.valor)})`).join(' · ')}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ''}. Toque para ver.</div>
+    <div class="res-card alerta res-equipe res-equipe-topo">
+      <div class="res-alerta" style="margin:0 0 6px">🔔 <b>${outros.length} ${outros.length === 1 ? 'colaborador' : 'colaboradores'}</b> com <b>RDM</b> a receber acima de ${brl(LIMITE_DEVEDOR)}</div>
+      ${linhas}
+      <button type="button" class="res-eq-ver" onclick="abrirNotificacoes()">Ver notificações ›</button>
     </div>`;
+}
+function lancarRepasseDoAviso(id) {
+  const c = equipePorId[id];
+  if (!c) return;
+  abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
+}
+function lancarRecargaDoAviso(id) {
+  const c = equipePorId[id];
+  if (!c) return;
+  abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, 'recarga');
 }
 
 /* Recolher/expandir o Resumo do mês (19/10/2026). A escolha fica no aparelho
