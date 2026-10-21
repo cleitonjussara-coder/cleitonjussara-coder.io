@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 457;
+const APP_BUILD = 458;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2191,6 +2191,25 @@ function _notificacoes() {
         sub: `${c.email || ''} · ${VIA[c.criado_via] || 'pelo app'}${c.created_at ? ' em ' + fmtDataBR(String(c.created_at).slice(0, 10)) : ''} · papel: ${PAPEL_NOME[c.role] || c.role || 'colaborador'}`,
       }));
   }
+  /* Foto em branco (21/10/2026): o colaborador enviou uma nota cujo anexo é papel liso, sem nenhum dado. O servidor
+     marca e manda push; aqui o aviso fica no sino até o "OK, vi" (a pendência "foto em branco" na faixa do Início
+     continua até a foto ser trocada). Só notas de OUTRAS pessoas dos últimos 30 dias — a nota própria já foi barrada
+     na tela, e as mais antigas ficam só na faixa. Marcadas pelo mutirão (artisan fotos:em-branco) entram igual. */
+  if (_ehGestorOuAdmin()) {
+    const limBr = Date.now() - 30 * 86400_000;
+    const jaVista = new Set();
+    notasEquipe.concat(notas).forEach(n => {
+      if (!n || n.deleted || !_fotoMarcadaEmBranco(n) || jaVista.has(n.id)) return;
+      jaVista.add(n.id);
+      const id = 'branco:' + n.id;
+      if (n.user_id === user.id || vistos.has(id) || new Date(n.data).getTime() < limBr) return;
+      out.push({
+        id, tipo: 'fotobranca', notaId: n.id,
+        titulo: `${n.user_nome || _rotuloProprietario(n)} enviou uma nota com a foto em branco`,
+        sub: `${n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa')} · ${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'} — a foto não mostra nenhum dado de nota.`,
+      });
+    });
+  }
   /* Cartão corporativo acabando (24/09/2026): quem recarrega é o gestor, e
      sem saldo o colaborador passa a pagar do bolso. O id carrega a faixa de
      centenas, então o aviso volta se o saldo cair mais (ou for dispensado e
@@ -2292,7 +2311,7 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
@@ -2301,6 +2320,10 @@ function abrirNotificacoes() {
         </div>` : it.tipo === 'justresp' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="verRespostaJustificativa('${it.just.id}')">💬 Ler resposta</button>
           <button class="btn btn-sm btn-outline" onclick="dispensarJustificativa('${it.just.id}', this)">OK, vi</button>
+        </div>` : it.tipo === 'fotobranca' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" onclick="verFoto('${esc(it.notaId)}')">📎 Ver foto</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); editarNota('${esc(it.notaId)}')">✏️ Corrigir a nota</button>
+          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${esc(it.id)}')">OK, vi</button>
         </div>` : it.tipo === 'cartao' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: '${it.userId}', nome: '${esc((it.nome || '').replace(/'/g, ''))}' }, 'recarga')">💳 Registrar recarga</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
@@ -5180,10 +5203,18 @@ function _ehRecibo(n) {
   return String(n?.documento || '') === 'outro';
 }
 
+/* O servidor marcou o anexo desta nota como foto em branco? (a coluna vem como true/1; null/ausente = não medida) */
+function _fotoMarcadaEmBranco(n) {
+  return n?.foto_em_branco === true || n?.foto_em_branco === 1;
+}
+
 function _motivosDaNota(n) {
   const motivos = [];
   if (n.sync_status === 'failed' || n.synced === false) motivos.push('aguardando envio');
   if (!n.foto_path && !n.foto_local) motivos.push('sem anexo');
+  /* 21/10/2026: o servidor mede o anexo no envio (api/app/Services/FotoEmBranco) e marca foto sem nenhum dado de nota.
+     Só marca: a nota continua valendo até alguém trocar a foto (Corrigir). */
+  if (_fotoMarcadaEmBranco(n)) motivos.push('foto em branco');
   if (!(Number(n.valor) > 0)) motivos.push('sem valor');
   const digitos = _soDigitos(n.cnpj);
   if (digitos.length !== 14) motivos.push('sem CNPJ');
@@ -7280,6 +7311,32 @@ async function _anexoUtilizavel(file, input) {
   return false;
 }
 
+/* Foto EM BRANCO (21/10/2026): o colaborador anexou a foto de um papel liso e a nota foi lançada, com o anexo sem nenhum
+   dado. Antes só barrava arquivo de 0 KB e, na câmera do app, foto borrada. Agora uma imagem sem conteúdo nenhum
+   (FotoBranca, js/foto-branca.js) é barrada ao anexar e ao salvar. Só barra o CLARAMENTE vazio: PDF/XML nunca são
+   medidos, e imagem que o aparelho não decodifica (HEIC no Chrome) ou erro de leitura devolvem "não sei" — que passa.
+   Não apaga nada: o que já estava anexado fica como está. Devolve true se barrou (o aviso já foi mostrado). */
+const _MSG_FOTO_EM_BRANCO = {
+  camera: 'A foto não mostra nenhum dado de nota — só papel liso, sem texto.\n\nAponte a câmera para a nota, deixe ela inteira na tela e tire a foto de novo. Nada foi anexado.',
+  arquivo: 'A imagem não mostra nenhum dado de nota — só papel liso, sem texto.\n\nEscolha o arquivo certo ou fotografe a nota. Nada foi anexado.',
+  salvar: 'O anexo desta nota é uma foto sem nenhum dado de nota — só papel liso, sem texto.\n\nTire a foto da nota de novo (ou escolha o arquivo certo) antes de salvar.',
+};
+async function _fotoEmBrancoBarrada(file, input, origem = 'arquivo') {
+  if (!file || !window.FotoBranca || file.__brancaConferida) return false;
+  const imagem = /^image\//i.test(file.type || '') || _ehImagemExt(_extDoArquivo(file));
+  if (!imagem) return false;                                   // PDF/XML: não são foto
+  let branca;
+  try { branca = await FotoBranca.emBranco(file); } catch (_) { branca = null; }
+  if (branca !== true) { try { file.__brancaConferida = true; } catch (_) {} return false; }
+  if (input) { try { input.value = ''; } catch (_) {} }
+  await mostrarAviso({
+    titulo: 'Essa foto está em branco',
+    mensagem: _MSG_FOTO_EM_BRANCO[origem] || _MSG_FOTO_EM_BRANCO.arquivo,
+    botao: origem === 'camera' ? 'Tirar de novo' : 'Entendi',
+  });
+  return true;
+}
+
 /* ── Leitura da nota: IA primeiro, Tesseract de reserva (10/10/2026) ──────────
    Com internet, a foto (reduzida) vai ao servidor, que pergunta a um modelo de
    visão e devolve os campos JÁ validados (CNPJ, chave, data, valor). Sem
@@ -7343,6 +7400,7 @@ async function onFotoNota(e) {
   let file = e.target.files[0];
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) return;
+  if (await _fotoEmBrancoBarrada(file, e.target)) return;   // 21/10/2026
   try { file = await _normalizarOrientacao(file); } catch (_) {}
   file = await _endireitarComAviso(file);   // 08/10/2026
 
@@ -7872,6 +7930,14 @@ async function dispararCameraNota() {
     blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
   if (!blob) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  /* foto EM BRANCO (21/10/2026)? Papel liso, sem nenhum dado de nota: não segue (nem com "usar assim mesmo"). Vem ANTES do
+     aviso de borrão — papel liso também mede "sem nitidez", e a mensagem do borrão estaria errada. Com a câmera ainda aberta. */
+  if (await _fotoEmBrancoBarrada(blob, null, 'camera')) {
+    if (_camNotaStream !== stream) return;     // cancelou durante o aviso
+    if (btn) btn.disabled = false; _camNotaScanner?.liberar();
+    return;
+  }
+  if (_camNotaStream !== stream) return;       // cancelou enquanto media
   /* foto borrada? oferece tirar de novo AGORA, com a câmera ainda aberta (depois de fechar, ela não volta) */
   const nit = await _nitidezDaFoto(blob);
   if (_camNotaStream !== stream) return;       // cancelou enquanto media a nitidez: sem diálogo, sem anexar
@@ -7886,6 +7952,7 @@ async function dispararCameraNota() {
   _camNotaAoCancelar = null;
   _pararCameraNota();
   const file = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  file.__brancaConferida = true;               // já conferida logo acima: onFotoNotaChange não mede de novo
   await onFotoNotaChange({ target: { files: [file], value: '' } });
 }
 function _mostrarFormAposLeitura() {
@@ -8141,6 +8208,8 @@ async function onFotoNotaChange(e) {
   let file = e.target.files[0];
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }   // o formulário estava escondido esperando o arquivo
+  /* 21/10/2026: foto em branco não é anexada (a da câmera do app já foi conferida com a câmera aberta: __brancaConferida) */
+  if (await _fotoEmBrancoBarrada(file, e.target, 'camera')) { _mostrarFormAposLeitura(); return; }
   /* 23/09/2026: endireita ANTES de tudo — recorte, OCR, anexo e miniatura
      passam a trabalhar com a foto na posição certa. */
   try { file = await _normalizarOrientacao(file); } catch (_) {}
@@ -8178,6 +8247,7 @@ async function onArquivoNotaChange(e) {
   let file = e.target.files[0];
   if (!file) return;
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
+  if (await _fotoEmBrancoBarrada(file, e.target, 'arquivo')) { _mostrarFormAposLeitura(); return; }   // 21/10/2026
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
   _fotoAntesDoScanner = null;
   if (_ehImagemExt(_extDoArquivo(file))) file = await _endireitarComAviso(file);   // 08/10/2026
@@ -8854,6 +8924,8 @@ async function _salvarNotaInterno() {
   }
   /* anexo vazio/ilegível (iPhone com o arquivo só na nuvem): não grava a nota com ele */
   if (fotoBlob && !(await _anexoUtilizavel(fotoBlob, null))) { _pedirAnexoObrigatorio(); return; }
+  /* anexo em branco (21/10/2026): rede de segurança — qualquer caminho que tenha deixado uma foto sem dados chegar até aqui */
+  if (fotoBlob && await _fotoEmBrancoBarrada(fotoBlob, null, 'salvar')) { _pedirAnexoObrigatorio(); return; }
 
   // TRAVA anti-duplicata (local): mesma chave já registrada por MIM bloqueia
   if (_notaDuplicadaChave($('nf-chave').value, $('nf-id').value || null)) {

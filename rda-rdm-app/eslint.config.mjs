@@ -23,6 +23,7 @@ export default [
         NFCE: "readonly",
         OCR: "readonly",
         Recorte: "readonly",
+        FotoBranca: "readonly",
         BrasilAPI: "readonly",
         GDrive: "readonly",
         DB: "readonly",

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Models\Nota;
+use App\Services\FotoEmBrancoAviso;
 use App\Services\FotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ use Illuminate\Validation\ValidationException;
  */
 class NotaController extends Controller
 {
-    public function __construct(private FotoStorage $fotos) {}
+    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca) {}
 
     /**
      * GET /notas?since=…&ano=…&mes=…&user_id=…&deleted=0|1|all&fields=a,b
@@ -220,6 +221,10 @@ class NotaController extends Controller
             $nota->updated_by = $u->id;
             $nota->save();
         }
+
+        /* Foto em branco (21/10/2026): mede o anexo se ainda não foi medido (nota nova, ou antiga que acabou de ser
+           editada). Só marca e avisa a gestão; nunca recusa nem apaga, e erro aqui nunca derruba o envio. */
+        $this->fotoBranca->avaliar($nota, $u);
 
         return response()->json($nota->fresh());
     }
@@ -614,6 +619,9 @@ class NotaController extends Controller
             $nota->foto_path = $path;
             $nota->updated_by = $u->id;
             $nota->save();
+            /* anexo trocado: mede de novo (foto em branco que o colaborador acabou de corrigir deixa de ser pendência).
+               Nota que ainda não existe é medida no upsert, quando nasce. */
+            $this->fotoBranca->avaliar($nota, $u, refazer: true);
         }
 
         return response()->json(['foto_path' => $path, 'updated_at' => $nota?->updated_at]);

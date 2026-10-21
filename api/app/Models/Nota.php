@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class Nota extends Model
 {
@@ -59,7 +60,24 @@ class Nota extends Model
             'mes' => 'integer',
             'ano' => 'integer',
             'deleted' => 'boolean',
+            'foto_em_branco' => 'boolean',   // null = ainda não analisada (só o servidor escreve; ver FotoEmBrancoAviso)
         ];
+    }
+
+    /* A coluna existe no banco? (memorizado). Protege o período entre publicar a API nova e a migração rodar:
+       sem isto, gravar o resultado da análise quebraria com "no such column". */
+    public static function temFotoEmBranco(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('notas', 'foto_em_branco');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
     }
 
     public function dono(): BelongsTo
