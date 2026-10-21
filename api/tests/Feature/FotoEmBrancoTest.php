@@ -406,6 +406,22 @@ class FotoEmBrancoTest extends TestCase
         $this->assertSame([], $this->pushes, 'o mutirão não manda push de nota velha');
     }
 
+    public function test_mutirao_so_mexe_no_updated_at_de_quem_vira_em_branco(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $branca = $this->notaAntiga($colab, $this->branca());
+        $boa = $this->notaAntiga($colab, $this->cupom());
+        $antes = '2026-10-01 12:00:00';
+        Nota::whereKey([$branca->id, $boa->id])->toBase()->update(['updated_at' => $antes]);   // toBase: sem o updated_at automático do Eloquent
+
+        $this->artisan('fotos:em-branco')->assertSuccessful();
+
+        $this->assertFalse($boa->fresh()->foto_em_branco);
+        $this->assertSame($antes, $boa->fresh()->updated_at->format('Y-m-d H:i:s'), 'com conteúdo: o "enviada ao servidor em" do gestor não muda');
+        $this->assertTrue($branca->fresh()->foto_em_branco);
+        $this->assertNotSame($antes, $branca->fresh()->updated_at->format('Y-m-d H:i:s'), 'em branco: sobe o updated_at para os aparelhos puxarem a marca');
+    }
+
     public function test_mutirao_seco_so_lista(): void
     {
         $colab = $this->pessoa('colaborador');

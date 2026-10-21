@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\Nota;
 use App\Services\FotoEmBrancoAviso;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * php84 artisan fotos:em-branco [--seco] [--refazer]
@@ -16,6 +18,15 @@ use Illuminate\Support\Facades\Log;
  * ainda não foi medido (foto_em_branco nulo); --refazer mede tudo de novo.
  *
  * --seco apenas lista, sem gravar.
+ *
+ * Só a nota que VIRA "em branco" tem o updated_at mexido (é isso que faz os aparelhos puxarem a marca); as que
+ * têm conteúdo só guardam o "medida, tudo certo" sem tocar no updated_at — ele aparece para o gestor como
+ * "enviada ao servidor em", e uma varredura não pode mudar isso em centenas de notas (a 1ª execução em produção,
+ * em 21/10/2026, mexeu em 284).
+ *
+ * A produção está em uso enquanto isto roda: os ids são lidos ANTES (sem manter uma leitura aberta durante as
+ * gravações — no SQLite em WAL isso faz a gravação falhar na hora com "database is locked", 159 vezes na 1ª
+ * execução) e cada gravação é repetida algumas vezes se o banco estiver ocupado.
  */
 class FotosEmBranco extends Command
 {
@@ -37,17 +48,19 @@ class FotosEmBranco extends Command
         if (! $refazer) {
             $q->whereNull('foto_em_branco');
         }
+        $ids = $q->orderBy('created_at')->pluck('id')->all();   // lista fechada: nenhuma leitura fica aberta durante as gravações
 
         $vistas = 0;
         $brancas = 0;
         $semArquivo = 0;
-        foreach ($q->orderBy('created_at')->cursor() as $nota) {
-            $vistas++;
-            if ($seco) {
-                $r = $aviso->medir($nota->foto_path);
-            } else {
-                $r = $aviso->avaliar($nota, null, refazer: true, avisar: false);
+        $falhas = 0;
+        foreach ($ids as $id) {
+            $nota = Nota::find($id);
+            if (! $nota || ! $nota->foto_path) {
+                continue;
             }
+            $vistas++;
+            $r = $aviso->medir($nota->foto_path);
             if ($r === null) {
                 $semArquivo++;
 
@@ -57,12 +70,41 @@ class FotosEmBranco extends Command
                 $brancas++;
                 $this->line(sprintf('  em branco: %s · %s · %s · R$ %s · %s', $nota->id, $nota->data?->format('d/m/Y'), $nota->razao_social ?: '(sem fornecedor)', number_format((float) $nota->valor, 2, ',', '.'), $nota->foto_path));
             }
+            if ($seco) {
+                continue;
+            }
+            if (! $this->gravar($nota, $r)) {
+                $falhas++;
+            }
         }
 
-        $msg = ($seco ? 'fotos em branco (nada foi gravado): ' : 'fotos em branco: ')."{$brancas} de {$vistas} notas analisadas".($semArquivo ? " ({$semArquivo} sem arquivo no disco)" : '');
+        $msg = ($seco ? 'fotos em branco (nada foi gravado): ' : 'fotos em branco: ')."{$brancas} de {$vistas} notas analisadas"
+            .($semArquivo ? " ({$semArquivo} sem arquivo no disco)" : '')
+            .($falhas ? " — ATENÇÃO: {$falhas} gravação(ões) falharam (banco ocupado); rode de novo, só as que faltam são refeitas" : '');
         $this->info($msg);
         Log::info($msg);
 
-        return self::SUCCESS;
+        return $falhas ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** Grava o resultado, repetindo se o SQLite estiver ocupado. true = gravou. */
+    private function gravar(Nota $nota, bool $emBranco): bool
+    {
+        for ($tentativa = 1; $tentativa <= 6; $tentativa++) {
+            try {
+                if ($emBranco) {
+                    $nota->forceFill(['foto_em_branco' => true])->save();           // sobe o updated_at: os aparelhos puxam a marca
+                } else {
+                    DB::table('notas')->where('id', $nota->id)->update(['foto_em_branco' => false]);   // sem tocar no updated_at
+                }
+
+                return true;
+            } catch (Throwable $e) {
+                Log::warning('fotos:em-branco: gravação falhou', ['nota' => $nota->id, 'tentativa' => $tentativa, 'erro' => $e->getMessage()]);
+                sleep(min($tentativa, 3));
+            }
+        }
+
+        return false;
     }
 }
