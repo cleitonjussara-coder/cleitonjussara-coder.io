@@ -191,12 +191,17 @@
       <p><b>⬇️ Baixar ZIP</b> monta, na hora, a pasta do mês (ou do ano) já com os nomes do modelo — <i>Colaborador/Ano/RDM DESPESAS CORPORATIVAS/ABASTECIMENTO/09 set/2026-09-03 POSTO X R$120,00.jpg</i> — e a <b>planilha do ano</b> dentro — <b>Planilha CV</b> para quem é C.V. e <b>Planilha RDM/RDA</b> para quem é RDM/RDA (14/10/2026: antes todo mundo recebia a de C.V.). Notas sem anexo entram numa lista <i>SEM ANEXO.txt</i>. Não depende do Google Drive.</p>\r
     </div>\r
 \r
-    <div class="ajuda-sec ajuda-gestor">\r
+    <div class="ajuda-sec ajuda-frota">\r
       <h4>🚗 Frota / KM dos veículos</h4>\r
       <p>No menu <b>☰ → Frota / KM</b> (disponível para o regime C.V. e para gestor/admin), toque em <b>Registrar KM</b>: escolha o veículo, a data e digite o <b>odômetro</b> (o número do painel). A foto do painel é opcional e <b>ajuda a preencher</b>: toque em <b>📷 Fotografar o odômetro</b>, ajuste a caixa só em volta do número do odômetro (não o parcial/trip) e toque em <b>Ler número</b>. O app escreve o valor no campo com o aviso <b>"Lido da foto. Confira o número."</b> — ele só sugere, quem salva é você. Se a leitura sair menor que a última do veículo, ou com salto grande, o app avisa; com internet, o app lê o número com uma <b>IA de visão</b> (leva poucos segundos); sem internet, ou se a IA não conseguir, ele tenta o leitor do próprio aparelho, que é mais lento; se nenhum ler, digite normalmente. <b>Pular leitura</b> anexa a foto sem preencher. Registre ao <b>pegar</b> e ao <b>devolver</b> o veículo e nos abastecimentos.</p>\r
-      <p>O app calcula o <b>km rodado no mês</b> por veículo pelas leituras. Se digitar um número menor que a última leitura, ele avisa. O <b>gestor</b> vê todos os veículos, quem dirigiu e cadastra os veículos (placa, modelo, responsável).</p>\r
-      <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O painel mostra os últimos dados baixados. O pendente é <b>de quem registrou</b> (desde 14/10/2026): se outra pessoa entrar no mesmo aparelho, o registro seu espera e só sobe quando <b>você</b> entrar de novo — nunca sai no nome de outra conta.</p>\r
-      <p>Na tela da Frota há o <b>dashboard</b> (km no mês/ano, evolução, km por veículo e por motorista) e os botões <b>📗 Planilha de controle (Excel)</b> — abas Veículos × mês, Motoristas × mês e todas as Leituras — e <b>CSV do mês</b>.</p>\r
+      <p>O <b>km rodado</b> de cada leitura é o odômetro menos a leitura anterior <b>do mesmo veículo</b> (de quem for): ele conta para o dia da leitura e para quem a fez. A primeira leitura de um veículo vale 0. Se digitar um número menor que a última leitura, o app avisa.</p>\r
+      <p>A tela da Frota tem abas (21/10/2026): <b>Painel</b>, <b>Histórico</b> e, para gestor/admin, <b>Veículos</b>. O botão <b>Registrar KM</b> fica sempre no alto.</p>\r
+      <p><b>Painel</b> — o km rodado por <b>Dia</b>, <b>Semana</b> (segunda a domingo) ou <b>Mês</b>: o total do período, quanto subiu (▲) ou desceu (▼) em relação ao anterior, a média por dia e um gráfico com os últimos 14 dias, 8 semanas ou 12 meses. <b>Toque numa barra</b> para ver aquele período; ‹ › andam de um período para o outro e <b>Voltar para hoje</b> traz o atual. Semana ou mês <b>em andamento</b> são comparados com os <b>mesmos dias</b> do anterior (quarta-feira contra a quarta-feira da semana passada), senão a conta enganaria. O colaborador vê <b>só os próprios números</b>.</p>\r
+      <p class="ajuda-gestor">Gestor e admin veem também <b>🏁 Quem está andando mais</b> (ranking dos colaboradores) e <b>Km por veículo</b>, cada um com a diferença sobre o período anterior. Toque numa linha para abrir o <b>Histórico</b> daquela pessoa ou daquele veículo, no mesmo período. Na aba <b>Veículos</b> ficam o cadastro (placa, modelo, responsável) e a última leitura de cada um.</p>\r
+      <p><b>Histórico</b> — as leituras da mais nova para a mais antiga, agrupadas por dia (com o km do dia): placa, <b>quem registrou</b> (gestor/admin), a hora de Brasília, o odômetro e o <b>+km desde a leitura anterior</b>. Os filtros são o <b>período</b> (hoje, semana, mês, mês passado, últimos 30 dias ou datas à escolha), o <b>colaborador</b> (gestor/admin) e o <b>veículo</b>. O <b>⚠️</b> avisa quando o odômetro é menor que o anterior ou pula mais de 2.000 km: confira o número. Leitura que ainda não subiu aparece no topo, como ⏳ pendente.</p>\r
+      <p><b>Toque no cartão</b> para abrir o detalhe: a foto do odômetro (toque nela para ampliar), os valores, quem registrou e quando, e de onde a leitura partiu. <b>Editar</b> e <b>Excluir</b> aparecem para quem registrou e para o <b>gestor e o admin</b>, que corrigem erro de digitação de qualquer pessoa — fica registrado <b>quem corrigiu</b>. O colaborador não mexe na leitura dos outros.</p>\r
+      <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O Painel e o Histórico mostram os últimos dados baixados. O pendente é <b>de quem registrou</b> (desde 14/10/2026): se outra pessoa entrar no mesmo aparelho, o registro seu espera e só sobe quando <b>você</b> entrar de novo — nunca sai no nome de outra conta.</p>\r
+      <p>No fim do <b>Painel</b> fica o quadro <b>📗 Planilhas de controle</b>: ‹ › muda o mês, <b>CSV</b> baixa o mês e <b>Excel</b> baixa o ano — abas Veículos × mês, Motoristas × mês e todas as Leituras.</p>\r
     </div>\r
 \r
     <div class="ajuda-sec ajuda-gestor">\r
@@ -324,12 +329,15 @@
       </ul>\r
     </div>\r
 \r
-`,Gn=Tn(`<div class="full-overlay" style="display:flex"><div class="form-hdr"><button class="btn-voltar" aria-label="Voltar">‹ Voltar</button> <h3>Como usar o app</h3></div> <div></div></div>`),Kn={hash:`svelte-1n46o8q`,code:`\r
-  /* Antes: app.js fazia\r
-       document.querySelectorAll('.ajuda-gestor').forEach(e => e.style.display = ...)\r
-     toda vez que a Ajuda abria — uma varredura imperativa do DOM. Aqui é\r
-     reativo: o prop \`vejoEquipe\` muda a classe do container, e o CSS decide. */.form-body.svelte-1n46o8q .ajuda-gestor {display:none;}.form-body.ve-equipe.svelte-1n46o8q .ajuda-gestor {display:block;}\r
-  /* Contador (14/10/2026): não lança nem gerencia — vê só o que é dele (seções marcadas\r
-     ajuda-contador) e a seção própria; o guia de lançar nota e repasse some. */.form-body.svelte-1n46o8q .ajuda-so-contador {display:none;}.form-body.eh-contador.svelte-1n46o8q .ajuda-sec {display:none;}.form-body.eh-contador.svelte-1n46o8q .ajuda-sec.ajuda-contador,\r
-  .form-body.eh-contador.svelte-1n46o8q .ajuda-sec.ajuda-so-contador,\r
-  .form-body.eh-contador.svelte-1n46o8q p.ajuda-contador {display:block;}`};function qn(e,t){Ln(e,Kn);let n=Un(t,`vejoEquipe`,3,!1),r=Un(t,`ehContador`,3,!1),i=Un(t,`onFechar`,3,()=>{});var a=Gn(),o=Tt(a),s=Tt(o),c=Et(o,2);let l;In(c,()=>Wn,!0),Lt(()=>l=Bn(c,1,`form-body svelte-1n46o8q`,null,l,{"ve-equipe":n(),"eh-contador":r()})),gn(`click`,s,function(...e){i()?.apply(this,e)}),En(e,a)}_n([`click`]);var Jn=null;function Yn(e,t){Jn&&Xn(),Jn=jn(qn,{target:e,props:t})}function Xn(){Jn&&=(Fn(Jn),null)}window.SvelteAjuda={montar:Yn,desmontar:Xn}})();
+`,Gn=Tn(`<div class="full-overlay" style="display:flex"><div class="form-hdr"><button class="btn-voltar" aria-label="Voltar">‹ Voltar</button> <h3>Como usar o app</h3></div> <div></div></div>`),Kn={hash:`svelte-1n46o8q`,code:`
+  /* Antes: app.js fazia
+       document.querySelectorAll('.ajuda-gestor').forEach(e => e.style.display = ...)
+     toda vez que a Ajuda abria — uma varredura imperativa do DOM. Aqui é
+     reativo: o prop \`vejoEquipe\` muda a classe do container, e o CSS decide. */.form-body.svelte-1n46o8q .ajuda-gestor {display:none;}.form-body.ve-equipe.svelte-1n46o8q .ajuda-gestor {display:block;}
+  /* Frota / KM (21/10/2026): gestor/admin e colaborador do regime C.V. usam o módulo; os parágrafos
+     marcados ajuda-gestor dentro da seção (ranking, cadastro de veículos) continuam só do gestor. */.form-body.svelte-1n46o8q .ajuda-frota {display:none;}.form-body.ve-equipe.svelte-1n46o8q .ajuda-frota,
+  .form-body.ve-frota.svelte-1n46o8q .ajuda-frota {display:block;}
+  /* Contador (14/10/2026): não lança nem gerencia — vê só o que é dele (seções marcadas
+     ajuda-contador) e a seção própria; o guia de lançar nota e repasse some. */.form-body.svelte-1n46o8q .ajuda-so-contador {display:none;}.form-body.eh-contador.svelte-1n46o8q .ajuda-sec {display:none;}.form-body.eh-contador.svelte-1n46o8q .ajuda-sec.ajuda-contador,
+  .form-body.eh-contador.svelte-1n46o8q .ajuda-sec.ajuda-so-contador,
+  .form-body.eh-contador.svelte-1n46o8q p.ajuda-contador {display:block;}`};function qn(e,t){Ln(e,Kn);let n=Un(t,`vejoEquipe`,3,!1),r=Un(t,`ehContador`,3,!1),i=Un(t,`veFrota`,3,!1),a=Un(t,`onFechar`,3,()=>{});var o=Gn(),s=Tt(o),c=Tt(s),l=Et(s,2);let u;In(l,()=>Wn,!0),Lt(()=>u=Bn(l,1,`form-body svelte-1n46o8q`,null,u,{"ve-equipe":n(),"ve-frota":i(),"eh-contador":r()})),gn(`click`,c,function(...e){a()?.apply(this,e)}),En(e,o)}_n([`click`]);var Jn=null;function Yn(e,t){Jn&&Xn(),Jn=jn(qn,{target:e,props:t})}function Xn(){Jn&&=(Fn(Jn),null)}window.SvelteAjuda={montar:Yn,desmontar:Xn}})();

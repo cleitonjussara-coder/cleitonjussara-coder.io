@@ -393,6 +393,9 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     },
     resumo: (ano, mes) => req('GET', '/frota/resumo', { query: { ano, mes } }),
     anual: ano => req('GET', '/frota/anual', { query: { ano } }),
+    /* histórico com filtros e painel dia/semana/mês + ranking (21/10/2026) */
+    historico: params => req('GET', '/frota/historico', { query: params }),
+    painel: params => req('GET', '/frota/painel', { query: params }),
   };
 
   /* Ponto de presença (18/09/2026). */

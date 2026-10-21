@@ -7,6 +7,12 @@
    por veículo, o km rodado no mês e quem dirigiu; também cadastra os
    veículos. Dashboard e planilha (Excel/CSV) vêm de GET /frota/anual.
 
+   HISTÓRICO E PAINEL (21/10/2026): a tela tem três abas — Painel (km por
+   dia/semana/mês + ranking), Histórico (cartões com filtros, toque abre o
+   detalhe) e Veículos (gestor/admin). Painel, histórico e detalhe moram em
+   frota-painel.js (window.FrotaPainel); aqui ficam o esqueleto da tela, o
+   formulário de registro, os veículos e a fila offline.
+
    OFFLINE (18/09/2026): a tela guarda no aparelho o que baixou por último
    (veículos, registros do mês, resumo, anual) e mostra isso sem internet;
    registro novo sem sinal entra numa FILA local (com a foto) e sobe
@@ -25,7 +31,8 @@ window.Frota = (() => {
   let _fotoKm = null;     // File escolhido no formulário
   let _offline = false;   // renderizou a partir do cache
   let _cacheEm = null;    // quando o cache foi gravado
-  let _filtroVeiculo = null;
+  let _aba = 'painel';    // painel | hist | vei
+  let _pendTodos = [];    // fila do aparelho (só da conta logada), em qualquer mês, no formato dos registros
 
   const kmFmt = n => Number(n || 0).toLocaleString('pt-BR');
   const KEY_CACHE = () => `frota_cache_${filAno}_${filMes}`;
@@ -127,20 +134,24 @@ window.Frota = (() => {
   /* registros da fila aparecem na lista como pendentes */
   async function _mesclarPendentes() {
     const f = await _minhas();
-    const pend = f.filter(it => { const d = it.payload.data || ''; return Number(d.slice(0, 4)) === filAno && Number(d.slice(5, 7)) === filMes; })
-      .map(it => {
-        const v = veiculos.find(x => x.id === it.payload.veiculo_id);
-        return { id: it.id, veiculo_id: it.payload.veiculo_id, placa: v?.placa || '?', modelo: v?.modelo, user_id: user?.id, user_nome: user?.nome,
-                 data: it.payload.data, odometro: it.payload.odometro, observacao: it.payload.observacao, foto_path: null,
-                 _pendente: true, _erro: it.erro, _foto: !!it.foto };
-      });
+    _pendTodos = f.map(it => {
+      const v = veiculos.find(x => x.id === it.payload.veiculo_id);
+      return { id: it.id, veiculo_id: it.payload.veiculo_id, placa: v?.placa || '?', modelo: v?.modelo, user_id: user?.id, user_nome: user?.nome,
+               data: it.payload.data, odometro: it.payload.odometro, observacao: it.payload.observacao, foto_path: null,
+               _pendente: true, _erro: it.erro, _foto: !!it.foto };
+    }).sort((a, b) => String(b.data).localeCompare(String(a.data)) || b.odometro - a.odometro);
+    const pend = _pendTodos.filter(it => { const d = it.data || ''; return Number(d.slice(0, 4)) === filAno && Number(d.slice(5, 7)) === filMes; });
     const ids = new Set(pend.map(p => p.id));
     registros = [...pend, ...registros.filter(r => !ids.has(r.id))];
   }
+  /* o registro com esse id, de onde estiver: mês carregado, fila do aparelho ou histórico */
+  const _reg = id => registros.find(x => x.id === id) || _pendTodos.find(x => x.id === id) || window.FrotaPainel?.registro?.(id) || null;
 
   /* ── Tela ───────────────────────────────────────────────── */
   async function render() {
     const el = $('app-content');
+    window.FrotaPainel?.fecharDetalhe?.();
+    window.FrotaPainel?.invalidar?.();              // salvou/excluiu/voltou: painel e histórico buscam de novo
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando frota…</p></div>';
     try { await carregar(); }
     catch (e) {
@@ -154,71 +165,55 @@ window.Frota = (() => {
     }
     await _mesclarPendentes();
     const gestor = _ehGestorOuAdmin();
-    const periodo = `${MESES[filMes - 1]} ${filAno}`;
     const fila = await _minhas();
+    if (_aba === 'vei' && !gestor) _aba = 'painel';
 
-    let html = `
+    el.innerHTML = `
     <div class="db-container">
-      <div class="page-hd" style="padding:0">
-        <div class="mes-nav">
-          <button class="btn-mes-nav" onclick="Frota.mudarMes(-1)">‹</button>
-          <span class="mes-label">${periodo}</span>
-          <button class="btn-mes-nav" onclick="Frota.mudarMes(1)">›</button>
-        </div>
-      </div>
-      ${_offline ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">📴 <b>Sem internet</b> — mostrando o que foi baixado${_cacheEm ? ' em ' + new Date(_cacheEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}. Você pode registrar KM normalmente: fica guardado e sobe sozinho.</div>` : ''}
-      ${fila.length ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">⏳ <b>${fila.length} registro${fila.length > 1 ? 's' : ''} aguardando envio</b>${fila.some(f => f.erro) ? ' — algum foi recusado pelo servidor; veja o ⚠️ na lista e corrija pelo ✏️' : ''}. ${navigator.onLine ? '<a class="link" onclick="Frota.reenviar()">Enviar agora</a>' : ''}</div>` : ''}
+      <div class="page-hd"><h2>🚗 Frota / KM</h2></div>
+      ${_offline ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">📴 <b>Sem internet</b> — mostrando o que foi baixado${_cacheEm ? ' em ' + new Date(_cacheEm).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}. Você pode registrar KM normalmente: fica guardado e sobe sozinho.</div>` : ''}
+      ${fila.length ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">⏳ <b>${fila.length} registro${fila.length > 1 ? 's' : ''} aguardando envio</b>${fila.some(f => f.erro) ? ' — algum foi recusado pelo servidor; veja o ⚠️ no Histórico e corrija' : ''}. ${navigator.onLine ? '<a class="link" onclick="Frota.reenviar()">Enviar agora</a>' : ''}</div>` : ''}
 
-      <button class="pnl" onclick="Frota.abrirForm()">
-        <span class="pnl-conteudo" style="max-width:80%">
+      <div class="fq-abas" id="fq-abas">${_abasHTML(gestor)}</div>
+
+      <button class="pnl pnl-atalho" style="margin:8px 14px 0;width:calc(100% - 28px)" onclick="Frota.abrirForm()">
+        <span class="pnl-conteudo">
           <span class="pnl-ico">🛣️</span>
-          <span class="pnl-tit">Registrar KM</span>
-          <span class="pnl-sub">Leitura do odômetro do veículo que você está usando — leva 10 segundos.</span>
+          <span><span class="pnl-tit" style="display:block">Registrar KM</span><span class="pnl-sub" style="font-size:13px">Leitura do odômetro do veículo que você está usando</span></span>
         </span>
-      </button>`;
+      </button>
 
-    if (!veiculos.filter(v => v.ativo !== false).length) {
-      html += `<div class="ini-dica">🚗 Nenhum veículo cadastrado ainda.${gestor ? ' Cadastre o primeiro em <b>Veículos</b>, abaixo.' : ' Peça ao gestor para cadastrar os veículos.'}</div>`;
-    }
+      ${veiculos.filter(v => v.ativo !== false).length ? '' : `<div class="ini-dica">🚗 Nenhum veículo cadastrado ainda.${gestor ? ' Cadastre o primeiro na aba <b>Veículos</b>.' : ' Peça ao gestor para cadastrar os veículos.'}</div>`}
 
-    html += _dashboardHTML(gestor, periodo);
+      <div id="fq-corpo"></div>
+    </div>`;
+    await _montarAba();
+  }
 
-    /* Registros do mês */
-    const lista = _filtroVeiculo ? registros.filter(r => r.veiculo_id === _filtroVeiculo) : registros;
-    html += `
-      <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center">
-        <span>${gestor ? 'Registros do mês' : 'Meus registros'} (${lista.length})</span>
-        ${_filtroVeiculo ? `<button class="btn btn-sm btn-outline" onclick="Frota.filtrarVeiculo(null)">Todos os veículos</button>` : ''}
-      </div>
-      <div class="notas-list">
-        ${lista.length ? lista.map(r => `
-        <div class="nota-card" style="${r._pendente ? 'border-left:3px solid var(--warning)' : ''}">
-          <div class="nota-head">
-            <span class="tipo-badge tipo-RDM">🚗 ${esc(r.placa || '?')}</span>
-            ${gestor && r.user_nome ? `<span class="subtipo-tag">👤 ${esc(r.user_nome)}</span>` : ''}
-            ${r._pendente ? (r._erro ? `<span class="doc-tag dup" title="${esc(r._erro)}">⚠️ recusado</span>` : '<span class="sync-pill pending">⏳ pendente</span>') : ''}
-            <span class="nota-data">${fmtData(r.data)}</span>
-          </div>
-          <div class="nota-body">
-            <div class="nota-empresa">${kmFmt(r.odometro)} km</div>
-            ${r.observacao ? `<div class="nota-obs">${esc(r.observacao)}</div>` : ''}
-            ${r._erro ? `<div class="nota-obs" style="color:#a12626">${esc(r._erro)}</div>` : ''}
-          </div>
-          <div class="nota-foot">
-            <span class="nota-valor" style="font-size:14px;color:var(--text2)">${r.foto_path || r._foto ? '📷 com foto' : ''}</span>
-            <div class="nota-actions">
-              ${r.foto_path ? `<button class="btn-icon-sm" onclick="Frota.verFoto('${r.id}')" title="Ver foto do odômetro">📎</button>` : ''}
-              ${(r.user_id === user?.id || user?.role === 'admin') ? `
-              <button class="btn-icon-sm" onclick="Frota.abrirForm('${r.id}')" title="Editar">✏️</button>
-              <button class="btn-icon-sm danger" onclick="Frota.excluir('${r.id}')" title="Excluir">🗑</button>` : ''}
-            </div>
-          </div>
-        </div>`).join('') : `<p class="muted-p">Nenhum registro neste mês.</p>`}
-      </div>`;
+  function _abasHTML(gestor) {
+    const aba = (k, t) => `<button class="chip ${_aba === k ? 'active' : ''}" onclick="Frota.trocarAba('${k}')">${t}</button>`;
+    return aba('painel', 'Painel') + aba('hist', 'Histórico') + (gestor ? aba('vei', 'Veículos') : '');
+  }
 
-    /* Veículos (gestor/admin) */
-    if (gestor) {
-      html += `
+  /* troca a aba sem baixar tudo de novo: só repinta o corpo (o painel e o histórico buscam o que precisam) */
+  function trocarAba(k) {
+    if (k) _aba = k;
+    const a = $('fq-abas');
+    if (a) a.innerHTML = _abasHTML(_ehGestorOuAdmin());
+    return _montarAba();
+  }
+
+  async function _montarAba() {
+    const c = $('fq-corpo');
+    if (!c) return;
+    if (_aba === 'vei') { c.innerHTML = _veiculosHTML(); return; }
+    if (!window.FrotaPainel) { c.innerHTML = '<div class="ini-dica">Atualize o app (feche e abra de novo) para ver o painel e o histórico.</div>'; return; }
+    return _aba === 'hist' ? window.FrotaPainel.historico(c) : window.FrotaPainel.painel(c);
+  }
+
+  /* Veículos (gestor/admin) */
+  function _veiculosHTML() {
+    return `
       <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center">
         <span>Veículos (${veiculos.length})</span>
         <button class="btn btn-sm btn-primary" onclick="Frota.abrirFormVeiculo()" ${_offline ? 'disabled title="Precisa de internet"' : ''}>＋ Veículo</button>
@@ -232,67 +227,12 @@ window.Frota = (() => {
             ${v.ativo === false ? '<span class="subtipo-tag">inativo</span>' : ''}
             <span class="nota-data">${v.responsavel_nome ? '👤 ' + esc(v.responsavel_nome) : ''}</span>
           </div>
+          ${v.ultimo_odometro != null ? `<div class="nota-body"><div class="nota-obs">Última leitura: <b>${kmFmt(v.ultimo_odometro)} km</b> em ${fmtData(v.ultima_data)}</div></div>` : ''}
           <div class="nota-foot">
-            <span></span>
+            <button class="btn btn-outline btn-sm" onclick="FrotaPainel.verHistorico({veiculo_id:'${esc(v.id)}'})">🕓 Histórico</button>
             <div class="nota-actions"><button class="btn-icon-sm" onclick="Frota.abrirFormVeiculo('${v.id}')" title="Editar" ${_offline ? 'disabled' : ''}>✏️</button></div>
           </div>
         </div>`).join('')}
-      </div>`;
-    }
-
-    html += '</div>';
-    el.innerHTML = html;
-  }
-
-  /* ── Dashboard ──────────────────────────────────────────── */
-  function _dashboardHTML(gestor, periodo) {
-    if (!anual) return '';
-    const i = filMes - 1;
-    const kmMes = anual.meses_total?.[i] || 0;
-    const kmAno = anual.total || 0;
-    const vAtivos = (anual.veiculos || []).filter(v => v.ativo !== false);
-    const leiturasMes = (anual.leituras || []).filter(l => l.mes === filMes).length;
-    const media = vAtivos.length ? Math.round(kmMes / vAtivos.length) : 0;
-    const porVeiculo = vAtivos.map(v => ({ nome: `${v.placa}${v.modelo ? ' · ' + v.modelo : ''}`, id: v.veiculo_id, val: v.meses?.[i] || 0 })).sort((a, b) => b.val - a.val);
-    const porMotorista = (anual.motoristas || []).map(m => ({ nome: m.nome, val: m.meses?.[i] || 0 })).filter(m => m.val > 0).sort((a, b) => b.val - a.val);
-    const maxV = Math.max(1, ...porVeiculo.map(x => x.val));
-    const maxM = Math.max(1, ...porMotorista.map(x => x.val));
-    const maxMes = Math.max(1, ...(anual.meses_total || []));
-    const rank = (arr, max, onclick) => arr.length ? arr.map((f, k) => `
-      <div class="db-rank-item" ${onclick ? `style="cursor:pointer" onclick="${onclick(f)}"` : ''}>
-        <div class="db-rank-meta"><span class="db-rank-pos">${k + 1}º</span><span class="db-rank-name">${esc(f.nome)}</span><span class="db-rank-val">${kmFmt(f.val)} km</span></div>
-        <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(3, Math.round(f.val / max * 100))}%"></div></div>
-      </div>`).join('') : '<p class="muted-p">Sem km neste mês.</p>';
-
-    return `
-      <div class="ini-titulo">${gestor ? 'Frota' : 'Meus km'} — ${periodo}</div>
-      <div class="ini-resumo">
-        <div class="ini-kpi"><div class="ini-kpi-lbl">Km no mês</div><div class="ini-kpi-val">${kmFmt(kmMes)}</div><div class="ini-kpi-sub">${leiturasMes} leitura${leiturasMes === 1 ? '' : 's'}</div></div>
-        <div class="ini-kpi"><div class="ini-kpi-lbl">Km no ano</div><div class="ini-kpi-val">${kmFmt(kmAno)}</div><div class="ini-kpi-sub">${anual.ano}</div></div>
-        ${gestor ? `
-        <div class="ini-kpi"><div class="ini-kpi-lbl">Veículos ativos</div><div class="ini-kpi-val">${vAtivos.length}</div><div class="ini-kpi-sub">${porVeiculo.filter(v => v.val > 0).length} rodaram no mês</div></div>
-        <div class="ini-kpi"><div class="ini-kpi-lbl">Média por veículo</div><div class="ini-kpi-val">${kmFmt(media)}</div><div class="ini-kpi-sub">km no mês</div></div>` : ''}
-      </div>
-
-      <div class="db-card">
-        <div class="db-card-title"><span>Evolução ${anual.ano}</span><span style="font-size:13px;color:var(--text2)">km por mês</span></div>
-        <div class="evo">${(anual.meses_total || []).map((v, k) => `<div class="evo-col ${k === i ? 'cur' : ''}" title="${MESES[k]}: ${kmFmt(v)} km"><div class="evo-bar" style="height:${Math.max(2, Math.round(v / maxMes * 100))}%"></div></div>`).join('')}</div>
-        <div class="evo-labels">${MESES.map((m, k) => `<span class="${k === i ? 'cur' : ''}">${m.slice(0, 3)}</span>`).join('')}</div>
-      </div>
-
-      <div class="db-card">
-        <div class="db-card-title"><span>Km por veículo</span><span style="font-size:13px;color:var(--text2)">${periodo}</span></div>
-        <div class="db-rank">${rank(porVeiculo, maxV, f => `Frota.filtrarVeiculo('${f.id}')`)}</div>
-      </div>
-      ${gestor ? `
-      <div class="db-card">
-        <div class="db-card-title"><span>Km por motorista</span><span style="font-size:13px;color:var(--text2)">${periodo}</span></div>
-        <div class="db-rank">${rank(porMotorista, maxM)}</div>
-      </div>` : ''}
-
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" onclick="Frota.exportarCSV()">CSV ${MESES[filMes - 1]}</button>
-        <button class="btn btn-primary btn-sm" onclick="Frota.exportarExcel()">📗 Planilha de controle ${anual.ano} (Excel)</button>
       </div>`;
   }
 
@@ -309,8 +249,7 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  function filtrarVeiculo(id) { _filtroVeiculo = id; render(); }
-
+  /* só move o mês das planilhas (CSV do mês / Excel do ano); o painel e o histórico têm o período deles */
   function mudarMes(delta) {
     filMes += delta;
     if (filMes > 12) { filMes = 1; filAno++; }
@@ -325,7 +264,7 @@ window.Frota = (() => {
     if (!veiculos.length) { try { veiculos = (await DB.getMeta('frota_veiculos')) || []; } catch (_) {} }
     const ativos = veiculos.filter(v => v.ativo !== false);
     if (!ativos.length) { toast('Nenhum veículo cadastrado — peça ao gestor', 'err'); return; }
-    const r = id ? registros.find(x => x.id === id) : null;
+    const r = id ? _reg(id) : null;
     _fotoKm = null; _odoLido = null; _avisoOdo('');
     $('km-id').value = r?.id || '';
     const sel = $('km-veiculo');
@@ -344,11 +283,20 @@ window.Frota = (() => {
   }
   function fecharForm() { $('km-overlay').style.display = 'none'; }
 
+  /* A última leitura do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
+     tela (mês carregado e fila do aparelho). Vale a mais recente; ao editar, a própria leitura não conta. */
   function _ultimaLeitura() {
-    const vid = $('km-veiculo').value;
-    const ult = registros.filter(r => r.veiculo_id === vid && r.id !== $('km-id').value).sort((a, b) => b.data.localeCompare(a.data) || b.odometro - a.odometro)[0];
-    const res = resumo?.veiculos?.find(v => v.veiculo_id === vid);
-    return { odo: ult?.odometro ?? res?.ultimo_odometro ?? null, dt: ult?.data ?? res?.ultima_data ?? null };
+    const vid = $('km-veiculo').value, idAtual = $('km-id').value;
+    const v = veiculos.find(x => x.id === vid);
+    const editando = idAtual ? _reg(idAtual) : null;
+    const c = [];
+    if (v?.ultimo_odometro != null && !(editando && editando.odometro === v.ultimo_odometro && editando.data === v.ultima_data)) c.push({ odo: v.ultimo_odometro, dt: v.ultima_data });
+    [...registros, ..._pendTodos].forEach(r => { if (r.veiculo_id === vid && r.id !== idAtual) c.push({ odo: r.odometro, dt: r.data }); });
+    /* cópia guardada antes do servidor informar a última leitura de cada veículo: o resumo do mês faz esse papel */
+    const res = resumo?.veiculos?.find(x => x.veiculo_id === vid);
+    if (v && v.ultimo_odometro === undefined && res?.ultimo_odometro != null) c.push({ odo: res.ultimo_odometro, dt: res.ultima_data });
+    const ult = c.filter(x => x.dt).sort((a, b) => b.dt.localeCompare(a.dt) || b.odo - a.odo)[0];
+    return { odo: ult?.odo ?? null, dt: ult?.dt ?? null };
   }
 
   function _mostrarUltimaLeitura() {
@@ -434,6 +382,14 @@ window.Frota = (() => {
       observacao: $('km-obs').value.trim() || null,
     };
     if (!payload.veiculo_id || !payload.data || !Number.isFinite(payload.odometro)) { toast('Veículo, data e odômetro são obrigatórios', 'err'); return; }
+    /* A hora em que a leitura foi feita (relógio do aparelho acertado pelo servidor) acompanha o registro novo — é ela
+       que o histórico mostra, mesmo que a leitura só suba horas depois, quando voltar o sinal. Ao editar, vale a original. */
+    const existente = $('km-id').value ? _reg($('km-id').value) : null;
+    if (!existente) payload.registrado_em = new Date(sb?.horaServidorMs ? sb.horaServidorMs() : Date.now()).toISOString();
+    else if (existente._pendente) {
+      const q = (await _fila()).find(x => x.id === id);
+      if (q?.payload?.registrado_em) payload.registrado_em = q.payload.registrado_em;
+    }
     /* número lido da foto com salto grande sobre a última leitura: confirma antes de gravar */
     if (_odoLido != null && payload.odometro === _odoLido) {
       const { odo: ref } = _ultimaLeitura();
@@ -483,9 +439,10 @@ window.Frota = (() => {
   }
 
   async function excluir(id) {
-    const r = registros.find(x => x.id === id);
+    const r = _reg(id);
     if (!r) return;
-    if (!(await pedirConfirmacao({ mensagem: `Excluir a leitura de ${kmFmt(r.odometro)} km (${fmtData(r.data)}) do veículo ${r.placa}?`, confirmar: 'Excluir', perigo: true }))) return;
+    const deOutro = r.user_id && r.user_id !== user?.id && r.user_nome ? ` feita por ${r.user_nome}` : '';
+    if (!(await pedirConfirmacao({ mensagem: `Excluir a leitura de ${kmFmt(r.odometro)} km (${fmtData(r.data)}) do veículo ${r.placa}${deOutro}?`, confirmar: 'Excluir', perigo: true }))) return;
     if (r._pendente) {                              // só estava no aparelho
       const f = await _fila(); await _salvarFila(f.filter(x => x.id !== id));
       toast('Registro descartado'); await render(); return;
@@ -498,7 +455,7 @@ window.Frota = (() => {
   }
 
   async function verFoto(id) {
-    const r = registros.find(x => x.id === id);
+    const r = _reg(id);
     if (!r?.foto_path) return;
     try {
       const url = await sb.fotos.url(r.foto_path);
@@ -541,7 +498,8 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, mudarMes, filtrarVeiculo, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
+  return { render, trocarAba, mudarMes, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
            abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
-           exportarExcel, exportarCSV, reenviar, subirFila };
+           exportarExcel, exportarCSV, reenviar, subirFila,
+           pendentes: () => _pendTodos };
 })();

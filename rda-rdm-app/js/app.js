@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 453;
+const APP_BUILD = 454;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -1859,6 +1859,7 @@ async function logout() {
   notasEquipe = []; repassesEquipe = []; justificativasSino = []; _histEq.dados = null; _histEq.em = 0;
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
+  try { window.FrotaPainel?.esquecer(); } catch (_) {}      // histórico/painel de KM da conta que saiu
   try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
   document.getElementById('demo-banner').style.display = 'none';
   showTela('auth');
@@ -9372,7 +9373,7 @@ async function compartilharFotoViewer() {
    dinheiro envolvido, só texto de ajuda. abrirAjuda()/fecharAjuda() viraram
    uma ponte fina para window.SvelteAjuda (js/svelte-ajuda.js); o resto do
    app nem percebe a troca, chama do mesmo jeito de sempre. */
-function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), onFechar: fecharAjuda }); }
+function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), veFrota: _veFrota(), onFechar: fecharAjuda }); }
 function fecharAjuda() { window.SvelteAjuda?.desmontar(); }
 
 /* ── Form Repasse ────────────────────────────────────────── */

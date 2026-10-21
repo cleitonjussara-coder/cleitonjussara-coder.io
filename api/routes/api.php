@@ -11,6 +11,7 @@ use App\Http\Controllers\ConviteController;
 use App\Http\Controllers\FotoController;
 use App\Http\Controllers\FrotaController;
 use App\Http\Controllers\JustificativaController;
+use App\Http\Controllers\KmPainelController;
 use App\Http\Controllers\NotaController;
 use App\Http\Controllers\PontoController;
 use App\Http\Controllers\RastreioController;
@@ -126,6 +127,8 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/km/{id}/foto', [FrotaController::class, 'foto']);
     Route::get('/frota/resumo', [FrotaController::class, 'resumo']);
     Route::get('/frota/anual', [FrotaController::class, 'anual']);
+    Route::get('/frota/historico', [KmPainelController::class, 'historico']);   // histórico de km com filtros (21/10/2026)
+    Route::get('/frota/painel', [KmPainelController::class, 'painel']);         // dia/semana/mês + ranking (21/10/2026)
 
     /* ponto de presença (18/09/2026) */
     Route::get('/ponto', [PontoController::class, 'index']);

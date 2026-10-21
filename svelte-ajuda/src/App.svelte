@@ -4,7 +4,7 @@
   // errar um parágrafo de ajuda real da equipe.
   import conteudo from './ajuda-conteudo.html?raw';
 
-  let { vejoEquipe = false, ehContador = false, onFechar = () => {} } = $props();
+  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {} } = $props();
 </script>
 
 <!-- Reaproveita as MESMAS classes globais do app (full-overlay, form-hdr,
@@ -16,7 +16,7 @@
     <button class="btn-voltar" aria-label="Voltar" onclick={onFechar}>‹ Voltar</button>
     <h3>Como usar o app</h3>
   </div>
-  <div class="form-body" class:ve-equipe={vejoEquipe} class:eh-contador={ehContador}>
+  <div class="form-body" class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}>
     {@html conteudo}
   </div>
 </div>
@@ -28,6 +28,11 @@
      reativo: o prop `vejoEquipe` muda a classe do container, e o CSS decide. */
   .form-body :global(.ajuda-gestor) { display: none; }
   .form-body.ve-equipe :global(.ajuda-gestor) { display: block; }
+  /* Frota / KM (21/10/2026): gestor/admin e colaborador do regime C.V. usam o módulo; os parágrafos
+     marcados ajuda-gestor dentro da seção (ranking, cadastro de veículos) continuam só do gestor. */
+  .form-body :global(.ajuda-frota) { display: none; }
+  .form-body.ve-equipe :global(.ajuda-frota),
+  .form-body.ve-frota :global(.ajuda-frota) { display: block; }
   /* Contador (14/10/2026): não lança nem gerencia — vê só o que é dele (seções marcadas
      ajuda-contador) e a seção própria; o guia de lançar nota e repasse some. */
   .form-body :global(.ajuda-so-contador) { display: none; }

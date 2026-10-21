@@ -7,17 +7,21 @@ use App\Models\KmRegistro;
 use App\Models\Veiculo;
 use App\Services\FotoStorage;
 use App\Services\LeitorOdometro;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
  * Frota: veículos e registros de quilometragem.
  *   veículos  → todos veem os ativos; gestor/admin cadastram e editam
- *   km        → dono lança e edita os seus; gestor/admin veem tudo, admin edita tudo
+ *   km        → dono lança e edita os seus; gestor/admin veem tudo e também corrigem
+ *               ou excluem o de qualquer um (21/10/2026; antes só o admin)
  *   resumo    → km rodado por veículo no mês (o que a gestão da frota usa)
+ *   histórico e painel de acompanhamento: KmPainelController
  */
 class FrotaController extends Controller
 {
@@ -32,7 +36,11 @@ class FrotaController extends Controller
             $q->where('ativo', true);
         }
 
-        return response()->json($q->get()->map(fn ($v) => $this->veiculoJson($v)));
+        /* a última leitura de cada veículo vai junto: o formulário de registro compara com ela,
+           em qualquer mês, e o aparelho guarda para conferir sem internet */
+        $ultimas = KmRegistro::ultimasPorVeiculo();
+
+        return response()->json($q->get()->map(fn ($v) => $this->veiculoJson($v, $ultimas[$v->id] ?? null)));
     }
 
     public function veiculoUpsert(Request $r, string $id): JsonResponse
@@ -53,11 +61,13 @@ class FrotaController extends Controller
         return response()->json($this->veiculoJson($v->fresh('responsavel')));
     }
 
-    private function veiculoJson(Veiculo $v): array
+    private function veiculoJson(Veiculo $v, ?array $ultima = null): array
     {
         return [
             'id' => $v->id, 'placa' => $v->placa, 'modelo' => $v->modelo, 'ativo' => $v->ativo,
             'responsavel_id' => $v->responsavel_id, 'responsavel_nome' => $v->responsavel?->nome,
+            'ultimo_odometro' => $ultima ? (int) $ultima['odometro'] : null,
+            'ultima_data' => $ultima ? substr((string) $ultima['data'], 0, 10) : null,
         ];
     }
 
@@ -93,12 +103,26 @@ class FrotaController extends Controller
             'data' => ['required', 'date_format:Y-m-d'],
             'odometro' => ['required', 'integer', 'min:0', 'max:9999999'],
             'observacao' => ['nullable', 'string', 'max:500'],
+            'registrado_em' => ['nullable', 'date'],
         ]);
         $k = KmRegistro::find($id);
         if ($k) {
-            abort_unless($k->user_id === $u->id || $u->ehAdmin(), 403, 'Sem permissão para este registro');
+            abort_unless($this->podeMexer($u, $k), 403, 'Sem permissão para este registro');
+            /* quem corrige não troca o dono da leitura nem a hora em que ela foi feita */
+            unset($d['user_id'], $d['registrado_em']);
+            /* "corrigido por" só quando foi outra pessoa; o dono mexendo no próprio registro limpa a marca */
+            if (KmRegistro::temAuditoria()) {
+                $d['atualizado_por'] = $k->user_id === $u->id ? null : $u->id;
+            }
             $k->fill($d)->save();
+            if ($k->user_id !== $u->id) {
+                Log::info('km corrigido por outra pessoa', ['id' => $k->id, 'dono' => $k->user_id, 'por' => $u->id, 'odometro' => $k->odometro]);
+            }
         } else {
+            $d['registrado_em'] = KmRegistro::temAuditoria() ? $this->momento($d['registrado_em'] ?? null) : null;
+            if ($d['registrado_em'] === null) {
+                unset($d['registrado_em']);
+            }
             $d['user_id'] = $d['user_id'] ?? $u->id;
             abort_unless($d['user_id'] === $u->id || $u->ehAdmin(), 403, 'Registro só pode ser lançado pelo próprio colaborador');
             /* leitura menor que a anterior do mesmo veículo é quase sempre erro de
@@ -119,11 +143,33 @@ class FrotaController extends Controller
     {
         $u = $r->user();
         $k = KmRegistro::findOrFail($id);
-        abort_unless($k->user_id === $u->id || $u->ehAdmin(), 403, 'Sem permissão para este registro');
+        abort_unless($this->podeMexer($u, $k), 403, 'Sem permissão para este registro');
+        if ($k->user_id !== $u->id) {
+            Log::warning('km excluído por outra pessoa', ['id' => $k->id, 'dono' => $k->user_id, 'por' => $u->id, 'veiculo' => $k->veiculo_id, 'data' => $k->data->format('Y-m-d'), 'odometro' => $k->odometro]);
+        }
         $this->fotos->apagarVersoesDe($k->user_id, 'km-'.$k->id);
         $k->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /** O dono mexe no que é dele; gestor e admin corrigem o de qualquer um (21/10/2026). */
+    private function podeMexer(Colaborador $u, KmRegistro $k): bool
+    {
+        return $k->user_id === $u->id || $u->gerencia();
+    }
+
+    /** Hora em que a leitura foi feita, no relógio do aparelho; sem ela ou no futuro, vale agora. UTC, "Y-m-d H:i:s". */
+    private function momento(?string $informado): string
+    {
+        $agora = now();
+        try {
+            $m = $informado ? Carbon::parse($informado)->utc() : $agora;
+        } catch (\Throwable) {
+            $m = $agora;
+        }
+
+        return ($m->greaterThan($agora->copy()->addMinutes(10)) ? $agora : $m)->format('Y-m-d H:i:s');
     }
 
     /** POST /km/{id}/foto — foto do odômetro (opcional). */
@@ -131,7 +177,7 @@ class FrotaController extends Controller
     {
         $u = $r->user();
         $k = KmRegistro::findOrFail($id);
-        abort_unless($k->user_id === $u->id || $u->ehAdmin(), 403, 'Sem permissão para este registro');
+        abort_unless($this->podeMexer($u, $k), 403, 'Sem permissão para este registro');
         $r->validate(['file' => ['required', 'file', 'max:'.config('petermann.foto_max_kb')]]);
         $path = $this->fotos->salvarPara($k->user_id, 'km-'.$k->id, $r->file('file'), $r->input('ext'));
         $k->foto_path = $path;
@@ -173,6 +219,7 @@ class FrotaController extends Controller
             'user_id' => $k->user_id, 'user_nome' => $k->colaborador?->nome,
             'data' => $k->data->format('Y-m-d'), 'odometro' => $k->odometro,
             'observacao' => $k->observacao, 'foto_path' => $k->foto_path,
+            'registrado_em' => KmRegistro::temAuditoria() ? $k->registrado_em?->toIso8601String() : null,
             'created_at' => $k->created_at?->toIso8601String(), 'updated_at' => $k->updated_at?->toIso8601String(),
         ];
     }
