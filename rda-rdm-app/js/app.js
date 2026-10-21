@@ -79,9 +79,9 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 455;
-/* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
-   colaborador não vê. false = some para todos. */
+const APP_BUILD = 456;
+/* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
+   ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
 const _driveDiag = { googleTokenNoRetorno: '—', setToken: '—', init: '—', automatico: '—' };   // diagnóstico do Drive (Perfil)
 
@@ -1189,8 +1189,10 @@ function _ehGestorOuAdmin() {
 function _ehContabilidade() { return user?.role === 'contabilidade'; }
 /* Regime (fase 3, 21/09/2026): cv = cartão corporativo; rdm_rda = dinheiro em conta (padrão) */
 function _ehCV(u = user) { return u?.role !== 'contabilidade' && (u?.regime || 'rdm_rda') === 'cv'; }   // Contador não tem cartão nem Frota
-/* Frota/KM: gestor/admin sempre; colaborador só se for do regime CV (09/10/2026). */
-function _veFrota() { return MODULOS_EXTRAS && (_ehGestorOuAdmin() || _ehCV()); }
+/* Frota/KM: TODOS os papéis, menos o Contador (pedido do Cleiton, 21/10/2026). Antes era gestor/admin e colaborador
+   do regime CV (09/10/2026); colaborador RDM/RDA ficava de fora. O servidor também fecha o módulo ao Contador
+   (middleware SomenteLeitura). Ponto segue só do gestor/admin. */
+function _veFrota() { return MODULOS_EXTRAS && !_ehContabilidade(); }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
    separado de propósito: é por ele que passam saldo do cartão, repasse e
    resumo por categoria, que são do cartão e não do nome do regime. */

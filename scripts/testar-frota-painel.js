@@ -145,6 +145,21 @@ const resposta = (itens, extra = {}) => ({ de: '2026-10-19', ate: '2026-10-25', 
     confere(w.__estado.chamadas.trocarAba.includes('hist'), 'tocar no ranking abre o histórico');
   }
 
+  console.log('7. quem vê a Frota / KM no menu (regra de 21/10/2026: todos, menos o Contador)');
+  {
+    const vm = require('vm');
+    const app = fs.readFileSync(path.join(__dirname, '..', 'rda-rdm-app', 'js', 'app.js'), 'utf8');
+    const funcao = nome => { const m = app.match(new RegExp('function ' + nome + '\\([^)]*\\)\\s*\\{[^}]*\\}')); if (!m) throw new Error('função não encontrada: ' + nome); return m[0]; };
+    const ctx = vm.createContext({ MODULOS_EXTRAS: true, user: null });
+    vm.runInContext(['_ehGestorOuAdmin', '_ehContabilidade', '_ehCV', '_veFrota'].map(funcao).join('\n'), ctx);
+    const ve = (role, regime) => { ctx.user = { role, regime }; return vm.runInContext('_veFrota()', ctx); };
+    confere(ve('colaborador', 'rdm_rda') === true, 'colaborador RDM/RDA vê');
+    confere(ve('colaborador', 'cv') === true, 'colaborador C.V. vê');
+    confere(ve('colaborador', undefined) === true, 'colaborador sem regime definido (padrão) vê');
+    confere(ve('gestor', 'rdm_rda') === true && ve('admin', 'cv') === true, 'gestor e admin veem');
+    confere(ve('contabilidade', 'rdm_rda') === false && ve('contabilidade', 'cv') === false, 'Contador não vê, de nenhum regime');
+  }
+
   console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
   process.exit(falhas ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -200,6 +200,24 @@ class HistoricoKmTest extends TestCase
         $this->assertSame(['Ana'], array_values(array_unique(array_column($j['itens'], 'user_nome'))));
     }
 
+    public function test_colaborador_de_qualquer_regime_usa_a_frota_e_so_o_contador_nao(): void
+    {
+        /* 21/10/2026: a Frota deixou de ser só do regime C.V. — RDM/RDA também registra e acompanha o próprio km */
+        foreach (['rdm_rda', 'cv'] as $regime) {
+            $c = $this->pessoa('Colab '.$regime);
+            $c->forceFill(['regime' => $regime])->save();
+            Sanctum::actingAs($c);
+            $this->getJson('/api/veiculos')->assertOk();
+            $this->getJson('/api/frota/painel')->assertOk()->assertJsonPath('colaboradores', null);
+            $this->getJson('/api/frota/historico')->assertOk();
+            $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600])->assertOk();
+            $this->getJson('/api/frota/anual?ano=2026')->assertOk();
+        }
+        Sanctum::actingAs($this->contador);
+        $this->getJson('/api/veiculos')->assertForbidden();
+        $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1700])->assertForbidden();
+    }
+
     public function test_contador_nao_usa_a_frota(): void
     {
         Sanctum::actingAs($this->contador);

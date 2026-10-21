@@ -28,7 +28,7 @@
      reativo: o prop `vejoEquipe` muda a classe do container, e o CSS decide. */
   .form-body :global(.ajuda-gestor) { display: none; }
   .form-body.ve-equipe :global(.ajuda-gestor) { display: block; }
-  /* Frota / KM (21/10/2026): gestor/admin e colaborador do regime C.V. usam o módulo; os parágrafos
+  /* Frota / KM (21/10/2026): todos usam o módulo, menos o Contador (veFrota = _veFrota() do app); os parágrafos
      marcados ajuda-gestor dentro da seção (ranking, cadastro de veículos) continuam só do gestor. */
   .form-body :global(.ajuda-frota) { display: none; }
   .form-body.ve-equipe :global(.ajuda-frota),
