@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 458;
+const APP_BUILD = 459;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2321,7 +2321,7 @@ function abrirNotificacoes() {
           <button class="btn btn-sm btn-primary" onclick="verRespostaJustificativa('${it.just.id}')">💬 Ler resposta</button>
           <button class="btn btn-sm btn-outline" onclick="dispensarJustificativa('${it.just.id}', this)">OK, vi</button>
         </div>` : it.tipo === 'fotobranca' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="verFoto('${esc(it.notaId)}')">📎 Ver foto</button>
+          <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); verFoto('${esc(it.notaId)}')">📎 Ver foto</button>
           <button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); editarNota('${esc(it.notaId)}')">✏️ Corrigir a nota</button>
           <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${esc(it.id)}')">OK, vi</button>
         </div>` : it.tipo === 'cartao' ? `<div class="notif-acoes">
