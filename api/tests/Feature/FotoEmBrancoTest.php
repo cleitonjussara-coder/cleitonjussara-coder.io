@@ -297,6 +297,21 @@ class FotoEmBrancoTest extends TestCase
         $this->assertSame([$cleiton->id], $this->destinos[0]);
     }
 
+    public function test_na_homologacao_o_push_so_vai_para_conta_de_teste(): void
+    {
+        $this->app['env'] = 'staging';              // homologação = cópia da produção, com push de gente real
+        $real = $this->pessoa('gestor', 'Gestor Real');
+        $teste = new Colaborador(['id' => (string) Str::uuid(), 'nome' => 'Gestor Teste', 'email' => 'gestor.teste@homolog.local', 'password' => 'segredo123', 'role' => 'gestor']);
+        $teste->forceFill(['ativo' => true] + (Colaborador::temConfirmacao() ? ['confirmado_em' => now()] : []))->save();
+        $colab = $this->pessoa('colaborador');
+
+        $this->lancar($colab, $colab, $this->branca());
+
+        $this->assertCount(1, $this->pushes);
+        $this->assertSame([$teste->id], $this->destinos[0]);
+        $this->assertNotContains($real->id, $this->destinos[0]);
+    }
+
     public function test_o_aparelho_nao_consegue_forjar_a_marca(): void
     {
         $this->pessoa('gestor');

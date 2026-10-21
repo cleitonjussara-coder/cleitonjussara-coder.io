@@ -90,6 +90,11 @@ class FotoEmBrancoAviso
             /* quem enviou a nota não precisa do próprio aviso (gestor lançando para um colaborador) */
             $gestores = Colaborador::whereIn('role', ['gestor', 'admin'])->where('ativo', true)
                 ->when($autor, fn ($q) => $q->where('id', '<>', $autor->id))->get();
+            /* A homologação é CÓPIA da produção, com as inscrições de push de gente de verdade: lá o aviso automático só
+               vai para as contas de teste (@homolog.local), nunca para o celular de um gestor real. */
+            if (app()->environment('staging')) {
+                $gestores = $gestores->filter(fn ($c) => str_ends_with(strtolower((string) $c->email), '@homolog.local'))->values();
+            }
 
             $this->push->enviar($gestores, 'Foto em branco numa nota', "{$quem} enviou uma nota com a foto em branco: {$resumo}", './?abrir=sino', 'foto-branca-'.$nota->id);
         } catch (Throwable $e) {
