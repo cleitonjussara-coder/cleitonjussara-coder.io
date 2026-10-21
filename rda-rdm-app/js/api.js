@@ -325,6 +325,10 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     existem: async ids => (await req('POST', '/notas/existem', { body: { ids } })).notas || [],
     chaveExiste: async (chave, ignoreId) =>
       (await req('POST', '/notas/chave-existe', { body: { chave, ignore_id: ignoreId || null } })).existe,
+    /* trava de EQUIPE (21/10/2026): a mesma nota já foi lançada por alguém, inclusive pelo Faturamento (sem dono)?
+       Chave, NFS-e, nº+fornecedor ou dia+valor+fornecedor em TODAS as notas vivas → { existe, motivo, origem, nota? };
+       o colaborador comum recebe só existe/motivo/origem, nunca a nota. Timeout curto: sinal ruim não trava o Salvar. */
+    duplicada: cand => req('POST', '/notas/duplicada', { body: cand, timeout: 8_000 }),
     /* sobe o anexo; o servidor grava em disco e devolve { foto_path }.
        userId = dono da nota, para quando ela ainda não existe no servidor
        (o anexo sobe antes da nota — anexo obrigatório vale na API).

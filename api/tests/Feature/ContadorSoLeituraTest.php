@@ -27,7 +27,7 @@ class ContadorSoLeituraTest extends TestCase
         'POST fotos/urls', 'POST notas/existem', 'PATCH colaboradores/{id}',
         /* corrigir nota que já existe (14/10/2026): o controller segura o resto */
         'PUT notas/{id}', 'PATCH notas/{id}/tipo', 'POST notas/{id}/foto',
-        'POST notas/chave-existe', 'POST notas/ler-foto',
+        'POST notas/chave-existe', 'POST notas/duplicada', 'POST notas/ler-foto',
     ];
 
     private function pessoa(string $role): Colaborador

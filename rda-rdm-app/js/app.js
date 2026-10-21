@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 456;
+const APP_BUILD = 457;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4657,6 +4657,11 @@ async function restaurarNota(id) {
   const arq = (await DB.getDeletedNotasUser(user.id).catch(() => [])).find(x => x.id === id);
   const d = arq ? _dupNaLixeira(arq) : null;
   if (d && !(await pedirConfirmacao({ mensagem: `Já existe uma nota igual ativa:\n${_resumoNota(d.nota)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`, confirmar: 'Restaurar' }))) return;
+  /* 21/10/2026: enquanto esta ficou na lixeira, o Faturamento (ou outra pessoa) pode ter lançado a mesma nota — o aparelho não vê isso */
+  if (!d && arq) {
+    const r = await _duplicadaNaEquipe(_candidataDeNota(arq), arq.id);
+    if (r && !(await pedirConfirmacao({ mensagem: `${_textoDuplicataEquipe(r)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`, confirmar: 'Restaurar' }))) return;
+  }
   const n = await DB.restoreNota(id);
   if (!n) {
     toast('Lançamento não encontrado na lixeira', 'err');
@@ -8607,7 +8612,69 @@ function _motivoDuplicata(a, b) {
   if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo) return 'igual';
   return null;
 }
-const _MOTIVO_DUP = { chave: 'mesma chave de acesso', numero: 'mesmo número de nota e fornecedor', igual: 'mesmo fornecedor, dia e valor' };
+const _MOTIVO_DUP = { chave: 'mesma chave de acesso', nfse: 'mesma chave da NFS-e', numero: 'mesmo número de nota e fornecedor', igual: 'mesmo fornecedor, dia e valor' };
+
+/* ── Duplicata contra a EQUIPE inteira (21/10/2026) ─────────────────────
+   _acharDuplicata só enxerga `notas`, que são as do PRÓPRIO usuário — e a
+   nota de Faturamento sem colaborador (user_id nulo), ou a de outra pessoa,
+   nunca está lá. Foi assim que a mesma nota lançada antes pelo Faturamento
+   passou batido quando o colaborador lançou de novo: só a chave de 44
+   dígitos era conferida no servidor. POST /notas/duplicada aplica as mesmas
+   regras em TODAS as notas vivas e devolve ao colaborador comum só
+   {existe, motivo, origem}; gestor/admin/contador recebem também a nota. */
+const _ORIGEM_DUP = { sua: 'por você', faturamento: 'no Faturamento da empresa', colaborador: 'por outro colaborador da equipe' };
+function _candidataDoFormulario() {
+  const v = parseFloat($('nf-valor').value);
+  const qr = $('nf-qr-url').value || '';
+  return {
+    chave: _digitos($('nf-chave').value) || null,
+    qr_url: (qr && qr.length <= 2000) ? qr : null,
+    tipo: $('nf-tipo').value || null,
+    cnpj: _digitos($('nf-cnpj').value) || null,
+    razao_social: $('nf-razao').value.trim() || null,
+    valor: v > 0 ? v : null,
+    data: $('nf-data').value || null,
+    numero: ($('nf-numero').value || '').trim() || null,
+    serie: ($('nf-serie').value || '').trim() || null,
+  };
+}
+/* o mesmo recorte, a partir de uma nota já gravada (restaurar da lixeira) */
+function _candidataDeNota(n) {
+  const v = Number(n.valor);
+  const qr = n.qr_url || '';
+  return {
+    chave: _digitos(n.chave_nfce || '') || null,
+    qr_url: (qr && qr.length <= 2000) ? qr : null,
+    tipo: n.tipo || null,
+    cnpj: _digitos(n.cnpj || '') || null,
+    razao_social: String(n.razao_social || '').trim() || null,
+    valor: v > 0 ? v : null,
+    data: String(n.data || '').slice(0, 10) || null,
+    numero: String(n.numero || '').trim() || null,
+    serie: String(n.serie || '').trim() || null,
+  };
+}
+/* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */
+async function _duplicadaNaEquipe(cand, ignoreId) {
+  if (!sb || DEMO_MODE || !navigator.onLine) return null;
+  try {
+    const r = await sb.notas.duplicada({ ...cand, ignore_id: ignoreId || null });
+    return r?.existe ? r : null;
+  } catch (_) { return null; }
+}
+/* chave de 44 dígitos e NFS-e identificam a nota sem dúvida: barram. Número e dia+valor podem ser coincidência: perguntam. */
+const _dupEquipeBarra = r => r?.motivo === 'chave' || r?.motivo === 'nfse';
+function _textoDuplicataEquipe(r) {
+  const onde = _ORIGEM_DUP[r.origem] || 'pela equipe';
+  const dono = r.nota?.dono_nome ? `\nLançada por: ${r.nota.dono_nome}` : '';
+  const quem = r.nota ? `\n\n${_resumoNota(r.nota)}${dono}` : '';
+  const aviso = r.origem === 'faturamento' ? '\n\nA empresa já pagou esta nota direto — lançar de novo conta duas vezes.' : '';
+  return `Esta nota já foi lançada ${onde} (${_MOTIVO_DUP[r.motivo] || 'mesma nota'}).${quem}${aviso}`;
+}
+async function _barrarDuplicataEquipe(r) {
+  await mostrarAviso(_textoDuplicataEquipe(r) + '\n\nNão precisa lançar de novo.');
+  toast('Lançamento cancelado — a nota já existe', 'err');
+}
 function _acharDuplicata(candidata, ignoreId = null) {
   for (const n of notas) {
     if (n.id === ignoreId || n.deleted) continue;
@@ -8676,7 +8743,7 @@ function _avisarDuplicataAposLeitura() {
     chave_nfce: $('nf-chave').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
-  if (!d) return false;
+  if (!d) { _avisarDuplicataDaEquipeAposLeitura().catch(() => {}); return false; }   // as do aparelho não casaram: confere a equipe/Faturamento
   /* não bloqueia mais (a janela do app é assíncrona): o aviso aparece por cima do
      formulário já preenchido; "Abrir a nota" leva à que existe, "Continuar" segue */
   pedirConfirmacao({
@@ -8684,6 +8751,21 @@ function _avisarDuplicataAposLeitura() {
     confirmar: 'Abrir a nota', cancelar: 'Continuar este',
   }).then(abrir => { if (abrir) { fecharFormNota(); editarNota(d.nota.id); } });
   return true;
+}
+/* Mesma conferência, contra a EQUIPE e o Faturamento (21/10/2026), logo depois da leitura: o colaborador descobre
+   antes de preencher o resto que a nota já foi lançada. Só avisa — o Salvar confere de novo e é ele que barra. */
+async function _avisarDuplicataDaEquipeAposLeitura() {
+  const idForm = $('nf-id').value || '';
+  const r = await _duplicadaNaEquipe(_candidataDoFormulario(), idForm || null);
+  /* a consulta demora um pouco: a pessoa pode ter fechado o formulário (ou aberto outra nota) nesse meio-tempo */
+  if (!r || r.origem === 'sua' || $('nota-form-overlay').style.display === 'none' || ($('nf-id').value || '') !== idForm) return;
+  const podeAbrir = !!(r.nota?.id && _notaPorId(r.nota.id));   // gestor/admin/contador, com a nota já no aparelho
+  const abrir = await pedirConfirmacao(podeAbrir
+    ? { mensagem: `⚠️ ${_textoDuplicataEquipe(r)}\n\nAbrir a nota que já existe? Se continuar, este lançamento segue para conferência ao salvar.`, confirmar: 'Abrir a nota', cancelar: 'Continuar este' }
+    : { mensagem: `⚠️ ${_textoDuplicataEquipe(r)}\n\nFechar este lançamento? Se continuar, o app confere de novo ao salvar.`, confirmar: 'Fechar este lançamento', cancelar: 'Continuar este' });
+  if (!abrir) return;
+  fecharFormNota();
+  if (podeAbrir) editarNota(r.nota.id);
 }
 
 /* Trava de reentrância do Salvar.
@@ -8778,18 +8860,6 @@ async function _salvarNotaInterno() {
     toast('⚠️ Esta nota já foi registrada (chave NFC-e duplicada).', 'err');
     return;
   }
-  // TRAVA de EQUIPE (online): a mesma chave já existe em QUALQUER colaborador?
-  // POST /notas/chave-existe — só devolve sim/não, não expõe dados de outros.
-  const _chaveDig = _digitos($('nf-chave').value);
-  if (_chaveDig.length === 44 && sb && navigator.onLine) {
-    try {
-      const existe = await sb.notas.chaveExiste(_chaveDig, $('nf-id').value || null);
-      if (existe) {
-        toast('⚠️ Esta nota já foi registrada por outro colaborador da equipe.', 'err');
-        return;
-      }
-    } catch (_) { /* falha na checagem online não bloqueia (a trava local já valeu) */ }
-  }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;
 
@@ -8807,6 +8877,7 @@ async function _salvarNotaInterno() {
      enxerga as notas de toda a equipe, e apagar sozinho o lançamento de um
      colaborador por semelhança seria longe demais. */
   let _repetidaAnterior = null;
+  let _confirmouSemelhante = false;   // já respondeu "Lançar assim mesmo?" para uma nota SUA
   if (_digitos($('nf-chave').value).length !== 44) {
     const dup = _acharDuplicata({
       tipo, cnpj: cnpjRaw, razao_social: $('nf-razao').value, valor, data,
@@ -8827,6 +8898,22 @@ async function _salvarNotaInterno() {
       const seguir = await pedirConfirmacao({
         mensagem: `Esta nota parece já ter sido lançada (${_MOTIVO_DUP[dup.motivo]}):\n\n` + resumo +
           '\n\nLançar assim mesmo? (nada será apagado)',
+        confirmar: 'Lançar assim mesmo',
+      });
+      if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }
+      _confirmouSemelhante = true;
+    }
+  }
+
+  /* TRAVA de EQUIPE (online, 21/10/2026): a mesma nota já existe em QUALQUER pessoa ou no Faturamento (sem dono)?
+     As conferências acima só enxergam as notas deste aparelho. Chave e NFS-e barram; número e dia+valor perguntam
+     (sem rede ou com erro não bloqueia — ver _duplicadaNaEquipe). */
+  const _dupEq = await _duplicadaNaEquipe(_candidataDoFormulario(), _idEdicao);
+  if (_dupEq) {
+    if (_dupEquipeBarra(_dupEq)) { await _barrarDuplicataEquipe(_dupEq); return; }
+    if (!(_confirmouSemelhante && _dupEq.origem === 'sua')) {
+      const seguir = await pedirConfirmacao({
+        mensagem: _textoDuplicataEquipe(_dupEq) + '\n\nLançar assim mesmo? (nada será apagado)',
         confirmar: 'Lançar assim mesmo',
       });
       if (!seguir) { toast('Lançamento cancelado — a nota já existe', 'err'); return; }

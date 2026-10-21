@@ -71,6 +71,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
 
     Route::get('/notas', [NotaController::class, 'index']);
     Route::post('/notas/chave-existe', [NotaController::class, 'chaveExiste']);
+    Route::post('/notas/duplicada', [NotaController::class, 'duplicada']);   // chave, NFS-e, nº+fornecedor, dia+valor+fornecedor em TODAS as notas (21/10/2026)
     Route::post('/notas/existem', [NotaController::class, 'existem']);
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
     Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto']);   // IA de visão lê a nota (10/10/2026)

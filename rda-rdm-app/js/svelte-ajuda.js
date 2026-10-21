@@ -151,6 +151,7 @@
     <div class="ajuda-sec">\r
       <h4>🔁 Notas repetidas</h4>\r
       <p>O app avisa quando parece que a nota <b>já foi lançada</b> — mesma chave, mesmo número no mesmo fornecedor, ou mesmo fornecedor no mesmo dia com o mesmo valor. O aviso aparece logo depois da leitura e de novo ao salvar. <b>Nada é apagado sozinho</b>: você decide.</p>\r
+      <p>A conferência vale para <b>a equipe toda e para o Faturamento da empresa</b>, não só para as suas notas: se a mesma nota já foi lançada por outra pessoa ou pelo <b>Faturamento</b> (nota que a empresa paga direto), o app avisa — e, com internet, confere de novo na hora de salvar. Com a <b>chave de acesso</b> (44 dígitos) ou a <b>chave da NFS-e</b> repetidas, o app <b>não deixa lançar</b>; com o mesmo número ou o mesmo fornecedor, dia e valor, ele pergunta se você quer lançar assim mesmo. Você só fica sabendo <i>de onde</i> a nota veio (Faturamento ou outro colaborador), nunca quem lançou nem os dados dela — isso só o gestor vê. Sem internet a conferência com a equipe não acontece: lance com cuidado e confira quando a rede voltar.</p>\r
       <p>No <b>Painel</b>, o item <b>🔁 Possíveis duplicatas</b> lista as suspeitas; o cartão da nota ganha a etiqueta <b>duplicada?</b>.</p>\r
     </div>\r
 \r

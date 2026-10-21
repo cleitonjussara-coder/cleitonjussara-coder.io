@@ -34,6 +34,7 @@ class SomenteLeitura
         'PATCH notas/{id}/tipo',
         'POST notas/{id}/foto',
         'POST notas/chave-existe',   // checagem de duplicata no formulário
+        'POST notas/duplicada',      // idem, com número/fornecedor/valor (só leitura)
         'POST notas/ler-foto',       // leitura do anexo trocado
     ];
 
