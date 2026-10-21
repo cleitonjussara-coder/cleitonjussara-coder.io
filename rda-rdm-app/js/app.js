@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 454;
+const APP_BUILD = 455;
 /* Frota/KM e Ponto: visíveis SÓ para gestor/admin (decisão de 19/09/2026);
    colaborador não vê. false = some para todos. */
 const MODULOS_EXTRAS = true;
@@ -893,6 +893,7 @@ function _ensureSb() {
          entrada. Durante a troca de senha pelo link não há sessão mesmo. */
       if (ev === 'SIGNED_OUT' && !_recuperandoSenha && _telaAtual !== 'auth') {
         user = null;
+        try { window.FrotaPainel?.esquecer(); } catch (_) {}      // sessão derrubada (401): o histórico/painel de KM dessa conta não fica para a próxima
         _telaAtual = 'auth';
         showTela('auth');
         renderAuth('login');

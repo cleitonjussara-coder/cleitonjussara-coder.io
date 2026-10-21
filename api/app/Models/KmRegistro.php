@@ -57,6 +57,9 @@ class KmRegistro extends Model
         $datas = DB::table('km_registros')->where('deleted', false)->groupBy('veiculo_id')->selectRaw('veiculo_id, max(data) as d');
         if ($antesDe !== null) {
             $datas->where('data', '<', $antesDe);
+        } else {
+            /* "última leitura" nunca é uma data que ainda não chegou (registro antigo com ano errado não vira a referência de todo mundo) */
+            $datas->where('data', '<=', now('America/Sao_Paulo')->format('Y-m-d').' 23:59:59');
         }
         $cols = ['k.id', 'k.veiculo_id', 'k.user_id', 'k.data', 'k.odometro', 'k.created_at'];
         if (self::temAuditoria()) {

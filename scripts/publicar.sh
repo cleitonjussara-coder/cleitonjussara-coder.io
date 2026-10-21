@@ -89,20 +89,8 @@ api_igual() {   # $1 = caminho relativo dentro de api/
   return $ok
 }
 
-if [[ "$ALVO" == "app" || "$ALVO" == "tudo" ]]; then
-  echo "▸ app (build $BUILD) → $AMB"
-  node scripts/empacotar.js app >/dev/null
-  scp "${SSH_OPTS[@]}" -q petermann-app.zip "$HOST:tmp/petermann-app-$AMB.zip"
-  ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$APP_DIR && unzip -oq ~/tmp/petermann-app-$AMB.zip && rm -f ~/tmp/petermann-app-$AMB.zip && grep -o 'APP_BUILD = [0-9]*' rda-rdm-app/js/app.js" || true
-  sleep 2
-  if [[ "$(publicado)" != "$BUILD" ]]; then sftp_app; sleep 2; fi
-  NO_AR=$(publicado)
-  if [[ "$NO_AR" != "$BUILD" ]]; then
-    echo "  ✗ o site ainda serve o build ${NO_AR:-?} (esperado $BUILD) — NÃO publicado"; exit 1
-  fi
-  echo "  ✔ build $BUILD no ar · $APP_URL"
-fi
-
+# Ordem: a API ANTES do app (21/10/2026). O app novo pode depender de rotas que só a API nova tem; com o app na frente,
+# quem abria o app no meio da publicação — ou se a etapa da API falhasse (SSH expirado) — via a tela quebrada (404).
 if [[ "$ALVO" == "api" || "$ALVO" == "tudo" ]]; then
   echo "▸ api → ~/$API_DIR"
   PASTAS=(app bootstrap/app.php bootstrap/providers.php config database/migrations lang resources routes artisan composer.json composer.lock)
@@ -138,6 +126,20 @@ if [[ "$ALVO" == "api" || "$ALVO" == "tudo" ]]; then
       echo "  ⚠ $PEND migração(ões) pendente(s): Perfil → 🛠️ Atualizar estrutura do banco"
     fi
   fi
+fi
+
+if [[ "$ALVO" == "app" || "$ALVO" == "tudo" ]]; then
+  echo "▸ app (build $BUILD) → $AMB"
+  node scripts/empacotar.js app >/dev/null
+  scp "${SSH_OPTS[@]}" -q petermann-app.zip "$HOST:tmp/petermann-app-$AMB.zip"
+  ssh "${SSH_OPTS[@]}" "$HOST" "cd ~/$APP_DIR && unzip -oq ~/tmp/petermann-app-$AMB.zip && rm -f ~/tmp/petermann-app-$AMB.zip && grep -o 'APP_BUILD = [0-9]*' rda-rdm-app/js/app.js" || true
+  sleep 2
+  if [[ "$(publicado)" != "$BUILD" ]]; then sftp_app; sleep 2; fi
+  NO_AR=$(publicado)
+  if [[ "$NO_AR" != "$BUILD" ]]; then
+    echo "  ✗ o site ainda serve o build ${NO_AR:-?} (esperado $BUILD) — NÃO publicado"; exit 1
+  fi
+  echo "  ✔ build $BUILD no ar · $APP_URL"
 fi
 
 printf '▸ ping: '; curl -s --max-time 20 "$PING" | head -c 200; echo

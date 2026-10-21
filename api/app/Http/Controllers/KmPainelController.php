@@ -147,7 +147,9 @@ class KmPainelController extends Controller
         if ($per['ini'] < $serie[0]['ini'] || $per['fim'] > $serie[count($serie) - 1]['fim']) {
             $serie = KmCalculo::serie($modo, $ref);
         }
-        $ctx = ['dia' => KmCalculo::periodo('dia', $ref), 'semana' => KmCalculo::periodo('semana', $ref), 'mes' => KmCalculo::periodo('mes', $ref)];
+        /* contexto do colaborador ("na semana", "no mês"): o mês é o do INÍCIO do período mostrado — o mesmo que a tela rotula.
+           (Com `ref` seria o mês do último dia: semana de 26/10 a 01/11 abriria novembro.) */
+        $ctx = ['dia' => KmCalculo::periodo('dia', $ref), 'semana' => KmCalculo::periodo('semana', $ref), 'mes' => KmCalculo::periodo('mes', $per['ini'])];
 
         $ini = min($serie[0]['ini'], $ant['ini'], $ctx['semana']['ini'], $ctx['mes']['ini']);
         $fim = max($serie[count($serie) - 1]['fim'], $per['fim'], $ctx['semana']['fim'], $ctx['mes']['fim']);
@@ -161,10 +163,12 @@ class KmPainelController extends Controller
 
         $tot = KmCalculo::somar($vis, $per);
         $totAnt = KmCalculo::somar($vis, $cmp);
-        $veiculosRodaram = count(array_unique(array_column(array_filter($vis, fn ($l) => $l['km'] > 0 && $l['data'] >= $per['ini'] && $l['data'] <= $per['fim']), 'veiculo_id')));
 
         $nomes = Colaborador::query()->get(['id', 'nome', 'ativo'])->keyBy('id');
         $veiculos = Veiculo::query()->orderBy('placa')->get(['id', 'placa', 'modelo', 'ativo']);
+        /* "X de Y": o X só conta veículo ativo (Y é o total de ativos); o colaborador, sem Y, conta os que ele usou */
+        $idsContados = $u->veTudo() ? $veiculos->where('ativo', true)->pluck('id')->all() : $veiculos->pluck('id')->all();
+        $veiculosRodaram = count(array_unique(array_column(array_filter($vis, fn ($l) => $l['km'] > 0 && $l['data'] >= $per['ini'] && $l['data'] <= $per['fim'] && in_array($l['veiculo_id'], $idsContados, true)), 'veiculo_id')));
 
         $porVeiculo = [];
         foreach ($veiculos as $v) {
@@ -177,7 +181,9 @@ class KmPainelController extends Controller
             if (! $v->ativo && ! $a['leituras'] && ! $b['leituras']) {
                 continue;
             }
-            $ult = $minhas ? end($minhas) : ($carga['bases'][$v->id] ?? null);
+            /* "última leitura" = a última até o FIM do período mostrado (não até onde a janela de dados foi carregada) */
+            $ateOFim = array_values(array_filter($minhas, fn ($l) => $l['data'] <= $per['fim']));
+            $ult = $ateOFim ? end($ateOFim) : ($carga['bases'][$v->id] ?? null);
             $porVeiculo[] = [
                 'veiculo_id' => $v->id, 'placa' => $v->placa, 'modelo' => $v->modelo,
                 'km' => $a['km'], 'km_anterior' => $b['km'], 'leituras' => $a['leituras'],
@@ -200,7 +206,7 @@ class KmPainelController extends Controller
                 }
                 $porPessoa[] = [
                     'user_id' => $id, 'nome' => $c?->nome ?? '?', 'km' => $a['km'], 'km_anterior' => $b['km'], 'leituras' => $a['leituras'],
-                    'ultima_data' => collect($ls)->max('data'),
+                    'ultima_data' => collect($ls)->where('data', '<=', $per['fim'])->max('data'),
                 ];
             }
             usort($porPessoa, fn ($a, $b) => [$b['km'], $b['km_anterior'], $a['nome']] <=> [$a['km'], $a['km_anterior'], $b['nome']]);
@@ -214,7 +220,9 @@ class KmPainelController extends Controller
             'leituras' => $tot['leituras'], 'dias_decorridos' => $dias,
             'veiculos_rodaram' => $veiculosRodaram, 'veiculos_ativos' => $u->veTudo() ? $veiculos->where('ativo', true)->count() : null,
             'contexto' => [
-                'dia' => KmCalculo::somar($vis, $ctx['dia']), 'semana' => KmCalculo::somar($vis, $ctx['semana']), 'mes' => KmCalculo::somar($vis, $ctx['mes']),
+                'dia' => KmCalculo::somar($vis, $ctx['dia']) + $ctx['dia'],
+                'semana' => KmCalculo::somar($vis, $ctx['semana']) + $ctx['semana'],
+                'mes' => KmCalculo::somar($vis, $ctx['mes']) + $ctx['mes'],      // com ini/fim: a tela rotula pelo mês de onde o número saiu
             ],
             'serie' => array_map(fn ($p) => $p + KmCalculo::somar($vis, $p), $serie),
             'colaboradores' => $porPessoa,

@@ -6,6 +6,7 @@ use App\Models\Colaborador;
 use App\Models\KmRegistro;
 use App\Models\Veiculo;
 use App\Services\FotoStorage;
+use App\Services\KmCalculo;
 use App\Services\LeitorOdometro;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -55,7 +57,13 @@ class FrotaController extends Controller
             'ativo' => ['nullable', 'boolean'],
         ]);
         $d['ativo'] = (bool) ($d['ativo'] ?? true);
-        $v = Veiculo::find($id) ?? new Veiculo(['id' => $id]);
+        $v = Veiculo::find($id);
+        if (! $v) {
+            if (! Str::isUuid($id)) {                    // o id vira texto em atributos HTML no app: só UUID
+                return response()->json(['message' => 'Identificador do veículo inválido.'], 422);
+            }
+            $v = new Veiculo(['id' => $id]);
+        }
         $v->fill($d)->save();
 
         return response()->json($this->veiculoJson($v->fresh('responsavel')));
@@ -105,6 +113,15 @@ class FrotaController extends Controller
             'observacao' => ['nullable', 'string', 'max:500'],
             'registrado_em' => ['nullable', 'date'],
         ]);
+        /* Nada gravado no futuro (mesma regra das notas): até 2 dias à frente é relógio de celular adiantado e vira hoje;
+           mais que isso é erro de digitação — e uma leitura do ano 2999 viraria a "última leitura" do veículo para todo mundo. */
+        $hoje = KmCalculo::hoje();
+        if ($d['data'] > $hoje) {
+            if ($d['data'] > date('Y-m-d', strtotime($hoje.' +2 days'))) {
+                return response()->json(['message' => "A data está no futuro ({$d['data']}). A leitura registra algo que já aconteceu — corrija a data."], 422);
+            }
+            $d['data'] = $hoje;
+        }
         $k = KmRegistro::find($id);
         if ($k) {
             abort_unless($this->podeMexer($u, $k), 403, 'Sem permissão para este registro');
@@ -119,6 +136,10 @@ class FrotaController extends Controller
                 Log::info('km corrigido por outra pessoa', ['id' => $k->id, 'dono' => $k->user_id, 'por' => $u->id, 'odometro' => $k->odometro]);
             }
         } else {
+            /* o id vira texto em atributos HTML no app: só UUID (o app sempre gera com crypto.randomUUID) */
+            if (! Str::isUuid($id)) {
+                return response()->json(['message' => 'Identificador do registro inválido.'], 422);
+            }
             $d['registrado_em'] = KmRegistro::temAuditoria() ? $this->momento($d['registrado_em'] ?? null) : null;
             if ($d['registrado_em'] === null) {
                 unset($d['registrado_em']);
@@ -245,10 +266,14 @@ class FrotaController extends Controller
         $leituras = [];
 
         foreach ($veiculos as $v) {
-            $base = KmRegistro::query()->visiveisPara($u)->where('deleted', false)->where('veiculo_id', $v->id);
+            /* A cadeia de leituras é a do VEÍCULO inteiro (de quem for): o km de uma leitura parte da anterior, mesmo que seja
+               de outra pessoa. O colaborador só soma e lista as dele — igual ao painel e ao histórico (21/10/2026). */
+            $base = KmRegistro::query()->where('deleted', false)->where('veiculo_id', $v->id);
             $antes = (clone $base)->where('data', '<', $ini)->orderByDesc('data')->orderByDesc('odometro')->first();
             $doAno = (clone $base)->whereBetween('data', [$ini, $fim])->orderBy('data')->orderBy('odometro')->get();
-            if (! $doAno->count() && ! $v->ativo) {
+            $meus = fn (KmRegistro $k) => $u->veTudo() || $k->user_id === $u->id;
+            $visiveis = $doAno->filter($meus)->values();
+            if (! $visiveis->count() && ! $v->ativo) {
                 continue;
             }
             $meses = array_fill(1, 12, 0);
@@ -256,6 +281,9 @@ class FrotaController extends Controller
             foreach ($doAno as $k) {
                 $delta = $prev === null ? 0 : max(0, $k->odometro - $prev);
                 $prev = $k->odometro;
+                if (! $meus($k)) {
+                    continue;
+                }
                 $m = (int) $k->data->format('n');
                 $meses[$m] += $delta;
                 $mesesTotal[$m] += $delta;
@@ -273,8 +301,8 @@ class FrotaController extends Controller
             $porVeiculo[] = [
                 'veiculo_id' => $v->id, 'placa' => $v->placa, 'modelo' => $v->modelo, 'ativo' => $v->ativo,
                 'responsavel_nome' => $v->responsavel?->nome,
-                'meses' => array_values($meses), 'total' => array_sum($meses), 'leituras' => $doAno->count(),
-                'odometro_inicial' => $antes?->odometro ?? $doAno->first()?->odometro, 'odometro_final' => $doAno->last()?->odometro,
+                'meses' => array_values($meses), 'total' => array_sum($meses), 'leituras' => $visiveis->count(),
+                'odometro_inicial' => $antes?->odometro ?? $visiveis->first()?->odometro, 'odometro_final' => $visiveis->last()?->odometro,
             ];
         }
         $motoristas = array_values(array_map(fn ($m) => ['user_id' => $m['user_id'], 'nome' => $m['nome'], 'meses' => array_values($m['meses']), 'total' => $m['total'], 'leituras' => $m['leituras']], $porMotorista));

@@ -330,6 +330,96 @@ class HistoricoKmTest extends TestCase
         $this->assertSame([300, 200], array_column($j['veiculos'], 'km'), 'só o que ele rodou em cada veículo');
     }
 
+    public function test_planilha_anual_do_colaborador_parte_da_leitura_do_veiculo_como_o_painel(): void
+    {
+        Sanctum::actingAs($this->ana);
+        $anual = $this->getJson('/api/frota/anual?ano=2026')->assertOk()->json();
+        $painel = $this->getJson('/api/frota/painel?modo=mes&ref=2026-10-21')->assertOk()->json();
+        $this->assertSame(600, $anual['meses_total'][9], 'o km de 21/10 em V1 parte da leitura da Bia (1300), não da da própria Ana');
+        $this->assertSame($painel['total'], $anual['meses_total'][9]);
+        $this->assertSame(['Ana'], array_column($anual['motoristas'], 'nome'));
+        $this->assertSame([5350, 1500, 5300, 1100, 1000], array_column($anual['leituras'], 'odometro'));
+
+        Sanctum::actingAs($this->bia);
+        $this->assertSame(250, $this->getJson('/api/frota/anual?ano=2026')->assertOk()->json('meses_total.9'), '80 + 120 + 0 + 50');
+
+        Sanctum::actingAs($this->gestor);
+        $g = $this->getJson('/api/frota/anual?ano=2026')->assertOk()->json();
+        $this->assertSame(850, $g['meses_total'][9]);
+        $this->assertEqualsCanonicalizing(['Ana', 'Bia'], array_column($g['motoristas'], 'nome'));
+    }
+
+    public function test_so_uuid_vira_id_de_registro_e_de_veiculo(): void
+    {
+        /* o id aparece em atributos HTML no app: id com aspas guardado aqui viraria script na tela do gestor */
+        Sanctum::actingAs($this->ana);
+        $this->putJson("/api/km/x');alert(1);('", ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600])->assertStatus(422);
+        $this->putJson('/api/km/abc', ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600])->assertStatus(422);
+        $this->assertSame(0, KmRegistro::where('odometro', 1600)->count());
+
+        Sanctum::actingAs($this->gestor);
+        $this->putJson('/api/veiculos/não-é-uuid', ['placa' => 'ZZZ9Z99', 'modelo' => 'Teste'])->assertStatus(422);
+        $this->putJson('/api/veiculos/'.Str::uuid(), ['placa' => 'ZZZ9Z99', 'modelo' => 'Teste'])->assertOk();
+    }
+
+    public function test_data_no_futuro_e_recusada_ou_trazida_para_hoje(): void
+    {
+        Sanctum::actingAs($this->ana);
+        $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-25', 'odometro' => 1600])->assertStatus(422);
+        $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2999-01-01', 'odometro' => 9999999])->assertStatus(422);
+
+        $perto = $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-22', 'odometro' => 1600])->assertOk()->json();
+        $this->assertSame('2026-10-21', $perto['data'], 'até 2 dias à frente é relógio adiantado: vira hoje');
+
+        /* a edição também não leva a leitura para o futuro */
+        $k = $this->registroDaAna();
+        $this->putJson('/api/km/'.$k->id, ['veiculo_id' => $this->v1->id, 'data' => '2999-01-01', 'odometro' => 1500])->assertStatus(422);
+    }
+
+    public function test_leitura_futura_ja_gravada_nao_vira_a_ultima_leitura_do_veiculo(): void
+    {
+        $this->leitura($this->v1, $this->ana, '2999-01-01', 9999999);       // registro antigo, de antes da regra
+        Sanctum::actingAs($this->bia);
+        $v = collect($this->getJson('/api/veiculos')->assertOk()->json())->keyBy('placa');
+        $this->assertSame(1500, $v['ABC1D23']['ultimo_odometro']);
+        $this->assertSame('2026-10-21', $v['ABC1D23']['ultima_data']);
+    }
+
+    public function test_contexto_do_mes_acompanha_o_inicio_do_periodo_mostrado(): void
+    {
+        $v3 = $this->veiculo('MNO5P67', 'Fiorino');
+        foreach ([['2026-10-28', 1000], ['2026-10-29', 1100], ['2026-11-03', 1300]] as [$data, $odo]) {
+            $this->leitura($v3, $this->ana, $data, $odo);
+        }
+        Sanctum::actingAs($this->ana);
+        /* semana de 26/10 a 01/11: o domingo (ref) é novembro, mas a semana começa em outubro e a tela rotula "outubro" */
+        $j = $this->getJson('/api/frota/painel?modo=semana&ref=2026-11-01')->assertOk()->json();
+        $this->assertSame('2026-10-01', $j['contexto']['mes']['ini']);
+        $this->assertSame(700, $j['contexto']['mes']['km'], 'só outubro: 600 + os 100 do Fiorino em 29/10');
+    }
+
+    public function test_veiculos_que_rodaram_so_conta_ativo(): void
+    {
+        $this->v2->update(['ativo' => false]);          // a Hilux rodou na semana (300 km), mas está inativa
+        Sanctum::actingAs($this->gestor);
+        $j = $this->getJson('/api/frota/painel?modo=semana&ref=2026-10-21')->assertOk()->json();
+        $this->assertSame(1, $j['veiculos_ativos']);
+        $this->assertSame(1, $j['veiculos_rodaram'], 'só a Strada, que está ativa — nunca "2 de 1"');
+        $this->assertSame(700, $j['total'], 'o km do veículo inativo continua no total');
+    }
+
+    public function test_ultima_leitura_do_painel_e_a_ate_o_fim_do_periodo_mostrado(): void
+    {
+        Sanctum::actingAs($this->gestor);
+        $j = $this->getJson('/api/frota/painel?modo=semana&ref=2026-10-14')->assertOk()->json();      // semana de 12 a 18/10
+        $v = collect($j['veiculos'])->keyBy('placa');
+        $this->assertSame(1100, $v['ABC1D23']['ultimo_odometro'], 'não 1500, que é de 21/10, depois da semana');
+        $this->assertSame('2026-10-14', $v['ABC1D23']['ultima_data']);
+        $this->assertSame(5050, $v['QRS4T56']['ultimo_odometro']);
+        $pessoas = collect($j['colaboradores'])->keyBy('nome');
+        $this->assertSame('2026-10-14', $pessoas['Ana']['ultima_data']);
+    }
+
     public function test_modo_invalido_e_recusado(): void
     {
         Sanctum::actingAs($this->gestor);

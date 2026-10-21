@@ -35,6 +35,11 @@ window.Frota = (() => {
   let _pendTodos = [];    // fila do aparelho (só da conta logada), em qualquer mês, no formato dos registros
 
   const kmFmt = n => Number(n || 0).toLocaleString('pt-BR');
+  /* texto seguro em ATRIBUTO HTML (o esc do app só troca & < >). Id de veículo/registro nunca vai para dentro de código de
+     onclick: vai em data-id e o handler lê this.dataset.id. */
+  /* "hoje" em Brasília segundo o servidor (o relógio do aparelho pode estar adiantado) */
+  const hojeDoApp = () => (sb?.hojeDoServidor ? sb.hojeDoServidor() : FusoBR.hojeISO());
+  const _at = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const KEY_CACHE = () => `frota_cache_${filAno}_${filMes}`;
   const KEY_ANUAL = () => `frota_anual_${filAno}`;
   const KEY_FILA = 'frota_fila';
@@ -206,6 +211,7 @@ window.Frota = (() => {
   async function _montarAba() {
     const c = $('fq-corpo');
     if (!c) return;
+    window.FrotaPainel?.cancelar?.();               // resposta de outra aba que ainda esteja vindo não pinta por cima desta
     if (_aba === 'vei') { c.innerHTML = _veiculosHTML(); return; }
     if (!window.FrotaPainel) { c.innerHTML = '<div class="ini-dica">Atualize o app (feche e abra de novo) para ver o painel e o histórico.</div>'; return; }
     return _aba === 'hist' ? window.FrotaPainel.historico(c) : window.FrotaPainel.painel(c);
@@ -229,8 +235,8 @@ window.Frota = (() => {
           </div>
           ${v.ultimo_odometro != null ? `<div class="nota-body"><div class="nota-obs">Última leitura: <b>${kmFmt(v.ultimo_odometro)} km</b> em ${fmtData(v.ultima_data)}</div></div>` : ''}
           <div class="nota-foot">
-            <button class="btn btn-outline btn-sm" onclick="FrotaPainel.verHistorico({veiculo_id:'${esc(v.id)}'})">🕓 Histórico</button>
-            <div class="nota-actions"><button class="btn-icon-sm" onclick="Frota.abrirFormVeiculo('${v.id}')" title="Editar" ${_offline ? 'disabled' : ''}>✏️</button></div>
+            <button class="btn btn-outline btn-sm" data-id="${_at(v.id)}" onclick="FrotaPainel.verHistorico({veiculo_id:this.dataset.id})">🕓 Histórico</button>
+            <div class="nota-actions"><button class="btn-icon-sm" data-id="${_at(v.id)}" onclick="Frota.abrirFormVeiculo(this.dataset.id)" title="Editar" ${_offline ? 'disabled' : ''}>✏️</button></div>
           </div>
         </div>`).join('')}
       </div>`;
@@ -249,12 +255,22 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  /* só move o mês das planilhas (CSV do mês / Excel do ano); o painel e o histórico têm o período deles */
-  function mudarMes(delta) {
+  /* Só move o mês das planilhas (CSV do mês / Excel do ano); o painel e o histórico têm o período deles. Não refaz a
+     tela (jogaria a rolagem para o topo, e o quadro fica no fim do Painel): troca o ano da planilha, se mudou, e
+     repinta só o quadro. */
+  async function mudarMes(delta) {
+    const anoAntes = filAno;
     filMes += delta;
     if (filMes > 12) { filMes = 1; filAno++; }
     if (filMes < 1) { filMes = 12; filAno--; }
-    render();
+    window.FrotaPainel?.repintarPlanilhas?.();
+    if (filAno !== anoAntes) {
+      try {
+        if (!sb || !navigator.onLine) throw new Error('offline');
+        anual = await sb.frota.anual(filAno);
+        try { await DB.setMeta(KEY_ANUAL(), anual); } catch (_) {}
+      } catch (_) { anual = await DB.getMeta(KEY_ANUAL()).catch(() => null); }
+    }
   }
 
   async function reenviar() { setLoading(true); try { await subirFila(); } finally { setLoading(false); } render(); }
@@ -268,11 +284,16 @@ window.Frota = (() => {
     _fotoKm = null; _odoLido = null; _avisoOdo('');
     $('km-id').value = r?.id || '';
     const sel = $('km-veiculo');
-    sel.innerHTML = ativos.map(v => `<option value="${v.id}">${esc(v.placa)}${v.modelo ? ' · ' + esc(v.modelo) : ''}</option>`).join('');
+    /* corrigir leitura de um veículo hoje inativo: o veículo dela tem que estar na lista, senão o campo fica em branco
+       e o Salvar trocaria o veículo da leitura sem querer */
+    const lista = [...ativos];
+    if (r && !lista.some(v => v.id === r.veiculo_id)) lista.push(veiculos.find(v => v.id === r.veiculo_id) || { id: r.veiculo_id, placa: r.placa || '?', modelo: r.modelo });
+    sel.innerHTML = lista.map(v => `<option value="${_at(v.id)}">${esc(v.placa)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ativo === false || !ativos.includes(v) ? ' (inativo)' : ''}</option>`).join('');
+    $('km-data').max = hojeDoApp();                 // a leitura registra algo que já aconteceu
     const meuUltimo = registros.find(x => x.user_id === user?.id);
     const meu = ativos.find(v => v.responsavel_id === user?.id);
     sel.value = r?.veiculo_id || meuUltimo?.veiculo_id || meu?.id || ativos[0].id;
-    $('km-data').value = r?.data || FusoBR.hojeISO();
+    $('km-data').value = r?.data || hojeDoApp();
     $('km-odometro').value = r?.odometro ?? '';
     $('km-obs').value = r?.observacao || '';
     $('km-foto-nome').textContent = r?.foto_path || r?._foto ? '📷 foto já guardada — escolha outra para trocar' : '';
@@ -283,15 +304,27 @@ window.Frota = (() => {
   }
   function fecharForm() { $('km-overlay').style.display = 'none'; }
 
-  /* A última leitura do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
-     tela (mês carregado e fila do aparelho). Vale a mais recente; ao editar, a própria leitura não conta. */
+  /* A leitura de referência do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
+     tela (mês carregado e fila do aparelho); vale a mais recente. Ao EDITAR, a referência é a leitura ANTERIOR à que está
+     sendo corrigida — nunca ela mesma, nem as que vieram depois dela. */
   function _ultimaLeitura() {
     const vid = $('km-veiculo').value, idAtual = $('km-id').value;
     const v = veiculos.find(x => x.id === vid);
     const editando = idAtual ? _reg(idAtual) : null;
+    const mesmaLeitura = !!editando && editando.veiculo_id === vid;     // se trocou de veículo no formulário, é como registrar
+    if (mesmaLeitura) {
+      /* o histórico já sabe de onde a leitura partiu (o servidor calcula sobre o veículo inteiro) */
+      const h = window.FrotaPainel?.registro?.(idAtual);
+      if (h && h.anterior_odometro != null) return { odo: h.anterior_odometro, dt: h.anterior_data };
+      if (h && h.anterior_odometro == null) return { odo: null, dt: null };      // é mesmo a primeira do veículo
+    }
     const c = [];
-    if (v?.ultimo_odometro != null && !(editando && editando.odometro === v.ultimo_odometro && editando.data === v.ultima_data)) c.push({ odo: v.ultimo_odometro, dt: v.ultima_data });
-    [...registros, ..._pendTodos].forEach(r => { if (r.veiculo_id === vid && r.id !== idAtual) c.push({ odo: r.odometro, dt: r.data }); });
+    if (v?.ultimo_odometro != null && !mesmaLeitura) c.push({ odo: v.ultimo_odometro, dt: v.ultima_data });
+    [...registros, ..._pendTodos].forEach(r => {
+      if (r.veiculo_id !== vid || r.id === idAtual) return;
+      if (mesmaLeitura && (r.data > editando.data || (r.data === editando.data && r.odometro >= editando.odometro))) return;   // só as anteriores
+      c.push({ odo: r.odometro, dt: r.data });
+    });
     /* cópia guardada antes do servidor informar a última leitura de cada veículo: o resumo do mês faz esse papel */
     const res = resumo?.veiculos?.find(x => x.veiculo_id === vid);
     if (v && v.ultimo_odometro === undefined && res?.ultimo_odometro != null) c.push({ odo: res.ultimo_odometro, dt: res.ultima_data });
@@ -382,6 +415,7 @@ window.Frota = (() => {
       observacao: $('km-obs').value.trim() || null,
     };
     if (!payload.veiculo_id || !payload.data || !Number.isFinite(payload.odometro)) { toast('Veículo, data e odômetro são obrigatórios', 'err'); return; }
+    if (payload.data > hojeDoApp()) { toast('A data da leitura não pode ser depois de hoje', 'err'); return; }
     /* A hora em que a leitura foi feita (relógio do aparelho acertado pelo servidor) acompanha o registro novo — é ela
        que o histórico mostra, mesmo que a leitura só suba horas depois, quando voltar o sinal. Ao editar, vale a original. */
     const existente = $('km-id').value ? _reg($('km-id').value) : null;
@@ -431,8 +465,10 @@ window.Frota = (() => {
       /* se era um item da fila (edição de pendente), tira da fila */
       const f = await _fila(); if (f.some(x => x.id === id)) await _salvarFila(f.filter(x => x.id !== id));
       fecharForm();
-      toast('KM registrado ✅');
-      await render();
+      /* corrigir leitura que já estava no servidor: atualiza no lugar (rolagem e páginas do histórico ficam); registro novo ou
+         item da fila mexe nos avisos do alto da tela, então refaz tudo */
+      if (existente && !existente._pendente) { toast('KM atualizado ✅'); await _atualizarLeve(); }
+      else { toast('KM registrado ✅'); await render(); }
     } catch (e) {
       toast(e.message || 'Não foi possível salvar', 'err');
     } finally { setLoading(false); }
@@ -449,9 +485,19 @@ window.Frota = (() => {
     }
     if (!navigator.onLine) { toast('Excluir precisa de internet', 'err'); return; }
     setLoading(true);
-    try { await sb.frota.kmDelete(id); toast('Registro excluído'); await render(); }
+    try { await sb.frota.kmDelete(id); toast('Registro excluído'); await _atualizarLeve(); }
     catch (e) { toast(e.message, 'err'); }
     finally { setLoading(false); }
+  }
+
+  /* Depois de corrigir/excluir um registro do servidor: confere os veículos (última leitura) e refaz só o que está na tela,
+     sem "Carregando frota…", sem voltar ao topo e sem perder as páginas já carregadas do histórico. */
+  async function _atualizarLeve() {
+    try {
+      const v = await sb.frota.veiculos(_ehGestorOuAdmin());
+      if (v) { veiculos = v; try { await DB.setMeta('frota_veiculos', veiculos); } catch (_) {} }
+    } catch (_) { /* sem a lista nova, a anterior serve */ }
+    await window.FrotaPainel?.atualizar?.();
   }
 
   async function verFoto(id) {
@@ -475,7 +521,7 @@ window.Frota = (() => {
     $('vei-modelo').value = v?.modelo || '';
     const sel = $('vei-resp');
     const pessoas = Object.values(window.equipePorId || {}).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
-    sel.innerHTML = '<option value="">— sem responsável fixo —</option>' + pessoas.map(p => `<option value="${p.id}">${esc(p.nome || p.email)}</option>`).join('');
+    sel.innerHTML = '<option value="">— sem responsável fixo —</option>' + pessoas.map(p => `<option value="${_at(p.id)}">${esc(p.nome || p.email)}</option>`).join('');
     sel.value = v?.responsavel_id || '';
     $('vei-ativo').checked = v ? v.ativo !== false : true;
     $('vei-titulo').textContent = v ? 'Editar veículo' : 'Novo veículo';
@@ -498,7 +544,7 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, trocarAba, mudarMes, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
+  return { render, trocarAba, abaAtiva: () => _aba, mudarMes, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
            abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
            exportarExcel, exportarCSV, reenviar, subirFila,
            pendentes: () => _pendTodos };
