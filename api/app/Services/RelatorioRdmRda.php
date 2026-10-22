@@ -158,6 +158,8 @@ class RelatorioRdmRda
         /* 15/10/2026 (pedido do cliente): linhas em branco ficam ocultas — cada mês só mostra as linhas usadas. */
         foreach ($blocosRdm as $m => [$ini, $tot]) {
             $usadas = max(0, ...array_values(array_map(fn ($r) => $r - ($ini + 1), $prox[$m] ?? [$ini + 1])));
+            /* 21/10/2026: o modelo traz as linhas de dados do R.D.M. ocultas (todos os meses menos setembro): as usadas precisam reaparecer */
+            $this->mostrarLinhas($rdm, $ini + 1, $ini + $usadas);
             $this->ocultarLinhas($rdm, $ini + 1 + $usadas, $tot - 1);
         }
         foreach ($blocosRda as $m => [$ini, $tot]) {
@@ -279,6 +281,13 @@ class RelatorioRdmRda
     {
         for ($r = $r1; $r <= $r2; $r++) {
             $ws->getRowDimension($r)->setVisible(false);
+        }
+    }
+
+    private function mostrarLinhas(Worksheet $ws, int $r1, int $r2): void
+    {
+        for ($r = $r1; $r <= $r2; $r++) {
+            $ws->getRowDimension($r)->setVisible(true);
         }
     }
 

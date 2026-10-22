@@ -158,6 +158,35 @@ class RelatorioRdmRdaAmostraTest extends TestCase
         $ss->disconnectWorksheets();
     }
 
+    /**
+     * 21/10/2026 — o modelo PLANILHA_RDM_RDA.xlsx traz as linhas de dados do R.D.M. OCULTAS em todos os meses menos setembro
+     * (o Cleiton o deixou compacto). O gerador só ocultava as linhas sobrando e nunca reexibia as usadas: uma nota de RDM de
+     * outubro caía numa linha oculta e "não estava na planilha". Toda linha com dado tem de estar visível.
+     */
+    public function test_nota_de_rdm_cai_em_linha_visivel_em_qualquer_mes(): void
+    {
+        $c = $this->colaborador();
+        $meses = [1 => 6, 2 => 40, 3 => 87, 10 => 416, 12 => 510];   // mês => primeira linha de dados do bloco no modelo
+        foreach (array_keys($meses) as $mes) {
+            foreach (['Abastecimento', 'Hospedagem', 'Outros'] as $cat) {
+                (new Nota([
+                    'id' => (string) Str::uuid(), 'user_id' => $c->id, 'tipo' => 'RDM', 'subtipo' => $cat, 'valor' => 24.95,
+                    'data' => sprintf('%d-%02d-14', self::ANO, $mes), 'mes' => $mes, 'ano' => self::ANO,
+                    'razao_social' => '', 'cnpj' => null, 'pagamento' => 'carteira', 'deleted' => false,
+                ]))->save();
+            }
+        }
+        $ss = app(RelatorioRdmRda::class)->gerar($c, self::ANO);
+        $ws = $ss->getSheetByName('R.D.M.');
+
+        foreach ($meses as $mes => $primeira) {
+            $this->assertEquals(24.95, $ws->getCell([10, $primeira])->getValue(), "mês $mes: a nota não está onde se espera");
+            $this->assertTrue($ws->getRowDimension($primeira)->getVisible(), "mês $mes: a linha $primeira tem nota e está oculta");
+            $this->assertFalse($ws->getRowDimension($primeira + 1)->getVisible(), "mês $mes: a linha seguinte está vazia e continua oculta");
+        }
+        $ss->disconnectWorksheets();
+    }
+
     public function test_lancamento_a_mais_que_as_linhas_do_modelo_cria_linhas(): void
     {
         $c = $this->colaborador();
