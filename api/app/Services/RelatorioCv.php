@@ -320,7 +320,10 @@ class RelatorioCv
             $mCat[$m] = array_fill_keys(array_keys($cats), 0.0);
             $recMes[$m] = 0.0;
         }
+        /* 22/10/2026: sem as notas de Faturamento (pagamento=empresa), como nas abas de cada um e nos outros relatórios —
+           a empresa pagou direto, não é gasto do colaborador. Antes entravam aqui e o Saldo do RESUMO saía negativo à toa. */
         Nota::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)
+            ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->select('user_id', 'tipo', 'subtipo', 'valor', 'mes')->cursor()->each(function (Nota $n) use (&$gCat, &$gMes, &$mCat) {
                 $m = (int) $n->mes;
                 if ($m < 1 || $m > 12) {

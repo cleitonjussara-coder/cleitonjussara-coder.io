@@ -491,6 +491,7 @@ window.Gestor = (() => {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
             <button class="btn btn-sm btn-outline" onclick="Gestor.verNotasFaturamento(this, ${ano}, ${mes})">👁 Ver notas</button>
             <button class="btn btn-sm btn-outline" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
+            <button class="btn btn-sm btn-outline" onclick="baixarPlanilhaFaturamento()">📊 Planilha do ano (Excel)</button>
           </div>
           <div class="fat-notas" style="display:none;margin-top:8px"></div>
         </div>`;

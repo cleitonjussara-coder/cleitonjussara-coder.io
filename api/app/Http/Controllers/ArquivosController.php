@@ -7,6 +7,7 @@ use App\Models\Nota;
 use App\Services\FotoStorage;
 use App\Services\PastaModelo;
 use App\Services\RelatorioCv;
+use App\Services\RelatorioFaturamentoXlsx;
 use App\Services\RelatorioRdmRda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,7 +60,34 @@ class ArquivosController extends Controller
             ];
         }
 
-        return response()->json(['ano' => $ano, 'colaboradores' => $out]);
+        /* Pasta "Faturamento": tudo que a empresa pagou direto (pagamento='empresa'), de qualquer dono ou sem dono.
+           Só quem vê tudo; é uma visão a mais — a nota continua também na pasta do colaborador. */
+        $fat = null;
+        if ($u->veTudo()) {
+            $meses = [];
+            foreach (Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano)
+                ->selectRaw("mes, count(*) as qtd, sum(valor) as total, sum(case when foto_path is not null and foto_path != '' then 1 else 0 end) as com_anexo")
+                ->groupBy('mes')->orderBy('mes')->get() as $l) {
+                $meses[] = ['mes' => (int) $l->mes, 'qtd' => (int) $l->qtd, 'total' => round((float) $l->total, 2), 'com_anexo' => (int) $l->com_anexo];
+            }
+            $fat = [
+                'qtd' => array_sum(array_column($meses, 'qtd')), 'total' => round(array_sum(array_column($meses, 'total')), 2),
+                'com_anexo' => array_sum(array_column($meses, 'com_anexo')), 'meses' => $meses,
+            ];
+        }
+
+        return response()->json(['ano' => $ano, 'colaboradores' => $out, 'faturamento' => $fat]);
+    }
+
+    /** Notas de Faturamento do período (todas as pessoas), mais antigas primeiro. */
+    private function notasFaturamento(int $ano, ?int $mes)
+    {
+        $q = Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano);
+        if ($mes) {
+            $q->where('mes', $mes);
+        }
+
+        return $q->orderBy('data')->orderBy('created_at')->get();
     }
 
     public function notas(Request $r): JsonResponse
@@ -69,15 +97,23 @@ class ArquivosController extends Controller
             'user_id' => ['nullable', 'string', 'size:36'],
             'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'faturamento' => ['nullable', 'boolean'],
         ]);
-        $alvo = $this->alvo($u, $d['user_id'] ?? null);
         $ano = (int) ($d['ano'] ?? now()->year);
 
-        $q = Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano);
-        if (! empty($d['mes'])) {
-            $q->where('mes', (int) $d['mes']);
+        $fat = (bool) ($d['faturamento'] ?? false);
+        if ($fat) {
+            abort_unless($u->veTudo(), 403, 'Só gestor, admin ou contabilidade abrem o Faturamento');
+            $alvo = $u;
+            $notas = $this->notasFaturamento($ano, ! empty($d['mes']) ? (int) $d['mes'] : null);
+        } else {
+            $alvo = $this->alvo($u, $d['user_id'] ?? null);
+            $q = Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano);
+            if (! empty($d['mes'])) {
+                $q->where('mes', (int) $d['mes']);
+            }
+            $notas = $q->orderBy('data')->orderBy('created_at')->get();
         }
-        $notas = $q->orderBy('data')->orderBy('created_at')->get();
 
         $out = [];
         foreach ($notas as $n) {
@@ -91,8 +127,12 @@ class ArquivosController extends Controller
                 'foto_path' => $temArq ? $n->foto_path : null, 'ext' => $ext,
                 'mini_url' => $temArq && in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $this->urls->urlMini($n->foto_path) : null,
                 'arquivo' => $temArq ? PastaModelo::nomeArquivo($n, $ext) : null,
-                'pasta' => PastaModelo::pastaDaNota($alvo, $n),
+                'pasta' => $fat ? PastaModelo::pastaSob('Faturamento', $n) : PastaModelo::pastaDaNota($alvo, $n),
             ];
+        }
+
+        if ($fat) {
+            return response()->json(['faturamento' => true, 'nome' => 'Faturamento', 'ano' => $ano, 'mes' => $d['mes'] ?? null, 'notas' => $out]);
         }
 
         return response()->json(['user_id' => $alvo->id, 'nome' => $alvo->nome, 'ano' => $ano, 'mes' => $d['mes'] ?? null, 'notas' => $out]);
@@ -111,8 +151,11 @@ class ArquivosController extends Controller
             'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
             'planilha' => ['nullable', 'boolean'],
+            'faturamento' => ['nullable', 'boolean'],
         ]);
-        $alvo = $this->alvo($u, $d['user_id'] ?? null);
+        $fat = (bool) ($d['faturamento'] ?? false);
+        abort_if($fat && ! $u->veTudo(), 403, 'Só gestor, admin ou contabilidade baixam o Faturamento');
+        $alvo = $fat ? $u : $this->alvo($u, $d['user_id'] ?? null);
         $ano = (int) ($d['ano'] ?? now()->year);
         $mes = isset($d['mes']) ? (int) $d['mes'] : null;
         $comPlanilha = (bool) ($d['planilha'] ?? true);
@@ -120,14 +163,18 @@ class ArquivosController extends Controller
         @ini_set('memory_limit', '512M');
         @set_time_limit(170);
 
-        $q = Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano);
-        if ($mes) {
-            $q->where('mes', $mes);
+        if ($fat) {
+            $notas = $this->notasFaturamento($ano, $mes);
+        } else {
+            $q = Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano);
+            if ($mes) {
+                $q->where('mes', $mes);
+            }
+            $notas = $q->orderBy('data')->get();
         }
-        $notas = $q->orderBy('data')->get();
         abort_if($notas->isEmpty(), 404, 'Nenhuma nota nesse período');
 
-        $tmp = tempnam(sys_get_temp_dir(), 'arq_').'.zip';
+        $tmp = $this->temporario('arq_', 'zip');
         $zip = new ZipArchive;
         abort_unless($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
 
@@ -141,17 +188,12 @@ class ArquivosController extends Controller
                 continue;
             }
             $ext = strtolower(pathinfo($n->foto_path, PATHINFO_EXTENSION));
-            $destino = PastaModelo::pastaDaNota($alvo, $n).'/'.PastaModelo::nomeArquivo($n, $ext);
-            $base = $destino;
-            for ($i = 2; isset($usados[$destino]); $i++) {   // duas notas iguais no mesmo dia → " (2)"
-                $destino = preg_replace('/\.([a-z0-9]+)$/', " ($i).$1", $base);
-            }
-            $usados[$destino] = true;
+            $destino = $this->nomeLivre(($fat ? PastaModelo::pastaSob('Faturamento', $n) : PastaModelo::pastaDaNota($alvo, $n)).'/'.PastaModelo::nomeArquivo($n, $ext), $usados);
             $zip->addFile($raiz.'/'.$n->foto_path, $destino);
             $zip->setCompressionName($destino, ZipArchive::CM_STORE);   // jpg não comprime; STORE é instantâneo
         }
 
-        $pastaColab = PastaModelo::nomeColaborador($alvo).'/'.$ano;
+        $pastaColab = ($fat ? 'Faturamento' : PastaModelo::nomeColaborador($alvo)).'/'.$ano;
         if ($semAnexo) {
             $txt = 'Notas sem anexo no servidor ('.count($semAnexo)."):\n";
             foreach ($semAnexo as $n) {
@@ -166,11 +208,18 @@ class ArquivosController extends Controller
                 /* 14/10/2026: cada um recebe a planilha do SEU regime. Antes era sempre a de CV: para quem é RDM/RDA as
                    abas CV ALELO e CV REEMBOLSO ficavam com as mesmas notas ("tudo junto") e a planilha dele ficava
                    igual à de quem é CV. */
-                $ehCv = $alvo->usaCartao();
-                $svc = $ehCv ? app(RelatorioCv::class) : app(RelatorioRdmRda::class);
-                $rotulo = $ehCv ? 'CV' : 'RDM_RDA';
-                $xlsx = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
-                $ss = $svc->gerar($alvo, $ano);
+                /* 22/10/2026: a pasta Faturamento leva a Planilha de Faturamento do ano (RelatorioFaturamentoXlsx). */
+                $xlsx = $this->temporario('cv_', 'xlsx');
+                if ($fat) {
+                    $svc = app(RelatorioFaturamentoXlsx::class);
+                    $rotulo = 'Faturamento';
+                    $ss = $svc->gerar($ano, $u);
+                } else {
+                    $ehCv = $alvo->usaCartao();
+                    $svc = $ehCv ? app(RelatorioCv::class) : app(RelatorioRdmRda::class);
+                    $rotulo = $ehCv ? 'CV' : 'RDM_RDA';
+                    $ss = $svc->gerar($alvo, $ano);
+                }
                 $svc->xlsx($ss, $xlsx);
                 $ss->disconnectWorksheets();
                 $zip->addFile($xlsx, "{$pastaColab}/Planilha_{$rotulo}_{$ano}.xlsx");
@@ -184,7 +233,7 @@ class ArquivosController extends Controller
             @unlink($xlsx);
         }
 
-        $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', PastaModelo::nomeColaborador($alvo));
+        $nome = $fat ? 'Faturamento' : preg_replace('/[^A-Za-z0-9_-]+/', '_', PastaModelo::nomeColaborador($alvo));
         $periodo = $mes ? sprintf('%d-%02d', $ano, $mes) : (string) $ano;
 
         return response()->download($tmp, "Notas_{$nome}_{$periodo}.zip", ['Content-Type' => 'application/zip'])
@@ -220,7 +269,7 @@ class ArquivosController extends Controller
         $porColab = $q->orderBy('data')->get()->groupBy('user_id');
         abort_if($porColab->isEmpty(), 404, 'Nenhuma nota nesse período');
 
-        $tmp = tempnam(sys_get_temp_dir(), 'arq_').'.zip';
+        $tmp = $this->temporario('arq_', 'zip');
         $zip = new ZipArchive;
         abort_unless($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
 
@@ -240,12 +289,7 @@ class ArquivosController extends Controller
                     continue;
                 }
                 $ext = strtolower(pathinfo($n->foto_path, PATHINFO_EXTENSION));
-                $destino = PastaModelo::pastaDaNota($c, $n).'/'.PastaModelo::nomeArquivo($n, $ext);
-                $base = $destino;
-                for ($i = 2; isset($usados[$destino]); $i++) {
-                    $destino = preg_replace('/\.([a-z0-9]+)$/', " ($i).$1", $base);
-                }
-                $usados[$destino] = true;
+                $destino = $this->nomeLivre(PastaModelo::pastaDaNota($c, $n).'/'.PastaModelo::nomeArquivo($n, $ext), $usados);
                 $zip->addFile($raiz.'/'.$n->foto_path, $destino);
                 $zip->setCompressionName($destino, ZipArchive::CM_STORE);
             }
@@ -266,6 +310,22 @@ class ArquivosController extends Controller
 
         return response()->download($tmp, "Notas_Equipe_{$periodo}.zip", ['Content-Type' => 'application/zip'])
             ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Caminho ainda não usado no ZIP: duas notas iguais no mesmo dia → " (2)". A comparação ignora maiúsculas
+     * (22/10/2026): "HOTEL IPE" e "Hotel Ipe" são o mesmo arquivo no Windows, e ao extrair um sobrescrevia o outro —
+     * na pasta Faturamento isso é comum (pessoas diferentes, mesmo hotel, mesmo dia).
+     */
+    private function nomeLivre(string $destino, array &$usados): string
+    {
+        $base = $destino;
+        for ($i = 2; isset($usados[mb_strtolower($destino)]); $i++) {
+            $destino = preg_replace('/\.([a-z0-9]+)$/', " ($i).$1", $base);
+        }
+        $usados[mb_strtolower($destino)] = true;
+
+        return $destino;
     }
 
     private function alvo(Colaborador $u, ?string $userId): Colaborador

@@ -33,7 +33,7 @@ class BackupController extends Controller
     public function completo(Request $r): BinaryFileResponse
     {
         abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin baixa o backup');
-        $tmp = tempnam(sys_get_temp_dir(), 'bk_').'.zip';
+        $tmp = $this->temporario('bk_', 'zip');
         $this->completo->gerar($tmp);
 
         return response()->download($tmp, 'petermann-completo-'.now(BackupCompleto::TZ)->format('Y-m-d').'.zip', ['Content-Type' => 'application/zip'])

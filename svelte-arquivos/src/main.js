@@ -20,9 +20,14 @@ let dep = null;
 
 let ano = null;
 let colab = null;
+const FAT = { faturamento: true, nome: 'Faturamento' };   // "colaborador" de mentira: a pasta Faturamento (empresa pagou direto)
 let mes = null;
 let resumo = null;
 let lista = null;
+/* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
+   ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
+   cima da pasta já aberta (22/10/2026). */
+let seq = 0;
 
 const ini = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
 
@@ -46,10 +51,10 @@ function mostrar(nivel, dados) {
     target: elAlvo,
     props: {
       nivel, dados, ano,
-      onMudarAno: mudarAno, onAbrirColab: abrirColab, onAbrirMes: abrirMes,
+      onMudarAno: mudarAno, onAbrirColab: abrirColab, onAbrirFaturamento: abrirFaturamento, onAbrirMes: abrirMes,
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
       onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
-      onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, meses: dep.MESES_LONGO.slice(1),
+      onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
     },
   });
   dep.carregarAvatares?.();
@@ -59,25 +64,30 @@ async function render() {
   if (!elAlvo) return;
   if (!navigator.onLine) { mostrar('offline', null); return; }
   if (!dep.veEquipe() && !colab) colab = { user_id: dep.user.id, nome: dep.user.nome || dep.user.email };
+  const s = ++seq;
   try {
-    if (colab && mes) await renderMes();
-    else if (colab) await renderMeses();
-    else await renderColabs();
+    if (colab && mes) await renderMes(s);
+    else if (colab) await renderMeses(s);
+    else await renderColabs(s);
   } catch (e) {
-    mostrar('erro', { mensagem: e?.message || 'erro' });
+    if (s === seq) mostrar('erro', { mensagem: e?.message || 'erro' });
   }
 }
 
-async function renderColabs() {
+async function renderColabs(s) {
   dep.voltarRodape(null);
   mostrar('carregando', null);
-  resumo = await dep.sb.arquivos.resumo(ano);
+  const r = await dep.sb.arquivos.resumo(ano);
+  if (s !== seq) return;   // outra tela já foi pedida
+  resumo = r;
   const cs = resumo.colaboradores || [];
   const { brl, esc } = dep;
   const totalNotas = cs.reduce((s, c) => s + c.qtd, 0);
   const totalValor = cs.reduce((s, c) => s + c.total, 0);
   const semAnexo = cs.reduce((s, c) => s + (c.qtd - c.com_anexo), 0);
 
+  const f = resumo.faturamento;
+  const faturamento = f ? { sub: f.qtd ? `${f.qtd} nota${f.qtd === 1 ? '' : 's'} · ${brl(f.total)}${f.qtd - f.com_anexo ? ` · <span style="color:#ffd166">${f.qtd - f.com_anexo} sem anexo</span>` : ''}` : `sem notas em ${ano}` } : null;
   const cabecalhoSub = `${totalNotas} nota${totalNotas === 1 ? '' : 's'} em ${ano} · ${brl(totalValor)}${semAnexo ? ` · <b style="color:#ffd166">${semAnexo} sem anexo</b>` : ''}`;
   const colaboradores = cs.map(c => {
     const vazio = !c.qtd;
@@ -90,12 +100,18 @@ async function renderColabs() {
       subHtml: vazio ? `sem notas em ${ano}` : `${c.qtd} nota${c.qtd === 1 ? '' : 's'} · ${brl(c.total)}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`,
     };
   });
-  mostrar('colabs', { cabecalhoSub, colaboradores });
+  mostrar('colabs', { cabecalhoSub, colaboradores, faturamento });
 }
 
-async function renderMeses() {
-  if (!resumo || resumo.ano !== ano) resumo = await dep.sb.arquivos.resumo(ano);
-  const c = (resumo.colaboradores || []).find(x => x.user_id === colab.user_id) || { ...colab, qtd: 0, total: 0, com_anexo: 0, meses: [] };
+async function renderMeses(s) {
+  if (!resumo || resumo.ano !== ano) {
+    const r = await dep.sb.arquivos.resumo(ano);
+    if (s !== seq) return;
+    resumo = r;
+  }
+  const c = colab.faturamento
+    ? { ...FAT, ...(resumo.faturamento || { qtd: 0, total: 0, com_anexo: 0, meses: [] }) }
+    : (resumo.colaboradores || []).find(x => x.user_id === colab.user_id) || { ...colab, qtd: 0, total: 0, com_anexo: 0, meses: [] };
   colab = c;
   dep.voltarRodape(dep.veEquipe() ? 'Arquivos.voltarColabs()' : "switchView('inicio')");
   mostrar('carregando', null);
@@ -119,14 +135,17 @@ async function renderMeses() {
     cabecalhoSub: `${c.qtd} nota${c.qtd === 1 ? '' : 's'} em ${ano} · ${brl(c.total)}`,
     temNotas: !!c.qtd,
     comAnexo: c.com_anexo,
+    ehFaturamento: !!c.faturamento,
     meses,
   });
 }
 
-async function renderMes() {
+async function renderMes(s) {
   dep.voltarRodape('Arquivos.voltarMeses()');
   mostrar('carregando', null);
-  lista = await dep.sb.arquivos.notas(colab.user_id, ano, mes);
+  const l = await dep.sb.arquivos.notas(colab.user_id, ano, mes, colab.faturamento);
+  if (s !== seq) return;
+  lista = l;
   const ns = lista.notas || [];
   const { brl, esc, fmtData } = dep;
   const total = ns.reduce((s, n) => s + (n.valor || 0), 0);
@@ -159,11 +178,13 @@ async function renderMes() {
     cabecalhoSub: `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
     temNotas: !!ns.length,
     comAnexo,
+    mes,   // sem isto o botão do mês baixava o ano inteiro (22/10/2026)
     grupos,
   });
 }
 
 function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; render(); }
+function abrirFaturamento() { colab = FAT; mes = null; render(); }
 function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; render(); }
 function abrirMes(m) { mes = m; render(); }
 function voltarMeses() { mes = null; lista = null; render(); }
@@ -179,7 +200,7 @@ async function baixarZip(m) {
   if (!navigator.onLine) { dep.toast('Precisa de internet', 'err'); return; }
   dep.setLoading(true, m ? `Montando o ZIP de ${dep.MESES_LONGO[m]}…` : `Montando o ZIP de ${ano} (pode levar 1 min)…`);
   try {
-    const blob = await dep.sb.arquivos.zip(colab.user_id, ano, m);
+    const blob = await dep.sb.arquivos.zip(colab.user_id, ano, m, colab.faturamento);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const nome = (colab.pasta || colab.nome || 'colaborador').replace(/[^A-Za-z0-9_-]+/g, '_');
@@ -225,10 +246,23 @@ async function baixarPlanilhas() {
   } finally { dep.setLoading(false); }
 }
 
+/* Planilha própria de Faturamento (22/10/2026): ano inteiro, RESUMO + uma aba por mês — a mesma que vai dentro do ZIP. */
+async function baixarPlanilhaFat() {
+  if (!navigator.onLine) { dep.toast('Precisa de internet', 'err'); return; }
+  dep.setLoading(true, `Gerando a Planilha de Faturamento de ${ano}…`);
+  try {
+    const blob = await dep.sb.relatorio.faturamento(ano, null, 'xlsx');
+    _salvarBlob(blob, `Planilha_Faturamento_${ano}.xlsx`);
+    dep.toast(`Planilha pronta (${(blob.size / 1024 / 1024).toFixed(1)} MB) ✅`);
+  } catch (e) {
+    dep.toast('Não foi possível gerar a planilha: ' + (e.message || 'erro'), 'err');
+  } finally { dep.setLoading(false); }
+}
+
 function reset() { colab = null; mes = null; lista = null; }
 
 /* MESMO NOME do módulo original (window.Arquivos) — substitui o
    arquivos.js de antes, não convive com ele. gestor.js chama
    Arquivos.abrirColab(id) direto; switchView() chama Arquivos.reset() ao
    sair e Arquivos.montar(el, deps) ao entrar (ver app.js). */
-window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset };
+window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset };

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 461;
+const APP_BUILD = 462;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -6411,6 +6411,12 @@ function baixarRelatorioEquipe(ids = []) {   // ids = marcados no seletor da Equ
 function baixarRelatorioFaturamento() {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar o relatório', 'err'); return; }
   return _baixarBlob(sb.relatorio.faturamento(filAno, filMes), `Relatorio_Faturamento_${filAno}-${String(filMes).padStart(2, '0')}.pdf`, 'Gerando o PDF de Faturamento…');
+}
+
+/* Planilha própria de Faturamento (22/10/2026): o ano inteiro, RESUMO + uma aba por mês. */
+function baixarPlanilhaFaturamento() {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar a planilha', 'err'); return; }
+  return _baixarBlob(sb.relatorio.faturamento(filAno, null, 'xlsx'), `Planilha_Faturamento_${filAno}.xlsx`, `Gerando a Planilha de Faturamento de ${filAno}…`);
 }
 
 /* Planilha de C.V. de vários colaboradores (21/09/2026), escolhidos no modal

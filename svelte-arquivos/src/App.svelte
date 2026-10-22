@@ -6,8 +6,8 @@
      não em dado de usuário solto. */
   let {
     nivel, dados, ano,
-    onMudarAno, onAbrirColab, onAbrirMes, onVoltarMeses, onVoltarColabs,
-    onVer, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, meses = [],
+    onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
+    onVer, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
   } = $props();
   let mesEquipe = $state('');
 </script>
@@ -59,6 +59,16 @@
     {#if !dados.colaboradores.length}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhum colaborador.</div>
     {/if}
+    {#if dados.faturamento}
+      <button class="arq-colab" onclick={onAbrirFaturamento}>
+        <div class="avatar">🏢</div>
+        <div class="arq-colab-txt">
+          <div class="arq-colab-nome">Faturamento</div>
+          <div class="arq-colab-sub">{@html dados.faturamento.sub}</div>
+        </div>
+        <span class="arq-seta">›</span>
+      </button>
+    {/if}
     {#each dados.colaboradores as c}
       <button class="arq-colab {c.vazio ? 'arq-vazio' : ''}" onclick={() => onAbrirColab(c.userId)}>
         <div class="avatar" data-foto={c.fotoPath}>{c.iniciais}</div>
@@ -75,7 +85,10 @@
   <div class="db-container">
     {@render cabecalho(dados.cabecalhoTitulo, dados.cabecalhoSub)}
     {#if dados.temNotas}
-      <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(null)}>⬇️ Baixar ZIP do ano {ano} ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + Planilha CV)</button>
+      <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(null)}>⬇️ Baixar ZIP do ano {ano} ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
+      {#if dados.ehFaturamento}
+        <button class="btn btn-outline btn-full" style="min-height:50px;margin-top:8px" onclick={onBaixarPlanilhaFat}>📊 Planilha de Faturamento {ano} (Excel)</button>
+      {/if}
     {/if}
     <div class="arq-meses">
       {#each dados.meses as m}
@@ -93,7 +106,7 @@
   <div class="db-container">
     {@render cabecalho(dados.cabecalhoTitulo, dados.cabecalhoSub)}
     {#if dados.temNotas}
-      <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + Planilha CV)</button>
+      <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
     {:else}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhuma nota neste mês.</div>
     {/if}

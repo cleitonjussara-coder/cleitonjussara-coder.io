@@ -80,8 +80,14 @@ class PastaModelo
     /** Pasta da nota dentro do ZIP (sem o nome do arquivo). */
     public static function pastaDaNota(Colaborador $c, Nota $n): string
     {
+        return self::pastaSob(self::nomeColaborador($c), $n);
+    }
+
+    /** Mesma árvore, com outra raiz — a pasta "Faturamento" não tem dono. */
+    public static function pastaSob(string $raiz, Nota $n): string
+    {
         [$m, $a] = self::mesAno($n);
-        $partes = [self::nomeColaborador($c), $a >= 2000 ? (string) $a : 'sem-ano', ...self::trilhaGrupo($n), self::mesPasta($m)];
+        $partes = [$raiz, $a >= 2000 ? (string) $a : 'sem-ano', ...self::trilhaGrupo($n), self::mesPasta($m)];
 
         return implode('/', $partes);
     }

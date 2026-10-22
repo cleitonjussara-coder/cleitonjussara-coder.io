@@ -440,15 +440,15 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     rdmrda: (ano, userId, formato) => req('GET', '/relatorio/rdmrda', { query: { ano, user_id: userId || undefined, formato: formato || 'xlsx' }, blob: true, timeout: 300_000 }),   // modelo RDM/RDA (21/09/2026)
     equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
     cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
-    faturamento: (ano, mes) => req('GET', '/relatorio/faturamento', { query: { ano, mes }, blob: true, timeout: 120_000 }),   // pago direto pela empresa (26/09/2026)
+    faturamento: (ano, mes, formato) => req('GET', '/relatorio/faturamento', { query: { ano, mes: mes || undefined, formato: formato || undefined }, blob: true, timeout: 120_000 }),   // pago direto pela empresa (26/09/2026); formato 'xlsx' = Planilha de Faturamento do ano (22/10/2026)
   };
 
   /* Arquivos no servidor, no lugar do Drive (19/09/2026). */
   const arquivos = {
     resumo: ano => req('GET', '/arquivos/resumo', { query: { ano } }),
-    notas: (userId, ano, mes) => req('GET', '/arquivos/notas', { query: { user_id: userId || undefined, ano, mes: mes || undefined } }),
+    notas: (userId, ano, mes, fat) => req('GET', '/arquivos/notas', { query: { user_id: userId || undefined, ano, mes: mes || undefined, faturamento: fat ? 1 : undefined } }),
     zipEquipe: (ano, mes) => req('GET', '/arquivos/zip-equipe', { query: { ano, mes: mes || undefined }, blob: true, timeout: 600_000 }),
-    zip: (userId, ano, mes) => req('GET', '/arquivos/zip', { query: { user_id: userId || undefined, ano, mes: mes || undefined }, blob: true, timeout: 300_000 }),
+    zip: (userId, ano, mes, fat) => req('GET', '/arquivos/zip', { query: { user_id: userId || undefined, ano, mes: mes || undefined, faturamento: fat ? 1 : undefined }, blob: true, timeout: 300_000 }),
   };
 
   /* Pedido de justificativa (19/10/2026): o gestor pede pelo Rastreio, o colaborador responde pelo sino.

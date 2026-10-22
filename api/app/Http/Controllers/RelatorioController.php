@@ -41,7 +41,7 @@ class RelatorioController extends Controller
         @set_time_limit(120);
 
         $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($alvo->nome ?: 'colaborador'));
-        $arquivo = tempnam(sys_get_temp_dir(), 'cv_').'.'.$formato;
+        $arquivo = $this->temporario('cv_', $formato);
         if ($formato === 'pdf') {
             app(\App\Services\RelatorioCvPdf::class)->gerar($alvo, $ano, $arquivo);   // HTML enxuto: cabe na página
         } else {
@@ -77,7 +77,7 @@ class RelatorioController extends Controller
         @ini_set('memory_limit', '768M');
         @set_time_limit(180);
         $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($alvo->nome ?: 'colaborador'));
-        $arquivo = tempnam(sys_get_temp_dir(), 'rdm_').'.'.$formato;
+        $arquivo = $this->temporario('rdm_', $formato);
         if ($formato === 'pdf') {
             app(\App\Services\RelatorioRdmRdaPdf::class)->gerar($alvo, $ano, $arquivo);
         } else {
@@ -128,7 +128,7 @@ class RelatorioController extends Controller
         @set_time_limit(900);   // modelo RDM/RDA leva ~20 s por pessoa
 
         if ($modo === 'unico') {
-            $arquivo = tempnam(sys_get_temp_dir(), 'cveq_').'.xlsx';
+            $arquivo = $this->temporario('cveq_', 'xlsx');
             $ss = $this->cv->gerarUnico($colabs, $ano);
             $this->cv->xlsxSemCalculo($ss, $arquivo);
             $ss->disconnectWorksheets();
@@ -138,13 +138,13 @@ class RelatorioController extends Controller
             ])->deleteFileAfterSend(true);
         }
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'cveq_').'.zip';
+        $zipPath = $this->temporario('cveq_', 'zip');
         $zip = new \ZipArchive();
         abort_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
         $temps = [];
         try {
             /* o mesmo RESUMO do Excel único, como arquivo próprio no ZIP */
-            $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
+            $tmp = $this->temporario('cv_', 'xlsx');
             $temps[] = $tmp;
             $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $ss->removeSheetByIndex(0);
@@ -155,7 +155,7 @@ class RelatorioController extends Controller
 
             foreach ($colabs as $c) {
                 $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($c->nome ?: 'colaborador'));
-                $tmp = tempnam(sys_get_temp_dir(), 'cv_').'.xlsx';
+                $tmp = $this->temporario('cv_', 'xlsx');
                 $temps[] = $tmp;
                 if ($c->usaCartao()) {
                     $ss = $this->cv->gerar($c, $ano);
@@ -196,14 +196,17 @@ class RelatorioController extends Controller
 
         @ini_set('memory_limit', '512M');
         @set_time_limit(120);
-        $arquivo = tempnam(sys_get_temp_dir(), 'eq_').'.pdf';
+        $arquivo = $this->temporario('eq_', 'pdf');
         app(\App\Services\RelatorioEquipePdf::class)->gerar($ano, $mes, $arquivo, $u, $ids);
 
         return response()->download($arquivo, sprintf('Relatorio_Equipe_%d-%02d.pdf', $ano, $mes), ['Content-Type' => 'application/pdf'])
             ->deleteFileAfterSend(true);
     }
 
-    /** GET /relatorio/faturamento?ano&mes — PDF do que a empresa pagou direto no mês (26/09/2026). */
+    /**
+     * GET /relatorio/faturamento?ano&mes — PDF do que a empresa pagou direto no mês (26/09/2026).
+     * formato=xlsx (22/10/2026): a Planilha de Faturamento do ANO inteiro (RESUMO + uma aba por mês); `mes` não conta.
+     */
     public function faturamento(Request $r): BinaryFileResponse
     {
         $u = $r->user();
@@ -211,13 +214,24 @@ class RelatorioController extends Controller
         $d = $r->validate([
             'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'formato' => ['nullable', 'in:pdf,xlsx'],
         ]);
         $ano = (int) ($d['ano'] ?? now()->year);
         $mes = (int) ($d['mes'] ?? now()->month);
 
         @ini_set('memory_limit', '512M');
         @set_time_limit(120);
-        $arquivo = tempnam(sys_get_temp_dir(), 'fat_').'.pdf';
+        if (($d['formato'] ?? 'pdf') === 'xlsx') {
+            $arquivo = $this->temporario('fat_', 'xlsx');
+            $svc = app(\App\Services\RelatorioFaturamentoXlsx::class);
+            $ss = $svc->gerar($ano, $u);
+            $svc->xlsx($ss, $arquivo);
+            $ss->disconnectWorksheets();
+
+            return response()->download($arquivo, "Planilha_Faturamento_{$ano}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+                ->deleteFileAfterSend(true);
+        }
+        $arquivo = $this->temporario('fat_', 'pdf');
         app(\App\Services\RelatorioFaturamentoPdf::class)->gerar($ano, $mes, $arquivo, $u);
 
         return response()->download($arquivo, sprintf('Relatorio_Faturamento_%d-%02d.pdf', $ano, $mes), ['Content-Type' => 'application/pdf'])
