@@ -77,7 +77,6 @@ class RelatorioCvPdf
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $num = fn ($v) => number_format((float) $v, 2, ',', '.');   // grade: sem prefixo, cabe na coluna
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
-        $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
 
         $h = [];
         /* ── CABEÇALHO ─────────────────────────────────────── */
@@ -164,7 +163,7 @@ class RelatorioCvPdf
                     foreach (self::CATS as $k => $rot) {
                         $n = $cats[$k][$i] ?? null;
                         $s .= $n
-                            ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpj ? $cnpj($n->cnpj) : ($n->razao_social ?? '')).'</td><td>'.$e($n->numero ?? '').'</td><td class="num">'.$num($n->valor).'</td>'
+                            ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpjParaPlanilha()).'</td><td>'.$e($n->numero ?? '').'</td><td class="num">'.$num($n->valor).'</td>'
                             : '<td></td><td></td><td></td><td></td>';
                     }
                     $s .= '</tr>';

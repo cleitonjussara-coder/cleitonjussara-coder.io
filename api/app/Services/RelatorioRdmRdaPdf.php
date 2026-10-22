@@ -75,7 +75,6 @@ class RelatorioRdmRdaPdf
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $num = fn ($v) => number_format((float) $v, 2, ',', '.');
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
-        $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
         $neg = fn ($v) => $v < 0 ? 'vermelho' : '';
 
         $h = [];
@@ -160,7 +159,7 @@ class RelatorioRdmRdaPdf
                 foreach (self::CATS as $k => $rot) {
                     $n = $cats[$k][$i] ?? null;
                     $s .= $n
-                        ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpj ? $cnpj($n->cnpj) : ($n->razao_social ?? '')).'</td><td class="num">'.$num($n->valor).'</td>'
+                        ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpjParaPlanilha()).'</td><td class="num">'.$num($n->valor).'</td>'
                         : '<td></td><td></td><td></td>';
                 }
                 $s .= '</tr>';
@@ -196,7 +195,7 @@ class RelatorioRdmRdaPdf
                 foreach ([$esq, $dir] as $col) {
                     $n = $col[$i] ?? null;
                     $s .= $n
-                        ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpj ? $cnpj($n->cnpj) : ($n->razao_social ?? '')).'</td><td class="num">'.$num($n->valor).'</td>'
+                        ? '<td>'.$dt($n->data).'</td><td class="cnpj">'.$e($n->cnpjParaPlanilha()).'</td><td class="num">'.$num($n->valor).'</td>'
                         : '<td></td><td></td><td></td>';
                 }
                 $s .= '</tr>';

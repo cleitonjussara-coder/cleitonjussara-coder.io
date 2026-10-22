@@ -85,6 +85,35 @@ class Nota extends Model
         return $this->belongsTo(Colaborador::class, 'user_id');
     }
 
+    /** Palavra que a planilha da empresa escreve no lugar do CNPJ quando a nota não tem (modelo do Cleiton, 21/10/2026). */
+    public const SEM_CNPJ = 'recibo';
+
+    /** A nota tem CNPJ? Vazio e "00000000000000" não são CNPJ: o app antigo gravava 14 zeros no recibo sem CNPJ. */
+    public function temCnpj(): bool
+    {
+        $d = preg_replace('/\D/', '', (string) $this->cnpj);
+
+        return $d !== '' && ! preg_match('/^0+$/', $d);
+    }
+
+    /**
+     * Texto da coluna "CNPJ da nota" nas planilhas: o CNPJ formatado. Sem CNPJ (só então): a razão social, se a nota tiver
+     * (como as planilhas já faziam), ou "recibo" quando não há nem uma coisa nem outra — a palavra nunca aparece com CNPJ.
+     */
+    public function cnpjParaPlanilha(): string
+    {
+        if (! $this->temCnpj()) {
+            $razao = trim((string) $this->razao_social);
+
+            return $razao !== '' ? $razao : self::SEM_CNPJ;
+        }
+        $c = (string) $this->cnpj;
+
+        return preg_match('/^\d{14}$/', $c)
+            ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $c)
+            : $c;
+    }
+
     /* Recorte da policy notas_sel: dono vê as suas; gestor/admin veem tudo. */
     public function scopeVisiveisPara(Builder $q, Colaborador $u): Builder
     {

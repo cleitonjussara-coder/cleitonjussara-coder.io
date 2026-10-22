@@ -218,17 +218,13 @@ class RelatorioRdmRda
         return $abaixoDoRotulo === 'data' ? $ini + 2 : $ini + 1;
     }
 
-    /** DATA | CNPJ (formatado, como o modelo traz) | R$ a partir de $col */
+    /** DATA | CNPJ (formatado, como o modelo traz; "recibo" se a nota não tem) | R$ a partir de $col */
     private function linha(Worksheet $ws, int $col, int $row, Nota $n): void
     {
         $ws->setCellValue([$col, $row], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
-        $cnpj = (string) $n->cnpj;
-        if (preg_match('/^\d{14}$/', $cnpj)) {
-            $cnpj = preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $cnpj);
-        } elseif ($cnpj === '' && $n->razao_social) {
-            $cnpj = $n->razao_social;
-        }
-        $ws->setCellValueExplicit([$col + 1, $row], $cnpj, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        /* 21/10/2026: sem CNPJ (vazio ou os 14 zeros que o app antigo gravava) a célula traz a razão social, e sem ela a palavra
+           "recibo", como na planilha manual da empresa; os zeros deixam de aparecer como 00.000.000/0000-00 */
+        $ws->setCellValueExplicit([$col + 1, $row], $n->cnpjParaPlanilha(), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $ws->setCellValue([$col + 2, $row], (float) $n->valor);
     }
 

@@ -84,6 +84,10 @@ class NotaController extends Controller
                 $r->merge([$campo => preg_replace('/\D/', '', (string) $r->input($campo)) ?: null]);
             }
         }
+        /* 21/10/2026: recibo sem CNPJ chegava como "00000000000000" (BrasilAPI.limpar('') do app antigo): zero não é CNPJ, grava vazio */
+        if (preg_match('/^0+$/', (string) $r->input('cnpj'))) {
+            $r->merge(['cnpj' => null]);
+        }
         /* 25/09/2026: 'reembolso' virou 'carteira'. Um aparelho que ficou offline
            durante a troca pode ter isso na fila de sincronização — normaliza
            aqui em vez de recusar o lançamento com 422 pra sempre. */

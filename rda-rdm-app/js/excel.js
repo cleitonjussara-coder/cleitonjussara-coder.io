@@ -221,7 +221,7 @@ window.Excel = (() => {
     ns.forEach(n => {
       ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[n.mes-1]);
       ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(n.data);
-      ws[XLSX.utils.encode_cell({r,c:2})] = strCell(n.cnpj?BrasilAPI.formatar(n.cnpj):'');
+      ws[XLSX.utils.encode_cell({r,c:2})] = strCell(BrasilAPI.paraPlanilha(n.cnpj));   // sem CNPJ: "recibo" (21/10/2026)
       ws[XLSX.utils.encode_cell({r,c:3})] = strCell(n.razao_social||'');
       ws[XLSX.utils.encode_cell({r,c:4})] = numCell(n.valor);
       ws[XLSX.utils.encode_cell({r,c:5})] = strCenter(n.metodo_captura||'manual');
@@ -395,7 +395,7 @@ window.Excel = (() => {
     notas.filter(n=>n.mes===mes && n.ano===ano && !n.deleted)
       .sort((a,b)=>a.data.localeCompare(b.data))
       .forEach(n => rows.push([n.tipo, n.subtipo||'', n.data,
-        n.cnpj||'', n.razao_social||'', brl(n.valor), n.metodo_captura||'']));
+        BrasilAPI.paraPlanilha(n.cnpj), n.razao_social||'', brl(n.valor), n.metodo_captura||'']));
     const rs = _soRecebidos(repasses).filter(r=>r.mes===mes && r.ano===ano);
     if (rs.length) {
       rows.push(['']); rows.push(['── REPASSES ──']);

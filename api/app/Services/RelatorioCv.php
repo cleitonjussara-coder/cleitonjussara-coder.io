@@ -198,10 +198,11 @@ class RelatorioCv
             }
             $col = self::COL[$cat];
             $ws->setCellValue([$col, $row], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
-            if ($n->cnpj && preg_match('/^\d{14}$/', $n->cnpj)) {
+            if ($n->temCnpj() && preg_match('/^\d{14}$/', $n->cnpj)) {
                 $ws->setCellValue([$col + 1, $row], (int) $n->cnpj);   // o modelo formata 00.000.000/0000-00
-            } elseif ($n->razao_social) {
-                $ws->setCellValue([$col + 1, $row], $n->razao_social);
+            } else {
+                /* 21/10/2026: sem CNPJ vale a razão social (como sempre) ou, sem ela, "recibo"; os 14 zeros não viram 00.000.000/0000-00 */
+                $ws->setCellValueExplicit([$col + 1, $row], $n->cnpjParaPlanilha(), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             }
             if ($n->numero) {
                 $ws->setCellValue([$col + 2, $row], is_numeric($n->numero) ? (int) $n->numero : $n->numero);

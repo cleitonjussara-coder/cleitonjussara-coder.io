@@ -12,8 +12,18 @@ window.BrasilAPI = (() => {
 
   function formatar(cnpj) {
     const c = limpar(cnpj);
-    if (c.length !== 14 || /^0+$/.test(c)) return cnpj || '';
+    /* 21/10/2026: zero não é CNPJ — limpar('') devolve 14 zeros, e a nota sem CNPJ voltava para o formulário como "00000000000000" */
+    if (/^0+$/.test(c)) return '';
+    if (c.length !== 14) return cnpj || '';
     return `${c.slice(0,2)}.${c.slice(2,5)}.${c.slice(5,8)}/${c.slice(8,12)}-${c.slice(12,14)}`;
+  }
+
+  /* Coluna "CNPJ da nota" das planilhas: o CNPJ formatado; sem CNPJ (vazio ou só zeros) a razão social, se vier, ou a
+     palavra "recibo" da planilha da empresa — igual ao servidor (Nota::cnpjParaPlanilha). "recibo" nunca aparece com CNPJ. */
+  function paraPlanilha(cnpj, razao) {
+    const d = String(cnpj || '').replace(/\D/g, '');
+    if (!d || /^0+$/.test(d)) return String(razao || '').trim() || 'recibo';
+    return formatar(cnpj);
   }
 
   async function consultar(cnpj, sb) {
@@ -57,5 +67,5 @@ window.BrasilAPI = (() => {
     } catch (_) { return null; }
   }
 
-  return { consultar, limpar, formatar };
+  return { consultar, limpar, formatar, paraPlanilha };
 })();

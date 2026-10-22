@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 459;
+const APP_BUILD = 460;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9005,7 +9005,7 @@ async function _salvarNotaInterno() {
     tipo, valor, data, mes, ano,
     subtipo        : tipo==='RDM' ? $('nf-subtipo').value : null,
     pagamento      : _pagamentoForcado || ($('nf-pagamento-group')?.style.display !== 'none' ? ($('nf-pagamento')?.value || 'cv') : (_notaAtual?.pagamento || null)),
-    cnpj           : cnpjRaw || null,
+    cnpj           : /^0*$/.test(cnpjRaw) ? null : cnpjRaw,   // 21/10/2026: limpar('') devolve 14 zeros — recibo sem CNPJ grava vazio, não zeros
     razao_social   : $('nf-razao').value.trim() || null,
     observacao     : $('nf-obs').value.trim()   || null,
     chave_nfce     : $('nf-chave').value        || null,

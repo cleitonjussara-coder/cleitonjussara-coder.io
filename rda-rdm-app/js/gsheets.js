@@ -98,7 +98,7 @@ window.GSheets = (() => {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[3]}/${m[2]}/${m[1]}` : s;      // pt_BR entende dd/mm/aaaa
   };
-  const _cnpj   = v => (v ? (window.BrasilAPI ? BrasilAPI.formatar(v) : v) : '');
+  const _cnpj   = n => (window.BrasilAPI ? BrasilAPI.paraPlanilha(n.cnpj, n.razao_social) : (n.cnpj || n.razao_social || 'recibo'));   // sem CNPJ: razão social ou "recibo" (21/10/2026)
   const _doMes  = (arr, m, ano) => (arr || []).filter(x => x.mes === m && x.ano === ano && !x.deleted);
 
   /* Em que linha cai o TOTAL de cada extrato de repasse na aba BANCO DE
@@ -196,7 +196,7 @@ window.GSheets = (() => {
         g.set(rLabel, c, MESES_LONGOS[m - 1]);
         porCat[k].forEach((n, i) => {
           g.set(rIni + i, c,     _data(n.data));
-          g.set(rIni + i, c + 1, _cnpj(n.cnpj));
+          g.set(rIni + i, c + 1, _cnpj(n));
           g.set(rIni + i, c + 2, cur(n.valor));
         });
         g.set(rTotal, c,     'TOTAL DE GASTOS');
@@ -277,7 +277,7 @@ window.GSheets = (() => {
       [[esquerda, B], [direita, E]].forEach(([lista, c]) => {
         lista.forEach((n, i) => {
           g.set(rIni + i, c,     _data(n.data));
-          g.set(rIni + i, c + 1, _cnpj(n.cnpj));
+          g.set(rIni + i, c + 1, _cnpj(n));
           g.set(rIni + i, c + 2, cur(n.valor));
         });
         moeda.push([rIni - 1, c + 1, rTotal, c + 2]);
