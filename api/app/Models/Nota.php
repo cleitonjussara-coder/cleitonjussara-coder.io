@@ -100,8 +100,14 @@ class Nota extends Model
      */
     public function cnpjParaPlanilha(): string
     {
+        return $this->temCnpj() ? $this->cnpjFormatado() : trim((string) $this->razao_social);
+    }
+
+    /** CNPJ no formato 00.000.000/0000-00; vazio se a nota não tem CNPJ (vazio ou só zeros). Valor fora do padrão (ex.: CPF) sai como está. */
+    public function cnpjFormatado(): string
+    {
         if (! $this->temCnpj()) {
-            return trim((string) $this->razao_social);
+            return '';
         }
         $c = (string) $this->cnpj;
 

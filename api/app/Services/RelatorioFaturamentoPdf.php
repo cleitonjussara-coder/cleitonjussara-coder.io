@@ -21,6 +21,16 @@ class RelatorioFaturamentoPdf
 
     public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null): void
     {
+        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $d->setPaper('A4', 'portrait');
+        $d->loadHtml($this->html($ano, $mes, $gerador));
+        $d->render();
+        file_put_contents($arquivo, $d->output());
+    }
+
+    /** O HTML do relatório (separado de gerar() para poder ser conferido sem renderizar o PDF) */
+    public function html(int $ano, int $mes, ?Colaborador $gerador = null): string
+    {
         $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
             ->where('pagamento', 'empresa')
             ->orderBy('data')->orderBy('created_at')->get();
@@ -31,7 +41,6 @@ class RelatorioFaturamentoPdf
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
-        $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
         $nomeDe = fn (?string $id) => $id && $pessoas->has($id) ? ($pessoas[$id]->nome ?: $pessoas[$id]->email) : 'Desconhecido';
         /* 28/09/2026: user_id nulo aqui é sempre Faturamento sem colaborador
            (a nota escolheu não apontar ninguém) — 'Desconhecido' soaria como
@@ -57,7 +66,7 @@ class RelatorioFaturamentoPdf
             $cat = $n->tipo === 'RDA' ? 'Alimentação' : (self::CAT[mb_strtolower((string) $n->subtipo)] ?? ($n->subtipo ?: 'Outros'));
             $h .= '<tr><td>'.$dt($n->data).'</td><td class="esq">'.$e($nomeDono($n->user_id)).'</td>'
                 .'<td><span class="tipo '.$e($n->tipo).'">'.$e($n->tipo).'</span></td><td>'.$e($cat).'</td>'
-                .'<td class="esq">'.$e(mb_substr((string) ($n->razao_social ?: '—'), 0, 40)).'</td><td>'.$e($cnpj($n->cnpj)).'</td>'
+                .'<td class="esq">'.$e(mb_substr((string) ($n->razao_social ?: '—'), 0, 40)).'</td><td>'.$e($n->cnpjFormatado()).'</td>'
                 .'<td class="num">'.$brl($n->valor).'</td><td class="esq">'.$e($nomeDe($n->created_by)).'</td></tr>';
         }
         $h .= '<tr class="tot"><td colspan="6" class="esq">TOTAL</td><td class="num">'.$brl($total).'</td><td></td></tr></table>';
@@ -83,11 +92,7 @@ class RelatorioFaturamentoPdf
         .tipo { display: inline-block; padding: 0 5px; border-radius: 3px; font-weight: bold; font-size: 7.5pt; }
         .tipo.RDA { background: #e8f5ee; color: #1B4332; } .tipo.RDM { background: #eef4ff; color: #23427a; }
         ';
-        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.$h.'</body></html>';
-        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
-        $d->setPaper('A4', 'portrait');
-        $d->loadHtml($html);
-        $d->render();
-        file_put_contents($arquivo, $d->output());
+
+        return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.$h.'</body></html>';
     }
 }

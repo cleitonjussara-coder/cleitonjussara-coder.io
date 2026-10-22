@@ -110,6 +110,50 @@ class NotaCnpjZerosTest extends TestCase
         $this->assertStringContainsString('05.764.979/0001-98', $html);
     }
 
+    public function test_relatorios_de_equipe_e_de_faturamento_nao_mostram_zeros_como_cnpj(): void
+    {
+        $c = $this->colaborador();
+        $this->nota($c, 'RDM', '00000000000000', 'POSTO ZEROS EQUIPE');
+        $this->nota($c, 'RDM', '05764979000198', 'POSTO COM CNPJ', 60.00);
+        $fat = $this->nota($c, 'RDM', '00000000000000', 'POSTO ZEROS FATURAMENTO', 99.00);
+        $fat->forceFill(['pagamento' => 'empresa'])->save();
+        $fat2 = $this->nota($c, 'RDM', '36578850000119', 'MERCADO FATURADO', 12.00);
+        $fat2->forceFill(['pagamento' => 'empresa'])->save();
+
+        $equipe = app(\App\Services\RelatorioEquipePdf::class)->html(self::ANO, 10);
+        $faturamento = app(\App\Services\RelatorioFaturamentoPdf::class)->html(self::ANO, 10);
+
+        $this->assertStringContainsString('POSTO ZEROS EQUIPE', $equipe, 'a nota está no relatório da equipe');
+        $this->assertStringContainsString('05.764.979/0001-98', $equipe, 'com CNPJ real continua o CNPJ formatado');
+        $this->assertStringNotContainsString('00.000.000/0000-00', $equipe, 'zeros não são CNPJ');
+        $this->assertStringContainsString('POSTO ZEROS FATURAMENTO', $faturamento, 'a nota está no relatório de faturamento');
+        $this->assertStringContainsString('36.578.850/0001-19', $faturamento);
+        $this->assertStringNotContainsString('00.000.000/0000-00', $faturamento, 'zeros não são CNPJ');
+    }
+
+    public function test_equipe_e_faturamento_continuam_gerando_o_pdf(): void
+    {
+        $c = $this->colaborador();
+        $this->nota($c, 'RDM', '00000000000000', 'POSTO ZEROS EQUIPE');
+        $fat = $this->nota($c, 'RDM', '05764979000198', 'MERCADO FATURADO', 12.00);
+        $fat->forceFill(['pagamento' => 'empresa'])->save();
+
+        foreach ([\App\Services\RelatorioEquipePdf::class, \App\Services\RelatorioFaturamentoPdf::class] as $classe) {
+            $arq = tempnam(sys_get_temp_dir(), 'pdf_').'.pdf';
+            app($classe)->gerar(self::ANO, 10, $arq);
+            $this->assertStringStartsWith('%PDF', (string) file_get_contents($arq), "$classe deve gerar um PDF");
+            $this->assertGreaterThan(1000, filesize($arq));
+            @unlink($arq);
+        }
+    }
+
+    public function test_cnpj_formatado_so_existe_quando_a_nota_tem_cnpj(): void
+    {
+        $this->assertSame('', (new Nota(['cnpj' => '00000000000000']))->cnpjFormatado());
+        $this->assertSame('', (new Nota(['cnpj' => null, 'razao_social' => 'X']))->cnpjFormatado(), 'a razão social não entra: ela tem coluna própria');
+        $this->assertSame('05.764.979/0001-98', (new Nota(['cnpj' => '05764979000198']))->cnpjFormatado());
+    }
+
     public function test_planilha_cv_nao_mostra_zeros_como_cnpj(): void
     {
         $c = $this->colaborador('cv');

@@ -22,7 +22,17 @@ class RelatorioEquipePdf
     /** @param string[]|null $ids só estes colaboradores (marcados na tela, 21/09/2026); null = todos */
     public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null, ?array $ids = null): void
     {
-        $colabs = Colaborador::query()->when($ids, fn ($q) => $q->whereIn('id', $ids))->orderBy('nome')->get();
+        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $d->setPaper('A4', 'landscape');
+        $d->loadHtml($this->html($ano, $mes, $gerador, $ids));
+        $d->render();
+        file_put_contents($arquivo, $d->output());
+    }
+
+    /** @param string[]|null $ids só estes colaboradores; o HTML do relatório (separado de gerar() para poder ser conferido sem renderizar o PDF) */
+    public function html(int $ano, int $mes, ?Colaborador $gerador = null, ?array $ids = null): string
+    {
+        $colabs =Colaborador::query()->when($ids, fn ($q) => $q->whereIn('id', $ids))->orderBy('nome')->get();
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai do quadro individual, não infla o RDM/RDA de ninguém. */
         $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
@@ -36,7 +46,6 @@ class RelatorioEquipePdf
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $brl = fn ($v) => 'R$ '.number_format((float) $v, 2, ',', '.');
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
-        $cnpj = fn ($v) => preg_match('/^\d{14}$/', (string) $v) ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $v) : (string) $v;
         /* 23/09/2026: só entra no relatório o repasse que o colaborador confirmou */
         $recebido = fn ($r) => (! $r->kind || $r->kind === 'received') && $r->confirmado_em;
         /* o que CONTA no saldo: recarga do cartão (CV) vai para o cartão, não é dinheiro
@@ -118,7 +127,7 @@ class RelatorioEquipePdf
             foreach ($l['ns'] as $n) {
                 $cat = $n->tipo === 'RDA' ? 'Alimentação' : (self::CAT[mb_strtolower((string) $n->subtipo)] ?? ($n->subtipo ?: 'Outros'));
                 $b .= '<tr><td>'.$dt($n->data).'</td><td><span class="tipo '.$e($n->tipo).'">'.$e($n->tipo).'</span></td><td>'.$e($cat).'</td>'
-                    .'<td class="esq">'.$e(mb_substr((string) ($n->razao_social ?: '—'), 0, 42)).'</td><td>'.$e($cnpj($n->cnpj)).'</td><td>'.$e($n->numero ?? '').'</td>'
+                    .'<td class="esq">'.$e(mb_substr((string) ($n->razao_social ?: '—'), 0, 42)).'</td><td>'.$e($n->cnpjFormatado()).'</td><td>'.$e($n->numero ?? '').'</td>'
                     .'<td class="num '.((float) $n->valor <= 0 ? 'alerta' : '').'">'.$brl($n->valor).'</td><td>'.($n->foto_path ? '✔' : '<span class="alerta">falta</span>').'</td></tr>';
             }
             $b .= '<tr class="tot"><td colspan="6" class="esq">TOTAL DE GASTOS ('.$l['notas'].' nota'.($l['notas'] === 1 ? '' : 's').')</td><td class="num">'.$brl($l['gasto']).'</td><td></td></tr></table>';
@@ -160,12 +169,8 @@ class RelatorioEquipePdf
         .tipo.RDA { background: #e8f5ee; color: #1B4332; } .tipo.RDM { background: #eef4ff; color: #23427a; }
         table.reps { margin-top: 2px; }
         ';
-        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.implode('', $h).'</body></html>';
-        $d = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
-        $d->setPaper('A4', 'landscape');
-        $d->loadHtml($html);
-        $d->render();
-        file_put_contents($arquivo, $d->output());
+
+        return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'.$css.'</style></head><body>'.implode('', $h).'</body></html>';
     }
 
     /**
