@@ -18,11 +18,11 @@ window.BrasilAPI = (() => {
     return `${c.slice(0,2)}.${c.slice(2,5)}.${c.slice(5,8)}/${c.slice(8,12)}-${c.slice(12,14)}`;
   }
 
-  /* Coluna "CNPJ da nota" das planilhas: o CNPJ formatado; sem CNPJ (vazio ou só zeros) a razão social, se vier, ou a
-     palavra "recibo" da planilha da empresa — igual ao servidor (Nota::cnpjParaPlanilha). "recibo" nunca aparece com CNPJ. */
+  /* Coluna "CNPJ da nota" das planilhas: o CNPJ formatado; sem CNPJ (vazio ou só zeros) a razão social, se vier, ou vazio —
+     igual ao servidor (Nota::cnpjParaPlanilha). Os 14 zeros nunca saem como 00.000.000/0000-00. */
   function paraPlanilha(cnpj, razao) {
     const d = String(cnpj || '').replace(/\D/g, '');
-    if (!d || /^0+$/.test(d)) return String(razao || '').trim() || 'recibo';
+    if (!d || /^0+$/.test(d)) return String(razao || '').trim();
     return formatar(cnpj);
   }
 

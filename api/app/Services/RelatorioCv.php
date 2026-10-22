@@ -200,8 +200,8 @@ class RelatorioCv
             $ws->setCellValue([$col, $row], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
             if ($n->temCnpj() && preg_match('/^\d{14}$/', $n->cnpj)) {
                 $ws->setCellValue([$col + 1, $row], (int) $n->cnpj);   // o modelo formata 00.000.000/0000-00
-            } else {
-                /* 21/10/2026: sem CNPJ vale a razão social (como sempre) ou, sem ela, "recibo"; os 14 zeros não viram 00.000.000/0000-00 */
+            } elseif ($n->cnpjParaPlanilha() !== '') {
+                /* sem CNPJ vale a razão social (como sempre); os 14 zeros (21/10/2026) não viram 00.000.000/0000-00 */
                 $ws->setCellValueExplicit([$col + 1, $row], $n->cnpjParaPlanilha(), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             }
             if ($n->numero) {

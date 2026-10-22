@@ -218,12 +218,12 @@ class RelatorioRdmRda
         return $abaixoDoRotulo === 'data' ? $ini + 2 : $ini + 1;
     }
 
-    /** DATA | CNPJ (formatado, como o modelo traz; "recibo" se a nota não tem) | R$ a partir de $col */
+    /** DATA | CNPJ (formatado, como o modelo traz; sem CNPJ, a razão social) | R$ a partir de $col */
     private function linha(Worksheet $ws, int $col, int $row, Nota $n): void
     {
         $ws->setCellValue([$col, $row], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
-        /* 21/10/2026: sem CNPJ (vazio ou os 14 zeros que o app antigo gravava) a célula traz a razão social, e sem ela a palavra
-           "recibo", como na planilha manual da empresa; os zeros deixam de aparecer como 00.000.000/0000-00 */
+        /* 21/10/2026: sem CNPJ (vazio ou os 14 zeros que o app antigo gravava) a célula traz a razão social ou fica em branco;
+           os zeros deixam de aparecer como 00.000.000/0000-00 */
         $ws->setCellValueExplicit([$col + 1, $row], $n->cnpjParaPlanilha(), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $ws->setCellValue([$col + 2, $row], (float) $n->valor);
     }

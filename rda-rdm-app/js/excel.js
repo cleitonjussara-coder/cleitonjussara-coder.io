@@ -221,7 +221,7 @@ window.Excel = (() => {
     ns.forEach(n => {
       ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(MESES[n.mes-1]);
       ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(n.data);
-      ws[XLSX.utils.encode_cell({r,c:2})] = strCell(BrasilAPI.paraPlanilha(n.cnpj));   // sem CNPJ: "recibo" (21/10/2026)
+      ws[XLSX.utils.encode_cell({r,c:2})] = strCell(BrasilAPI.paraPlanilha(n.cnpj));   // sem CNPJ: vazio; zeros não viram CNPJ (21/10/2026)
       ws[XLSX.utils.encode_cell({r,c:3})] = strCell(n.razao_social||'');
       ws[XLSX.utils.encode_cell({r,c:4})] = numCell(n.valor);
       ws[XLSX.utils.encode_cell({r,c:5})] = strCenter(n.metodo_captura||'manual');

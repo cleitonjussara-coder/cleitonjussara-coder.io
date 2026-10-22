@@ -98,7 +98,7 @@ window.GSheets = (() => {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[3]}/${m[2]}/${m[1]}` : s;      // pt_BR entende dd/mm/aaaa
   };
-  const _cnpj   = n => (window.BrasilAPI ? BrasilAPI.paraPlanilha(n.cnpj, n.razao_social) : (n.cnpj || n.razao_social || 'recibo'));   // sem CNPJ: razão social ou "recibo" (21/10/2026)
+  const _cnpj   = n => (window.BrasilAPI ? BrasilAPI.paraPlanilha(n.cnpj, n.razao_social) : (n.cnpj || n.razao_social || ''));   // sem CNPJ: razão social; zeros não viram CNPJ (21/10/2026)
   const _doMes  = (arr, m, ano) => (arr || []).filter(x => x.mes === m && x.ano === ano && !x.deleted);
 
   /* Em que linha cai o TOTAL de cada extrato de repasse na aba BANCO DE
