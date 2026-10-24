@@ -240,6 +240,66 @@ class HistoricoKmTest extends TestCase
         $this->getJson('/api/frota/historico?de=2026-10-21&ate=2026-10-01')->assertStatus(422);
     }
 
+    /* ── Todo o histórico (22/10/2026) ─────────────────────── */
+
+    public function test_todo_o_historico_vai_da_primeira_leitura_ate_hoje_e_vem_por_partes(): void
+    {
+        $this->leitura($this->v1, $this->bia, '2026-03-05', 500);              // meses antes: nenhum período pronto alcança
+        $apagada = $this->leitura($this->v2, $this->bia, '2026-01-10', 100);
+        $apagada->forceFill(['deleted' => true])->save();                      // excluída não conta nem vira o "desde"
+
+        Sanctum::actingAs($this->gestor);
+        /* de/ate mandados junto são ignorados: "tudo" é tudo */
+        $a = $this->getJson('/api/frota/historico?tudo=1&limite=4&de=2026-10-20&ate=2026-10-21')->assertOk()->json();
+        $this->assertTrue($a['tudo']);
+        $this->assertSame('2026-03-05', $a['de']);
+        $this->assertSame('2026-10-21', $a['ate']);
+        $this->assertSame(10, $a['total']);
+        $this->assertSame(1350, $a['total_km'], '850 do mês + os 500 que a leitura de 12/10 rodou desde a de março');
+        $this->assertCount(4, $a['itens']);
+        $this->assertTrue($a['tem_mais']);
+        $this->assertSame(0, $a['por_dia']['2026-03-05']);
+        $this->assertSame(500, $a['por_dia']['2026-10-12'], 'o km por dia cobre o histórico inteiro, não só a página');
+
+        $fim = $this->getJson('/api/frota/historico?tudo=1&limite=4&offset=8')->assertOk()->json();
+        $this->assertSame([1000, 500], $this->itens($fim));
+        $this->assertSame([500, 0], $this->itens($fim, 'km_rodado'));
+        $this->assertFalse($fim['tem_mais']);
+
+        /* sem `tudo`, continua o mês corrente */
+        $mes = $this->getJson('/api/frota/historico')->assertOk()->json();
+        $this->assertFalse($mes['tudo']);
+        $this->assertSame('2026-10-01', $mes['de']);
+        $this->assertSame(9, $mes['total']);
+    }
+
+    public function test_todo_o_historico_do_colaborador_so_tem_as_leituras_dele(): void
+    {
+        $this->leitura($this->v1, $this->bia, '2026-03-05', 500);
+        Sanctum::actingAs($this->ana);
+        $j = $this->getJson('/api/frota/historico?tudo=1&user_id='.$this->bia->id)->assertOk()->json();
+
+        $this->assertSame(5, $j['total'], 'o filtro de pessoa não abre a leitura dos outros');
+        $this->assertSame(['Ana'], array_values(array_unique(array_column($j['itens'], 'user_nome'))));
+        $this->assertSame('2026-10-12', $j['de'], 'o "desde" é a leitura mais antiga DELA, não a da frota');
+        $this->assertSame([50, 200, 250, 100, 500], $this->itens($j, 'km_rodado'), 'o km parte da leitura anterior do veículo, de quem for');
+        $this->assertSame([], $j['colaboradores']);
+    }
+
+    public function test_todo_o_historico_vazio_e_filtrado_por_veiculo(): void
+    {
+        $novo = $this->veiculo('XYZ9W87', 'Saveiro');
+        Sanctum::actingAs($this->gestor);
+        $vazio = $this->getJson('/api/frota/historico?tudo=1&veiculo_id='.$novo->id)->assertOk()->json();
+        $this->assertSame(0, $vazio['total']);
+        $this->assertSame('2026-10-21', $vazio['de'], 'sem leitura, o "desde" é hoje');
+        $this->assertSame([], $vazio['itens']);
+
+        $v2 = $this->getJson('/api/frota/historico?tudo=1&veiculo_id='.$this->v2->id)->assertOk()->json();
+        $this->assertSame([5350, 5300, 5050, 5000], $this->itens($v2));
+        $this->assertSame('2026-10-13', $v2['de']);
+    }
+
     /* ── Painel ────────────────────────────────────────────── */
 
     public function test_painel_da_semana_do_gestor_traz_total_comparacao_serie_e_ranking(): void

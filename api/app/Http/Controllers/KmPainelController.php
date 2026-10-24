@@ -16,7 +16,8 @@ use Illuminate\Validation\Rule;
  * Histórico e painel de acompanhamento do KM (pedido do Cleiton, 21/10/2026).
  *
  *   GET /frota/historico → leituras em ordem cronológica, com o km rodado desde a
- *                          leitura anterior do mesmo veículo, filtros e total
+ *                          leitura anterior do mesmo veículo, filtros e total;
+ *                          `tudo=1` = desde a primeira leitura (22/10/2026)
  *   GET /frota/painel    → km por dia/semana/mês, comparação com o período
  *                          anterior, série para o gráfico e ranking
  *
@@ -38,9 +39,19 @@ class KmPainelController extends Controller
             'veiculo_id' => ['nullable', 'string', 'size:36'],
             'limite' => ['nullable', 'integer', 'min:1', 'max:200'],
             'offset' => ['nullable', 'integer', 'min:0'],
+            'tudo' => ['nullable', 'boolean'],
         ]);
-        $ate = $d['ate'] ?? KmCalculo::hoje();
-        $de = $d['de'] ?? KmCalculo::periodo('mes', $ate)['ini'];
+        /* "Todo o histórico" (22/10/2026): da primeira leitura que existe até hoje (ou até a última, se alguma antiga
+           tiver ficado à frente); de/ate são ignorados. A página continua sendo `limite` — o app carrega por partes. */
+        $tudo = (bool) ($d['tudo'] ?? false);
+        if ($tudo) {
+            $ext = DB::table('km_registros')->where('deleted', false)->selectRaw('min(data) as ini, max(data) as fim')->first();
+            $ate = max(KmCalculo::hoje(), substr((string) ($ext->fim ?? ''), 0, 10));
+            $de = $ext->ini ? substr((string) $ext->ini, 0, 10) : $ate;
+        } else {
+            $ate = $d['ate'] ?? KmCalculo::hoje();
+            $de = $d['de'] ?? KmCalculo::periodo('mes', $ate)['ini'];
+        }
         if ($de > $ate) {
             return response()->json(['message' => 'A data inicial é depois da final.'], 422);
         }
@@ -61,7 +72,8 @@ class KmPainelController extends Controller
         $itens = array_map(fn ($l) => $this->itemJson($u, $l, $nomes, $veiculos), array_slice($lista, $offset, $limite));
 
         return response()->json([
-            'de' => $de, 'ate' => $ate,
+            /* no histórico inteiro, "de" é a leitura mais antiga do que a pessoa vê com esses filtros (o "desde" da tela) */
+            'de' => $tudo ? ($lista ? end($lista)['data'] : $ate) : $de, 'ate' => $ate, 'tudo' => $tudo,
             'total' => count($lista), 'total_km' => array_sum(array_column($lista, 'km')),
             /* km de cada dia do filtro inteiro: o cabeçalho do dia não pode depender de quanto já foi carregado */
             'por_dia' => $this->kmPorDia($lista),

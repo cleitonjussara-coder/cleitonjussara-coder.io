@@ -32,7 +32,7 @@ function montar({ gestor = true, historico, painel, online = true, erroRede = fa
     var DB = { setMeta: async (k, v) => { __estado.meta[k] = v; }, getMeta: async k => __estado.meta[k] || null };
     var sb = {
       hojeDoServidor: () => '2026-10-21',
-      frota: { historico: async q => { __estado.chamadas.historico++; if (__estado.erroRede) throw new Error('sem rede'); return JSON.parse(JSON.stringify(__estado.historico)); },
+      frota: { historico: async q => { __estado.chamadas.historico++; __estado.chamadas.q = q; if (__estado.erroRede) throw new Error('sem rede'); return JSON.parse(JSON.stringify(__estado.historico)); },
                painel: async q => { if (__estado.erroRede) throw new Error('sem rede'); return JSON.parse(JSON.stringify(__estado.painel)); } },
       fotos: { urls: async () => ({}), url: async () => null },
     };
@@ -158,6 +158,42 @@ const resposta = (itens, extra = {}) => ({ de: '2026-10-19', ate: '2026-10-25', 
     confere(ve('colaborador', undefined) === true, 'colaborador sem regime definido (padrão) vê');
     confere(ve('gestor', 'rdm_rda') === true && ve('admin', 'cv') === true, 'gestor e admin veem');
     confere(ve('contabilidade', 'rdm_rda') === false && ve('contabilidade', 'cv') === false, 'Contador não vê, de nenhum regime');
+  }
+
+  console.log('8. "Todo o histórico" (22/10/2026): pede tudo=1, título por mês, carrega por partes');
+  {
+    const w = montar({ historico: resposta([item()]) });
+    const corpo = w.document.getElementById('fq-corpo');
+    await w.FrotaPainel.historico(corpo);
+    const botao = [...corpo.querySelectorAll('.fq-mais button')].find(b => b.textContent.includes('Ver todo o histórico'));
+    confere(!!botao, 'a lista do período tem o botão "Ver todo o histórico"');
+    confere(!!corpo.querySelector('select[aria-label="Período"] option[value="tudo"]'), 'o período tem a opção "Todo o histórico"');
+    w.__estado.historico = resposta([item(), item({ id: '33333333-3333-4333-8333-333333333333', data: '2026-09-30', odometro: 1300, km_rodado: 150 })],
+      { de: '2026-03-05', ate: '2026-10-21', tudo: true, total: 3, total_km: 350, tem_mais: true, por_dia: { '2026-10-21': 200, '2026-09-30': 150, '2026-03-05': 0 } });
+    botao.click();
+    confere(w.__estado.chamadas.trocarAba.includes('hist'), 'o botão leva ao histórico');
+    await w.FrotaPainel.historico(corpo);
+    const q = w.__estado.chamadas.q;
+    confere(q.tudo === 1 && q.de === undefined && q.ate === undefined, 'pede tudo=1, sem datas');
+    const meses = [...corpo.querySelectorAll('.fq-mes')].map(m => [...m.children].map(s => s.textContent).join(' '));
+    confere(meses.length === 2 && meses[0] === 'Outubro 2026 200 km' && meses[1] === 'Setembro 2026 150 km', 'um título por mês com o km do mês: ' + meses.join(' | '));
+    const resumo = corpo.querySelector('.fq-resumo').textContent;
+    confere(resumo.includes('em todo o histórico') && resumo.includes('desde 05/03/2026'), 'o resumo diz desde quando: ' + resumo.trim());
+    confere(![...corpo.querySelectorAll('.fq-mais button')].some(b => b.textContent.includes('Ver todo')), 'no histórico inteiro o botão some');
+    confere(corpo.querySelector('select[aria-label="Período"]').value === 'tudo', 'o seletor mostra "Todo o histórico"');
+    w.FrotaPainel.maisHist();
+    await espera(0);
+    confere(w.__estado.chamadas.q.tudo === 1 && w.__estado.chamadas.q.offset === 2, 'carregar mais continua no histórico inteiro, a partir do que já veio');
+    w.FrotaPainel.periodo('custom');
+    await w.FrotaPainel.historico(corpo);
+    confere(w.__estado.chamadas.q.de === '2026-03-05' && w.__estado.chamadas.q.ate === '2026-10-21' && !w.__estado.chamadas.q.tudo, '"Escolher datas…" depois de ver tudo começa do mesmo intervalo');
+    confere(corpo.querySelectorAll('.fq-mes').length === 0, 'fora do histórico inteiro não há título de mês');
+  }
+  {
+    const w = montar({ historico: resposta([]), online: false, erroRede: true });
+    w.__estado.meta['frota_hist_u1'] = { d: { ...resposta([item()], { de: '2026-03-05', ate: '2026-10-21', tudo: true }), _f: { user_id: '', veiculo_id: '', periodo: 'tudo' } }, em: '2026-10-21T10:00:00Z' };
+    await w.FrotaPainel.historico(w.document.getElementById('fq-corpo'));
+    confere(w.document.querySelector('select[aria-label="Período"]').value === 'tudo', 'sem internet, a cópia do histórico inteiro volta como "Todo o histórico"');
   }
 
   console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

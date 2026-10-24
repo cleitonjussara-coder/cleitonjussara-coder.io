@@ -10,7 +10,8 @@
      números dele). GET /frota/painel.
    • Histórico — leituras em cartões, da mais nova para a mais antiga, com o km
      rodado desde a leitura anterior do mesmo veículo e filtros de período,
-     colaborador e veículo. GET /frota/historico.
+     colaborador e veículo. GET /frota/historico. "Todo o histórico" (22/10/2026)
+     manda tudo=1, vem de 50 em 50 e ganha um título por mês.
    • Detalhe   — tocar no cartão abre a foto, os valores, quem registrou e
      quando, e as ações que o papel permite (corrigir/excluir).
 
@@ -135,7 +136,10 @@ window.FrotaPainel = (() => {
       .fq-seta{font-size:20px;color:var(--text2);line-height:1;vertical-align:-1px}
       .fq-item .nota-body{padding-bottom:10px}
       .fq-alerta{font-size:13.5px;font-weight:700;color:#fbbf24}
-      .fq-mais{display:flex;justify-content:center;padding:4px 14px 18px}
+      .fq-mes{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:10px 2px 6px;border-bottom:1.5px solid rgba(185,226,74,.35);
+              color:#fff;font-weight:800;font-size:16px;overflow-wrap:anywhere}
+      .fq-mes span:last-child{color:#d9f5a0;flex-shrink:0}
+      .fq-mais{display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 14px 18px}
       .kd-foto{width:100%;max-height:36vh;object-fit:contain;background:#14171a;border-radius:12px;display:block;cursor:zoom-in}
       .kd-sem-foto{border:1.5px dashed var(--border);border-radius:12px;padding:18px 12px;text-align:center;color:var(--text2);font-size:14.5px}
       .kd-dica{text-align:center;font-size:12.5px;color:var(--text2);margin-top:-6px}
@@ -330,7 +334,8 @@ window.FrotaPainel = (() => {
   }
 
   /* ═══════════════ HISTÓRICO ═══════════════ */
-  const PERIODOS = [['hoje', 'Hoje'], ['semana', 'Esta semana'], ['mes', 'Este mês'], ['mes-ant', 'Mês passado'], ['30d', 'Últimos 30 dias'], ['custom', 'Escolher datas…']];
+  /* 'tudo' (22/10/2026) = desde a primeira leitura: o servidor diz de quando (resposta.de) e a lista vem por partes */
+  const PERIODOS = [['hoje', 'Hoje'], ['semana', 'Esta semana'], ['mes', 'Este mês'], ['mes-ant', 'Mês passado'], ['30d', 'Últimos 30 dias'], ['tudo', 'Todo o histórico'], ['custom', 'Escolher datas…']];
 
   function _intervalo(chave, h = hoje()) {
     const fimMes = iso => { const d = _dt(iso.slice(0, 8) + '01'); d.setUTCMonth(d.getUTCMonth() + 1, 0); return _iso(d); };
@@ -348,6 +353,7 @@ window.FrotaPainel = (() => {
     return k || 'custom';
   }
   function _garantirIntervalo() {
+    if (S.h.periodo === 'tudo') return;             // as datas vêm do servidor
     if (S.h.periodo !== 'custom' || !S.h.de || !S.h.ate) {
       const r = _intervalo(S.h.periodo === 'custom' ? 'semana' : S.h.periodo);
       S.h.de = r[0]; S.h.ate = r[1];
@@ -368,7 +374,9 @@ window.FrotaPainel = (() => {
   async function _carregarHist(offset, limite = LIMITE_PAGINA) {
     const gen = ++_gen;
     const g = gestor();
-    const q = { de: S.h.de, ate: S.h.ate, veiculo_id: S.h.veiculo_id || undefined, user_id: g ? (S.h.user_id || undefined) : undefined, limite, offset: offset || undefined };
+    const tudo = S.h.periodo === 'tudo';
+    const q = { de: tudo ? undefined : S.h.de, ate: tudo ? undefined : S.h.ate, tudo: tudo ? 1 : undefined,
+                veiculo_id: S.h.veiculo_id || undefined, user_id: g ? (S.h.user_id || undefined) : undefined, limite, offset: offset || undefined };
     if (offset) {                                    // "carregar mais": sem cópia guardada; se falhar, a lista que já está na tela fica
       try {
         const r = await sb.frota.historico(q);
@@ -381,12 +389,14 @@ window.FrotaPainel = (() => {
       return;
     }
     try {
-      const filtros = { user_id: S.h.user_id, veiculo_id: S.h.veiculo_id };
+      const filtros = { user_id: S.h.user_id, veiculo_id: S.h.veiculo_id, periodo: S.h.periodo };
       const r = await _buscar(_chaveHist(), () => sb.frota.historico(q).then(x => ({ ...x, _f: filtros })));
       if (gen !== _gen) return;
       if (r._off) {                                      // a cópia guardada vale com os filtros dela
-        S.h.de = r.de; S.h.ate = r.ate; S.h.periodo = _chaveDoIntervalo(r.de, r.ate);
+        S.h.de = r.de; S.h.ate = r.ate; S.h.periodo = r._f?.periodo === 'tudo' ? 'tudo' : _chaveDoIntervalo(r.de, r.ate);
         S.h.user_id = g ? (r._f?.user_id || '') : ''; S.h.veiculo_id = r._f?.veiculo_id || '';
+      } else if (tudo) {                                 // "Escolher datas…" depois de ver tudo começa do mesmo intervalo
+        S.h.de = r.de; S.h.ate = r.ate;
       }
       r.itens.forEach(i => porId.set(i.id, i));
       S.hd = r;
@@ -417,11 +427,19 @@ window.FrotaPainel = (() => {
     d.itens.forEach(i => { const u = dias[dias.length - 1]; if (u && u.data === i.data) u.itens.push(i); else dias.push({ data: i.data, itens: [i] }); });
     const h = hoje();
     const tituloDia = x => x === h ? `Hoje · ${dsem(x)} ${dm(x)}` : x === somarDias(h, -1) ? `Ontem · ${dsem(x)} ${dm(x)}` : `${dsem(x)} ${dm(x)}${x.slice(0, 4) !== h.slice(0, 4) ? '/' + x.slice(0, 4) : ''}`;
+    /* no histórico inteiro, cada mês ganha um título com o km dele (do filtro inteiro, como o do dia) */
+    const tudo = S.h.periodo === 'tudo';
+    const kmMes = m => Object.entries(d.por_dia || {}).reduce((t, [k, v]) => (k.startsWith(m) ? t + v : t), 0);
+    const tituloMes = (x, i) => tudo && (i === 0 || dias[i - 1].data.slice(0, 7) !== x.data.slice(0, 7))
+      ? `<div class="fq-mes"><span>${MESES_L[+x.data.slice(5, 7) - 1]} ${x.data.slice(0, 4)}</span><span>${kmFmt(kmMes(x.data.slice(0, 7)))} km</span></div>` : '';
+    const doPeriodo = tudo
+      ? ` em todo o histórico${d.total ? ` <span class="fq-dica">(desde ${esc(fmtData(d.de))})</span>` : ''}`
+      : ` no período${S.h.periodo !== 'custom' ? ` <span class="fq-dica">(${dm(S.h.de)}${S.h.de !== S.h.ate ? ' a ' + dm(S.h.ate) : ''})</span>` : ''}`;
 
     corpo.innerHTML = `
       ${_avisoOff(d)}
       <div class="fq-filtros">
-        <select class="fq-sel ${g ? 'larga ' : ''}${S.h.periodo !== 'semana' ? 'on' : ''}" onchange="FrotaPainel.periodo(this.value)" aria-label="Período">
+        <select class="fq-sel larga ${S.h.periodo !== 'semana' ? 'on' : ''}" onchange="FrotaPainel.periodo(this.value)" aria-label="Período">
           ${PERIODOS.map(([k, t]) => `<option value="${k}" ${S.h.periodo === k ? 'selected' : ''}>📅 ${t}</option>`).join('')}
         </select>
         ${g ? `<select class="fq-sel ${S.h.user_id ? 'on' : ''}" onchange="FrotaPainel.filtrar('user_id', this.value)" aria-label="Colaborador">
@@ -435,14 +453,17 @@ window.FrotaPainel = (() => {
         <input class="inp" type="date" value="${at(S.h.de)}" max="${at(S.h.ate)}" onchange="FrotaPainel.datas('de', this.value)" aria-label="De">
         <input class="inp" type="date" value="${at(S.h.ate)}" min="${at(S.h.de)}" onchange="FrotaPainel.datas('ate', this.value)" aria-label="Até">
       </div>` : ''}
-      <div class="fq-resumo">${d.total} registro${d.total === 1 ? '' : 's'} · <b>${kmFmt(d.total_km)} km</b> no período${S.h.periodo !== 'custom' ? ` <span class="fq-dica">(${dm(S.h.de)}${S.h.de !== S.h.ate ? ' a ' + dm(S.h.ate) : ''})</span>` : ''}</div>
+      <div class="fq-resumo">${d.total} registro${d.total === 1 ? '' : 's'} · <b>${kmFmt(d.total_km)} km</b>${doPeriodo}</div>
       <div class="fq-lista">
         ${pend.length ? `<div class="fq-dia"><span>⏳ Aguardando envio</span><span></span></div>${pend.map(_cartaoPendente).join('')}` : ''}
-        ${dias.length ? dias.map(x => `
+        ${dias.length ? dias.map((x, i) => `${tituloMes(x, i)}
           <div class="fq-dia"><span>${esc(tituloDia(x.data))}</span><span>${kmFmt(d.por_dia?.[x.data] || 0)} km</span></div>
-          ${x.itens.map(_cartao).join('')}`).join('') : `<p class="muted-p">Nenhum registro neste período${(g && S.h.user_id) || S.h.veiculo_id ? ' com esses filtros' : ''}.</p>`}
+          ${x.itens.map(_cartao).join('')}`).join('') : `<p class="muted-p">Nenhum registro ${tudo ? 'ainda' : 'neste período'}${(g && S.h.user_id) || S.h.veiculo_id ? ' com esses filtros' : ''}.</p>`}
       </div>
-      ${d.tem_mais ? `<div class="fq-mais"><button class="btn btn-outline" onclick="FrotaPainel.maisHist()">Carregar mais (${mais} de ${d.total})</button></div>` : ''}`;
+      ${d.tem_mais || !tudo ? `<div class="fq-mais">
+        ${d.tem_mais ? `<button class="btn btn-outline" onclick="FrotaPainel.maisHist()">Carregar mais (${mais} de ${d.total})</button>` : ''}
+        ${tudo ? '' : '<button class="btn btn-outline btn-sm" onclick="FrotaPainel.periodo(\'tudo\')">🕓 Ver todo o histórico</button>'}
+      </div>` : ''}`;
     const el = $('app-content'); if (el) el.scrollTop = rolagem;
     _miniaturas(d.itens);
   }
@@ -519,7 +540,8 @@ window.FrotaPainel = (() => {
 
   function periodo(chave) {
     S.h.periodo = chave;
-    if (chave !== 'custom') { const r = _intervalo(chave); S.h.de = r[0]; S.h.ate = r[1]; }
+    const r = _intervalo(chave);                    // null em 'custom' (datas ficam) e em 'tudo' (vêm do servidor)
+    if (r) { S.h.de = r[0]; S.h.ate = r[1]; }
     S.hd = null; Frota.trocarAba('hist');
   }
   function datas(campo, valor) {
