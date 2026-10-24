@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 466;
+const APP_BUILD = 467;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3108,6 +3108,7 @@ function _histEquipeServidor() {
       .catch(() => {})
       .finally(() => {
         _histEq.buscando = false; _histEq.em = Date.now();
+        atualizarNotificacoes().catch(() => {});   // o sino também sai do número do servidor
         if (viewAtual !== 'inicio') return;
         const el = document.getElementById('aviso-equipe-topo');
         if (el) el.outerHTML = _avisoEquipeDevedoraHTML();
@@ -3131,6 +3132,10 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
      recargas ficarem de fora. Sem rede/antes de chegar, cai na cópia local. */
   const srv = _histEquipeServidor();
   if (srv) { junta(srv.notas, 'ns'); junta(srv.repasses, 'rs'); }
+  /* 24/10/2026 ("aparece e some", produção): a cópia local da equipe é só para quem está SEM rede. Com rede, o aviso
+     espera o servidor responder — antes ele nascia da cópia local (que não bate com o servidor), aparecia e sumia
+     quando o número certo chegava. Na produção ninguém passava de R$ 1.500 e o aviso piscava mesmo assim. */
+  else if (_veEquipe() && sb && !DEMO_MODE && navigator.onLine) return [];
   else { junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs'); }
   if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
   return Object.entries(porUser)
