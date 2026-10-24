@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 465;
+const APP_BUILD = 466;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3806,9 +3806,10 @@ function _pedidoAbertoCV() {
     .sort((a, b) => String(b.created_at || b.data).localeCompare(String(a.created_at || a.data)))[0] || null;
 }
 
-function _cartaoPedidoAbertoHTML() {
+function _cartaoPedidoAbertoHTML(noForm = false) {
   const p = _pedidoAbertoCV();
   if (!p) return '';
+  const fecha = noForm ? 'fecharFormRepasse(); ' : '';
   const recarga = p.destino === 'recarga';
   return `
     <div class="aviso-gestor" style="border:2px solid var(--accent-d);border-radius:14px;padding:14px;margin:12px 0;background:var(--card,rgba(255,255,255,.06))">
@@ -3817,8 +3818,8 @@ function _cartaoPedidoAbertoHTML() {
       <div style="opacity:.75;font-size:13.5px">Pedido de ${fmtDataBR(p.data)}${p.descricao ? ' · ' + esc(p.descricao) : ''}</div>
       <div style="opacity:.75;font-size:13.5px;margin-top:6px">O dinheiro já caiu? Confirme — se o valor depositado foi diferente, você pode corrigir. Enquanto este pedido estiver aberto, não dá para fazer outro.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button class="btn btn-primary" onclick="abrirConfirmarRecebimento('${esc(p.id)}')">✅ Recebi</button>
-        <button class="btn btn-outline" onclick="cancelarPedidoAberto('${esc(p.id)}')">Cancelar pedido</button>
+        <button class="btn btn-primary" onclick="${fecha}abrirConfirmarRecebimento('${esc(p.id)}')">✅ Recebi</button>
+        <button class="btn btn-outline" onclick="${fecha}cancelarPedidoAberto('${esc(p.id)}')">Cancelar pedido</button>
       </div>
     </div>`;
 }
@@ -3870,6 +3871,31 @@ async function cancelarPedidoAberto(id) {
   if (!(await pedirConfirmacao({ mensagem: 'Cancelar este pedido? Depois disso você poderá fazer outro.', confirmar: 'Cancelar pedido', perigo: true }))) return;
   await excluirRepasse(id);
   if (viewAtual === 'inicio') renderInicio();
+}
+
+/* Abaixo do "Voltar" do formulário de repasse/recarga: o pedido pendente (se houver) e o histórico do mesmo tipo
+   (recarga com recarga, repasse com repasse), de todos os meses (24/10/2026). */
+function _historicoRepasseFormHTML(destino) {
+  if (!user || _ehGestorOuAdmin()) return '';
+  const recarga = destino === 'recarga';
+  const lista = repasses
+    .filter(r => r.user_id === user.id && !r.deleted && (r.destino === 'recarga') === recarga)
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, 12);
+  const linhas = lista.map(r => {
+    const pedido = _repasseEhPedido(r);
+    const ico = pedido ? (r.atendido_em ? '✅' : '⏳') : '✅';
+    const st = pedido ? (r.atendido_em ? 'pedido encerrado' : 'pedido pendente') : 'recebido';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border)">
+      <span style="font-size:20px">${ico}</span>
+      <span class="tipo-badge tipo-${esc(r.tipo)}">${esc(r.tipo)}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${esc(r.descricao || (pedido ? 'Pedido' : 'Recebimento'))}</div>
+        <div style="font-size:13px;color:var(--text2)">${fmtDataBR(r.data)} · ${st}</div></div>
+      <b style="white-space:nowrap">${brl(r.valor)}</b></div>`;
+  }).join('');
+  return `${_cartaoPedidoAbertoHTML(true)}
+    <div style="margin-top:16px"><div class="lbl" style="margin-bottom:4px">Histórico de ${recarga ? 'recargas' : 'repasses'}</div>
+    ${linhas || `<div style="color:var(--text2);padding:10px 0">Nenhum lançamento ainda.</div>`}</div>`;
 }
 
 /* barra o 2º pedido enquanto há um aberto; devolve true se barrou */
@@ -9884,6 +9910,7 @@ function irParaPassoRepasse(n) {
   if (p1) p1.hidden = n !== 1;
   if (p2) p2.hidden = n !== 2 || _repasseSemCategoria();
   if (p3) p3.hidden = n !== 3;
+  { const h = $('rep-historico'); if (h) h.hidden = n >= 3; }
   const salvar = $('rep-btn-salvar');
   if (salvar) salvar.style.display = n === 3 ? '' : 'none';
   const voltar = $('rep-btn-voltar');
@@ -10106,6 +10133,7 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
     const deve = _devedorDe(notas, repasses, filMes, filAno, true);
     if (deve > 0) $('rep-valor').value = deve.toFixed(2);
   }
+  { const h = $('rep-historico'); if (h) h.innerHTML = _repasseAlvo ? '' : _historicoRepasseFormHTML(_repasseDestino); }
   irParaPassoRepasse(_repassePassoMin);
   $('rep-data').value  = pre?.data || hoje();
   $('rep-valor').value = pre?.valor != null ? String(pre.valor) : '';
