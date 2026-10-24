@@ -17,8 +17,10 @@ use Illuminate\Validation\ValidationException;
  * Notas de despesa. As regras de acesso são as policies do Supabase:
  *   ver      → dono, ou gestor/admin (todos os núcleos)
  *   gravar   → dono, ou gestor/admin
- *   apagar   → dono, ou admin (gestor NÃO: apagar sem volta o lançamento
- *              de outra pessoa é outro nível — ver migração 2026-09-10)
+ *   apagar   → dono, ou gestor/admin. Era só dono/admin (migração 2026-09-10);
+ *              em 23/10/2026 o gestor entrou: ele é o cargo maior da empresa, e a
+ *              nota de Faturamento sem colaborador (que só ele lança) não tem
+ *              dono — sem isto nem dava para limpar da lixeira.
  */
 class NotaController extends Controller
 {
@@ -319,7 +321,12 @@ class NotaController extends Controller
     {
         $u = $r->user();
         $nota = Nota::findOrFail($id);
-        abort_unless($nota->user_id === $u->id || $u->ehAdmin(), 403, 'Só o dono ou o admin apagam em definitivo');
+        abort_unless($nota->user_id === $u->id || $u->gerencia(), 403, 'Só o dono, o gestor ou o admin apagam em definitivo');
+
+        /* Quem não é o dono só apaga o que já está na lixeira (23/10/2026). A Lixeira do app já filtra assim, mas a nota
+           sem dono é de todos os gestores: se um restaura enquanto outro está com a Lixeira aberta, o segundo apagaria
+           uma nota VIVA, com o anexo, sem volta. */
+        abort_if($nota->user_id !== $u->id && ! $nota->deleted, 409, 'Esta nota não está na lixeira (foi restaurada?). Atualize a tela.');
 
         /* A lápide (25/09/2026): sem ela a linha some e o sync incremental
            nunca conta aos outros aparelhos que a nota foi apagada — a cópia

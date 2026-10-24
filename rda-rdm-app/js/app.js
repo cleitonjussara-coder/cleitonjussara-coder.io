@@ -4699,19 +4699,21 @@ async function restaurarNota(id) {
 }
 
 /* Definitivo é definitivo: a linha sai do banco e o anexo sai do Storage,
-   sem lixeira para voltar. Por isso só o DONO da nota e o admin — gestor
-   corrige nota de colaborador, mas apagar sem volta é outro nível — e é a
-   mesma regra das policies notas_del / fotos_del no Supabase. */
+   sem lixeira para voltar. Pode o DONO da nota e a gestão (gestor ou admin);
+   o servidor confere a mesma regra (NotaController::destroy).
+   Até 22/10/2026 o gestor ficava de fora e não limpava nem a nota de
+   Faturamento sem colaborador (sem user_id), que só ele lança — pedido do
+   Paulo em 23/10/2026. */
 function _podeApagarDefinitivo(n) {
   if (!user || !n) return false;
-  return (n.user_id && n.user_id === user.id) || user.role === 'admin';
+  return (n.user_id && n.user_id === user.id) || _ehGestorOuAdmin();
 }
 
 async function apagarDefinitivo(id) {
   const n = (await DB.getDeletedNotasUser(user.id).catch(() => []))
     .find(x => x.id === id) || _notaPorId(id);
   if (!n) { toast('Lançamento não encontrado', 'err'); return; }
-  if (!_podeApagarDefinitivo(n)) { toast('Só o dono da nota ou o admin pode apagar em definitivo', 'err'); return; }
+  if (!_podeApagarDefinitivo(n)) { toast('Só o dono da nota, o gestor ou o admin pode apagar em definitivo', 'err'); return; }
 
   /* Sem internet não dá: apagaria só aqui, a linha continuaria no Supabase e
      a sincronização seguinte traria a nota de volta. */
@@ -9370,7 +9372,7 @@ async function apagarDefinitivoSelecionadas() {
   const marcadas = await _lixeiraSelecionados();
   if (!marcadas.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
   const lista = marcadas.filter(_podeApagarDefinitivo);
-  if (!lista.length) { toast('Só o dono da nota ou o admin pode apagar em definitivo', 'err'); return false; }
+  if (!lista.length) { toast('Só o dono da nota, o gestor ou o admin pode apagar em definitivo', 'err'); return false; }
   /* sem internet apagaria só aqui e o servidor traria a nota de volta */
   if (!sb || !navigator.onLine) { toast('Precisa de internet para apagar em definitivo', 'err'); return false; }
   const semPermissao = marcadas.length - lista.length;

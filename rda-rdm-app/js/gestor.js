@@ -1188,7 +1188,7 @@ window.Gestor = (() => {
             ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
           </select>
           ${souEu ? '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
-            : '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo e ainda apaga lançamento em definitivo.</p>'}
+            : '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px"><b>Gestor</b> é o cargo maior: vê a equipe, edita papéis e cuida do sistema. <b>Administrador</b> é o papel técnico de quem mantém o app — faz o mesmo que o gestor.</p>'}
           <label class="lbl">Regime de despesas</label>
           <select class="inp" id="g-regime" ${podeRegime && colab.role !== 'contabilidade' ? '' : 'disabled'}>
             <option value="rdm_rda"${(colab.regime||'rdm_rda')==='rdm_rda'?' selected':''}>💰 RDM/RDA — recebe dinheiro em conta; gera Excel RDM/RDA</option>
@@ -1236,7 +1236,7 @@ window.Gestor = (() => {
          confirma antes, dos dois lados. */
       const quem = colab.nome || colab.email;
       if (role !== colab.role) {
-        if (role === 'admin' && !(await pedirConfirmacao({ mensagem: `Tornar ${quem} ADMINISTRADOR?\n\nÉ o papel técnico de quem mantém o app: passa a editar qualquer perfil, mudar papéis e apagar lançamento em definitivo.`, confirmar: 'Tornar administrador', perigo: true }))) return;
+        if (role === 'admin' && !(await pedirConfirmacao({ mensagem: `Tornar ${quem} ADMINISTRADOR?\n\nÉ o papel técnico de quem mantém o app: passa a ter os mesmos poderes do gestor: editar qualquer perfil, mudar papéis e apagar lançamento em definitivo.`, confirmar: 'Tornar administrador', perigo: true }))) return;
         if (colab.role === 'admin' && !(await pedirConfirmacao({ mensagem: `Tirar o ADMINISTRADOR de ${quem}?\n\nEle deixa de manter o sistema e passa a ${PAPEL_TXT[role] ? PAPEL_TXT[role].split(' — ')[0].toLowerCase() : role}. Dá para devolver o papel depois.`, confirmar: 'Tirar administrador', perigo: true }))) return;
       }
       try { await sb.colaboradores.update(colab.id, dados); }

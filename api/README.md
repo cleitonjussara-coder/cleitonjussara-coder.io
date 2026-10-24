@@ -25,7 +25,7 @@ Guia de implantação e migração de dados: [`../MIGRACAO-LOCAWEB.md`](../MIGRA
 |---|---|---|---|
 | ver notas/repasses | só os seus | de todos | de todos |
 | gravar nota | a sua | de qualquer um | de qualquer um |
-| apagar nota em definitivo | a sua | — | qualquer |
+| apagar nota em definitivo | a sua | qualquer (desde 23/10/2026; antes só dono/admin) | qualquer |
 | lançar repasse | só o seu | só o seu | só o seu |
 | editar repasse | o seu | — | qualquer |
 | ver/editar perfis | o seu (nome) | vê todos | edita todos (nome, papel) |

@@ -47,7 +47,7 @@ Depois disso o admin promove os outros dentro do app (aba **Equipe** → ✏️)
 | Papel | Vê | Grava |
 |---|---|---|
 | colaborador | as próprias notas e repasses | as próprias |
-| gestor | todos os colaboradores (todos os núcleos) | notas de qualquer um; não apaga em definitivo |
+| gestor | todos os colaboradores (todos os núcleos) | notas de qualquer um; apaga em definitivo (desde 23/10/2026) |
 | admin | tudo | tudo, inclusive nome/papel dos outros |
 
 ---
