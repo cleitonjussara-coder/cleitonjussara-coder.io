@@ -135,6 +135,13 @@ class RepasseController extends Controller
         }
         $rep = Repasse::find($id);
         $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
+        /* 24/10/2026: para o colaborador (C.V. ou RDM/RDA) só existe UM pedido aberto por vez — enquanto o último não for confirmado
+           (ou cancelado), não entra outro. Vale para aparelho com app antigo também. */
+        if ($novo && $d['kind'] === 'requested' && ! $d['deleted'] && ! $u->gerencia()) {
+            $aberto = Repasse::where('user_id', $d['user_id'])->where('kind', 'requested')
+                ->where('deleted', false)->whereNull('atendido_em')->exists();
+            abort_if($aberto, 422, 'Já existe um pedido pendente. Confirme o recebimento (ou cancele o pedido) antes de fazer outro.');
+        }
         /* 07/10/2026: o colaborador volta a registrar o PRÓPRIO recebimento
            (repasse e recarga do cartão), direto, sem pedido — o gestor só é
            avisado (push abaixo). A regra de 25/09 que rebaixava para pedido
@@ -171,6 +178,17 @@ class RepasseController extends Controller
             /* Registro NOVO só nasce com id em UUID (24/10/2026): o app gera com crypto.randomUUID() e põe o id em atributos
                de HTML (onclick) — um id com aspas seria código rodando na tela do gestor. Mesma regra de notas e de KM. */
             abort_unless(Str::isUuid($id), 422, 'Identificador de repasse inválido.');
+            /* Duplo toque / reenvio com outro id (24/10/2026): recebido idêntico criado há menos de 2 minutos
+               para a mesma pessoa é recusado, sem apagar nada. Quem lança de propósito espera e lança de novo. */
+            if ($d['kind'] === 'received' && ! $d['deleted']) {
+                $repetido = Repasse::where('user_id', $d['user_id'])->where('kind', 'received')->where('deleted', false)
+                    ->where('tipo', $d['tipo'])->where('valor', $d['valor'])->whereDate('data', $d['data'])
+                    ->where('created_at', '>=', now()->subMinutes(2))
+                    ->when(($d['destino'] ?? null) === 'recarga', fn ($q) => $q->where('destino', 'recarga'),
+                        fn ($q) => $q->where(fn ($w) => $w->whereNull('destino')->orWhere('destino', '!=', 'recarga')))
+                    ->exists();
+                abort_if($repetido, 422, 'Um lançamento igual acabou de ser registrado. Confira a lista antes de lançar de novo.');
+            }
             $rep = new Repasse(['id' => $id] + $d);
             $rep->created_by = $u->id;
             $rep->updated_by = $u->id;
@@ -181,6 +199,20 @@ class RepasseController extends Controller
            sai de um pedido marcado como pago. Não há mais 2ª etapa. */
         if ($rep->kind === 'received' && ! $rep->confirmado_em && ! $rep->pedido_id) {
             $rep->forceFill(['confirmado_em' => now(), 'confirmado_por' => $rep->user_id])->save();
+        }
+
+        /* 24/10/2026: o gestor lançou o pagamento direto para quem tem pedido aberto → o pedido se encerra sozinho
+           (mesma pessoa e mesmo destino: recarga ou repasse). O lançamento vira o "recebido" daquele pedido. */
+        if ($novo && $rep->kind === 'received' && ! $rep->deleted && ! $rep->pedido_id
+            && $u->gerencia() && $rep->user_id !== $u->id) {
+            $aberto = Repasse::where('user_id', $rep->user_id)->where('kind', 'requested')
+                ->where('deleted', false)->whereNull('atendido_em')
+                ->where(fn ($q) => $rep->destino === 'recarga' ? $q->where('destino', 'recarga') : $q->where(fn ($w) => $w->whereNull('destino')->orWhere('destino', '!=', 'recarga')))
+                ->orderBy('data')->first();
+            if ($aberto) {
+                $rep->forceFill(['pedido_id' => $aberto->id])->save();
+                $aberto->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
+            }
         }
 
         /* Depois de gravado — falha de e-mail nunca impede o registro. */
@@ -269,6 +301,60 @@ class RepasseController extends Controller
             $this->emReais($pedido->valor) . ' — já está no seu saldo.',
             '/',
             'pago-' . $pedido->id
+        );
+
+        return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
+    }
+
+    /** PATCH /repasses/{id}/recebi {valor?} — o DONO do pedido confirma que o dinheiro caiu.
+     *  `valor` é o que realmente foi depositado (pode ser maior ou menor que o pedido). Idempotente. */
+    public function recebi(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        $valor = $r->validate(['valor' => ['nullable', 'numeric', 'min:0.01']])['valor'] ?? null;
+        $pedido = Repasse::findOrFail($id);
+        abort_unless($pedido->user_id === $u->id, 403, 'Só quem fez o pedido confirma o recebimento');
+        abort_if($pedido->deleted, 404, 'Pedido excluído');
+        abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+
+        if ($pedido->atendido_em) {
+            $recebido = Repasse::where('pedido_id', $pedido->id)->where('deleted', false)->first();
+
+            return response()->json(['pedido' => $pedido, 'recebido' => $recebido, 'ja_estava' => true]);
+        }
+
+        $pago = $valor ?? (float) $pedido->valor;
+        $hoje = now('America/Sao_Paulo');
+        $recebido = new Repasse([
+            'id' => (string) Str::uuid(),
+            'user_id' => $pedido->user_id,
+            'tipo' => $pedido->tipo,
+            'valor' => $pago,
+            'data' => $hoje->format('Y-m-d'),
+            'mes' => (int) $hoje->format('n'),
+            'ano' => (int) $hoje->format('Y'),
+            'descricao' => 'Recebimento do pedido de ' . $pedido->data->format('d/m/Y') . ($pedido->descricao ? ' — ' . $pedido->descricao : ''),
+            'kind' => 'received',
+            'deleted' => false,
+        ]);
+        $recebido->forceFill([
+            'pedido_id' => $pedido->id,
+            'confirmado_em' => now(),
+            'confirmado_por' => $u->id,
+            'destino' => $pedido->destino,
+            'created_by' => $u->id,
+            'updated_by' => $u->id,
+        ])->save();
+        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
+
+        $oque = $pedido->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
+        $dif = abs($pago - (float) $pedido->valor) > 0.004
+            ? ' (pedido de ' . $this->emReais($pedido->valor) . ')' : '';
+        $this->push->avisarGestores(
+            'Recebimento confirmado',
+            ($pedido->dono?->nome ?: 'Um colaborador') . ' confirmou ' . $oque . ' de ' . $this->emReais($pago) . $dif . ' (' . $pedido->tipo . ').',
+            '/',
+            'recebido-' . $recebido->id
         );
 
         return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);

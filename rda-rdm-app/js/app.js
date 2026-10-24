@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 464;
+const APP_BUILD = 465;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3678,6 +3678,7 @@ function renderInicio() {
   <div class="db-container">
     </div>
     ${_avisoEquipeDevedoraHTML()}
+    ${_cartaoPedidoAbertoHTML()}
     ${resumoGastos}
 
     <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
@@ -3791,6 +3792,92 @@ const _dataDe = o => String(o?.data || o?.created_at || '');   // nunca undefine
 function _repasseEhPedido(rep) {
   const kind = String(rep?.kind || '').toLowerCase();
   return ['requested', 'request', 'pedido', 'solicitado'].includes(kind);
+}
+
+/* ─── Pedido aberto, qualquer regime (24/10/2026) ─────────────────────────
+   Quem não é gestor tem UM pedido aberto por vez: o cartão "Pedido aguardando"
+   deixa a pessoa confirmar que o dinheiro caiu (com o valor realmente
+   depositado, maior ou menor) e, enquanto ele existir, o botão de pedir
+   outro fica bloqueado (o servidor também recusa). */
+function _pedidoAbertoCV() {
+  if (!user || _ehGestorOuAdmin() || _ehContabilidade()) return null;
+  return repasses
+    .filter(r => r.user_id === user?.id && _repassePendente(r))
+    .sort((a, b) => String(b.created_at || b.data).localeCompare(String(a.created_at || a.data)))[0] || null;
+}
+
+function _cartaoPedidoAbertoHTML() {
+  const p = _pedidoAbertoCV();
+  if (!p) return '';
+  const recarga = p.destino === 'recarga';
+  return `
+    <div class="aviso-gestor" style="border:2px solid var(--accent-d);border-radius:14px;padding:14px;margin:12px 0;background:var(--card,rgba(255,255,255,.06))">
+      <div style="font-weight:700;font-size:16px">⏳ ${recarga ? 'Recarga do cartão' : 'Repasse'} pedido — aguardando</div>
+      <div style="font-size:22px;font-weight:800;margin:6px 0">${brl(p.valor)} <span class="tipo-badge tipo-${esc(p.tipo)}">${esc(p.tipo)}</span></div>
+      <div style="opacity:.75;font-size:13.5px">Pedido de ${fmtDataBR(p.data)}${p.descricao ? ' · ' + esc(p.descricao) : ''}</div>
+      <div style="opacity:.75;font-size:13.5px;margin-top:6px">O dinheiro já caiu? Confirme — se o valor depositado foi diferente, você pode corrigir. Enquanto este pedido estiver aberto, não dá para fazer outro.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-primary" onclick="abrirConfirmarRecebimento('${esc(p.id)}')">✅ Recebi</button>
+        <button class="btn btn-outline" onclick="cancelarPedidoAberto('${esc(p.id)}')">Cancelar pedido</button>
+      </div>
+    </div>`;
+}
+
+function abrirConfirmarRecebimento(id) {
+  const p = repasses.find(r => r.id === id);
+  if (!p || !_repassePendente(p)) { toast('Este pedido já foi resolvido', 'err'); return; }
+  document.getElementById('recebi-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'recebi-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-hd"><h3>✅ Confirmar recebimento</h3>
+        <button class="btn-icon-sm" onclick="document.getElementById('recebi-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 12px;opacity:.75;font-size:14.5px">${p.destino === 'recarga' ? 'Recarga do cartão' : 'Repasse'} ${esc(p.tipo)} · pedido de ${fmtDataBR(p.data)}</p>
+        <div class="field">
+          <label class="lbl">Valor que caiu (R$) *</label>
+          <input class="inp" id="recebi-valor" type="number" inputmode="decimal" step="0.01" min="0.01" value="${Number(p.valor || 0).toFixed(2)}">
+        </div>
+        <p style="opacity:.7;font-size:13px;margin:6px 0 0">Você pediu ${brl(p.valor)}. Se o depósito foi maior ou menor, altere o valor — o saldo usa o que realmente caiu.</p>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-primary" onclick="_confirmarRecebimento('${esc(p.id)}', this)">✅ Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+}
+
+async function _confirmarRecebimento(id, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para confirmar o recebimento', 'err'); return; }
+  const valor = Number(document.getElementById('recebi-valor')?.value);
+  if (!valor || valor <= 0) { toast('Informe um valor válido', 'err'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await sb.repasses.recebi(id, valor);
+    for (const x of [res?.pedido, res?.recebido]) { if (x?.id) { try { await DB.mesclarRepassesRemotos(x); } catch (_) {} } }
+    document.getElementById('recebi-overlay')?.remove();
+    await carregarDadosLocais();
+    await atualizarNotificacoes();
+    toast(res?.ja_estava ? 'O gestor já tinha lançado este pagamento — pedido encerrado ✅' : `Recebimento de ${brl(valor)} confirmado ✅ — o gestor foi avisado.`);
+    if (viewAtual === 'inicio') renderInicio(); else if (viewAtual === 'home') renderHome(); else renderSaldo();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+
+async function cancelarPedidoAberto(id) {
+  if (!(await pedirConfirmacao({ mensagem: 'Cancelar este pedido? Depois disso você poderá fazer outro.', confirmar: 'Cancelar pedido', perigo: true }))) return;
+  await excluirRepasse(id);
+  if (viewAtual === 'inicio') renderInicio();
+}
+
+/* barra o 2º pedido enquanto há um aberto; devolve true se barrou */
+function _barrarPedidoDuplicado() {
+  const p = _pedidoAbertoCV();
+  if (!p) return false;
+  toast(`Você já tem um pedido de ${brl(p.valor)} pendente. Confirme o recebimento (ou cancele) antes de pedir outro.`, 'err');
+  return true;
 }
 
 /* 23/09/2026: o repasse que o gestor registra JÁ VALE — entra em saldo,
@@ -5846,11 +5933,12 @@ function renderSaldo() {
     ${cardTipo('RDA', rda)}
   </div>`}
 
+  ${_cartaoPedidoAbertoHTML()}
   <div class="section-hd">
     <span>Repasses</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
       ${_ehGestorOuAdmin() ? '' : `<button class="btn btn-sm btn-outline" onclick="abrirFormRepasse('received', null, null, ${_usaCartao() ? "'carteira'" : 'null'})">+ Registrar recebido</button>`}
-      <button class="btn btn-sm btn-primary" onclick="abrirFormRepasse('requested', null, null, ${_usaCartao() ? "'carteira'" : 'null'})">Solicitar repasse</button>
+      <button class="btn btn-sm btn-primary" ${_pedidoAbertoCV() ? 'disabled title="Há um pedido pendente"' : ''} onclick="abrirFormRepasse('requested', null, null, ${_usaCartao() ? "'carteira'" : 'null'})">${_pedidoAbertoCV() ? '⏳ Pedido pendente' : 'Solicitar repasse'}</button>
     </div>
   </div>
   <div class="rep-list">${repHtml}</div>`;
@@ -9987,6 +10075,13 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
   /* 23/09/2026: lançamento do gestor para o colaborador — só "recebido",
      e entra direto no saldo dele (não passa pela confirmação). */
   _repasseAlvo = alvo && alvo.id ? alvo : null;
+  if (!_repasseAlvo && modo === 'requested' && _barrarPedidoDuplicado()) return;
+  /* Com pedido aberto do mesmo tipo (recarga ou repasse), "registrar recebido" é confirmar o pedido: abre o Recebi,
+     onde o valor pode ser corrigido — assim o pedido não fica aberto e o mesmo dinheiro não entra duas vezes. */
+  if (!_repasseAlvo && modo !== 'requested') {
+    const aberto = _pedidoAbertoCV();
+    if (aberto && (aberto.destino === 'recarga') === (destino === 'recarga')) { abrirConfirmarRecebimento(aberto.id); return; }
+  }
   _repasseDestino = _usaCartao(_repasseAlvo ? equipePorId[_repasseAlvo.id] : undefined) ? (destino || 'carteira') : null;
   if (_repasseAlvo) modo = 'received';
   setRepasseModo(modo || 'received');
@@ -10035,6 +10130,8 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
     const rm = $('rep-mode-received'), rq = $('rep-mode-request');
     if (rm) rm.style.display = '';
     if (rq) { rq.style.display = ''; rq.style.gridColumn = ''; }
+    /* C.V. com pedido aberto: o botão de pedir outro some (24/10/2026) */
+    if (rq && _pedidoAbertoCV()) rq.style.display = 'none';
   }
   $('rep-overlay').style.display = 'flex';
 }
@@ -10087,6 +10184,18 @@ async function _salvarRepasseInterno() {
     destino: _repasseDestino,
     email_sent: false,
   };
+  /* Padrão contra lançamento duplicado (24/10/2026): mesmo dono, tipo, destino, valor e data de um recebido que já
+     existe → pergunta antes. Nunca apaga nada sozinho; a decisão é de quem lança. */
+  if (kind === 'received') {
+    const dono = _repasseAlvo ? _repasseAlvo.id : user.id;
+    const fonte = _repasseAlvo ? repassesEquipe : repasses;
+    const igual = fonte.find(r => r.user_id === dono && !r.deleted && !_repasseEhPedido(r)
+      && r.tipo === tipo && (r.destino === 'recarga') === (_repasseDestino === 'recarga')
+      && Math.abs(Number(r.valor) - valor) < 0.005 && String(r.data).slice(0, 10) === data);
+    if (igual && !(await pedirConfirmacao({
+      mensagem: `Já existe um lançamento igual: ${brl(valor)} (${tipo}) em ${fmtDataBR(data)}${igual.descricao ? ' — ' + igual.descricao : ''}.\n\nLançar mesmo assim?`,
+      confirmar: 'Lançar de novo', perigo: true }))) return;
+  }
   /* 23/09/2026: repasse do gestor PARA OUTRO vai direto ao servidor — no
      aparelho do gestor ele não existe, e no do colaborador aparece já
      confirmado na próxima sincronização. */
