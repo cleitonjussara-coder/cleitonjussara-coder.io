@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 463;
+const APP_BUILD = 464;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -111,6 +111,8 @@ const TRIMESTRES = [
 const brl  = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
 const hoje = () => FusoBR.hojeISO();   // o dia de BRASÍLIA (antes: o dia em UTC, que virava "amanhã" depois das 21h)
 const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/* esc() não escapa aspas: dentro de atributo (data-*="...") use esc + aspas escapadas */
+const _at  = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const $    = id => document.getElementById(id);
 const fmtData = d => { try { return new Date(d+'T00:00:00').toLocaleDateString('pt-BR'); } catch(_){return d;} };
 const _digitos = s => String(s||'').replace(/\D/g,'');
@@ -893,6 +895,7 @@ function _ensureSb() {
          entrada. Durante a troca de senha pelo link não há sessão mesmo. */
       if (ev === 'SIGNED_OUT' && !_recuperandoSenha && _telaAtual !== 'auth') {
         user = null;
+        avisosCorrecaoSino = []; _avisosPend.clear();                // sessão derrubada (401): os avisos dessa conta não ficam para a próxima
         try { window.FrotaPainel?.esquecer(); } catch (_) {}      // sessão derrubada (401): o histórico/painel de KM dessa conta não fica para a próxima
         _telaAtual = 'auth';
         showTela('auth');
@@ -1859,7 +1862,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = []; justificativasSino = []; _histEq.dados = null; _histEq.em = 0;
+  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0;
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { window.FrotaPainel?.esquecer(); } catch (_) {}      // histórico/painel de KM da conta que saiu
@@ -2133,6 +2136,10 @@ function _repassePendente(r) { return _repasseEhPedido(r) && !r.atendido_em && !
    gestor/admin: respostas dos pedidos que ele fez e ainda não deu "OK, vi". Sem rede, fica o que já veio. */
 let justificativasSino = [];
 const _just = id => justificativasSino.find(j => j.id === id);
+/* Aviso para corrigir nota (24/10/2026): vem do servidor, como a justificativa. Colaborador: avisos abertos dele
+   (GET /avisos-correcao/sino). Gestor/admin: o último aviso de cada nota do quadro "O que falta corrigir" (_avisosPend). */
+let avisosCorrecaoSino = [];
+const _avisosPend = new Map();   // nota_id → último aviso (só enquanto o quadro de pendências está aberto)
 
 /* lista de notificações do usuário atual */
 function _notificacoes() {
@@ -2154,6 +2161,23 @@ function _notificacoes() {
         sub: `${j.motivo} — “${_resumirTexto(j.resposta, 140)}”`,
       });
     }
+  });
+  /* Aviso para corrigir nota (24/10/2026): o gestor pediu pelo quadro "O que falta corrigir". Some sozinho quando a nota
+     deixa de ter pendência (o app confere com a cópia local — só ESCONDE, nada é gravado) ou com "OK, vi". */
+  const avisoPorNota = new Map();   // só os da conta de agora (sessão que caiu por 401 não vaza para a próxima) e UM por nota: o mais novo
+  avisosCorrecaoSino.filter(a => a.colaborador_id === user.id && !a.visto_em).forEach(a => {
+    const atual = avisoPorNota.get(a.nota_id);
+    if (!atual || String(a.avisado_em) > String(atual.avisado_em)) avisoPorNota.set(a.nota_id, a);
+  });
+  avisoPorNota.forEach(a => {
+    const n = _notaPorId(a.nota_id);
+    const faltam = n ? _motivosDaNota(n) : (a.motivos || []);
+    if (n && (n.deleted || !faltam.length)) return;
+    out.push({
+      id: 'corr:' + a.id, tipo: 'correcao', aviso: a, notaId: a.nota_id,
+      titulo: `${a.pedido_por_nome || 'A gestão'} pede para corrigir uma nota`,
+      sub: `${a.nota_titulo || 'Nota'}${a.nota_data ? ' · ' + fmtDataBR(a.nota_data) : ''}${Number(a.nota_valor) > 0 ? ' · ' + brl(a.nota_valor) : ''} — falta: ${faltam.join(', ')}${a.mensagem ? ' · “' + _resumirTexto(a.mensagem, 160) + '”' : ''} · avisado ${_quandoJust(a.avisado_em)}`,
+    });
   });
   if (_ehGestorOuAdmin()) {
     repassesEquipe.filter(_repassePendente)
@@ -2280,6 +2304,21 @@ function _buscarJustificativas() {
   return _justBuscando;
 }
 
+/* Avisos de correção do colaborador (24/10/2026): mesma regra da busca acima — nunca rejeita, uma por vez, resposta de
+   outra conta é descartada. Gestor/admin não recebem aviso (o servidor devolve vazio), então nem pergunta. */
+let _corrBuscando = null;
+function _buscarAvisosCorrecao() {
+  if (!user || _ehContabilidade() || _ehGestorOuAdmin()) { avisosCorrecaoSino = []; return Promise.resolve(false); }   // não é de quem está aqui: nada fica na memória
+  if (!(sb?.avisosCorrecao && !DEMO_MODE && navigator.onLine)) return Promise.resolve(false);
+  if (_corrBuscando) return _corrBuscando;
+  const uid = user.id;
+  _corrBuscando = sb.avisosCorrecao.sino()
+    .then(l => { if (user?.id !== uid) return false; avisosCorrecaoSino = l || []; return true; })
+    .catch(() => false)           // offline, API ainda sem a rota: fica a lista anterior
+    .finally(() => { _corrBuscando = null; });
+  return _corrBuscando;
+}
+
 async function _pintarSino() {
   const n = _notificacoes().length;
   const sino = $('hdr-sino'), num = $('hdr-sino-num');
@@ -2298,7 +2337,7 @@ async function atualizarNotificacoes({ esperarJust = false } = {}) {
   if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
   if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
   /* Justificativas (19/10/2026): vêm do servidor. Em segundo plano; quando chegam, o número do sino é repintado. */
-  const busca = _buscarJustificativas();
+  const busca = Promise.all([_buscarJustificativas(), _buscarAvisosCorrecao()]).then(r => r.some(Boolean));
   if (esperarJust) await busca;
   else busca.then(mudou => { if (mudou) _pintarSino(); });
   return _pintarSino();
@@ -2311,11 +2350,15 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'correcao' ? '✏️' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'justificativa' ? `<div class="notif-acoes">
+        ${it.tipo === 'correcao' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" data-nota="${_at(it.notaId)}" onclick="corrigirPeloAviso(this.dataset.nota)">✏️ Corrigir a nota</button>
+          ${(() => { const nn = _notaPorId(it.notaId); return nn && (nn.foto_path || nn.foto_local) ? `<button class="btn btn-sm btn-outline" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); verFoto(this.dataset.nota)">📎 Ver anexo</button>` : ''; })()}
+          <button class="btn btn-sm btn-outline" data-aviso="${_at(it.aviso.id)}" onclick="dispensarAvisoCorrecao(this.dataset.aviso, this)">OK, vi</button>
+        </div>` : it.tipo === 'justificativa' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="responderJustificativa('${it.just.id}')">✍️ Responder</button>
         </div>` : it.tipo === 'justresp' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="verRespostaJustificativa('${it.just.id}')">💬 Ler resposta</button>
@@ -2445,6 +2488,30 @@ async function dispensarJustificativa(id, btn) {
     await _atualizarSinoDepoisDeJustificativa();
     if (viewAtual === 'rastreio') window.Rastreio?.atualizar?.();
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AVISO PARA CORRIGIR NOTA — lado do colaborador (24/10/2026, pedido do Cleiton)
+   O gestor avisa pelo quadro "O que falta corrigir" (abrirPendencias); aqui é quem recebe: "Corrigir a nota" abre o
+   formulário da própria nota e "OK, vi" tira o aviso (gravado no servidor). Corrigir a nota também faz o aviso sumir
+   do sino — o app confere com a cópia local, sem gravar nada.
+═══════════════════════════════════════════════════════════ */
+function corrigirPeloAviso(notaId) {
+  document.getElementById('notif-overlay')?.remove();
+  if (!_notaPorId(notaId)) { toast('Essa nota ainda não chegou neste aparelho — abra de novo daqui a pouco, com internet', 'err', 4500); return; }
+  editarNota(notaId);
+}
+
+async function dispensarAvisoCorrecao(id, btn) {
+  if (!sb || !navigator.onLine) { toast('Precisa de internet', 'err'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    await sb.avisosCorrecao.visto(id);
+  } catch (e) {
+    if (e.status !== 404) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; return; }   // 404: já não existe, só some da lista
+  }
+  avisosCorrecaoSino = avisosCorrecaoSino.filter(a => a.id !== id);
+  await _atualizarSinoDepoisDeJustificativa();
 }
 
 /* Tocar na notificação do celular com o app FECHADO abre ./?abrir=sino: abre o sino direto, uma vez só. */
@@ -5261,6 +5328,7 @@ function _fmtEnvioServidor(n) {
 function abrirPendencias() {
   const lista = _notasComPendencia();
   if (!lista.length) { toast('Nenhuma pendência 🎉'); return; }
+  _avisosPend.clear();
   const vejoEquipe = _ehGestorOuAdmin();
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
@@ -5277,12 +5345,14 @@ function abrirPendencias() {
               <div style="font-size:13.5px;opacity:.8">${_ehNotaDeOutroUsuario(n) ? '👤 ' + esc(n.user_nome || _rotuloProprietario(n)) + ' · ' : ''}${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}</div>
               ${vejoEquipe && _fmtEnvioServidor(n) ? `<div style="font-size:12.5px;opacity:.65;margin-top:2px">📡 enviada ao servidor em ${_fmtEnvioServidor(n)}</div>` : ''}
               <div class="pend-motivos">${motivos.map(m => `<span class="pend-tag">${esc(m)}</span>`).join('')}</div>
+              ${_podeAvisarCorrecao(n) ? `<div class="pend-avisado" data-aviso-linha="${_at(n.id)}"></div>` : ''}
             </div>
             <div style="display:flex;flex-direction:column;gap:6px">
               ${n.foto_path || n.foto_local
-                ? `<button class="btn btn-sm btn-outline" onclick="verFoto('${n.id}')" title="Ver o anexo">📎 Ver</button>`
+                ? `<button class="btn btn-sm btn-outline" data-nota="${_at(n.id)}" onclick="verFoto(this.dataset.nota)" title="Ver o anexo">📎 Ver</button>`
                 : '<span class="pend-tag" style="text-align:center">sem anexo</span>'}
-              <span data-acao-pend="${n.id}"><button class="btn btn-sm btn-primary" onclick="document.getElementById('pend-overlay')?.remove(); editarNota('${n.id}')">Corrigir</button></span>
+              <span data-acao-pend="${_at(n.id)}"><button class="btn btn-sm btn-primary" data-nota="${_at(n.id)}" onclick="document.getElementById('pend-overlay')?.remove(); editarNota(this.dataset.nota)">Corrigir</button></span>
+              ${_podeAvisarCorrecao(n) ? `<span data-aviso-pend="${_at(n.id)}">${_botaoAvisarHTML(n.id, null)}</span>` : ''}
             </div>
           </div>`).join('')}
       </div>
@@ -5290,6 +5360,98 @@ function abrirPendencias() {
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   _marcarPendenciasFantasma(lista.map(x => x.nota)).catch(() => {});
+  _carregarAvisosPend(lista.map(x => x.nota).filter(_podeAvisarCorrecao).map(n => n.id)).catch(() => {});
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AVISO PARA CORRIGIR NOTA — lado do gestor/admin (24/10/2026, pedido do Cleiton)
+   No quadro "O que falta corrigir", a nota de COLABORADOR ganha "🔔 Avisar": o dono recebe um aviso (celular + sino +
+   e-mail) com o que falta e uma mensagem opcional, e corrige pelo próprio app (corrigirPeloAviso, mais acima). Só vale
+   para nota de outra pessoa com papel de colaborador, ativa e já liberada; o servidor confere tudo de novo e segura o
+   intervalo entre avisos da MESMA nota. Não há fila offline: é aviso, não lançamento.
+═══════════════════════════════════════════════════════════ */
+const AVISO_CORRECAO_INTERVALO_H = 12;   // espelho de petermann.aviso_correcao.intervalo_horas — quem manda é o servidor
+
+function _podeAvisarCorrecao(n) {
+  if (!_ehGestorOuAdmin() || !n || n.deleted || !n.user_id || n.user_id === user?.id || !sb?.avisosCorrecao) return false;
+  const c = equipePorId[n.user_id];
+  return !!c && c.role === 'colaborador' && c.ativo !== false && !('confirmado_em' in c && !c.confirmado_em);
+}
+
+function _botaoAvisarHTML(notaId, aviso) {
+  /* relógio do SERVIDOR (o do celular pode estar errado): é ele que decide as 12 h */
+  const agora = sb?.horaServidorMs?.() ?? Date.now();
+  const recente = aviso && agora < new Date(aviso.avisado_em).getTime() + AVISO_CORRECAO_INTERVALO_H * 3600_000;
+  return recente
+    ? `<span class="btn btn-sm pend-ja" title="Avisado por ${_at(aviso.pedido_por_nome || 'gestão')}">✓ Avisado</span>`   // a hora e quem avisou ficam na linha de baixo (cabe melhor no celular)
+    : `<button class="btn btn-sm btn-outline" data-nota="${_at(notaId)}" onclick="avisarCorrecao(this.dataset.nota)">🔔 Avisar</button>`;   // depois das 12 h volta o mesmo botão; a linha de baixo mostra o aviso anterior
+}
+
+/* guarda o aviso mais NOVO da nota: uma resposta velha da rede não pode sobrescrever o que acabou de ser enviado */
+function _guardarAvisoPend(a) {
+  const atual = _avisosPend.get(a.nota_id);
+  if (!atual || String(a.avisado_em) >= String(atual.avisado_em)) _avisosPend.set(a.nota_id, a);
+}
+
+/* repinta o botão e a linha "Avisado hoje 09:12 por Paulo" de UMA nota do quadro aberto */
+function _pintarAvisoPend(notaId) {
+  const a = _avisosPend.get(notaId) || null;
+  const bt = [...document.querySelectorAll('[data-aviso-pend]')].find(el => el.dataset.avisoPend === notaId);
+  if (bt) bt.innerHTML = _botaoAvisarHTML(notaId, a);
+  const linha = [...document.querySelectorAll('[data-aviso-linha]')].find(el => el.dataset.avisoLinha === notaId);
+  if (linha) linha.textContent = a ? `🔔 Avisado ${_quandoJust(a.avisado_em)} por ${a.pedido_por_nome || 'gestão'}${a.visto_em ? ' · já viu' : ''}` : '';
+}
+
+async function _carregarAvisosPend(ids) {
+  if (!ids.length || !sb?.avisosCorrecao || !navigator.onLine) return;
+  /* em lotes de 100 (a URL leva os ids): o quadro lista toda pendência da equipe e pode passar disso */
+  for (let i = 0; i < ids.length; i += 100) {
+    const lote = ids.slice(i, i + 100);
+    const lista = await sb.avisosCorrecao.list(lote);
+    if (!document.getElementById('pend-overlay')) return;          // fechou o quadro enquanto a rede respondia
+    (lista || []).forEach(_guardarAvisoPend);
+    lote.forEach(_pintarAvisoPend);
+  }
+}
+
+async function avisarCorrecao(notaId) {
+  const n = _notaPorId(notaId);
+  if (!n || !_podeAvisarCorrecao(n)) return;
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para avisar', 'err'); return; }
+  const dono = equipePorId[n.user_id]?.nome || n.user_nome || 'o colaborador';
+  const titulo = n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa');
+  const motivos = _motivosDaNota(n).slice(0, 8).map(m => String(m).slice(0, 60));
+  if (!motivos.length) { toast('Essa nota não tem mais pendência', 'err'); return; }
+  let mensagem = '';
+  for (;;) {
+    const r = await pedirCampos({
+      titulo: `Avisar ${dono}`,
+      dica: `${titulo} · ${fmtDataBR(n.data)}${Number(n.valor) > 0 ? ' · ' + brl(n.valor) : ''}${_NL}Falta: ${motivos.join(', ')}${_NL}${_NL}${dono} recebe um aviso no celular, no sino do app e por e-mail, com o botão para corrigir a nota.`,
+      confirmar: 'Enviar aviso',
+      campos: [{ id: 'mensagem', rotulo: 'Mensagem (opcional)', valor: mensagem, linhas: 3, maxlength: 500, placeholder: 'Ex.: falta o CNPJ — confere no cupom?' }],
+    });
+    if (!r) return;
+    mensagem = r.mensagem;
+    setLoading(true);
+    try {
+      const a = await sb.avisosCorrecao.avisar({ nota_id: notaId, motivos, mensagem });
+      setLoading(false);
+      _guardarAvisoPend(a);
+      _pintarAvisoPend(notaId);
+      toast(a?.agrupado ? `Aviso enviado a ${dono} — entrou no sino; o celular e o e-mail já tinham sido avisados há pouco 🔔`
+        : a?.email_enviado === false ? `Aviso enviado a ${dono} — aparece no sino e no celular (o e-mail não saiu) 🔔`
+        : `Aviso enviado a ${dono} 🔔`, 'ok', 4500);
+      return;
+    } catch (e) {
+      setLoading(false);
+      if ([403, 404, 422, 503].includes(e.status)) {                 // regra do servidor (já avisado há pouco, nota na lixeira…): explicar
+        await mostrarAviso(`Não foi possível avisar${_NL}${e.message || 'O servidor recusou o aviso.'}`);
+        _carregarAvisosPend([notaId]).catch(() => {});
+        return;
+      }
+      await mostrarAviso(`Não enviou${_NL}${e.message || 'erro de conexão'}${_NL}${_NL}O que você escreveu foi mantido — toque em OK e envie de novo.`);
+    }
+  }
 }
 
 /* 25/09/2026 — a nota que o servidor não tem mais.

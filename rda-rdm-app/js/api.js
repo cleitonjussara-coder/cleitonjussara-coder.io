@@ -462,6 +462,15 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     cancelar: id => req('DELETE', `/justificativas/${id}`),
   };
 
+  /* Aviso para corrigir nota (24/10/2026, pedido do Cleiton): gestor/admin avisa o dono pelo quadro "O que falta
+     corrigir"; o colaborador vê no sino e corrige. Tudo direto no servidor (é aviso, não lançamento). */
+  const avisosCorrecao = {
+    list: notaIds => req('GET', '/avisos-correcao', { query: { nota_ids: (notaIds || []).join(',') || undefined }, timeout: 8_000 }),   // último aviso de cada nota (gestor/admin)
+    sino: () => req('GET', '/avisos-correcao/sino', { timeout: 8_000 }),                                                                 // avisos abertos de quem está logado
+    avisar: ({ nota_id, motivos, mensagem }) => req('POST', '/avisos-correcao', { body: { nota_id, motivos, mensagem: mensagem || null } }),
+    visto: id => req('PATCH', `/avisos-correcao/${id}/visto`),
+  };
+
   /* Manutenção do servidor — só admin (a hospedagem não tem terminal). */
   const admin = {
     status: () => req('GET', '/admin/status'),
@@ -474,5 +483,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao };
 })();

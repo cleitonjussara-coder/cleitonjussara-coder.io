@@ -168,6 +168,9 @@ class RepasseController extends Controller
             $rep->save();
         } else {
             abort_unless($d['user_id'] === $u->id || $u->gerencia(), 403, 'Repasse só pode ser lançado pelo próprio colaborador');
+            /* Registro NOVO só nasce com id em UUID (24/10/2026): o app gera com crypto.randomUUID() e põe o id em atributos
+               de HTML (onclick) — um id com aspas seria código rodando na tela do gestor. Mesma regra de notas e de KM. */
+            abort_unless(Str::isUuid($id), 422, 'Identificador de repasse inválido.');
             $rep = new Repasse(['id' => $id] + $d);
             $rep->created_by = $u->id;
             $rep->updated_by = $u->id;

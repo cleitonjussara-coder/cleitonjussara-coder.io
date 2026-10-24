@@ -31,6 +31,15 @@ return [
         'intervalo_horas' => (int) env('JUSTIFICATIVA_INTERVALO_HORAS', 24),
     ],
 
+    /* Aviso para corrigir nota (24/10/2026): o gestor avisa o dono pelo quadro "O que falta corrigir".
+       Freio contra insistência: a MESMA nota só é avisada de novo depois deste intervalo (0 = sem freio). */
+    'aviso_correcao' => [
+        'intervalo_horas' => (int) env('AVISO_CORRECAO_INTERVALO_HORAS', 12),
+        /* Vários avisos ao MESMO colaborador em seguida (o gestor percorrendo o quadro nota por nota) viram UM celular e UM
+           e-mail: dentro desta janela o aviso novo entra só no sino. 0 = cada aviso notifica. */
+        'agrupar_minutos' => (int) env('AVISO_CORRECAO_AGRUPAR_MINUTOS', 10),
+    ],
+
     /* Login com Google (mesmo cliente OAuth do projeto CLEITON-PM). A URL de
        callback precisa estar cadastrada lá em "URIs de redirecionamento". */
     'google' => [

@@ -39,7 +39,7 @@ class SomenteLeitura
     ];
 
     /** Módulos que ele não usa: nem a leitura (ponto, quilometragem, frota). */
-    private const MODULOS_FECHADOS = ['veiculos', 'km', 'frota', 'ponto', 'feriados', 'justificativas'];
+    private const MODULOS_FECHADOS = ['veiculos', 'km', 'frota', 'ponto', 'feriados', 'justificativas', 'avisos-correcao'];
 
     public function handle(Request $request, Closure $next): Response
     {

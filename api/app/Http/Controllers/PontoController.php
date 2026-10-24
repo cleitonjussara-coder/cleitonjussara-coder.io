@@ -120,6 +120,8 @@ class PontoController extends Controller
             abort_if($d['data'] < $lim, 403, 'Só é possível corrigir o ponto de hoje e de ontem; para dias anteriores, peça ao gestor');
         }
         if (! $p) {
+            /* Registro NOVO só nasce com id em UUID (24/10/2026): o id vai para atributos de HTML (onclick) no app. */
+            abort_unless(Str::isUuid($id), 422, 'Identificador de ponto inválido.');
             $p = new Ponto(['id' => $id, 'user_id' => $dono, 'data' => $d['data']]);
         }
         foreach (Ponto::MARCACOES as $m) {

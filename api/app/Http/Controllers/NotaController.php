@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -178,6 +179,12 @@ class NotaController extends Controller
             $d['ano'] = $anoCerto;
         }
         $nota = Nota::find($id);
+        /* Nota NOVA só nasce com id em formato UUID (24/10/2026): o app sempre gera com crypto.randomUUID(), e o id vai parar
+           em atributos de HTML (onclick, data-*) em várias telas — um id com aspas seria código rodando na tela do gestor.
+           Nota que já existe segue como está. */
+        if (! $nota) {
+            abort_unless(Str::isUuid($id), 422, 'Identificador de nota inválido.');
+        }
         $this->podeGravar($u, $d['user_id'], $nota !== null);
         if ($nota) {
             $this->podeGravar($u, $nota->user_id, true);
@@ -340,6 +347,9 @@ class NotaController extends Controller
             ['user_id' => $nota->user_id, 'apagada_por' => $u->id, 'apagada_em' => now()],
         );
         $this->fotos->apagarTodasVersoes($nota);
+        if (\App\Models\AvisoCorrecao::tabelaExiste()) {
+            \App\Models\AvisoCorrecao::where('nota_id', $nota->id)->delete();   // 24/10/2026: os avisos da nota vão junto
+        }
         $nota->delete();
 
         return response()->json(['ok' => true]);

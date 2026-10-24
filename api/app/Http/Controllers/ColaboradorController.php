@@ -225,6 +225,7 @@ class ColaboradorController extends Controller
                 'km' => KmRegistro::where('user_id', $alvo->id)->delete(),
                 'pontos' => Ponto::where('user_id', $alvo->id)->delete(),
                 'justificativas' => \App\Models\Justificativa::tabelaExiste() ? \App\Models\Justificativa::where('colaborador_id', $alvo->id)->delete() : 0,   // 19/10/2026
+                'avisos_correcao' => \App\Models\AvisoCorrecao::tabelaExiste() ? \App\Models\AvisoCorrecao::where('colaborador_id', $alvo->id)->delete() : 0,   // 24/10/2026
             ];
             Veiculo::where('responsavel_id', $alvo->id)->update(['responsavel_id' => null]);
             $alvo->tokens()->delete();

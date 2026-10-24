@@ -4,6 +4,7 @@ use App\Http\Controllers\PushController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AvisoCorrecaoController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CnpjController;
 use App\Http\Controllers\ColaboradorController;
@@ -148,6 +149,12 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/justificativas/{id}/responder', [JustificativaController::class, 'responder'])->middleware('throttle:20,1');
     Route::patch('/justificativas/{id}/visto', [JustificativaController::class, 'visto']);
     Route::delete('/justificativas/{id}', [JustificativaController::class, 'cancelar']);
+
+    /* aviso para corrigir nota (24/10/2026): gestor/admin avisa o dono pelo quadro "O que falta corrigir" */
+    Route::get('/avisos-correcao', [AvisoCorrecaoController::class, 'index']);
+    Route::get('/avisos-correcao/sino', [AvisoCorrecaoController::class, 'sino']);
+    Route::post('/avisos-correcao', [AvisoCorrecaoController::class, 'store'])->middleware('throttle:30,1');
+    Route::patch('/avisos-correcao/{id}/visto', [AvisoCorrecaoController::class, 'visto']);
 
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);
     Route::put('/cnpj/{cnpj}', [CnpjController::class, 'upsert']);
