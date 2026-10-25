@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 468;
+const APP_BUILD = 469;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1863,7 +1863,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = [];
+  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = []; try { localStorage.removeItem(K_DEVEDORA); } catch (_) {}
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { window.FrotaPainel?.esquecer(); } catch (_) {}      // histórico/painel de KM da conta que saiu
@@ -2256,8 +2256,8 @@ function _notificacoes() {
      aviso volta se a dívida crescer depois de dispensado. */
   if (_ehGestorOuAdmin()) {
     _equipeDevedora().forEach(c => {
+      /* 25/10/2026 (Cleiton): enquanto estiver acima do limite a notificação TEM que aparecer — não some mais com "OK, vi". */
       const id = `devedor:${c.id}:${Math.floor(c.valor / 100)}`;
-      if (vistos.has(id)) return;
       out.push({
         id, tipo: 'devedor', userId: c.id,
         titulo: `${c.nome}: RDM a receber de ${brl(c.valor)}`,
@@ -2377,7 +2377,6 @@ function abrirNotificacoes() {
           <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
         </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
           ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
-          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button>
         </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" onclick="abrirModalAtenderPedido('${it.id}')">✅ Marcar como pago</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.rep.user_id}'), 400)">👤 Ver colaborador</button>` : ''}
@@ -3121,7 +3120,8 @@ function _histEquipeServidor() {
 
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
    no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
-let _devedoraUltima = [];   // última lista calculada: serve enquanto o servidor ainda não respondeu, para o aviso não piscar
+const K_DEVEDORA = 'devedora_ultima_v1';
+let _devedoraUltima = [];
 function _equipeDevedora(mes = filMes, ano = filAno) {
   if (!_ehGestorOuAdmin()) return [];
   const porUser = {};
@@ -3137,7 +3137,12 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
   /* 24/10/2026 ("aparece e some", produção): a cópia local da equipe é só para quem está SEM rede. Com rede, o aviso
      espera o servidor responder — antes ele nascia da cópia local (que não bate com o servidor), aparecia e sumia
      quando o número certo chegava. Na produção ninguém passava de R$ 1.500 e o aviso piscava mesmo assim. */
-  else if (_veEquipe() && sb && !DEMO_MODE && navigator.onLine) return _devedoraUltima;
+  else if (_veEquipe() && sb && !DEMO_MODE && navigator.onLine) {
+    if (!_devedoraUltima.length) {   // reabriu o app: usa a última lista guardada desta conta até o servidor responder
+      try { const o = JSON.parse(localStorage.getItem(K_DEVEDORA) || 'null'); if (o && o.uid === user?.id && Array.isArray(o.lista)) _devedoraUltima = o.lista; } catch (_) {}
+    }
+    return _devedoraUltima;
+  }
   else { junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs'); }
   if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
   const lista = Object.entries(porUser)
@@ -3157,7 +3162,7 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
     })
     .filter(c => c.valor > LIMITE_DEVEDOR)
     .sort((a, b) => b.valor - a.valor);
-  if (srv) _devedoraUltima = lista;
+  if (srv) { _devedoraUltima = lista; try { localStorage.setItem(K_DEVEDORA, JSON.stringify({ uid: user?.id, lista })); } catch (_) {} }
   return lista;
 }
 
