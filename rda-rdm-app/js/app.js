@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 467;
+const APP_BUILD = 468;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1264,9 +1264,10 @@ async function carregarDadosLocais() {
         user_nome: equipePorId[n.user_id]?.nome || null,
       }));
     } catch (err) {
+      /* 25/10/2026: NÃO zera mais equipePorId. Uma falha de rede (ou 429 do servidor) esvaziava o mapa, e sem ele o
+         aviso de devedores tratava todo C.V. como RDM/RDA e a lista mudava de repente. Fica o último mapa bom. */
       console.warn('carregarDadosLocais equipe:', err.message);
       notasEquipe = [];
-      equipePorId = {};
     }
   }
 
@@ -1862,7 +1863,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0;
+  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = [];
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { window.FrotaPainel?.esquecer(); } catch (_) {}      // histórico/painel de KM da conta que saiu
@@ -3120,6 +3121,7 @@ function _histEquipeServidor() {
 
 /* Colaboradores da equipe acima do limite (gestor/admin; usa o que já está
    no aparelho — notasEquipe/repassesEquipe — sem pedir nada ao servidor). */
+let _devedoraUltima = [];   // última lista calculada: serve enquanto o servidor ainda não respondeu, para o aviso não piscar
 function _equipeDevedora(mes = filMes, ano = filAno) {
   if (!_ehGestorOuAdmin()) return [];
   const porUser = {};
@@ -3135,10 +3137,11 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
   /* 24/10/2026 ("aparece e some", produção): a cópia local da equipe é só para quem está SEM rede. Com rede, o aviso
      espera o servidor responder — antes ele nascia da cópia local (que não bate com o servidor), aparecia e sumia
      quando o número certo chegava. Na produção ninguém passava de R$ 1.500 e o aviso piscava mesmo assim. */
-  else if (_veEquipe() && sb && !DEMO_MODE && navigator.onLine) return [];
+  else if (_veEquipe() && sb && !DEMO_MODE && navigator.onLine) return _devedoraUltima;
   else { junta(notasEquipe, 'ns'); junta(repassesEquipe, 'rs'); }
   if (user?.id) { porUser[user.id] = { ns: notas.filter(n => !n.deleted), rs: repasses.filter(r => !r.deleted) }; }
-  return Object.entries(porUser)
+  const lista = Object.entries(porUser)
+    .filter(([id]) => id === user?.id || equipePorId[id])   // sem o perfil não dá para saber o regime: não chuta com o do admin
     .map(([id, d]) => {
       const quem = id === user?.id ? user : equipePorId[id];
       return {
@@ -3154,6 +3157,8 @@ function _equipeDevedora(mes = filMes, ano = filAno) {
     })
     .filter(c => c.valor > LIMITE_DEVEDOR)
     .sort((a, b) => b.valor - a.valor);
+  if (srv) _devedoraUltima = lista;
+  return lista;
 }
 
 /* Bloco "Resumo do mês" do hub: RDA, RDM e o que há para receber. */
