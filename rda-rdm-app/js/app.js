@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 471;
+const APP_BUILD = 472;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -499,6 +499,22 @@ function _atualizarDocumentoAuto() {
    senão o 🔗 dessas notas dizia "não tem chave" — parecia problema do SEFAZ
    de outro estado, mas era só a busca na lista errada. */
 const _notasDesenhadas = new Map();
+/* 27/10/2026: recibo de pedágio não traz chave nem QR; a NFS-e sai no portal da
+   EcoRodovias (login CPF/CNPJ + reCAPTCHA, não dá para abrir direto). O botão copia
+   data, valor e a observação (placa/SEQ) e abre o portal. */
+const PORTAL_NFSE_PEDAGIO = 'https://nfsevia.ecorodovias.com.br/';
+function _ehReciboPedagio(n) {
+  return docDaNota(n) === 'outro'
+    && /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`);
+}
+function emitirNfsePedagio(id) {
+  const n = _notaPorId(id);
+  if (!n) return;
+  const texto = [`Data ${fmtDataBR(n.data)}`, Number(n.valor) > 0 ? `Valor ${brl(n.valor)}` : '', n.observacao || ''].filter(Boolean).join(' · ');
+  navigator.clipboard?.writeText(texto).catch(() => {});
+  window.open(PORTAL_NFSE_PEDAGIO, '_blank');
+  toast('Dados do recibo copiados — cole no portal 🧾');
+}
 function consultarNota(id) {
   const n = _notaPorId(id);
   abrirConsultaChave(n?.chave_nfce || '', n?.qr_url || null);
@@ -5691,6 +5707,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
+            ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" onclick="emitirNfsePedagio('${n.id}')" title="Emitir a NFS-e do pedágio no portal da EcoRodovias">🧾</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
             <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
