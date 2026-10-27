@@ -100,7 +100,7 @@ window.OCR = (() => {
     const oneLine = raw.replace(/\r?\n/g, ' ');
     const lines   = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
 
-    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null };
+    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null, placa:null };
 
     /* 0. Número e série impressos — cupom ("Nº 123456 Série 1", "NFC-e nº"),
        DANFE ("Nº 000.001.234  SÉRIE 001") e NFS-e ("Número da NFS-e: 2026123").
@@ -129,6 +129,9 @@ window.OCR = (() => {
       const seq = oneLine.match(/SEQ\.?\s*N[º°oO]?\.?\s*[:.]?\s*([0-9A-Z]{8}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{12})/i);
       if (seq) r.numero = seq[1].toUpperCase().replace(/O/g, '0');
     }
+    /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
+    const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
+    if (mp) r.placa = (mp[1] + mp[2]).toUpperCase();
     for (const p of r.numero ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 473;
+const APP_BUILD = 474;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -474,7 +474,11 @@ function _ajustarRotulosDoDocumento() {
     : 'Número da nota';
   if (ser) ser.textContent = 'Série';
   if (campoNum) campoNum.placeholder = ehRecibo ? 'SEQ do recibo (deixe em branco se não houver)' : 'Automático pela chave';
+  const campoPlaca = $('nf-placa-campo');   // placa só no recibo (pedágio); o valor é gravado só quando Documento = Outro
+  if (campoPlaca) campoPlaca.style.display = ehRecibo ? '' : 'none';
 }
+/* Placa do veículo: só letras e números, maiúscula; vazia vira null. */
+function _placaLimpa(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null; }
 
 function _atualizarDocumentoAuto() {
   _ajustarBlocoDocumento();
@@ -483,7 +487,7 @@ function _atualizarDocumentoAuto() {
   const salva = _notaPorId($('nf-id').value);
   const ext = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : '') || (salva?.foto_path ? String(salva.foto_path).split('.').pop() : '');
   const auto = _docPelaChave($('nf-chave').value, ext) || (_ehUrlNfse($('nf-qr-url').value) ? 'nfse' : null);
-  if (auto) sel.value = auto;
+  if (auto) { sel.value = auto; _ajustarRotulosDoDocumento(); }   // a chave/QR lida depois tira o campo da placa de cena
   else if (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value)) { sel.value = 'outro'; _ajustarRotulosDoDocumento(); }
   const dica = $('nf-documento-dica');
   if (dica) {
@@ -504,13 +508,14 @@ const _notasDesenhadas = new Map();
    data, valor e a observação (placa/SEQ) e abre o portal. */
 const PORTAL_NFSE_PEDAGIO = 'https://nfsevia.ecorodovias.com.br/';
 function _ehReciboPedagio(n) {
-  return docDaNota(n) === 'outro'
-    && /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`);
+  return docDaNota(n) === 'outro' && (!!n.placa
+    || /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`));
 }
 function emitirNfsePedagio(id) {
   const n = _notaPorId(id);
   if (!n) return;
-  const texto = [`Data ${fmtDataBR(n.data)}`, Number(n.valor) > 0 ? `Valor ${brl(n.valor)}` : '', n.observacao || ''].filter(Boolean).join(' · ');
+  const texto = [n.placa ? `Placa ${n.placa}` : '', n.numero ? `SEQ ${n.numero}` : '', `Data ${fmtDataBR(n.data)}`,
+    Number(n.valor) > 0 ? `Valor ${brl(n.valor)}` : '', n.observacao || ''].filter(Boolean).join(' · ');
   navigator.clipboard?.writeText(texto).catch(() => {});
   window.open(PORTAL_NFSE_PEDAGIO, '_blank');
   toast('Dados do recibo copiados — cole no portal 🧾');
@@ -5701,6 +5706,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
           ${n.cnpj&&!n.razao_social ? `<div class="nota-cnpj">${BrasilAPI.formatar(n.cnpj)}</div>` : ''}
           ${_numeroSerieHTML(n)}
+          ${n.placa ? `<div class="nota-cnpj">placa ${esc(n.placa)}</div>` : ''}
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
         <div class="nota-foot">
@@ -7696,7 +7702,7 @@ async function _lerNotaPorIa(blob) {
     if (!d || !(d.valor || d.cnpj || d.chave)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
-             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '',
+             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '',
              uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', _ia: true };
   } catch (_) { return null; }
 }
@@ -8309,6 +8315,7 @@ async function abrirFormNota(dados = {}) {
   _docEscolhidoManual = false;
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento
     : (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '');
+  $('nf-placa').value = dados.placa || '';
   _ajustarRotulosDoDocumento();
   $('nf-numero').value   = dados.numero   || '';
   $('nf-serie').value    = dados.serie    || '';
@@ -8846,6 +8853,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       }
       if (ocr.razao_social && !$('nf-razao').value) { $('nf-razao').value = ocr.razao_social; }
       if (ocr.numero && !$('nf-numero').value) { _preencherNumeroSerie(ocr.numero, ocr.serie); preencheu.push('número'); }
+      if (ocr.placa && !$('nf-placa').value) { $('nf-placa').value = _placaLimpa(ocr.placa) || ''; preencheu.push('placa'); }
       if (ocr.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
         $('nf-data').value = ocr.data; preencheu.push('data');
       }
@@ -9335,6 +9343,9 @@ async function _salvarNotaInterno() {
     documento      : $('nf-documento').value    || null,
     numero         : ($('nf-numero').value || '').trim() || null,
     serie          : ($('nf-serie').value  || '').trim() || null,
+    /* documento efetivo: select vazio sem chave nem QR também vira 'outro' mais abaixo */
+    placa          : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
+      ? _placaLimpa($('nf-placa').value) : null,
     qr_url         : $('nf-qr-url').value       || null,
     consumidor     : $('nf-consumidor').value   || null,
     uf             : $('nf-uf').value           || null,

@@ -48,7 +48,7 @@ class Nota extends Model
        pelo controller (auditoria), nunca pelo cliente. */
     protected $fillable = [
         'id', 'user_id', 'tipo', 'subtipo', 'pagamento', 'cnpj', 'consumidor', 'razao_social', 'valor',
-        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie',
+        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'placa',
         'foto_path', 'qr_url', 'observacao', 'deleted', 'created_at',
     ];
 
@@ -72,6 +72,21 @@ class Nota extends Model
         if ($tem === null) {
             try {
                 $tem = Schema::hasColumn('notas', 'foto_em_branco');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
+    /* Mesma proteção para a placa do recibo de pedágio (27/10/2026): API nova antes da migração não pode quebrar o upsert. */
+    public static function temPlaca(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('notas', 'placa');
             } catch (\Throwable) {
                 $tem = false;
             }

@@ -127,6 +127,7 @@ class NotaController extends Controller
             'numero' => ['nullable', 'string', 'max:40'],
             // 24/09/2026: séries com mais de 6 dígitos existem (NFS-e); o limite era 5.
             'serie' => ['nullable', 'string', 'max:20'],
+            'placa' => ['nullable', 'string', 'max:10', 'regex:/^[A-Za-z0-9]+$/'],   // recibo de pedágio (27/10/2026)
             'foto_path' => ['nullable', 'string', 'max:255'],
             'qr_url' => ['nullable', 'string'],
             'observacao' => ['nullable', 'string'],
@@ -204,6 +205,14 @@ class NotaController extends Controller
 
         $d['metodo_captura'] = $d['metodo_captura'] ?? 'manual';
         $d['deleted'] = (bool) ($d['deleted'] ?? false);
+
+        /* placa do recibo de pedágio: maiúscula; e, até a migração rodar, nem tenta gravar (senão TODA nota quebra com "no such column") */
+        if (array_key_exists('placa', $d)) {
+            $d['placa'] = $d['placa'] === null ? null : strtoupper($d['placa']);
+            if (! Nota::temPlaca()) {
+                unset($d['placa']);
+            }
+        }
 
         if ($nota) {
             /* foto_path vazio do app NÃO é remoção: o anexo é obrigatório e o

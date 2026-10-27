@@ -193,6 +193,16 @@ class LeitorNotaTest extends TestCase
         $this->assertSame("1", $this->leitor()->validar(json_encode(["serie" => "001"]))["serie"]);
     }
 
+    public function test_placa_do_recibo_aceita_antiga_e_mercosul_e_descarta_o_resto(): void
+    {
+        foreach (["REM8H68" => "REM8H68", "rem-8h68" => "REM8H68", "ABC 1234" => "ABC1234", "abc1d23" => "ABC1D23"] as $in => $esperado) {
+            $this->assertSame($esperado, $this->leitor()->validar(json_encode(["placa" => $in]))["placa"], "placa $in");
+        }
+        foreach (["", "ABC123", "1234567", "REM8H68X", "REM8H6", null] as $ruim) {
+            $this->assertNull($this->leitor()->validar(json_encode(["placa" => $ruim]))["placa"], "placa ".var_export($ruim, true));
+        }
+    }
+
     /** Recibo de pedágio: o "SEQ No" (UUID) é o número do recibo; qualquer outra mistura de letras continua descartada. */
     public function test_numero_aceita_o_seq_uuid_do_recibo_de_pedagio(): void
     {

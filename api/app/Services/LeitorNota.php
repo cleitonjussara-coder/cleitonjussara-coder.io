@@ -27,14 +27,14 @@ use Illuminate\Support\Facades\Log;
  */
 class LeitorNota
 {
-    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse'];
+    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa'];
 
     private const UFS = ['11', '12', '13', '14', '15', '16', '17', '21', '22', '23', '24', '25', '26', '27', '28', '29',
         '31', '32', '33', '35', '41', '42', '43', '50', '51', '52', '53'];
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "..."} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "..."} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -44,6 +44,7 @@ class LeitorNota
         .'data = data de EMISSÃO no formato AAAA-MM-DD. '
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
+        .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
         .'Use null em todo campo que não esteja legível com segurança. Não invente, corte nem complete dígitos. '
@@ -168,8 +169,20 @@ class LeitorNota
             ? $seq
             : $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
+        $out['placa'] = $this->placa($j['placa'] ?? null);
 
         return $out;
+    }
+
+    /** Placa antiga (ABC1234) ou Mercosul (ABC1D23); hífen e espaço saem. Qualquer outra coisa vira null. */
+    private function placa(mixed $v): ?string
+    {
+        if (! is_string($v)) {
+            return null;
+        }
+        $p = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $v));
+
+        return preg_match('/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/', $p) ? $p : null;
     }
 
     private function soDigitos(mixed $v): ?string
