@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 470;
+const APP_BUILD = 471;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -414,8 +414,12 @@ function docDaNota(n) {
   if (!n) return null;
   if (n.documento && DOC_LABEL[n.documento]) return n.documento;
   const ext = n.foto_path ? String(n.foto_path).split('.').pop() : (n.foto_local || '');
-  return _docPelaChave(n.chave_nfce, ext) || (_ehUrlNfse(n.qr_url) ? 'nfse' : null);
+  return _docPelaChave(n.chave_nfce, ext) || (_ehUrlNfse(n.qr_url) ? 'nfse' : null)
+    || (_semChaveNemQr(n.chave_nfce, n.qr_url) ? 'outro' : null);
 }
+/* 27/10/2026 (pedido do Cleiton): sem chave e sem QR Code não há como ser NFC-e/NF-e/NFS-e
+   — é recibo ou comprovante, então vira 'outro' em vez de ficar em "documento?". */
+function _semChaveNemQr(chave, qrUrl) { return !_digitos(chave) && !String(qrUrl || '').trim(); }
 function _numeroSerieHTML(n) {
   const ns = (n?.numero) ? { numero: n.numero, serie: n.serie } : _numeroSerieDaChave(n?.chave_nfce);
   if (!ns?.numero) return '';
@@ -480,6 +484,7 @@ function _atualizarDocumentoAuto() {
   const ext = fotoExt || (fotoBlob ? _extDoArquivo(fotoBlob) : '') || (salva?.foto_path ? String(salva.foto_path).split('.').pop() : '');
   const auto = _docPelaChave($('nf-chave').value, ext) || (_ehUrlNfse($('nf-qr-url').value) ? 'nfse' : null);
   if (auto) sel.value = auto;
+  else if (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value)) { sel.value = 'outro'; _ajustarRotulosDoDocumento(); }
   const dica = $('nf-documento-dica');
   if (dica) {
     const c = _digitos($('nf-chave').value);
@@ -8284,9 +8289,10 @@ async function abrirFormNota(dados = {}) {
   $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
   $('nf-qr-url').value   = dados.qr_url   || '';
   $('nf-consumidor').value = (dados.consumidor || '').replace(new RegExp(String.fromCharCode(92) + 'D', 'g'), '');
-  _ajustarRotulosDoDocumento();
   _docEscolhidoManual = false;
-  $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento : '';
+  $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento
+    : (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '');
+  _ajustarRotulosDoDocumento();
   $('nf-numero').value   = dados.numero   || '';
   $('nf-serie').value    = dados.serie    || '';
   _ajustarBlocoDocumento();
@@ -9356,7 +9362,8 @@ async function _salvarNotaInterno() {
        Fica null só quando não há como saber — o cartão mostra "documento?". */
     if (!payload.documento) {
       const extRef = anexoExt || (_notaAtual?.foto_path ? String(_notaAtual.foto_path).split('.').pop() : '');
-      payload.documento = _docPelaChave(payload.chave_nfce, extRef) || (_ehUrlNfse(payload.qr_url) ? 'nfse' : null);
+      payload.documento = _docPelaChave(payload.chave_nfce, extRef) || (_ehUrlNfse(payload.qr_url) ? 'nfse' : null)
+        || (_semChaveNemQr(payload.chave_nfce, payload.qr_url) ? 'outro' : null);
     }
 
     const saved = await DB.saveNota(payload, user.id);
