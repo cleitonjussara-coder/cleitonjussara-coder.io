@@ -124,7 +124,7 @@ class NotaController extends Controller
             'uf' => ['nullable', 'string', 'size:2'],
             'modelo' => ['nullable', 'string', 'size:2'],
             'documento' => ['nullable', Rule::in(Nota::DOCUMENTOS)],
-            'numero' => ['nullable', 'string', 'max:20'],
+            'numero' => ['nullable', 'string', 'max:40'],
             // 24/09/2026: séries com mais de 6 dígitos existem (NFS-e); o limite era 5.
             'serie' => ['nullable', 'string', 'max:20'],
             'foto_path' => ['nullable', 'string', 'max:255'],
@@ -473,7 +473,7 @@ class NotaController extends Controller
             'razao_social' => ['nullable', 'string', 'max:255'],
             'valor' => ['nullable', 'numeric'],
             'data' => ['nullable', 'date_format:Y-m-d'],
-            'numero' => ['nullable', 'string', 'max:20'],
+            'numero' => ['nullable', 'string', 'max:40'],
             'serie' => ['nullable', 'string', 'max:20'],
             'ignore_id' => ['nullable', 'string', 'size:36'],
         ]);

@@ -193,6 +193,16 @@ class LeitorNotaTest extends TestCase
         $this->assertSame("1", $this->leitor()->validar(json_encode(["serie" => "001"]))["serie"]);
     }
 
+    /** Recibo de pedágio: o "SEQ No" (UUID) é o número do recibo; qualquer outra mistura de letras continua descartada. */
+    public function test_numero_aceita_o_seq_uuid_do_recibo_de_pedagio(): void
+    {
+        $seq = "13E47631-C253-4255-A77E-50FBEBA7105F";
+        $this->assertSame($seq, $this->leitor()->validar(json_encode(["numero" => $seq]))["numero"]);
+        $this->assertSame($seq, $this->leitor()->validar(json_encode(["numero" => strtolower($seq)]))["numero"]);
+        $this->assertNull($this->leitor()->validar(json_encode(["numero" => "13E47631-C253-4255-A77E"]))["numero"]);
+        $this->assertNull($this->leitor()->validar(json_encode(["numero" => "ZZZZZZZZ-C253-4255-A77E-50FBEBA7105F"]))["numero"]);
+    }
+
     public function test_chave_de_nfse_de_50_digitos_so_com_estrutura_valida(): void
     {
         $ano = (int) now("America/Sao_Paulo")->format("y");

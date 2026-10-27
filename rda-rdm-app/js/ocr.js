@@ -123,6 +123,12 @@ window.OCR = (() => {
       return null;
     })();
     if (k50) { r.chaveNfse = k50[1]; const n = String(parseInt(k50[1].slice(23, 36), 10)); if (n !== 'NaN' && n !== '0') r.numero = n; }
+    /* Recibo de pedágio: o número do recibo é o "SEQ No: 13E47631-C253-4255-A77E-50FBEBA7105F" (UUID, 27/10/2026).
+       O OCR troca 0 por O nesse código; UUID é hexadecimal, então O volta a ser 0. */
+    if (!r.numero) {
+      const seq = oneLine.match(/SEQ\.?\s*N[º°oO]?\.?\s*[:.]?\s*([0-9A-Z]{8}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{12})/i);
+      if (seq) r.numero = seq[1].toUpperCase().replace(/O/g, '0');
+    }
     for (const p of r.numero ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }

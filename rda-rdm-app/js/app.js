@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 472;
+const APP_BUILD = 473;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -470,10 +470,10 @@ function _ajustarRotulosDoDocumento() {
   const ehRecibo = String($('nf-documento')?.value || '') === 'outro';
   const num = $('nf-numero-lbl'), ser = $('nf-serie-lbl'), campoNum = $('nf-numero');
   if (num) num.innerHTML = ehRecibo
-    ? 'Número <span style="font-weight:400;color:var(--text2)">— o recibo costuma não ter</span>'
+    ? 'Número do recibo <span style="font-weight:400;color:var(--text2)">— o SEQ No do recibo, se houver</span>'
     : 'Número da nota';
   if (ser) ser.textContent = 'Série';
-  if (campoNum) campoNum.placeholder = ehRecibo ? 'deixe em branco se não houver' : 'Automático pela chave';
+  if (campoNum) campoNum.placeholder = ehRecibo ? 'SEQ do recibo (deixe em branco se não houver)' : 'Automático pela chave';
 }
 
 function _atualizarDocumentoAuto() {

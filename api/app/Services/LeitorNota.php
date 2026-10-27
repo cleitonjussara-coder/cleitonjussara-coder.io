@@ -43,6 +43,7 @@ class LeitorNota
         .'Em reais, como número JSON com ponto decimal (ex.: 123.45); não some os itens e não use tributos. '
         .'data = data de EMISSÃO no formato AAAA-MM-DD. '
         .'numero e serie = somente o número e a série do documento, um único número cada. '
+        .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
         .'Use null em todo campo que não esteja legível com segurança. Não invente, corte nem complete dígitos. '
@@ -161,7 +162,11 @@ class LeitorNota
             $out['data'] = null;
         }
 
-        $out['numero'] = $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
+        /* recibo de pedágio: o número é o "SEQ No" (UUID com letras), único caso em que o número não é só dígitos */
+        $seq = is_string($j['numero'] ?? null) ? strtoupper(trim($j['numero'])) : '';
+        $out['numero'] = preg_match('/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/', $seq)
+            ? $seq
+            : $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
 
         return $out;
