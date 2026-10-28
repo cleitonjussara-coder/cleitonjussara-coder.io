@@ -70,13 +70,23 @@
       </button>
     {/if}
     {#each dados.colaboradores as c}
-      <button class="arq-colab {c.vazio ? 'arq-vazio' : ''}" onclick={() => onAbrirColab(c.userId)}>
+      <button class="arq-colab {c.vazio && !c.saldo ? 'arq-vazio' : ''} {c.saldo ? `arq-com-saldo sv-${c.saldo.nivel}` : ''}" onclick={() => onAbrirColab(c.userId)}>
         <div class="avatar" data-foto={c.fotoPath}>{c.iniciais}</div>
         <div class="arq-colab-txt">
           <div class="arq-colab-nome">{@html c.nomeHtml}</div>
           <div class="arq-colab-sub">{@html c.subHtml}</div>
         </div>
+        {#if c.saldo}
+          <div class="arq-selo"><small>{c.saldo.rotulo}</small><b>{c.saldo.valor}</b></div>
+        {/if}
         <span class="arq-seta">›</span>
+        {#if c.saldo}
+          <div class="arq-saldo">
+            {#each c.saldo.itens as it}
+              <div><span>{it.rotulo}</span><b>{it.valor}</b></div>
+            {/each}
+          </div>
+        {/if}
       </button>
     {/each}
   </div>

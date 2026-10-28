@@ -89,15 +89,33 @@ async function renderColabs(s) {
   const f = resumo.faturamento;
   const faturamento = f ? { sub: f.qtd ? `${f.qtd} nota${f.qtd === 1 ? '' : 's'} · ${brl(f.total)}${f.qtd - f.com_anexo ? ` · <span style="color:#ffd166">${f.qtd - f.com_anexo} sem anexo</span>` : ''}` : `sem notas em ${ano}` } : null;
   const cabecalhoSub = `${totalNotas} nota${totalNotas === 1 ? '' : 's'} em ${ano} · ${brl(totalValor)}${semAnexo ? ` · <b style="color:#ffd166">${semAnexo} sem anexo</b>` : ''}`;
+  /* Saldo que a empresa deve (28/10/2026): faixas de cor pelo valor — até R$ 1.000 amarelo, até R$ 3.000 laranja, acima vermelho */
+  const saldoDe = c => {
+    const s = c.saldo;
+    if (!s || c.ativo === false && !c.qtd) return null;
+    const deve = s.deve > 0.004 ? s.deve : 0;
+    const nivel = !deve ? 0 : deve < 1000 ? 1 : deve < 3000 ? 2 : 3;
+    const item = (rotulo, v) => v == null ? { rotulo, valor: '—', neg: false } : { rotulo, valor: brl(v), neg: v < -0.004 };
+    return {
+      nivel,
+      rotulo: deve ? 'EMPRESA DEVE' : 'SALDO',
+      valor: deve ? brl(deve) : 'Em dia',
+      itens: [
+        item(s.cv ? 'RDA (bolso)' : 'RDA', s.rda), item(s.cv ? 'RDM (bolso)' : 'RDM', s.rdm), item('Saldo cartão', s.cartao_saldo),
+        item('Gasto cartão', s.cartao_gasto), item('Gasto carteira', s.carteira),
+      ],
+    };
+  };
   const colaboradores = cs.map(c => {
     const vazio = !c.qtd;
     return {
+      saldo: saldoDe(c),
       userId: c.user_id,
       fotoPath: c.foto_path || '',
       iniciais: ini(c.nome || c.email),
       vazio,
       nomeHtml: `${esc(c.nome || c.email)}${c.ativo === false ? ' <span style="font-size:14px;opacity:.75">🚫 desativado</span>' : ''}`,
-      subHtml: vazio ? `sem notas em ${ano}` : `${c.qtd} nota${c.qtd === 1 ? '' : 's'} · ${brl(c.total)}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`,
+      subHtml: vazio ? `sem notas em ${ano}` : `${c.qtd} nota${c.qtd === 1 ? '' : 's'}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`,
     };
   });
   mostrar('colabs', { cabecalhoSub, colaboradores, faturamento });

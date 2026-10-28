@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Models\Nota;
+use App\Models\Repasse;
 use App\Services\FotoStorage;
 use App\Services\PastaModelo;
 use App\Services\RelatorioCv;
@@ -37,6 +38,7 @@ class ArquivosController extends Controller
             ->groupBy('user_id', 'mes')->get();
 
         $colabs = Colaborador::query()->orderBy('nome')->get();
+        $saldos = $u->veTudo() ? $this->saldosEquipe($ano, $colabs) : [];
         $out = [];
         foreach ($colabs as $c) {
             if (! $u->veTudo() && $c->id !== $u->id) {
@@ -57,6 +59,7 @@ class ArquivosController extends Controller
                 'user_id' => $c->id, 'nome' => $c->nome, 'email' => $c->email, 'role' => $c->role, 'ativo' => (bool) $c->ativo,
                 'foto_path' => $c->foto_path, 'pasta' => PastaModelo::nomeColaborador($c),
                 'qtd' => $qtd, 'total' => round($total, 2), 'com_anexo' => $comAnexo, 'meses' => $meses,
+                'saldo' => $saldos[$c->id] ?? null,
             ];
         }
 
@@ -77,6 +80,91 @@ class ArquivosController extends Controller
         }
 
         return response()->json(['ano' => $ano, 'colaboradores' => $out, 'faturamento' => $fat]);
+    }
+
+    /**
+     * Quanto a empresa deve a cada colaborador, acumulado até dezembro de $ano (28/10/2026, cartão da lista de
+     * Arquivos). Mesma conta do app (_devedorDe, _gastoBolsoPorTipo, _cartaoPorTipo) e do PDF da equipe:
+     *   RDM/RDA → gasto (sem Faturamento) − recebido confirmado, por tipo; a recarga do cartão fica fora;
+     *   C.V.    → notas do bolso (pagamento=carteira) − repasse recebido; RDM/RDA mostram só a composição do bolso;
+     *   cartão  → recargas − gasto no cartão, no ANO (igual à planilha CV; negativo = empresa deve).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function saldosEquipe(int $ano, $colabs): array
+    {
+        $k = $ano * 12 + 12;
+        $gastos = Nota::query()->where('deleted', false)->whereNotNull('user_id')
+            ->whereRaw('(ano * 12 + mes) <= ?', [$k])
+            ->selectRaw('user_id, tipo, pagamento, ano, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'pagamento', 'ano')->get();
+        $repasses = Repasse::query()->where('deleted', false)
+            ->whereRaw('(ano * 12 + mes) <= ?', [$k])
+            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', 'received'))
+            ->whereNotNull('confirmado_em')
+            ->selectRaw('user_id, tipo, destino, ano, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'destino', 'ano')->get();
+
+        $a = [];
+        foreach ($gastos as $g) {
+            $x = &$a[$g->user_id];
+            $x ??= ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
+            $v = (float) $g->v;
+            $t = $g->tipo;
+            if ($g->pagamento !== 'empresa') {
+                if (isset($x['gasto'][$t])) {
+                    $x['gasto'][$t] += $v;
+                }
+                if ($g->pagamento === 'carteira' && isset($x['bolso'][$t])) {
+                    $x['bolso'][$t] += $v;
+                }
+                if ($g->pagamento !== 'carteira' && (int) $g->ano === $ano) {
+                    $x['cartaoAno'] += $v;
+                }
+            }
+            unset($x);
+        }
+        foreach ($repasses as $r) {
+            $x = &$a[$r->user_id];
+            $x ??= ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
+            $v = (float) $r->v;
+            if ($r->destino === 'recarga') {
+                if ((int) $r->ano === $ano) {
+                    $x['recargaAno'] += $v;
+                }
+            } else {
+                $x['repassado'] += $v;
+                if (isset($x['recebido'][$r->tipo])) {
+                    $x['recebido'][$r->tipo] += $v;
+                }
+            }
+            unset($x);
+        }
+
+        $out = [];
+        foreach ($colabs as $c) {
+            $x = $a[$c->id] ?? ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
+            if ($c->usaCartao()) {
+                $bolso = $x['bolso']['RDM'] + $x['bolso']['RDA'];
+                $out[$c->id] = [
+                    'cv' => true,
+                    'deve' => round($bolso - $x['repassado'], 2),
+                    'rdm' => round($x['bolso']['RDM'], 2), 'rda' => round($x['bolso']['RDA'], 2),
+                    'cartao_gasto' => round($x['cartaoAno'], 2), 'cartao_saldo' => round($x['recargaAno'] - $x['cartaoAno'], 2),
+                    'carteira' => round($bolso, 2),
+                ];
+            } else {
+                $rdm = $x['gasto']['RDM'] - $x['recebido']['RDM'];
+                $rda = $x['gasto']['RDA'] - $x['recebido']['RDA'];
+                $out[$c->id] = [
+                    'cv' => false,
+                    'deve' => round($rdm + $rda, 2),
+                    'rdm' => round($rdm, 2), 'rda' => round($rda, 2),
+                    'cartao_gasto' => null, 'cartao_saldo' => null,
+                    'carteira' => round($x['gasto']['RDM'] + $x['gasto']['RDA'], 2),
+                ];
+            }
+        }
+
+        return $out;
     }
 
     /** Notas de Faturamento do período (todas as pessoas), mais antigas primeiro. */
