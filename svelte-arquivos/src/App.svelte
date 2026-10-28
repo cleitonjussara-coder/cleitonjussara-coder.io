@@ -10,6 +10,12 @@
     onVer, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
   } = $props();
   let mesEquipe = $state('');
+  let busca = $state('');
+  /* sem acento e sem caixa: "joao" acha "João" */
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const termo = $derived(norm(busca));
+  const visiveis = $derived(dados?.colaboradores ? dados.colaboradores.filter(c => !termo || c.busca.includes(termo)) : []);
+  const mostraFat = $derived(!termo || 'faturamento'.includes(termo));
 </script>
 
 {#snippet cabecalho(titulo, sub)}
@@ -56,10 +62,18 @@
         <div class="ini-dica" style="margin-top:8px">As planilhas são do ano inteiro; RDM/RDA leva uns 20 s por pessoa.</div>
       </div>
     {/if}
+    {#if dados.colaboradores.length}
+      <div class="arq-busca">
+        <input type="search" bind:value={busca} placeholder="🔍 Buscar colaborador" autocomplete="off" aria-label="Buscar colaborador">
+        {#if busca}<button type="button" class="arq-busca-x" onclick={() => (busca = '')} aria-label="Limpar busca">✕</button>{/if}
+      </div>
+    {/if}
     {#if !dados.colaboradores.length}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhum colaborador.</div>
+    {:else if termo && !visiveis.length && !(dados.faturamento && mostraFat)}
+      <div class="db-card" style="text-align:center;color:var(--text2)">Nenhum colaborador com “{busca.trim()}”.</div>
     {/if}
-    {#if dados.faturamento}
+    {#if dados.faturamento && mostraFat}
       <button class="arq-colab" onclick={onAbrirFaturamento}>
         <div class="avatar">🏢</div>
         <div class="arq-colab-txt">
@@ -69,7 +83,7 @@
         <span class="arq-seta">›</span>
       </button>
     {/if}
-    {#each dados.colaboradores as c}
+    {#each visiveis as c (c.userId)}
       <button class="arq-colab {c.vazio && !c.saldo ? 'arq-vazio' : ''} {c.saldo ? `arq-com-saldo sv-${c.saldo.nivel}` : ''}" onclick={() => onAbrirColab(c.userId)}>
         <div class="avatar" data-foto={c.fotoPath}>{c.iniciais}</div>
         <div class="arq-colab-txt">

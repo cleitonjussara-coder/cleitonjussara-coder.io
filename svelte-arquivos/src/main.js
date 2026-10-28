@@ -111,6 +111,7 @@ async function renderColabs(s) {
     const vazio = !c.qtd;
     return {
       saldo: saldoDe(c),
+      busca: `${c.nome || ''} ${c.email || ''}`.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(),
       userId: c.user_id,
       fotoPath: c.foto_path || '',
       iniciais: ini(c.nome || c.email),
