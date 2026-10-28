@@ -38,7 +38,12 @@ return [
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),
-            'database' => env('DB_DATABASE') ?: database_path('database.sqlite'),
+            /* Com o MySQL no ar (06/10/2026) o DB_DATABASE passa a ser o nome
+               do banco MySQL: o arquivo SQLite (que continua sendo lido pela
+               cópia e pela volta) não pode herdar esse valor. */
+            'database' => env('SQLITE_DATABASE')
+                ?: (env('DB_CONNECTION', 'sqlite') === 'sqlite' ? env('DB_DATABASE') : null)
+                ?: database_path('database.sqlite'),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
             'busy_timeout' => (int) env('DB_BUSY_TIMEOUT', 5000),
@@ -47,14 +52,18 @@ return [
             'transaction_mode' => 'IMMEDIATE',
         ],
 
+        /* MySQL da Locaweb (06/10/2026). Os MYSQL_* do .env valem antes dos
+           DB_*: assim dá para cadastrar o MySQL e copiar os dados com o
+           SQLite ainda no ar, e a virada (artisan banco:mudar mysql) só troca
+           o DB_CONNECTION. */
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
+            'host' => env('MYSQL_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('MYSQL_PORT', env('DB_PORT', '3306')),
+            'database' => env('MYSQL_DATABASE', env('DB_DATABASE', 'laravel')),
+            'username' => env('MYSQL_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('MYSQL_PASSWORD', env('DB_PASSWORD', '')),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),

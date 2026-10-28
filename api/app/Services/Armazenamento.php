@@ -37,6 +37,14 @@ class Armazenamento
             foreach ([$arq, $arq.'-wal', $arq.'-shm'] as $f) {
                 $banco += is_file($f) ? (filesize($f) ?: 0) : 0;
             }
+        } else {
+            /* MySQL (06/10/2026): o tamanho que o próprio servidor informa. */
+            try {
+                $banco = (int) DB::table('information_schema.tables')
+                    ->where('table_schema', DB::connection()->getDatabaseName())
+                    ->sum(DB::raw('data_length + index_length'));
+            } catch (\Throwable) {
+            }
         }
 
         $raizFotos = rtrim($this->fotos->disk()->path(''), '/\\');
