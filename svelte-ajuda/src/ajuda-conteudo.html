@@ -17,6 +17,7 @@
       <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>foto em branco</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>
       <p><b>📷 Foto em branco (21/10/2026):</b> o app <b>não deixa anexar</b> uma foto que não mostra nenhum dado de nota — papel liso, sem texto (veja abaixo). Se uma assim já tiver chegado ao servidor (um aparelho com o app antigo, ou uma nota de antes), a nota ganha a etiqueta <b>foto em branco</b> aqui. Nada é apagado: toque em <b>Corrigir</b> e <b>fotografe a nota de novo</b>; ao enviar a foto certa a etiqueta some sozinha.</p>
       <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>
+      <p><b>Recibo de pedágio (27/10/2026):</b> nota <b>sem chave e sem QR Code</b> já abre como <b>🗒️ Outro</b>. No recibo de pedágio o app lê pela foto o <b>SEQ No</b> (vira o <b>Número do recibo</b>) e a <b>Placa do veículo</b> (campo próprio, só aparece em recibo). Confira os dois antes de salvar. O botão <b>🧾</b> no cartão da nota copia placa, SEQ, data e valor e abre o portal da EcoRodovias — lá a pessoa entra com CPF/CNPJ e senha e emite a NFS-e do pedágio, que depois é anexada à nota.</p>
     </div>
 
     <div class="ajuda-sec">
@@ -142,7 +143,8 @@
       <h4>🧾 Campos da nota</h4>
       <ul>
         <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Outros). Define a aba da planilha e a pasta nos arquivos.</li>
-        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo). Com chave, o app escolhe sozinho.</li>
+        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo, comprovante). Com chave, o app escolhe sozinho; sem chave e sem QR, vira Outro (27/10/2026).</li>
+        <li><b>Placa</b> (só em recibo de pedágio, 27/10/2026): lida da foto ("Placa: ABC1D23"); você pode digitar ou corrigir. O número do recibo é o <b>SEQ No</b> impresso nele.</li>
         <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>
         <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>
       </ul>

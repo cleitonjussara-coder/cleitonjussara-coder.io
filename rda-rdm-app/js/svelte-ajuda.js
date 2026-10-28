@@ -18,6 +18,7 @@
       <p>O que entra nessa lista: <b>aguardando envio</b>, <b>sem anexo</b>, <b>foto em branco</b>, <b>sem valor</b>, <b>sem CNPJ</b>, <b>sem nº da nota</b>, <b>data no futuro</b> e <b>possível duplicata</b>.</p>\r
       <p><b>📷 Foto em branco (21/10/2026):</b> o app <b>não deixa anexar</b> uma foto que não mostra nenhum dado de nota — papel liso, sem texto (veja abaixo). Se uma assim já tiver chegado ao servidor (um aparelho com o app antigo, ou uma nota de antes), a nota ganha a etiqueta <b>foto em branco</b> aqui. Nada é apagado: toque em <b>Corrigir</b> e <b>fotografe a nota de novo</b>; ao enviar a foto certa a etiqueta some sozinha.</p>\r
       <p><b>Recibo é exceção (24/09/2026):</b> escolhendo <b>🗒️ Outro — recibo, comprovante</b> no campo Documento, o app <b>deixa de pedir número e série</b> — recibo costuma não ter. O <b>CNPJ do estabelecimento</b> continua sendo pedido, porque é ele que identifica quem recebeu.</p>\r
+      <p><b>Recibo de pedágio (27/10/2026):</b> nota <b>sem chave e sem QR Code</b> já abre como <b>🗒️ Outro</b>. No recibo de pedágio o app lê pela foto o <b>SEQ No</b> (vira o <b>Número do recibo</b>) e a <b>Placa do veículo</b> (campo próprio, só aparece em recibo). Confira os dois antes de salvar. O botão <b>🧾</b> no cartão da nota copia placa, SEQ, data e valor e abre o portal da EcoRodovias — lá a pessoa entra com CPF/CNPJ e senha e emite a NFS-e do pedágio, que depois é anexada à nota.</p>\r
     </div>\r
 \r
     <div class="ajuda-sec">\r
@@ -50,7 +51,6 @@
         <li><b>💳 Recarga do cartão</b> — quando o gestor transferir para o cartão pré-pago, <b>você registra o recebimento</b> aqui (07/10/2026) e o gestor é avisado. O painel mostra o <b>saldo de hoje</b>: recargas recebidas menos o que já foi gasto no cartão.</li>\r
       </ul>\r
       <p>Toda despesa paga <b>no cartão</b> vai para a aba <b>CARTÃO CORPORATIVO</b>. Em <b>RDM/RDA e Planilhas</b> há o quadro <b>💳 Saldo do cartão</b>, que fica marcado como <b>Acabando</b> abaixo de R$ 300,00.</p>\r
-      <p><b>Pedido aberto e "Recebi" (24/10/2026, vale para C.V. e RDM/RDA):</b> quando você pede repasse ou recarga, aparece no <b>Início</b> e no <b>Saldo</b> o cartão <b>⏳ aguardando</b>. Quando o dinheiro cair, toque em <b>✅ Recebi</b> e confirme — se o depósito foi <b>maior ou menor</b> que o pedido, corrija o valor; o saldo usa o que realmente caiu e o gestor é avisado. Enquanto o pedido estiver aberto, <b>não dá para pedir outro</b> (o botão fica bloqueado); para liberar, confirme o recebimento ou toque em <b>Cancelar pedido</b>.</p>\r
       <p><b>Recebido separado (16/10/2026):</b> no <b>Painel</b>, o recebido do mês aparece aberto em <b>Recebido RDM</b>, <b>Recebido RDA</b> e <b>💳 Recarga do cartão</b>. Em <b>RDM/RDA e Planilhas</b>, a lista de repasses ganha o resumo <b>Recebido em (mês)</b> e a recarga vem identificada como <b>💳 Recarga do cartão</b> — ela vai para o cartão e <b>não abate os repasses</b> nem entra no saldo.</p>\r
       <p><b>Notas por pagamento (16/10/2026):</b> em <b>Notas</b>, quem é do cartão corporativo ganha os botões <b>💳 Cartão</b> e <b>👛 Carteira</b>, ao lado de Todas, RDA e RDM — cada um lista só as notas daquele pagamento, e <b>Todas</b> volta à lista inteira.</p>\r
       <p><b>Resumo no Início (16/10/2026):</b> quem é do cartão corporativo vê, no Início, o resumo do mês com o <b>gasto no 💳 Cartão</b> (e o <b>saldo do cartão</b>, que avisa <b>acabando</b> abaixo de R$ 300,00) e o <b>gasto na 👛 Carteira</b> (e o <b>reembolso a receber</b>, somando os meses anteriores). Embaixo de cada um, o gasto aberto em <b>RDM</b> e <b>RDA</b> — o que foi lançado no cartão e o que foi lançado na carteira. Tocar no resumo abre o Painel.</p>\r
@@ -144,7 +144,8 @@
       <h4>🧾 Campos da nota</h4>\r
       <ul>\r
         <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Outros). Define a aba da planilha e a pasta nos arquivos.</li>\r
-        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo). Com chave, o app escolhe sozinho.</li>\r
+        <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo, comprovante). Com chave, o app escolhe sozinho; sem chave e sem QR, vira Outro (27/10/2026).</li>\r
+        <li><b>Placa</b> (só em recibo de pedágio, 27/10/2026): lida da foto ("Placa: ABC1D23"); você pode digitar ou corrigir. O número do recibo é o <b>SEQ No</b> impresso nele.</li>\r
         <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>\r
         <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>\r
       </ul>\r
