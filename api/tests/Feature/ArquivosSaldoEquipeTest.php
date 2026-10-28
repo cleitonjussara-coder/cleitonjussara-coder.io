@@ -79,6 +79,20 @@ class ArquivosSaldoEquipeTest extends TestCase
         $this->assertNull($s['cartao_gasto']);
     }
 
+    public function test_credito_em_um_tipo_nao_abate_a_divida_do_outro(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora');
+        $dani = $this->pessoa('colaborador', 'Dani');
+        $this->nota($dani, 'RDA', 100, null);
+        $this->repasse($dani, 'RDM', 136, 'carteira');   // RDM −136, RDA +100
+        Sanctum::actingAs($gestor);
+
+        $s = $this->saldoDe($dani->id);
+        $this->assertEquals(-136, $s['rdm']);
+        $this->assertEquals(100, $s['rda']);
+        $this->assertEquals(100, $s['deve']);
+    }
+
     public function test_cv_deve_bolso_menos_repasse_e_cartao_e_recarga_do_ano(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora');

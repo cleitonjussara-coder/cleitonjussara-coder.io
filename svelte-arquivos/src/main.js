@@ -100,6 +100,7 @@ async function renderColabs(s) {
       nivel,
       rotulo: deve ? 'EMPRESA DEVE' : 'SALDO',
       valor: deve ? brl(deve) : 'Em dia',
+      partes: [{ rotulo: 'RDM', valor: brl(s.rdm) }, { rotulo: 'RDA', valor: brl(s.rda) }],
       itens: [
         item(s.cv ? 'RDA (bolso)' : 'RDA', s.rda), item(s.cv ? 'RDM (bolso)' : 'RDM', s.rdm), item('Saldo cartão', s.cartao_saldo),
         item('Gasto cartão', s.cartao_gasto), item('Gasto carteira', s.carteira),

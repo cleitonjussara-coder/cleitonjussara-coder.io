@@ -156,7 +156,8 @@ class ArquivosController extends Controller
                 $rda = $x['gasto']['RDA'] - $x['recebido']['RDA'];
                 $out[$c->id] = [
                     'cv' => false,
-                    'deve' => round($rdm + $rda, 2),
+                    /* RDM e RDA são independentes (como no PDF da equipe): crédito de um não paga a dívida do outro */
+                    'deve' => round(max(0, $rdm) + max(0, $rda), 2),
                     'rdm' => round($rdm, 2), 'rda' => round($rda, 2),
                     'cartao_gasto' => null, 'cartao_saldo' => null,
                     'carteira' => round($x['gasto']['RDM'] + $x['gasto']['RDA'], 2),

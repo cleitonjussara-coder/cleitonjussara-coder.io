@@ -77,7 +77,9 @@
           <div class="arq-colab-sub">{@html c.subHtml}</div>
         </div>
         {#if c.saldo}
-          <div class="arq-selo"><small>{c.saldo.rotulo}</small><b>{c.saldo.valor}</b></div>
+          <div class="arq-selo"><small>{c.saldo.rotulo}</small><b>{c.saldo.valor}</b>
+            <em>{#each c.saldo.partes as p, i}{i ? ' · ' : ''}{p.rotulo} {p.valor}{/each}</em>
+          </div>
         {/if}
         <span class="arq-seta">›</span>
         {#if c.saldo}
