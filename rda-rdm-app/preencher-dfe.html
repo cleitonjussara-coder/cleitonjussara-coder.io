@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Favorito Preencher DFE</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg:#f4f7f4; --card:#fff; --tx:#16301f; --tx2:#4c6354; --ac:#1f8a4c; --bd:#d5e0d8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1b14; --card:#17261d; --tx:#e6f1ea; --tx2:#9db3a5; --ac:#3bb56e; --bd:#2a3d31; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--tx); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:640px; margin:0 auto; background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:22px 20px; }
+  h1 { margin:0 0 4px; font-size:22px; }
+  p, li { color:var(--tx2); }
+  ol { padding-left:20px; }
+  li { margin:8px 0; }
+  b { color:var(--tx); }
+  .fav { display:inline-block; margin:6px 0 2px; padding:12px 18px; border-radius:10px; background:var(--ac); color:#fff; font-weight:700; text-decoration:none; cursor:grab; }
+  .nota { font-size:14px; border-left:3px solid var(--ac); padding-left:10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📋 Favorito “Preencher DFE”</h1>
+  <p>Preenche, no portal da EcoRodovias, o <b>Nro. DFE</b> (o SEQ do recibo de pedágio) e a <b>data da passagem</b>. Você escolhe a concessão, a praça e a pista e clica em <b>Emitir</b>. Serve para o Chrome do computador.</p>
+
+  <h3>Instalar (uma vez só)</h3>
+  <ol>
+    <li>Deixe a barra de favoritos visível (<b>Ctrl + Shift + B</b>).</li>
+    <li><b>Arraste</b> o botão verde abaixo para a barra de favoritos: <br><a class="fav" id="fav" href="#">Preencher DFE</a></li>
+  </ol>
+
+  <h3>Usar</h3>
+  <ol>
+    <li>No app, no cartão do recibo de pedágio, toque em <b>🧾</b>. Ele copia os dados e abre o portal.</li>
+    <li>Entre no portal (CPF/CNPJ, senha e reCAPTCHA) e abra <b>Passagem Manual</b>.</li>
+    <li>Clique no favorito <b>Preencher DFE</b>. Se o Chrome perguntar sobre a área de transferência, permita.</li>
+    <li>Confira, escolha <b>Concessão, Praça e Pista</b> e clique em <b>Emitir</b>.</li>
+  </ol>
+  <p class="nota">O portal só aceita emitir até <b>7 dias</b> depois da passagem. O favorito não guarda senha nem clica em Emitir.</p>
+</main>
+<script>
+/* O código do favorito. Fica como função para ser lido e testado; o link do botão é montado a partir dela. */
+function preencherDfe() {
+  var UUID = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/;
+  if (!/ecorodovias\.com\.br$/i.test(location.hostname)) {
+    alert('Abra o portal da EcoRodovias (Passagem Manual) e clique no favorito de novo.');
+    return;
+  }
+  function pronto(el, v) {
+    var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    d.set.call(el, v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function aplicar(txt) {
+    var seq = (txt.match(UUID) || [])[0];
+    if (!seq) { alert('Não achei o SEQ do recibo. No app, toque em 🧾 no cartão do recibo e tente de novo.'); return; }
+    var resto = txt.replace(UUID, ''), m, iso = '';
+    if ((m = resto.match(/(\d{4})-(\d{2})-(\d{2})/))) iso = m[0];
+    else if ((m = resto.match(/(\d{2})\/(\d{2})\/(\d{4})/))) iso = m[3] + '-' + m[2] + '-' + m[1];
+    var caixas = [].filter.call(document.querySelectorAll('input'), function (i) { return /^X+$/.test(i.placeholder || ''); });
+    if (caixas.length !== 5) { alert('Não achei as 5 caixas do Nro. DFE. Abra Passagem Manual e tente de novo.'); return; }
+    var partes = seq.toUpperCase().split('-');
+    caixas.forEach(function (c, i) { pronto(c, partes[i]); });
+    var dt = document.querySelector('input[type=date]');
+    if (dt && iso) pronto(dt, iso);
+    alert('Preenchido: Nro. DFE ' + seq.toUpperCase() + (dt && iso ? ' e data ' + iso.split('-').reverse().join('/') : '') +
+      '.\nEscolha Concessão, Praça e Pista, confira e clique em Emitir.');
+  }
+  var h = '';
+  try { h = decodeURIComponent(location.hash.slice(1)); } catch (e) { h = ''; }
+  if (UUID.test(h)) { aplicar(h); return; }
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(aplicar, function () {
+      var t = prompt('Cole aqui o texto copiado pelo app (botão 🧾):');
+      if (t) aplicar(t);
+    });
+  } else {
+    var t = prompt('Cole aqui o texto copiado pelo app (botão 🧾):');
+    if (t) aplicar(t);
+  }
+}
+document.getElementById('fav').href = 'javascript:' + encodeURIComponent('(' + preencherDfe.toString() + ')()');
+document.getElementById('fav').addEventListener('click', function (e) { e.preventDefault(); alert('Arraste este botão para a barra de favoritos; não clique aqui.'); });
+</script>
+</body>
+</html>

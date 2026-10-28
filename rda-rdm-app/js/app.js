@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 475;
+const APP_BUILD = 476;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -506,7 +506,28 @@ const _notasDesenhadas = new Map();
 /* 27/10/2026: recibo de pedágio não traz chave nem QR; a NFS-e sai no portal da
    EcoRodovias (login CPF/CNPJ + reCAPTCHA, não dá para abrir direto). O botão copia
    data, valor e a observação (placa/SEQ) e abre o portal. */
-const PORTAL_NFSE_PEDAGIO = 'https://nfsevia.ecorodovias.com.br/';
+const PORTAL_NFSE_PEDAGIO = 'https://cupomfiscal.ecorodovias.com.br/EmitirCupom.aspx?pagamento=manual';
+const PRAZO_NFSE_PEDAGIO_DIAS = 7;   // o portal só emite até 7 dias depois da passagem
+const _SEQ_UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+/* Prazo para emitir a NFS-e do pedágio: só a DATA da passagem é conhecida (não a hora), então o limite é aproximado.
+   Devolve { falta (dias; negativo = vencido), limite ('dd/mm') } ou null se não é recibo de pedágio / sem data. */
+function _prazoNfsePedagio(n) {
+  if (!n || !n.data || !_ehReciboPedagio(n)) return null;
+  const [a, m, d] = String(n.data).slice(0, 10).split('-').map(Number);
+  const [ha, hm, hd] = String(hoje()).split('-').map(Number);
+  if (![a, m, d, ha, hm, hd].every(Number.isFinite)) return null;
+  const dias = Math.round((Date.UTC(ha, hm - 1, hd) - Date.UTC(a, m - 1, d)) / 86400000);
+  const lim = new Date(Date.UTC(a, m - 1, d + PRAZO_NFSE_PEDAGIO_DIAS));
+  return { falta: PRAZO_NFSE_PEDAGIO_DIAS - dias, limite: `${String(lim.getUTCDate()).padStart(2, '0')}/${String(lim.getUTCMonth() + 1).padStart(2, '0')}` };
+}
+function _prazoNfsePedagioHTML(n) {
+  const p = _prazoNfsePedagio(n);
+  if (!p || p.falta < -30) return '';   // recibo antigo: não fica reclamando para sempre
+  const estilo = 'style="color:#b45309;background:#fff7e6;border-radius:8px;padding:5px 8px;margin:6px 0 2px"';
+  if (p.falta < 0) return `<div class="nota-obs" ${estilo}>⚠️ Prazo da NFS-e do pedágio venceu em ${p.limite} (7 dias após a passagem) — o portal pode recusar.</div>`;
+  const quando = p.falta === 0 ? 'hoje é o último dia' : p.falta === 1 ? 'falta 1 dia' : `faltam ${p.falta} dias`;
+  return `<div class="nota-obs" ${p.falta <= 2 ? estilo : ''}>⏳ Emitir a NFS-e do pedágio até ~${p.limite} (${quando}).</div>`;
+}
 function _ehReciboPedagio(n) {
   return docDaNota(n) === 'outro' && (!!n.placa
     || /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`));
@@ -517,8 +538,14 @@ function emitirNfsePedagio(id) {
   const texto = [n.placa ? `Placa ${n.placa}` : '', n.numero ? `SEQ ${n.numero}` : '', `Data ${fmtDataBR(n.data)}`,
     Number(n.valor) > 0 ? `Valor ${brl(n.valor)}` : '', n.observacao || ''].filter(Boolean).join(' · ');
   navigator.clipboard?.writeText(texto).catch(() => {});
-  window.open(PORTAL_NFSE_PEDAGIO, '_blank');
-  toast('Dados do recibo copiados — cole no portal 🧾');
+  /* o favorito "Preencher DFE" (preencher-dfe.html) lê o SEQ e a data do endereço; se o login apagar o #, lê da área de transferência */
+  const seq = String(n.numero || '').trim();
+  const dia = String(n.data || '').slice(0, 10);
+  const alvo = _SEQ_UUID.test(seq) ? `${PORTAL_NFSE_PEDAGIO}#dfe=${encodeURIComponent(seq)}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `&data=${dia}` : ''}` : PORTAL_NFSE_PEDAGIO;
+  window.open(alvo, '_blank');
+  const p = _prazoNfsePedagio(n);
+  toast(p && p.falta < 0 ? 'Dados copiados, mas o prazo de 7 dias venceu — o portal pode recusar ⚠️'
+    : 'Dados copiados 🧾 — entre no portal e use o favorito Preencher DFE');
 }
 function consultarNota(id) {
   const n = _notaPorId(id);
@@ -5707,6 +5734,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           ${n.cnpj&&!n.razao_social ? `<div class="nota-cnpj">${BrasilAPI.formatar(n.cnpj)}</div>` : ''}
           ${_numeroSerieHTML(n)}
           ${n.placa ? `<div class="nota-cnpj">placa ${esc(n.placa)}</div>` : ''}
+          ${_prazoNfsePedagioHTML(n)}
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
         <div class="nota-foot">
