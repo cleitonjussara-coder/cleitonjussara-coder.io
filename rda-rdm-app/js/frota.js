@@ -236,6 +236,7 @@ window.Frota = (() => {
           ${v.ultimo_odometro != null ? `<div class="nota-body"><div class="nota-obs">Última leitura: <b>${kmFmt(v.ultimo_odometro)} km</b> em ${fmtData(v.ultima_data)}</div></div>` : ''}
           <div class="nota-foot">
             <button class="btn btn-outline btn-sm" data-id="${_at(v.id)}" onclick="FrotaPainel.verHistorico({veiculo_id:this.dataset.id})">🕓 Histórico</button>
+            ${v.ativo === false ? '' : `<button class="btn btn-primary btn-sm" data-id="${_at(v.id)}" onclick="Frota.abrirForm(null, this.dataset.id)">＋ KM</button>`}
             <div class="nota-actions"><button class="btn-icon-sm" data-id="${_at(v.id)}" onclick="Frota.abrirFormVeiculo(this.dataset.id)" title="Editar" ${_offline ? 'disabled' : ''}>✏️</button></div>
           </div>
         </div>`).join('')}
@@ -276,7 +277,7 @@ window.Frota = (() => {
   async function reenviar() { setLoading(true); try { await subirFila(); } finally { setLoading(false); } render(); }
 
   /* ── Formulário de KM ──────────────────────────────────── */
-  async function abrirForm(id = null) {
+  async function abrirForm(id = null, veiculoId = null) {
     if (!veiculos.length) { try { veiculos = (await DB.getMeta('frota_veiculos')) || []; } catch (_) {} }
     const ativos = veiculos.filter(v => v.ativo !== false);
     if (!ativos.length) { toast('Nenhum veículo cadastrado — peça ao gestor', 'err'); return; }
@@ -290,9 +291,14 @@ window.Frota = (() => {
     if (r && !lista.some(v => v.id === r.veiculo_id)) lista.push(veiculos.find(v => v.id === r.veiculo_id) || { id: r.veiculo_id, placa: r.placa || '?', modelo: r.modelo });
     sel.innerHTML = lista.map(v => `<option value="${_at(v.id)}">${esc(v.placa)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ativo === false || !ativos.includes(v) ? ' (inativo)' : ''}</option>`).join('');
     $('km-data').max = hojeDoApp();                 // a leitura registra algo que já aconteceu
-    const meuUltimo = registros.find(x => x.user_id === user?.id);
-    const meu = ativos.find(v => v.responsavel_id === user?.id);
-    sel.value = r?.veiculo_id || meuUltimo?.veiculo_id || meu?.id || ativos[0].id;
+    /* Veículo: só vem preenchido quando se sabe QUAL é (leitura editada, botão do próprio veículo, o veículo de que o
+       usuário é responsável, ou o único existente). Nunca "o último usado": isso levava a gravar na placa errada sem
+       perceber. Sem certeza, o campo fica vazio e obriga a escolher. */
+    const meus = ativos.filter(v => v.responsavel_id === user?.id);
+    const doBotao = veiculoId && ativos.find(v => v.id === veiculoId);
+    const certo = r?.veiculo_id || doBotao?.id || (meus.length === 1 ? meus[0].id : '') || (ativos.length === 1 ? ativos[0].id : '');
+    if (!certo) sel.insertAdjacentHTML('afterbegin', '<option value="">Escolha o veículo…</option>');
+    sel.value = certo;
     $('km-data').value = r?.data || hojeDoApp();
     $('km-odometro').value = r?.odometro ?? '';
     $('km-obs').value = r?.observacao || '';
@@ -333,6 +339,7 @@ window.Frota = (() => {
   }
 
   function _mostrarUltimaLeitura() {
+    if (!$('km-veiculo').value) { $('km-ultima').textContent = 'Escolha o veículo (confira a placa) antes de registrar.'; return; }
     const { odo, dt } = _ultimaLeitura();
     $('km-ultima').textContent = odo != null ? `Última leitura: ${kmFmt(odo)} km em ${fmtData(dt)}` : 'Primeira leitura deste veículo';
   }
@@ -415,6 +422,10 @@ window.Frota = (() => {
       observacao: $('km-obs').value.trim() || null,
     };
     if (!payload.veiculo_id || !payload.data || !Number.isFinite(payload.odometro)) { toast('Veículo, data e odômetro são obrigatórios', 'err'); return; }
+    if (!$('km-id').value) {                       // leitura nova: confirma a placa por extenso
+      const v = veiculos.find(x => x.id === payload.veiculo_id);
+      if (!(await pedirConfirmacao({ mensagem: `Registrar ${kmFmt(payload.odometro)} km no veículo ${v?.placa || '?'}${v?.modelo ? ' · ' + v.modelo : ''}? Confira se a placa é a do carro que você está usando.`, confirmar: 'Placa certa, salvar' }))) return;
+    }
     if (payload.data > hojeDoApp()) { toast('A data da leitura não pode ser depois de hoje', 'err'); return; }
     /* A hora em que a leitura foi feita (relógio do aparelho acertado pelo servidor) acompanha o registro novo — é ela
        que o histórico mostra, mesmo que a leitura só suba horas depois, quando voltar o sinal. Ao editar, vale a original. */
