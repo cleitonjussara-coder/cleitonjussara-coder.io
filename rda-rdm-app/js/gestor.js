@@ -335,6 +335,10 @@ window.Gestor = (() => {
   function irParaNotas() {
     document.getElementById('cdet-notas')?.scrollIntoView({ block: 'start' });
   }
+  /* seta ↑ dos cabeçalhos Notas/Repasses: desfaz o salto dos cartões do resumo (↓) */
+  function irParaTopoFicha() {
+    (document.querySelector('.cdet-kpis') || document.querySelector('.page-hd'))?.scrollIntoView({ block: 'start' });
+  }
   function irParaRepasses() {
     document.getElementById('cdet-repasses')?.scrollIntoView({ block: 'start' });   // direto, como as setas da lista (sem animação: não depende do aparelho)
   }
@@ -864,7 +868,7 @@ window.Gestor = (() => {
 
       if (!ehContador) {
       const _podeSelNotas = podeEditar && notas.length && typeof selNotasBarraHTML === 'function';
-      html += `<div class="section-hd" id="cdet-notas" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
+      html += `<div class="section-hd" id="cdet-notas" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span><button class="btn btn-sm btn-outline" title="Voltar ao topo" aria-label="Voltar ao topo" onclick="Gestor.irParaTopoFicha()">↑ Topo</button>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
       if (ehCVcolab) html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
       if (!notas.length) {
         html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
@@ -887,6 +891,7 @@ window.Gestor = (() => {
       const recCartao = soma(recebidos.filter(ehRecarga));
       html += `<div class="section-hd" id="cdet-repasses" style="flex-wrap:wrap;gap:8px 12px">
         <span>💸 Repasses · ${reps.length}</span>
+        <button class="btn btn-sm btn-outline" title="Voltar ao topo" aria-label="Voltar ao topo" onclick="Gestor.irParaTopoFicha()">↑ Topo</button>
         ${podeEditar && reps.length ? `<button class="btn btn-sm btn-outline" id="cdet-selbtn" onclick="Gestor.selecionarRepasses(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}
         <div class="mes-nav" style="margin-left:auto">
           <button class="btn-mes-nav" title="Mês anterior" onclick="Gestor.mesRepasses(-1)">‹</button>
@@ -1348,5 +1353,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaRepasses, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
