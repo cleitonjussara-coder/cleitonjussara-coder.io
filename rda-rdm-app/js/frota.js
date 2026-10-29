@@ -299,6 +299,10 @@ window.Frota = (() => {
     const certo = r?.veiculo_id || doBotao?.id || (meus.length === 1 ? meus[0].id : '') || (ativos.length === 1 ? ativos[0].id : '');
     if (!certo) sel.insertAdjacentHTML('afterbegin', '<option value="">Escolha o veículo…</option>');
     sel.value = certo;
+    /* veículo cadastrado para a pessoa (responsável) fica FIXADO ao registrar uma leitura nova; "Usar outro veículo" destrava */
+    const fixar = !r && !doBotao && meus.length === 1 && certo === meus[0].id;
+    sel.disabled = fixar;
+    $('km-veiculo-fixo').style.display = fixar ? 'block' : 'none';
     $('km-data').value = r?.data || hojeDoApp();
     $('km-odometro').value = r?.odometro ?? '';
     $('km-obs').value = r?.observacao || '';
@@ -309,6 +313,7 @@ window.Frota = (() => {
     setTimeout(() => $('km-odometro').focus(), 50);
   }
   function fecharForm() { $('km-overlay').style.display = 'none'; }
+  function destravarVeiculo() { $('km-veiculo').disabled = false; $('km-veiculo-fixo').style.display = 'none'; $('km-veiculo').focus(); }
 
   /* A leitura de referência do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
      tela (mês carregado e fila do aparelho); vale a mais recente. Ao EDITAR, a referência é a leitura ANTERIOR à que está
@@ -556,7 +561,7 @@ window.Frota = (() => {
   }
 
   return { render, trocarAba, abaAtiva: () => _aba, mudarMes, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
-           abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
+           destravarVeiculo, abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
            exportarExcel, exportarCSV, reenviar, subirFila,
            pendentes: () => _pendTodos };
 })();
