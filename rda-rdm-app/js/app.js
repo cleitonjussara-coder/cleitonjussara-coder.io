@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 485;
+const APP_BUILD = 486;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3044,10 +3044,11 @@ function switchView(v, voltando = false, avancando = false) {
          "Petermann – Despesas" — o rodapé volta um nível; o "‹ Início" do
          cabeçalho continua levando direto ao Início. */
       const anterior = _histViews[_histViews.length - 1];
-      const rotulo = anterior ? '‹ ' + (NOME_VIEW[anterior] || 'Voltar') : '🏠 Início';
-      r.textContent = rotulo;
+      const destino = anterior ? (NOME_VIEW[anterior] || 'tela anterior') : 'Início';
+      r.innerHTML = `<span class="vlt-seta" aria-hidden="true">←</span><span class="vlt-txt"><small>Voltar para</small><b>${esc(destino)}</b></span>`;
+      r.classList.remove('vlt-entra'); void r.offsetWidth; r.classList.add('vlt-entra');
       r.setAttribute('aria-label', anterior ? 'Voltar para ' + (NOME_VIEW[anterior] || 'a tela anterior') : 'Voltar ao Início');
-      r.onclick = () => (anterior ? voltarView() : switchView('inicio', true));
+      r.onclick = () => { try { navigator.vibrate?.(12); } catch (_) {} anterior ? voltarView() : switchView('inicio', true); };
     }
     $('app-content')?.classList.toggle('com-rodape', v !== 'inicio'); }
   if (v !== 'equipe') window.Gestor?.reset?.();   // sair da Equipe fecha o detalhe aberto
