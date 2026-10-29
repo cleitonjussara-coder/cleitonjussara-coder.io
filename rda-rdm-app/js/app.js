@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 484;
+const APP_BUILD = 485;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2946,9 +2946,16 @@ const NOME_VIEW = {
 };
 let _histViews = [];
 
+let _fwdViews = [];   // telas de onde a pessoa voltou — o botão "Avançar ›" leva de volta
+
 function voltarView() {
   const anterior = _histViews.pop();
+  if (viewAtual && viewAtual !== (anterior || 'inicio')) _fwdViews.push(viewAtual);
   switchView(anterior || 'inicio', true);
+}
+function avancarView() {
+  const prox = _fwdViews.pop();
+  if (prox) switchView(prox, false, true);
 }
 
 /* ─── Navegação em todas as telas (29/10/2026) ───────────────────
@@ -3016,7 +3023,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('app-content')?.addEventListener('scroll', _atualizarBotaoTopo, { passive: true });
 });
 
-function switchView(v, voltando = false) {
+function switchView(v, voltando = false, avancando = false) {
   /* Contador só consulta e baixa (14/10/2026): nada de Painel, Notas, Saldo, lixeira, Frota… */
   if (_ehContabilidade() && !['inicio', 'equipe', 'arquivos', 'perfil'].includes(v)) v = 'inicio';
   /* histórico: não empilha repetição nem o próprio destino (evita laço) */
@@ -3025,7 +3032,8 @@ function switchView(v, voltando = false) {
     _histViews.push(viewAtual);
     if (_histViews.length > 20) _histViews.shift();
   }
-  if (v === "inicio") _histViews = [];   // Início é a raiz: zera o caminho
+  if (!voltando && !avancando) _fwdViews = [];   // caminho novo: o "Avançar" antigo não vale mais
+  if (v === "inicio") { _histViews = []; if (!voltando) _fwdViews = []; }   // Início é a raiz: zera o caminho
   _pintarBarraUsuario();
   _voltarRodape(null);   // cada tela declara o seu, se tiver
   viewAtual = v;
@@ -3058,6 +3066,8 @@ function switchView(v, voltando = false) {
   el.scrollTop = 0;
   _pintarTrilha();
   _atualizarBotaoTopo();
+  { const f = $('btn-avancar'), prox = _fwdViews[_fwdViews.length - 1];
+    if (f) { f.style.display = prox ? '' : 'none'; if (prox) { f.textContent = (NOME_VIEW[prox] || 'Avançar') + ' ›'; f.setAttribute('aria-label', 'Avançar para ' + (NOME_VIEW[prox] || 'a próxima tela')); } } }
   if (v !== 'inicio') _armarNav();
   if (v==='home')    renderHome();
   else if (v==='inicio') renderInicio();
