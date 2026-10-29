@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 483;
+const APP_BUILD = 484;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2951,6 +2951,71 @@ function voltarView() {
   switchView(anterior || 'inicio', true);
 }
 
+/* ─── Navegação em todas as telas (29/10/2026) ───────────────────
+   Pedido do Paulo/Cleiton: "muitas páginas não voltam". Três ajudas juntas:
+   1) trilha clicável no topo (Início › Equipe › Paulo);
+   2) o botão Voltar do aparelho/navegador volta UM passo dentro do app
+      (janela aberta > nível interno da tela > tela anterior) em vez de sair;
+   3) seta ↑ que volta ao topo quando a tela está rolada. */
+let _navArmada = false;
+
+function _fecharJanelaAberta() {
+  if ($('menu-drawer-overlay')?.classList.contains('open')) { fecharMenu(); return true; }
+  const visiveis = [...document.querySelectorAll('.modal-overlay, [id$="-overlay"]')]
+    .filter(o => o.id !== 'menu-drawer-overlay' && getComputedStyle(o).display !== 'none' && getComputedStyle(o).visibility !== 'hidden' && o.offsetWidth > 0);
+  const topo = visiveis[visiveis.length - 1];
+  if (!topo) return false;
+  topo.dispatchEvent(new MouseEvent('click', { bubbles: true }));   // os overlays fecham ao tocar no fundo
+  return !(topo.isConnected && getComputedStyle(topo).display !== 'none');
+}
+
+/* um passo atrás: janela > nível interno (pílula do rodapé) > tela anterior */
+function _voltarNivel() {
+  if (_fecharJanelaAberta()) return true;
+  const b = $('btn-voltar-rodape');
+  if (b && b.style.display !== 'none') { b.click(); return true; }
+  if (viewAtual && viewAtual !== 'inicio') { voltarView(); return true; }
+  return false;
+}
+
+function _armarNav() {
+  if (_navArmada) return;
+  try { history.pushState({ nav: 1 }, '', location.href); _navArmada = true; } catch (_) {}
+}
+
+window.addEventListener('popstate', () => {
+  if (!_navArmada) return;
+  _navArmada = false;
+  if (_voltarNivel() && viewAtual && viewAtual !== 'inicio') _armarNav();   // no Início o próximo "voltar" sai do app
+});
+
+function _pintarTrilha() {
+  const el = $('trilha-nav');
+  if (!el) return;
+  if (!viewAtual || viewAtual === 'inicio') { el.style.display = 'none'; return; }
+  const caminho = ['inicio', ..._histViews.filter(x => x !== 'inicio').slice(-1), viewAtual];
+  el.innerHTML = caminho.map((v, i) => {
+    const nome = esc(NOME_VIEW[v] || v);
+    const ultimo = i === caminho.length - 1;
+    return (i ? '<span class="trilha-sep" aria-hidden="true">›</span>' : '') +
+      (ultimo ? `<span class="trilha-atual" aria-current="page">${nome}</span>`
+              : `<button type="button" class="trilha-item" onclick="switchView('${v}')">${i ? '' : '🏠 '}${nome}</button>`);
+  }).join('');
+  el.style.display = '';
+}
+
+function _atualizarBotaoTopo() {
+  const c = $('app-content'), b = $('btn-topo');
+  if (b && c) b.classList.toggle('visivel', c.scrollTop > 400);
+}
+function subirAoTopo() {
+  const c = $('app-content');
+  try { c.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { c.scrollTop = 0; }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  $('app-content')?.addEventListener('scroll', _atualizarBotaoTopo, { passive: true });
+});
+
 function switchView(v, voltando = false) {
   /* Contador só consulta e baixa (14/10/2026): nada de Painel, Notas, Saldo, lixeira, Frota… */
   if (_ehContabilidade() && !['inicio', 'equipe', 'arquivos', 'perfil'].includes(v)) v = 'inicio';
@@ -2991,6 +3056,9 @@ function switchView(v, voltando = false) {
   });
   const el = $('app-content');
   el.scrollTop = 0;
+  _pintarTrilha();
+  _atualizarBotaoTopo();
+  if (v !== 'inicio') _armarNav();
   if (v==='home')    renderHome();
   else if (v==='inicio') renderInicio();
   else if (v==='despesas') { _pagamentoCV = null; _abaDespesa = null; renderDespesas(); }
@@ -3577,6 +3645,8 @@ function lancarNaAba(tipo, modo) {
 }
 
 function renderDespesas() {
+  _voltarRodape(null);
+  if (_ehCV() && _pagamentoCV) _voltarRodape('trocarPagamentoCV()', '‹ Forma de pagamento');   // nível interno: volta à escolha cartão/repasse
   $('app-content').innerHTML = `
   <div class="db-container">
     <div class="ini-ola">
