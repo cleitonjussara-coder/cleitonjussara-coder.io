@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 487;
+const APP_BUILD = 488;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5547,14 +5547,7 @@ function _motivosDaNota(n) {
      Só marca: a nota continua valendo até alguém trocar a foto (Corrigir). */
   if (_fotoMarcadaEmBranco(n)) motivos.push('foto em branco');
   if (!(Number(n.valor) > 0)) motivos.push('sem valor');
-  const digitos = _soDigitos(n.cnpj);
-  if (digitos.length !== 14) motivos.push('sem CNPJ');
-  /* 08/10/2026: o número também vale quando sai da chave de 44 dígitos — é o
-     mesmo que o cartão mostra. A migração de 16/09 preencheu o número das notas
-     antigas no servidor sem mexer no updated_at, então o celular que já tinha
-     a nota guardada nunca recebeu o número e cobrava "sem nº" que o computador
-     (sincronizado depois) não cobrava. */
-  if (!_ehRecibo(n) && !String(n.numero || '').trim() && !_numeroSerieDaChave(n.chave_nfce)) motivos.push('sem nº da nota');
+  /* 30/10/2026: nº da nota e CNPJ NÃO são obrigatórios (pedido do Cleiton) — não viram pendência nem aviso. */
   if (_dataNoFuturo(n.data)) motivos.push('data no futuro');
   if (_dupMapa.has(n.id)) motivos.push('possível duplicata');
 
@@ -9373,6 +9366,17 @@ async function _salvarNotaInterno() {
   }
   const semValor = isNaN(valor) || valor <= 0;
   if (semValor) valor = 0;
+
+  /* 30/10/2026: recibo em branco não grava. Recibo (documento "outro" ou sem chave nem QR) sem valor, sem empresa/CNPJ,
+     sem número e sem observação não diz nada além do anexo — vira linha vazia na planilha. Nota com chave/QR fica de fora
+     (o servidor/leitura completa os dados depois). */
+  const _ehReciboForm = ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro';
+  if (_ehReciboForm && semValor
+      && !$('nf-razao').value.trim() && /^0*$/.test(BrasilAPI.limpar($('nf-cnpj').value))
+      && !($('nf-numero').value || '').trim() && !$('nf-obs').value.trim()) {
+    toast('Recibo em branco: informe pelo menos o valor, a empresa ou uma observação', 'err');
+    return;
+  }
 
   const cnpjRaw = BrasilAPI.limpar($('nf-cnpj').value);
   /* 24/09/2026: mês e ano SAEM DA DATA, sempre. Vinham dos campos escondidos
