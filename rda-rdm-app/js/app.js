@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 492;
+const APP_BUILD = 493;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2780,6 +2780,8 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
       <div class="modal-hd"><h3>${esc(titulo)}</h3>
         <button class="btn-icon-sm" onclick="document.getElementById('seletor-colab-overlay')?.remove()">✕</button></div>
       <div class="modal-bd">
+        <button class="btn btn-outline btn-full" style="margin-bottom:12px;min-height:46px;font-weight:700"
+                onclick="document.getElementById('seletor-colab-overlay')?.remove()">‹ Cancelar</button>
         ${lista.length > 6 ? `
           <input class="inp" id="seletor-colab-busca" type="text" placeholder="🔎 Buscar colaborador..."
                  style="margin-bottom:12px" oninput="_filtrarSeletorColab(this.value)">
@@ -2828,10 +2830,41 @@ function _filtrarSeletorColab(termo) {
    28/09/2026: "muitas vezes vai ter Faturamento que não terá como
    especificar" — o gestor pode pular a escolha, e a nota nasce sem dono
    nenhum (user_id null no banco), só possível pra pagamento='empresa'. */
-function iniciarFaturamento() {
-  abrirSeletorColaborador('🏢 Faturamento — de qual colaborador?', id => {
-    abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa', semColaborador: id === null });
-  }, { semColaborador: 'Sem colaborador específico' });
+/* 30/10/2026 (pedido do Paulo, áudio): "Lançar Faturamento" abre primeiro três caminhos separados — ver as notas, lançar por
+   colaborador ou lançar uma nota independente — e sempre dá para cancelar. */
+function _escolherCaminhoFaturamento() {
+  return new Promise(resolve => {
+    const { el, caixa, fechar, abrir } = _janelaApp(resolve, null);
+    _cabecalhoJanela(caixa, '🏢 Faturamento', 'O que você quer fazer?', false);
+    const opcoes = [
+      ['ver', '🗂️ Ver notas de Faturamento'],
+      ['colab', '👤 Lançar por colaborador'],
+      ['indep', '🏢 Lançar nota independente (sem colaborador)'],
+    ];
+    opcoes.forEach(([chave, rotulo]) => {
+      const b = _botaoJanela(rotulo, true, false);
+      b.style.cssText += ';width:100%;display:block;margin-bottom:8px;text-align:left';
+      b.onclick = () => fechar(chave);
+      caixa.appendChild(b);
+    });
+    const c = _botaoJanela('Cancelar', false, false);
+    c.style.cssText += ';width:100%;display:block';
+    c.onclick = () => fechar(null);
+    caixa.appendChild(c);
+    el.onclick = e => { if (e.target === el) fechar(null); };
+    abrir();
+  });
+}
+
+async function iniciarFaturamento() {
+  const escolha = await _escolherCaminhoFaturamento();
+  if (escolha === 'ver') abrirNotasFaturadas();
+  else if (escolha === 'indep') abrirSeletorTipoLancamento({ user_id: null, pagamento: 'empresa', semColaborador: true });
+  else if (escolha === 'colab') {
+    abrirSeletorColaborador('🏢 Faturamento — de qual colaborador?', id => {
+      abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa', semColaborador: false });
+    });
+  }
 }
 
 /* Atalho direto na Início pro Admin editar nota de colaborador sem passar
@@ -9573,6 +9606,19 @@ async function _salvarNotaInterno() {
       semValor || _atraso >= LANC_DIAS_LIMITE ? 'err' : 'ok', _atraso >= LANC_DIAS_LIMITE ? 6000 : 3000);
     syncToDrive().catch(() => {});
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
+    /* 30/10/2026 (pedido do Paulo): lançando várias notas de Faturamento, depois de salvar o app oferece lançar a próxima
+       para a mesma pessoa (ou sem colaborador), sem voltar ao menu. */
+    if (!_idEdicao && saved.pagamento === 'empresa') {
+      const dono = saved.user_id || null;
+      setTimeout(async () => {
+        const mais = await pedirConfirmacao({
+          titulo: 'Nota de Faturamento salva ✅',
+          mensagem: dono ? `Lançar mais uma nota para ${(equipePorId[dono]?.nome || 'o mesmo colaborador')}?` : 'Lançar mais uma nota sem colaborador?',
+          confirmar: 'Lançar mais', cancelar: 'Concluir',
+        });
+        if (mais) abrirSeletorTipoLancamento({ user_id: dono, pagamento: 'empresa', semColaborador: !dono });
+      }, 400);
+    }
   } finally { setLoading(false); }
 }
 
