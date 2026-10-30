@@ -17,7 +17,7 @@ class RelatorioFaturamentoPdf
 {
     private const MESES = [1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-    private const CAT = ['abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'outros' => 'Outros'];
+    private const CAT = ['abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locação de veículos' => 'Locação de Veículos', 'outros' => 'Outros'];
 
     public function gerar(int $ano, int $mes, string $arquivo, ?Colaborador $gerador = null): void
     {

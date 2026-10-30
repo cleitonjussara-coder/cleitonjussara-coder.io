@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 488;
+const APP_BUILD = 489;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1028,6 +1028,7 @@ function _itensMenu() {
   if (!_ehContabilidade()) {
     itens.push({ view:'home', ico:'📊', lbl:'Painel', sub:'gráficos e pendências' });
     itens.push({ acao:"irParaNotas()", ico:'🧾', lbl:'Minhas notas', sub:'lista completa' });
+    itens.push({ view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
     itens.push({ view:'saldo', ico: _usaCartao() ? '💳' : '💰', lbl: _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas', sub: _usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios' });
   }
   if (_veEquipe()) {
@@ -3854,6 +3855,12 @@ function renderInicio() {
           <span class="pnl-ico">📁</span>
           <span class="pnl-tit pnl-tit-frase">Arquivos e anexos</span>
         </span>
+      </button>
+      <button class="pnl pnl-grande" onclick="abrirNotasFaturadas()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">🏢</span>
+          <span class="pnl-tit pnl-tit-frase">NOTAS FATURADAS</span>
+        </span>
       </button>` : _usaCartao() ? `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'carteira')">
         <span class="pnl-conteudo">
@@ -3883,6 +3890,13 @@ function renderInicio() {
           <span class="pnl-ico">🏢</span>
           <span class="pnl-tit">Lançar Faturamento</span>
           <span class="pnl-sub">nota paga direto pela empresa</span>
+        </span>
+      </button>
+      <button class="pnl pnl-grande" onclick="abrirNotasFaturadas()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">🗂️</span>
+          <span class="pnl-tit">NOTAS FATURADAS</span>
+          <span class="pnl-sub">ver, corrigir ou excluir as já lançadas</span>
         </span>
       </button>
       <button class="pnl pnl-grande" onclick="iniciarRepasseColaborador()">
@@ -5215,6 +5229,12 @@ function renderHistorico() {
    'arquivos' é escolhida; a lógica de qual nível mostrar mora no bridge. */
 const MESES_LONGO_ARQUIVOS = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+/* Atalho "Notas faturadas" (30/10/2026, pedido do Paulo): cai direto na pasta Faturamento de Arquivos. */
+function abrirNotasFaturadas() {
+  switchView('arquivos');
+  setTimeout(() => window.Arquivos?.abrirFaturamento?.(), 50);
+}
+
 function _montarArquivos() {
   const el = $('app-content');
   el.innerHTML = '';   // Svelte.mount() só ANEXA no alvo
@@ -5225,6 +5245,7 @@ function _montarArquivos() {
     voltarRodape: _voltarRodape,
     carregarAvatares: () => window.Gestor?.carregarAvatares?.(),
     verFotoCompartilhado: _verArquivoCompartilhado,
+    podeExcluir: _ehGestorOuAdmin, moverNotaFat: faturadaMoverNota, excluirNotaFat: faturadaExcluirNota,
   });
 }
 
@@ -5481,6 +5502,7 @@ function renderNotas() {
       <button class="chip"        data-fil="RDA"  onclick="filtrarTipo(this)">RDA</button>
       <button class="chip"        data-fil="RDM"  onclick="filtrarTipo(this)">RDM</button>
       <button class="chip" onclick="switchView('lixeira')">🗑 Apagados</button>
+      ${_ehGestorOuAdmin() ? `<button class="chip" onclick="abrirNotasFaturadas()">🏢 Notas faturadas</button>` : ''}
     </div>
   </div>`;
 
@@ -8429,6 +8451,7 @@ async function abrirFormNota(dados = {}) {
      Pagamento (que é só cartão x carteira) — fica gravado à parte e prevalece
      na hora de salvar, não importa o regime de quem é a nota. */
   _pagamentoForcado = dados.pagamento === 'empresa' ? 'empresa' : null;
+  { const oL = $('nf-opt-locacao'); if (oL) { oL.hidden = !_pagamentoForcado; oL.disabled = !_pagamentoForcado; if (_pagamentoForcado) $('nf-subtipo').value = dados.subtipo || 'Abastecimento'; } }   // Locação de Veículos: só Faturamento
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
   { const donoCV = _usaCartaoDe(dados.user_id);
     const g = $('nf-pagamento-group'); if (g) g.style.display = (donoCV && !_pagamentoForcado) ? '' : 'none';
@@ -9566,9 +9589,16 @@ const _GRUPOS = [
   { tipo: 'RDM', subtipo: 'Outros', rotulo: 'RDM · Outros', nota: 'demais gastos' },
 ];
 
+/* Locação de Veículos (30/10/2026): categoria só da pasta Faturamento — é a que o gestor pode escolher ao mover uma nota faturada. */
+const _GRUPOS_FAT = [..._GRUPOS, { tipo: 'RDM', subtipo: 'Locação de Veículos', rotulo: 'RDM · Locação de Veículos', nota: 'aluguel de carro' }];
+
 function corrigirGrupoNota(id) {
   const n = _notaPorId(id);
   if (!n) { toast('Nota não encontrada', 'err'); return; }
+  _modalGrupoNota(n, _GRUPOS);
+}
+
+function _modalGrupoNota(n, grupos) {
   const atual = g => g.tipo === n.tipo && (g.tipo === 'RDA' || String(g.subtipo || '') === String(n.subtipo || 'Outros'));
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
@@ -9581,7 +9611,7 @@ function corrigirGrupoNota(id) {
         <p style="margin:0 0 4px;opacity:.75;font-size:14.5px">${esc(n.razao_social || 'Sem empresa')} · ${brl(Number(n.valor) || 0)} · ${fmtData(n.data)}<br>
         Lançado por <b>${esc(_rotuloProprietario(n))}</b> em <b>${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</b>.</p>
         <div class="grupo-opcoes">
-          ${_GRUPOS.map(g => `
+          ${grupos.map(g => `
             <button class="btn btn-full ${atual(g) ? 'btn-primary' : 'btn-outline'}" style="justify-content:flex-start;margin-bottom:8px"
                     ${atual(g) ? 'disabled' : ''}
                     onclick="_aplicarGrupoNota('${n.id}', '${g.tipo}', ${g.subtipo ? "'" + g.subtipo + "'" : 'null'}, this)">
@@ -9595,6 +9625,35 @@ function corrigirGrupoNota(id) {
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
 }
 
+/* Pasta Faturamento (Arquivos), 30/10/2026: o gestor muda a categoria ou manda para a lixeira uma nota já lançada. A nota pode
+   ser de qualquer pessoa (ou de ninguém), então tudo vai direto ao servidor e nada entra no IndexedDB de quem corrige. */
+function faturadaMoverNota(n) {
+  if (!n?.id) return;
+  _modalGrupoNota(n, _GRUPOS_FAT);
+}
+
+async function faturadaExcluirNota(n) {
+  if (!n?.id) return;
+  if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin excluem nota', 'err'); return; }
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para excluir', 'err'); return; }
+  const ok = await pedirConfirmacao({
+    titulo: 'Excluir esta nota faturada?',
+    mensagem: `${n.razao_social || 'Sem empresa'} · ${brl(Number(n.valor) || 0)} · ${fmtData(n.data)}
+
+Vai para a lixeira (Apagados) e sai do Faturamento e das planilhas. Dá para restaurar de lá.`,
+    confirmar: 'Excluir', perigo: true,
+  });
+  if (!ok) return;
+  setLoading(true, 'Excluindo…');
+  try {
+    await sb.notas.lixeira(n.id, true);
+    toast('Nota enviada para a lixeira');
+    window.Arquivos?.recarregar?.();
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+  } finally { setLoading(false); }
+}
+
 async function _aplicarGrupoNota(id, tipo, subtipo, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para corrigir', 'err'); return; }
   const n = _notaPorId(id);
@@ -9605,7 +9664,8 @@ async function _aplicarGrupoNota(id, tipo, subtipo, btn) {
     if (n) { n.tipo = nova.tipo || tipo; n.subtipo = ('subtipo' in nova) ? nova.subtipo : subtipo; }
     document.getElementById('grupo-overlay')?.remove();
     toast(r?.mudou === false ? 'Já estava nesse grupo' : `Corrigido para ${tipo}${subtipo ? ' · ' + subtipo : ''} ✅`);
-    if (viewAtual === 'equipe' && n?.user_id && window.Gestor?.abrir) Gestor.abrir(n.user_id);
+    if (viewAtual === 'arquivos') window.Arquivos?.recarregar?.();
+    else if (viewAtual === 'equipe' && n?.user_id && window.Gestor?.abrir) Gestor.abrir(n.user_id);
     else if (viewAtual === 'equipe') switchView('equipe');
   } catch (e) {
     toast('Não deu: ' + (e.message || 'erro'), 'err');

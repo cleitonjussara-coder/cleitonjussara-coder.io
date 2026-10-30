@@ -24,7 +24,8 @@ class PastaModelo
 
     /* subtipo gravado na nota → categoria da pasta (a planilha diz
        "Hospedagem", a pasta diz "HOSPEDAGENS") */
-    public const CATEGORIA_RDM = ['abastecimento' => 'ABASTECIMENTO', 'hospedagem' => 'HOSPEDAGENS'];
+    public const CATEGORIA_RDM = ['abastecimento' => 'ABASTECIMENTO', 'hospedagem' => 'HOSPEDAGENS',
+        'locação de veículos' => 'LOCAÇÃO DE VEÍCULOS'];
 
     public static function mesPasta(?int $mes): string
     {
@@ -37,7 +38,7 @@ class PastaModelo
         if (strtoupper((string) $n->tipo) === 'RDA') {
             return [self::GRUPO_RDA];
         }
-        $sub = strtolower(trim((string) $n->subtipo));
+        $sub = mb_strtolower(trim((string) $n->subtipo));
 
         return [self::GRUPO_RDM, self::CATEGORIA_RDM[$sub] ?? 'OUTROS'];
     }

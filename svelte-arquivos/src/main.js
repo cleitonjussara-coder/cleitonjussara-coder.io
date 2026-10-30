@@ -53,7 +53,7 @@ function mostrar(nivel, dados) {
       nivel, dados, ano,
       onMudarAno: mudarAno, onAbrirColab: abrirColab, onAbrirFaturamento: abrirFaturamento, onAbrirMes: abrirMes,
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
-      onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
+      onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
     },
   });
@@ -198,6 +198,8 @@ async function renderMes(s) {
     cabecalhoSub: `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
     temNotas: !!ns.length,
     comAnexo,
+    acoes: !!colab.faturamento,   // 30/10/2026: na pasta Faturamento cada nota ganha Categoria / Excluir
+    podeExcluir: !!dep.podeExcluir?.(),
     mes,   // sem isto o botão do mês baixava o ano inteiro (22/10/2026)
     grupos,
   });
@@ -209,6 +211,11 @@ function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user
 function abrirMes(m) { mes = m; render(); }
 function voltarMeses() { mes = null; lista = null; render(); }
 function voltarColabs() { colab = null; mes = null; lista = null; render(); }
+
+const _notaDaLista = id => (lista?.notas || []).find(x => x.id === id);
+function moverNota(id) { const n = _notaDaLista(id); if (n) dep.moverNotaFat?.(n); }
+function excluirNota(id) { const n = _notaDaLista(id); if (n) dep.excluirNotaFat?.(n); }
+function recarregar() { lista = null; resumo = null; render(); }
 
 function ver(id) {
   const n = (lista?.notas || []).find(x => x.id === id);
@@ -285,4 +292,4 @@ function reset() { colab = null; mes = null; lista = null; }
    arquivos.js de antes, não convive com ele. gestor.js chama
    Arquivos.abrirColab(id) direto; switchView() chama Arquivos.reset() ao
    sair e Arquivos.montar(el, deps) ao entrar (ver app.js). */
-window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset };
+window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset, recarregar };

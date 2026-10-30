@@ -11,7 +11,7 @@ class Nota extends Model
 {
     public const TIPOS = ['RDA', 'RDM'];
 
-    public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Outros'];
+    public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Locação de Veículos', 'Outros'];
 
     /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; carteira = do próprio bolso.
        25/09/2026: 'reembolso' virou 'carteira' — Reembolso e Repasse eram o mesmo dinheiro (o que vai

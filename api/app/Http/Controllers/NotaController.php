@@ -293,6 +293,28 @@ class NotaController extends Controller
         return response()->json(['nota' => $nota->fresh(), 'mudou' => true]);
     }
 
+    /**
+     * PATCH /notas/{id}/lixeira {deleted} — gestor/admin manda a nota para a lixeira (ou a traz de volta) direto no
+     * servidor (30/10/2026). Existe para a pasta Faturamento, onde a nota pode ser de qualquer pessoa ou de ninguém e
+     * não está no aparelho de quem a corrige. Não apaga em definitivo: o dono/gestor ainda a vê em Apagados.
+     */
+    public function lixeira(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin mandam a nota para a lixeira');
+        $d = $r->validate(['deleted' => ['required', 'boolean']]);
+
+        $nota = Nota::findOrFail($id);
+        if ((bool) $nota->deleted !== (bool) $d['deleted']) {
+            $nota->forceFill(['deleted' => (bool) $d['deleted'], 'updated_by' => $u->id])->save();
+            Log::warning('nota '.($d['deleted'] ? 'enviada para a lixeira' : 'restaurada').' pelo servidor', [
+                'nota' => $nota->id, 'por' => $u->email, 'dono' => $nota->user_id, 'pagamento' => $nota->pagamento,
+            ]);
+        }
+
+        return response()->json(['nota' => $nota->fresh()]);
+    }
+
     /* Ids apagados em definitivo desde `since`, para o app limpar o que
        ainda tem guardado (25/09/2026). Só ids — nada da nota sobrevive.
        26/09/2026: com `detalhe=1` devolve a linha inteira da lápide

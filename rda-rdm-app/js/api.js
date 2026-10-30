@@ -308,6 +308,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
        gestor/admin (26/09/2026). */
     apagadasDetalhe: since => req('GET', '/notas/apagadas', { query: { detalhe: 1, since: since || undefined } }),
     /* gestor/admin corrige o grupo do lançamento (23/09/2026) */
+    lixeira: (id, deleted = true) => req('PATCH', `/notas/${id}/lixeira`, { body: { deleted } }),
     corrigirTipo: (id, tipo, subtipo = null) => req('PATCH', `/notas/${id}/tipo`, { body: { tipo, subtipo } }),
     /* valor/data/emitente oficiais pela URL do QR (servidor abre o portal do
        SEFAZ). null quando o portal não respondeu — o app fica com o OCR. */

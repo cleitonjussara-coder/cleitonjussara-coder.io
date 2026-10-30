@@ -28,9 +28,9 @@ class RelatorioFaturamentoXlsx
     private const MESES_LONGO = [1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     /** chave interna → rótulo da coluna; a mesma divisão do RESUMO da equipe e do PDF de Faturamento */
-    private const CATS = ['alimentacao' => 'Alimentação (RDA)', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'outros' => 'Outros'];
+    private const CATS = ['alimentacao' => 'Alimentação (RDA)', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'outros' => 'Outros'];
 
-    private const ROTULO_CAT = ['alimentacao' => 'Alimentação', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'outros' => 'Outros'];
+    private const ROTULO_CAT = ['alimentacao' => 'Alimentação', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'outros' => 'Outros'];
 
     private const DOCS = ['nfce' => 'NFC-e', 'nfe' => 'NF-e', 'danfe' => 'DANFE', 'nfse' => 'NFS-e', 'outro' => 'Outro'];
 
@@ -108,6 +108,9 @@ class RelatorioFaturamentoXlsx
         }
         if (str_starts_with($s, 'hosp')) {
             return 'hospedagem';
+        }
+        if (str_starts_with($s, 'loca')) {
+            return 'locacao';
         }
 
         return 'outros';

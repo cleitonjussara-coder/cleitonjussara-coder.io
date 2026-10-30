@@ -7,7 +7,7 @@
   let {
     nivel, dados, ano,
     onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
-    onVer, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
+    onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
   } = $props();
   let mesEquipe = $state('');
   let busca = $state('');
@@ -141,6 +141,7 @@
         <div class="arq-grupo-hd"><span>{g.nome}</span><span>{g.resumoTxt}</span></div>
         <div class="arq-grade">
           {#each g.itens as n}
+            <div class="arq-cel">
             {#if n.temMini}
               <button class="arq-item" onclick={() => onVer(n.id)} title={n.titulo}>
                 <img src={n.miniUrl} alt="" decoding="async">
@@ -160,6 +161,13 @@
                 {#if n.fornHtml}<span class="arq-forn">{@html n.fornHtml}</span>{/if}
               </div>
             {/if}
+            {#if dados.acoes}
+              <div class="arq-acoes">
+                <button class="arq-acao" onclick={() => onMoverNota(n.id)} title="Mudar a categoria desta nota">🔀 Categoria</button>
+                {#if dados.podeExcluir}<button class="arq-acao arq-acao-del" onclick={() => onExcluirNota(n.id)} title="Mandar para a lixeira">🗑</button>{/if}
+              </div>
+            {/if}
+            </div>
           {/each}
         </div>
       </div>
