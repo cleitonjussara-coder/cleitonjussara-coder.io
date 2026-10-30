@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 489;
+const APP_BUILD = 490;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2850,7 +2850,7 @@ function iniciarEdicaoNotaColaborador() {
    card do colaborador em gestor.js — só o caminho até ela que é mais
    curto. Recarga só faz sentido pra quem usa cartão pré-pago (CV). */
 function iniciarRepasseColaborador() {
-  abrirSeletorColaborador('👛 Repasse — para qual colaborador?', id => {
+  abrirSeletorColaborador('💵 Repasse — para qual colaborador?', id => {
     const c = equipePorId[id];
     if (!c) return;
     abrirFormRepasse('received', null, { id: c.id, nome: c.nome || c.email || 'colaborador' }, _ehCV(c) ? 'carteira' : null);
@@ -3115,7 +3115,7 @@ let _pagamentoCV = null;         // 'cv' | 'carteira' — escolhido na página n
 const PAGAMENTOS_CV = [
   { chave: 'cv', ico: '💳', nome: 'Nota no cartão',
     sub: 'Pagou com o cartão corporativo.' },
-  { chave: 'carteira', ico: '👛', nome: 'Nota de repasse',
+  { chave: 'carteira', ico: '💵', nome: 'Nota de repasse',
     sub: 'Pagamento de carteira.' },
 ];
 
@@ -3390,7 +3390,7 @@ function _resumoHub() {
     if (!linhas.length) return '';
     const mostra = linhas.slice(0, 6);
     return `
-      <div class="res-tab-tit">👛 Repasse — mês a mês</div>
+      <div class="res-tab-tit">💵 Repasse — mês a mês</div>
       <table class="res-tab">
         <tr><th>Mês</th><th>Do bolso</th><th>Recebido</th><th>A receber</th></tr>
         ${mostra.map(l => `
@@ -3407,7 +3407,7 @@ function _resumoHub() {
   const detalhe = ehCartao ? `
     <div class="res-rec-tit">${rotulo}</div>
     <div class="res-recs">
-      ${caixaRec('👛', 'Repasse', devedor)}
+      ${caixaRec('💵', 'Repasse', devedor)}
     </div>
     ${tabelaCarteira()}` : `
     <div class="res-rec-tit">${rotulo} — por aba</div>
@@ -3433,7 +3433,7 @@ function _resumoHub() {
     <div class="res-card res-card-mini ${acima ? 'alerta' : ''}" id="resumo-corpo" onclick="alternarResumoHub()">
       <div class="res-recs">
         ${ehCartao
-          ? caixaRec('👛', 'Repasse', devedor)
+          ? caixaRec('💵', 'Repasse', devedor)
           : caixaRec('🍽️', 'RDA', devedorRda) + caixaRec('💼', 'RDM', devedorRdm)}
       </div>
       ${avisoLimite}
@@ -3476,8 +3476,8 @@ function _avisoEquipeDevedoraHTML() {
       ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
     const acoes = c.cv
-      ? btn('👛 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
-      : btn('👛 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('👛 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '');
+      ? btn('💵 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
+      : btn('💵 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('💵 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '');
     return `
       <div class="res-eq-linha">
         <div class="res-eq-quem"><b>${esc(c.nome)}</b>${info}</div>
@@ -3790,7 +3790,7 @@ function renderInicio() {
         { sigla: '💳 Cartão', cor: 'var(--accent-d)', gasto: A.gastoCartao,
           txt: _saldoCart == null ? '' : 'saldo ' + brlCurto(_saldoCart) + (_saldoCart < CARTAO_SALDO_MINIMO ? ' · acabando' : ''),
           cls: _saldoCart != null && _saldoCart < CARTAO_SALDO_MINIMO ? 'receber' : 'adiantado', det: _det(false) },
-        { sigla: '👛 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
+        { sigla: '💵 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
           txt: _aReemb > 0.004 ? brlCurto(_aReemb) + ' a receber' : _aReemb < -0.004 ? brlCurto(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
           cls: _aReemb > 0.004 ? 'receber' : 'adiantado', det: _det(true) },
       ];
@@ -3864,7 +3864,7 @@ function renderInicio() {
       </button>` : _usaCartao() ? `
       <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'carteira')">
         <span class="pnl-conteudo">
-          <span class="pnl-ico">👛</span>
+          <span class="pnl-ico">💵</span>
           <span class="pnl-tit">Repasse</span>
           <span class="pnl-sub">registrar o que recebeu · ou pedir ao gestor</span>
         </span>
@@ -4766,7 +4766,7 @@ function renderHome() {
         <span>${rdmAcc.pendenciaAnterior !== 0 || rdaAcc.pendenciaAnterior !== 0
           ? `<span>Pend. anterior <b style="color:${(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior) < 0 ? 'var(--danger)' : 'inherit'}">${brl(rdmAcc.pendenciaAnterior + rdaAcc.pendenciaAnterior)}</b></span>`
           : ''}</span>
-        ${_usaCartao() ? `<span>💳 C.V. <b>${brl(A.gastoCartao)}</b></span><span>👛 Carteira <b>${brl(A.gastoBolso)}</b></span>` : ''}
+        ${_usaCartao() ? `<span>💳 C.V. <b>${brl(A.gastoCartao)}</b></span><span>💵 Carteira <b>${brl(A.gastoBolso)}</b></span>` : ''}
       </div>
       <!-- 16/10/2026 (pedido do Cleiton): o recebido aberto em RDM, RDA e recarga do cartão (a recarga não entra no saldo) -->
       <div class="db-hero-meta" style="margin-top:4px">
@@ -4796,7 +4796,7 @@ function renderHome() {
         </div>
         <span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
         <span class="db-kpi-sub">Gasto ${brl(rdmAcc.gastoMes)} · Recebido ${brl(rdmAcc.repasseMes)}</span>
-        ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdmAcc.gastoCartaoMes)} · 👛 Carteira ${brl(rdmAcc.gastoBolsoMes)}</span>` : ''}
+        ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdmAcc.gastoCartaoMes)} · 💵 Carteira ${brl(rdmAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi rda" onclick="switchView('saldo')">
         <div class="db-kpi-top">
@@ -4808,7 +4808,7 @@ function renderHome() {
         </div>
         <span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
         <span class="db-kpi-sub">Gasto ${brl(rdaAcc.gastoMes)} · Recebido ${brl(rdaAcc.repasseMes)}</span>
-        ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdaAcc.gastoCartaoMes)} · 👛 Carteira ${brl(rdaAcc.gastoBolsoMes)}</span>` : ''}
+        ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdaAcc.gastoCartaoMes)} · 💵 Carteira ${brl(rdaAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
         <div class="db-kpi-top">
@@ -5498,7 +5498,7 @@ function renderNotas() {
     <div class="fil-tipo">
       <button class="chip active" data-fil="all"  onclick="filtrarTipo(this)">Todas</button>
       ${_usaCartao() ? `<button class="chip" data-fil="cartao"   onclick="filtrarTipo(this)">💳 Cartão</button>
-      <button class="chip" data-fil="carteira" onclick="filtrarTipo(this)">👛 Carteira</button>` : ''}
+      <button class="chip" data-fil="carteira" onclick="filtrarTipo(this)">💵 Carteira</button>` : ''}
       <button class="chip"        data-fil="RDA"  onclick="filtrarTipo(this)">RDA</button>
       <button class="chip"        data-fil="RDM"  onclick="filtrarTipo(this)">RDM</button>
       <button class="chip" onclick="switchView('lixeira')">🗑 Apagados</button>
@@ -5798,7 +5798,7 @@ function _notaIncompletaParaPlanilha(n) {
    já sabe de quem é); sem ele, olha o dono da nota. */
 function _pagamentoBadgeHTML(n, opts = {}) {
   if (n.pagamento === 'empresa') return '';
-  if (n.pagamento === 'carteira') return `<span class="doc-tag pag-carteira" title="Pago do bolso — a empresa reembolsa">👛 Carteira</span>`;
+  if (n.pagamento === 'carteira') return `<span class="doc-tag pag-carteira" title="Pago do bolso — a empresa reembolsa">💵 Carteira</span>`;
   const dono = n.user_id && n.user_id !== user?.id ? equipePorId[n.user_id] : user;
   const cv = opts.cv != null ? opts.cv : _ehCV(dono);
   return cv ? `<span class="doc-tag pag-cartao" title="Pago no cartão corporativo — a empresa já pagou">💳 Cartão</span>` : '';
@@ -6081,7 +6081,7 @@ function renderSaldo() {
       </div>
     </div>
     <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
-      <div class="saldo-label">👛 Saldo de RDM Recebido · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
+      <div class="saldo-label">💵 Saldo de RDM Recebido · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
       <div class="saldo-val">${brl(aReceber)}</div>
       <div class="saldo-detail"><span>Notas Carteira <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
       <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
