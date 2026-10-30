@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 491;
+const APP_BUILD = 492;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9558,6 +9558,10 @@ async function _salvarNotaInterno() {
     /* A tela é reconferida DEPOIS da espera (a pessoa pode ter saído da Equipe). Sem rede a ficha não carrega (ela lê do servidor
        e só mostraria "Erro ao carregar"): fica como está, a correção segue na fila e o aviso abaixo diz isso. */
     if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }
+    /* 30/10/2026 (pedido do Paulo): lançando a partir de Despesas ou do Início, a pessoa FICA nessa tela para lançar a próxima —
+       antes caía na lista de Minhas notas a cada nota salva. */
+    else if (viewAtual === 'despesas') renderDespesas();
+    else if (viewAtual === 'inicio') renderInicio();
     else if (_ehContabilidade()) renderEquipe(); else renderNotas();   // Contador não tem 'Minhas notas'
     const _atraso = _idEdicao ? null : _diasAtras(data);
     toast(
