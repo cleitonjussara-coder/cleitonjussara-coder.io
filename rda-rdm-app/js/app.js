@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 490;
+const APP_BUILD = 491;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2792,9 +2792,9 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
           ${lista.length ? '<div style="border-top:1px solid var(--border);margin-bottom:10px"></div>' : ''}
         ` : ''}
         ${lista.map(c => `
-          <button class="btn btn-outline btn-full" data-busca="${esc(`${c.nome || ''} ${c.email || ''}`)}" style="justify-content:flex-start;margin-bottom:8px;text-align:left"
+          <button class="btn btn-outline btn-full" data-busca="${esc(`${c.nome || ''} ${c.email || ''}`)}" style="justify-content:flex-start;margin-bottom:8px;text-align:left;height:auto;min-height:48px;padding:8px 14px;line-height:1.25;white-space:normal;flex-wrap:wrap;gap:0 8px"
                   onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback('${c.id}')">
-            ${esc(c.nome || c.email)} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${esc(c.email || '')}</span>
+            ${esc(c.nome || c.email)} <span style="opacity:.7;font-size:13px;font-weight:600;overflow-wrap:anywhere">${esc(c.email || '')}</span>
           </button>`).join('')}
         <p id="seletor-colab-vazio" style="display:none;opacity:.7;font-size:14px;text-align:center;margin:10px 0 0">Nenhum colaborador encontrado.</p>
       </div>
@@ -3845,7 +3845,7 @@ function renderInicio() {
           <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
             ? "Equipe e relatórios"
             : _ehCV()
-              ? "Postar nota de C.V. e repasse"
+              ? 'Postar nota de C.V. e repasse<span style="color:#e6f55a">/reembolso</span>'
               : "Lançar nota de RDM e RDA"}</span>
         </span>
       </button>
