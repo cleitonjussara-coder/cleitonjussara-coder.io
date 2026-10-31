@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 493;
+const APP_BUILD = 494;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5167,6 +5167,17 @@ async function renderNotasApagadas() {
     } catch (_) { /* offline ou erro: mostra como sempre */ }
   }
   const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
+  /* 30/10/2026 (pedido do Paulo): gestor/admin também veem o que a EQUIPE apagou — de quem era e quem apagou. Vem direto do
+     servidor (a lixeira do aparelho só guarda o que passou por ele); o que já está na lista de cima não repete. */
+  let daEquipe = [];
+  if (_ehGestorOuAdmin() && sb && navigator.onLine) {
+    try {
+      const jaTem = new Set(ns.map(n => n.id));
+      daEquipe = (await sb.notas.list({ deleted: '1' }) || [])
+        .filter(n => n && n.deleted && !jaTem.has(n.id))
+        .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    } catch (_) { daEquipe = []; }
+  }
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return '—'; }
@@ -5181,13 +5192,13 @@ async function renderNotasApagadas() {
     </div>
   </div>`;
 
-  if (!ns.length) {
+  if (!ns.length && !daEquipe.length) {
     html += `<div class="empty-state">
       <div class="empty-icon">🗑️</div>
       <p>Nenhum lançamento apagado por aqui.</p>
       <button class="btn btn-primary" onclick="switchView('notas')">Voltar para as notas</button>
     </div>`;
-  } else {
+  } else if (ns.length) {
     html += `<div style="display:flex;justify-content:flex-end;padding:0 14px 8px">
       <button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>
     </div>${selNotasBarraHTML('lixeira')}`;
@@ -5227,8 +5238,67 @@ async function renderNotasApagadas() {
     html += `</div>`;
   }
 
+  if (daEquipe.length) {
+    const nomeDe = uid => uid ? (equipePorId[uid]?.nome || equipePorId[uid]?.email || (uid === user.id ? (user.nome || user.email) : 'colaborador removido')) : 'Faturamento geral (sem colaborador)';
+    html += `<div style="padding:14px 14px 6px;font-weight:700;font-size:16px">👥 Apagadas pela equipe <span style="opacity:.7;font-weight:600">(${daEquipe.length})</span></div>
+    <div class="notas-list" id="notas-equipe-apagadas">`;
+    daEquipe.forEach(n => {
+      const quem = n.updated_by ? nomeDe(n.updated_by) : 'não registrado';
+      html += `
+      <div class="nota-card" data-tipo="${esc(n.tipo)}">
+        <div class="nota-head">
+          <span class="tipo-badge tipo-${esc(n.tipo)}">${esc(n.tipo)}</span>
+          ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
+          ${n.pagamento === 'empresa' ? '<span class="subtipo-tag">🏢 Faturamento</span>' : ''}
+          <span class="nota-data">${fmtHora(n.updated_at)}</span>
+        </div>
+        <div class="nota-body">
+          <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
+          <div class="nota-obs">👤 Nota de <b>${esc(nomeDe(n.user_id))}</b><br>🗑 Apagada por <b>${esc(quem)}</b> · ${fmtHora(n.updated_at)}${n.data ? `<br>📅 Data da nota: ${esc(fmtData(n.data))}` : ''}</div>
+        </div>
+        <div class="nota-foot">
+          <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
+          <div class="nota-actions">
+            <button class="btn btn-sm btn-primary" onclick="lixeiraEquipeRestaurar('${esc(n.id)}')">Restaurar</button>
+            <button class="btn btn-sm btn-danger-outline" onclick="lixeiraEquipeApagar('${esc(n.id)}')" title="Apagar em definitivo">Apagar definitivo</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
   _selNotas.clear();
   el.innerHTML = html;
+}
+
+/* Apagadas pela equipe (30/10/2026): a nota não está no aparelho de quem restaura, então vai direto ao servidor. */
+async function lixeiraEquipeRestaurar(id) {
+  if (!_ehGestorOuAdmin() || !sb || !navigator.onLine) { toast('Precisa de internet e de conta de gestor ou admin', 'err'); return; }
+  setLoading(true, 'Restaurando…');
+  try {
+    await sb.notas.lixeira(id, false);
+    toast('Lançamento restaurado');
+    if (viewAtual === 'lixeira') renderNotasApagadas();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); }
+  finally { setLoading(false); }
+}
+
+async function lixeiraEquipeApagar(id) {
+  if (!_ehGestorOuAdmin() || !sb || !navigator.onLine) { toast('Precisa de internet e de conta de gestor ou admin', 'err'); return; }
+  const ok = await pedirPalavra({
+    titulo: 'Apagar em definitivo?',
+    mensagem: 'A nota e o anexo saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.',
+    confirmar: 'Apagar',
+  });
+  if (!ok) return;
+  setLoading(true, 'Apagando…');
+  try {
+    await sb.notas.delete(id);
+    toast('Apagada em definitivo');
+    if (viewAtual === 'lixeira') renderNotasApagadas();
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); }
+  finally { setLoading(false); }
 }
 
 /* ═══════════════════════════════════════════════════════════
