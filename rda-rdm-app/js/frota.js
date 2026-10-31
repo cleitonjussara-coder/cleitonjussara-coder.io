@@ -423,6 +423,20 @@ window.Frota = (() => {
     }
   }
 
+  /* Atalho "Lançar KM" do Início (31/10/2026): o formulário abre por cima de qualquer tela. Depois de salvar, quem estava
+     na Frota vê a tela refeita; quem veio do Início continua nele (como nas notas) — render() trocaria a tela dele. */
+  async function _aposSalvar() {
+    if (viewAtual === 'frota') { await render(); return; }
+    window.FrotaPainel?.invalidar?.();
+    if (viewAtual === 'inicio') renderInicio();
+  }
+  async function lancar() {
+    if (!veiculos.length && sb && navigator.onLine) {      // nunca abriu a Frota neste aparelho: busca os veículos agora
+      try { veiculos = (await sb.frota.veiculos(_ehGestorOuAdmin())) || []; await DB.setMeta('frota_veiculos', veiculos); } catch (_) {}
+    }
+    return abrirForm();
+  }
+
   async function salvar() {
     const id = $('km-id').value || crypto.randomUUID();
     const payload = {
@@ -466,7 +480,7 @@ window.Frota = (() => {
         await enfileirar(id, payload, foto);
         fecharForm();
         toast('📴 Sem internet: registro guardado no aparelho — sobe sozinho quando voltar o sinal');
-        await render();
+        await _aposSalvar();
         return;
       }
       try {
@@ -475,7 +489,7 @@ window.Frota = (() => {
         if (!e?.status) {                          // caiu a rede no meio: fila
           await enfileirar(id, payload, foto);
           fecharForm(); toast('📴 Conexão falhou: registro guardado no aparelho');
-          await render(); return;
+          await _aposSalvar(); return;
         }
         throw e;                                    // 422/403: mostra o motivo
       }
@@ -489,7 +503,7 @@ window.Frota = (() => {
       /* corrigir leitura que já estava no servidor: atualiza no lugar (rolagem e páginas do histórico ficam); registro novo ou
          item da fila mexe nos avisos do alto da tela, então refaz tudo */
       if (existente && !existente._pendente) { toast('KM atualizado ✅'); await _atualizarLeve(); }
-      else { toast('KM registrado ✅'); await render(); }
+      else { toast('KM registrado ✅'); await _aposSalvar(); }
     } catch (e) {
       toast(e.message || 'Não foi possível salvar', 'err');
     } finally { setLoading(false); }
@@ -565,7 +579,7 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, trocarAba, abaAtiva: () => _aba, mudarMes, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
+  return { render, trocarAba, abaAtiva: () => _aba, mudarMes, lancar, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
            destravarVeiculo, abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
            exportarExcel, exportarCSV, reenviar, subirFila,
            pendentes: () => _pendTodos };

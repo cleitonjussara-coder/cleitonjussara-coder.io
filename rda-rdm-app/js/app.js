@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 495;
+const APP_BUILD = 496;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3919,6 +3919,14 @@ function renderInicio() {
           <span class="pnl-sub">recebido ou a pedir (PIX)</span>
         </span>
       </button>`}
+      ${_veFrota() ? `
+      <button class="pnl pnl-grande" onclick="Frota.lancar()">
+        <span class="pnl-conteudo">
+          <span class="pnl-ico">🛣️</span>
+          <span class="pnl-tit">Lançar KM</span>
+          <span class="pnl-sub">leitura do odômetro do veículo</span>
+        </span>
+      </button>` : ''}
       ${_ehGestorOuAdmin() ? `
       <button class="pnl pnl-grande" onclick="iniciarFaturamento()">
         <span class="pnl-conteudo">
