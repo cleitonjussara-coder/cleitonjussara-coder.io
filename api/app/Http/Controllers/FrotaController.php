@@ -280,6 +280,7 @@ class FrotaController extends Controller
             $prev = $antes?->odometro;
             foreach ($doAno as $k) {
                 $delta = $prev === null ? 0 : max(0, $k->odometro - $prev);
+                $odoAnterior = $prev;
                 $prev = $k->odometro;
                 if (! $meus($k)) {
                     continue;
@@ -294,7 +295,7 @@ class FrotaController extends Controller
                 $porMotorista[$mk]['leituras']++;
                 $leituras[] = [
                     'id' => $k->id, 'data' => $k->data->format('Y-m-d'), 'mes' => $m, 'placa' => $v->placa, 'modelo' => $v->modelo,
-                    'motorista' => $nomes[$mk] ?? '?', 'odometro' => $k->odometro, 'km_rodado' => $delta,
+                    'user_id' => $mk, 'motorista' => $nomes[$mk] ?? '?', 'odometro' => $k->odometro, 'odometro_anterior' => $odoAnterior, 'km_rodado' => $delta,
                     'observacao' => $k->observacao, 'foto' => (bool) $k->foto_path,
                 ];
             }

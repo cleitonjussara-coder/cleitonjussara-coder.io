@@ -417,6 +417,14 @@ class HistoricoKmTest extends TestCase
         $this->assertSame($painel['total'], $anual['meses_total'][9]);
         $this->assertSame(['Ana'], array_column($anual['motoristas'], 'nome'));
         $this->assertSame([5350, 1500, 5300, 1100, 1000], array_column($anual['leituras'], 'odometro'));
+        /* planilha dinâmica (31/10/2026): cada leitura diz de quem é e de onde o km partiu */
+        $this->assertSame([$this->ana->id], array_values(array_unique(array_column($anual['leituras'], 'user_id'))));
+        foreach ($anual['leituras'] as $l) {
+            $this->assertArrayHasKey('odometro_anterior', $l);
+            if ($l['odometro_anterior'] !== null) {
+                $this->assertSame(max(0, $l['odometro'] - $l['odometro_anterior']), $l['km_rodado']);
+            }
+        }
 
         Sanctum::actingAs($this->bia);
         $this->assertSame(250, $this->getJson('/api/frota/anual?ano=2026')->assertOk()->json('meses_total.9'), '80 + 120 + 0 + 50');

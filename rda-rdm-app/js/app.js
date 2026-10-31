@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 494;
+const APP_BUILD = 495;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -949,6 +949,7 @@ function _ensureSb() {
       if (ev === 'SIGNED_OUT' && !_recuperandoSenha && _telaAtual !== 'auth') {
         user = null;
         avisosCorrecaoSino = []; _avisosPend.clear();                // sessão derrubada (401): os avisos dessa conta não ficam para a próxima
+        try { window.FrotaPlanilha?.esquecer(); } catch (_) {}
         try { window.FrotaPainel?.esquecer(); } catch (_) {}      // sessão derrubada (401): o histórico/painel de KM dessa conta não fica para a próxima
         _telaAtual = 'auth';
         showTela('auth');
@@ -1920,6 +1921,7 @@ async function logout() {
   notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = []; try { localStorage.removeItem(K_DEVEDORA); } catch (_) {}
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
+  try { window.FrotaPlanilha?.esquecer(); } catch (_) {}
   try { window.FrotaPainel?.esquecer(); } catch (_) {}      // histórico/painel de KM da conta que saiu
   try { sessionStorage.removeItem('drive_auto_tentado'); } catch (_) {}
   document.getElementById('demo-banner').style.display = 'none';

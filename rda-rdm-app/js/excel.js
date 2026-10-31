@@ -481,6 +481,98 @@ window.Excel = (() => {
     XLSX.writeFile(wb, `Petermann_Frota_${MESES[mes-1]}${anual.ano}.csv`);
   }
 
+  /* ── Planilha de KM por colaborador (31/10/2026) ─────────
+     Mesma base de GET /frota/anual (leituras com user_id). `pessoas` = [{user_id, nome}] escolhidas na tela;
+     junto = um arquivo com RESUMO (pessoa × mês), DIA A DIA do mês e uma aba por pessoa;
+     separado = um arquivo por pessoa (RESUMO + DIA A DIA + LEITURAS dela). */
+  const _nomeAba = (nome, usados) => {
+    let b = String(nome || 'Colaborador').replace(/[\\\/?*\[\]:]/g, ' ').trim().slice(0, 28) || 'Colaborador', n = b, i = 2;
+    while (usados.has(n.toLowerCase())) n = `${b.slice(0, 26)} ${i++}`;
+    usados.add(n.toLowerCase());
+    return n;
+  };
+  function _abaDiaADia(anual, pessoas, mes) {
+    const ws = {}; ws['!merges'] = []; let r = 0;
+    const dias = new Date(anual.ano, mes, 0).getDate(), nC = 2 + pessoas.length + (pessoas.length > 1 ? 1 : 0);
+    ws['!cols'] = [{wch:12}, {wch:7}, ...pessoas.map(() => ({wch:16})), ...(pessoas.length > 1 ? [{wch:11}] : [])];
+    merge(ws, r, 0, r, nC - 1);
+    ws[XLSX.utils.encode_cell({r,c:0})] = titCell(`KM POR DIA — ${MESES[mes-1].toUpperCase()}/${anual.ano}`); r += 2;
+    hdrRow(ws, r, ['Data', 'Dia', ...pessoas.map(p => p.nome), ...(pessoas.length > 1 ? ['TOTAL DO DIA'] : [])]); r++;
+    const SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+    const porPD = {};
+    (anual.leituras || []).filter(l => l.mes === mes).forEach(l => { const k = `${l.user_id}|${Number(l.data.slice(8))}`; porPD[k] = (porPD[k] || 0) + (l.km_rodado || 0); });
+    const tot = pessoas.map(() => 0);
+    for (let d = 1; d <= dias; d++) {
+      const dt = `${String(d).padStart(2,'0')}/${String(mes).padStart(2,'0')}/${anual.ano}`;
+      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(dt);
+      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(SEM[new Date(Date.UTC(anual.ano, mes - 1, d)).getUTCDay()]);
+      let soma = 0;
+      pessoas.forEach((p, j) => { const v = porPD[`${p.user_id}|${d}`] || 0; soma += v; tot[j] += v; ws[XLSX.utils.encode_cell({r,c:2+j})] = v ? intCell(v) : strCell(''); });
+      if (pessoas.length > 1) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = soma ? intCell(soma, true) : strCell('');
+      r++;
+    }
+    ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL', s:{ font:FONT_TOT, border:BORDER_BOTTOM, alignment:ALIGN_L } };
+    ws[XLSX.utils.encode_cell({r,c:1})] = { t:'s', v:'', s:{ font:FONT_TOT, border:BORDER_BOTTOM } };
+    tot.forEach((v, j) => { ws[XLSX.utils.encode_cell({r,c:2+j})] = intCell(v, true); });
+    if (pessoas.length > 1) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = intCell(tot.reduce((a,b)=>a+b,0), true);
+    ws['!freeze'] = { xSplit:2, ySplit:3 };
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:nC-1}});
+    return ws;
+  }
+  function _abaLeiturasPessoa(anual, p) {
+    const ws = {}; ws['!merges'] = []; let r = 0;
+    ws['!cols'] = [{wch:12},{wch:7},{wch:10},{wch:13},{wch:13},{wch:11},{wch:36}];
+    merge(ws, r, 0, r, 6);
+    ws[XLSX.utils.encode_cell({r,c:0})] = titCell(`${p.nome} — LEITURAS DE ${anual.ano}`); r++;
+    merge(ws, r, 0, r, 6);
+    ws[XLSX.utils.encode_cell({r,c:0})] = subCell('Km = leitura menos a leitura anterior do mesmo veículo (que pode ser de outra pessoa).'); r++;
+    hdrRow(ws, r, ['Data', 'Dia', 'Placa', 'Leitura anterior', 'Leitura', 'Km rodado', 'Observação']); const h = r; r++;
+    const SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+    const ls = (anual.leituras || []).filter(l => l.user_id === p.user_id).sort((a,b) => a.data.localeCompare(b.data) || a.odometro - b.odometro);
+    let soma = 0;
+    ls.forEach(l => {
+      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(l.data.split('-').reverse().join('/'));
+      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(SEM[new Date(l.data + 'T00:00:00Z').getUTCDay()]);
+      ws[XLSX.utils.encode_cell({r,c:2})] = strCenter(l.placa);
+      ws[XLSX.utils.encode_cell({r,c:3})] = l.odometro_anterior != null ? intCell(l.odometro_anterior) : strCell('');
+      ws[XLSX.utils.encode_cell({r,c:4})] = intCell(l.odometro);
+      ws[XLSX.utils.encode_cell({r,c:5})] = intCell(l.km_rodado, true);
+      ws[XLSX.utils.encode_cell({r,c:6})] = strCell(l.observacao || '');
+      soma += l.km_rodado || 0; r++;
+    });
+    ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL', s:{ font:FONT_TOT, border:BORDER_BOTTOM, alignment:ALIGN_L } };
+    ws[XLSX.utils.encode_cell({r,c:5})] = intCell(soma, true);
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:h,c:0},e:{r:Math.max(h+1,r-1),c:6}}) };
+    ws['!freeze'] = { xSplit:0, ySplit:h+1 };
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:6}});
+    return ws;
+  }
+  function _resumoPessoas(anual, pessoas) {
+    const linhas = pessoas.map(p => {
+      const m = (anual.motoristas || []).find(x => x.user_id === p.user_id);
+      return { nome: p.nome, meses: m?.meses || Array(12).fill(0), total: m?.total || 0, leituras: m?.leituras || 0 };
+    });
+    return _abaMeses(`KM POR COLABORADOR — ${anual.ano}`, linhas, 'Colaborador', [{titulo:'Leituras',campo:'leituras',num:true}]);
+  }
+  function exportarFrotaPlanilha(anual, pessoas, { mes, separado = false } = {}) {
+    if (!pessoas?.length) throw new Error('Escolha ao menos um colaborador');
+    const mesX = Math.min(12, Math.max(1, Number(mes) || 1));
+    const montar = lista => {
+      const wb = XLSX.utils.book_new(), usados = new Set(['resumo', 'dia a dia']);
+      XLSX.utils.book_append_sheet(wb, _resumoPessoas(anual, lista), 'RESUMO');
+      XLSX.utils.book_append_sheet(wb, _abaDiaADia(anual, lista, mesX), 'DIA A DIA');
+      lista.forEach(p => XLSX.utils.book_append_sheet(wb, _abaLeiturasPessoa(anual, p), _nomeAba(p.nome, usados)));
+      return wb;
+    };
+    const slug = s => String(s || 'colab').trim().replace(/\s+/g, '_').replace(/[^\w\-.À-ÿ]/g, '');
+    if (!separado) {
+      XLSX.writeFile(montar(pessoas), pessoas.length === 1 ? `Petermann_KM_${slug(pessoas[0].nome)}_${anual.ano}.xlsx` : `Petermann_KM_Selecionados_${anual.ano}.xlsx`);
+      return pessoas.length;
+    }
+    pessoas.forEach((p, i) => setTimeout(() => XLSX.writeFile(montar([p]), `Petermann_KM_${slug(p.nome)}_${anual.ano}.xlsx`), i * 700));   // um por vez: o navegador barra vários downloads de uma vez
+    return pessoas.length;
+  }
+
   /* ── Ponto (18/09/2026) ──────────────────────────────────
      resumo = GET /ponto/resumo: pessoas (totais + por_dia), dias (espelho). */
   const hmx = min => { min = Math.max(0, Math.round(Number(min) || 0)); return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`; };
@@ -616,7 +708,8 @@ window.Excel = (() => {
     exportarEquipe:   comLib(exportarEquipe),
     exportarFrota:    comLib(exportarFrota),
     exportarFrotaCSV: comLib(exportarFrotaCSV),
-    exportarPonto:    comLib(exportarPonto),
+    exportarFrotaPlanilha: comLib(exportarFrotaPlanilha),
+    exportarPonto:   comLib(exportarPonto),
     exportarPontoCSV: comLib(exportarPontoCSV),
     buildResumo, buildRDM, buildRDA, buildRepasses, buildEquipe,
   };

@@ -31,7 +31,7 @@ window.Frota = (() => {
   let _fotoKm = null;     // File escolhido no formulário
   let _offline = false;   // renderizou a partir do cache
   let _cacheEm = null;    // quando o cache foi gravado
-  let _aba = 'painel';    // painel | hist | vei
+  let _aba = 'painel';    // painel | plan | hist | vei
   let _pendTodos = [];    // fila do aparelho (só da conta logada), em qualquer mês, no formato dos registros
 
   const kmFmt = n => Number(n || 0).toLocaleString('pt-BR');
@@ -197,7 +197,7 @@ window.Frota = (() => {
 
   function _abasHTML(gestor) {
     const aba = (k, t) => `<button class="chip ${_aba === k ? 'active' : ''}" onclick="Frota.trocarAba('${k}')">${t}</button>`;
-    return aba('painel', 'Painel') + aba('hist', 'Histórico') + (gestor ? aba('vei', 'Veículos') : '');
+    return aba('painel', 'Painel') + aba('plan', 'Planilha') + aba('hist', 'Histórico') + (gestor ? aba('vei', 'Veículos') : '');
   }
 
   /* troca a aba sem baixar tudo de novo: só repinta o corpo (o painel e o histórico buscam o que precisam) */
@@ -212,7 +212,12 @@ window.Frota = (() => {
     const c = $('fq-corpo');
     if (!c) return;
     window.FrotaPainel?.cancelar?.();               // resposta de outra aba que ainda esteja vindo não pinta por cima desta
+    window.FrotaPlanilha?.cancelar?.();
     if (_aba === 'vei') { c.innerHTML = _veiculosHTML(); return; }
+    if (_aba === 'plan') {
+      if (!window.FrotaPlanilha) { c.innerHTML = '<div class="ini-dica">Atualize o app (feche e abra de novo) para ver a planilha.</div>'; return; }
+      return window.FrotaPlanilha.montar(c);
+    }
     if (!window.FrotaPainel) { c.innerHTML = '<div class="ini-dica">Atualize o app (feche e abra de novo) para ver o painel e o histórico.</div>'; return; }
     return _aba === 'hist' ? window.FrotaPainel.historico(c) : window.FrotaPainel.painel(c);
   }
