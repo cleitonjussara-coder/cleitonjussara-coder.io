@@ -201,6 +201,16 @@ class RelatorioController extends Controller
         $modo = $d['modo'] ?? 'unico';
         $anual = app(FrotaController::class)->anual($r)->getData(true);   // já respeita quem vê o quê
 
+        if ($r->query('tipo') === 'controle') {   // planilha de controle da frota: veículo × mês, motorista × mês e leituras
+            $svc = app(RelatorioKm::class);
+            $arquivo = $this->temporario('kmc_', 'xlsx');
+            $ss = $svc->gerarControle($anual);
+            $svc->xlsx($ss, $arquivo);
+            $ss->disconnectWorksheets();
+
+            return response()->download($arquivo, "Planilha_Controle_Frota_{$ano}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);
+        }
+
         $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? '')))));
         $pessoas = [];
         foreach ($anual['motoristas'] as $m) {

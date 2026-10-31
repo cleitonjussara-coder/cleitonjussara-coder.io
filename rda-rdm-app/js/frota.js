@@ -251,7 +251,16 @@ window.Frota = (() => {
   async function exportarExcel() {
     if (!anual) { toast('Abra a Frota com internet uma vez para gerar a planilha', 'err'); return; }
     setLoading(true, 'Gerando a planilha…');
-    try { await Excel.exportarFrota(anual); toast('Planilha gerada 📗'); } catch (e) { toast('Planilha: ' + e.message, 'err'); }
+    try {
+      /* modelo montado no servidor (cores e filtros garantidos); sem internet, o gerador do aparelho */
+      if (navigator.onLine && window.API?.relatorio?.kmControle) {
+        const blob = await window.API.relatorio.kmControle(anual.ano);
+        const url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = `Planilha_Controle_Frota_${anual.ano}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else await Excel.exportarFrota(anual);
+      toast('Planilha gerada 📗');
+    } catch (e) { toast('Planilha: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }
   async function exportarCSV() {

@@ -46,6 +46,127 @@ class RelatorioKm
         return $ss;
     }
 
+    /**
+     * Planilha de CONTROLE da frota (o Excel do quadro "Planilhas de controle" do Painel): veículo × mês,
+     * motorista × mês e todas as leituras do ano — no mesmo visual da planilha de KM por colaborador.
+     */
+    public function gerarControle(array $anual): Spreadsheet
+    {
+        $ss = new Spreadsheet();
+        $ss->removeSheetByIndex(0);
+        $this->matrizMeses($ss->createSheet(), 'VEÍCULOS', 'FROTA — KM POR VEÍCULO — '.$anual['ano'], 'Veículo',
+            array_map(fn ($v) => [$v['placa'].($v['modelo'] ? ' · '.$v['modelo'] : ''), $v['meses'], $v['total'], [$v['leituras'], $v['odometro_inicial'], $v['odometro_final'], $v['responsavel_nome'] ?? '']], $anual['veiculos'] ?? []),
+            ['Leituras', 'Odômetro inicial', 'Odômetro final', 'Responsável']);
+        $this->matrizMeses($ss->createSheet(), 'MOTORISTAS', 'FROTA — KM POR MOTORISTA — '.$anual['ano'], 'Motorista',
+            array_map(fn ($m) => [$m['nome'], $m['meses'], $m['total'], [$m['leituras']]], $anual['motoristas'] ?? []),
+            ['Leituras']);
+        $this->todasLeituras($ss->createSheet(), $anual);
+        $ss->setActiveSheetIndex(0);
+
+        return $ss;
+    }
+
+    /** @param list<array{0:string,1:array,2:int,3:array}> $linhas  [rótulo, 12 meses, total, extras] */
+    private function matrizMeses(Worksheet $ws, string $aba, string $titulo, string $rotulo, array $linhas, array $extras): void
+    {
+        $ws->setTitle($aba);
+        $nE = count($extras);
+        $nC = 14 + $nE;
+        $this->cabecalho($ws, $titulo, 'Km rodado por mês. Quanto mais km, mais forte o verde. Use as setas do cabeçalho para ordenar ou filtrar; o TOTAL acompanha o filtro.', $nC);
+        $this->cabecaTabela($ws, [$rotulo, ...self::MESES, 'TOTAL', ...$extras]);
+        $max = 0;
+        foreach ($linhas as $l) {
+            $max = max($max, ...($l[1] ?: [0]));
+        }
+        $r = 4;
+        foreach ($linhas as $i => $l) {
+            $ws->setCellValue([1, $r], $l[0]);
+            foreach ($l[1] as $j => $v) {
+                $ws->setCellValue([2 + $j, $r], (int) round($v));
+                if ($cor = $this->calor((float) $v, (float) $max)) {
+                    $this->pintar($ws, $this->col(2 + $j).$r, $cor);
+                } elseif ($i % 2) {
+                    $this->pintar($ws, $this->col(2 + $j).$r, self::ZEBRA);
+                }
+            }
+            $ws->setCellValue([14, $r], (int) round($l[2]));
+            foreach ($l[3] as $k => $v) {
+                if ($v !== null && $v !== '') {
+                    $ws->setCellValue([15 + $k, $r], is_numeric($v) ? (int) $v : (string) $v);
+                }
+            }
+            if ($i % 2) {
+                $this->pintar($ws, "A{$r}", self::ZEBRA);
+                $this->pintar($ws, 'N'.$r.':'.$this->col($nC).$r, self::ZEBRA);
+            }
+            $ws->getStyle("N{$r}")->getFont()->setBold(true);
+            $r++;
+        }
+        $rl = max(4, $r - 1);
+        $ult = $this->col($nC);
+        $ws->getStyle("B4:{$ult}{$rl}")->getNumberFormat()->setFormatCode(self::FMT);
+        $ws->getStyle("B4:{$ult}{$rl}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $this->bordas($ws, "A4:{$ult}{$rl}");
+        $this->total($ws, $r, $nC, range(2, 15), 4, $rl);   // meses, TOTAL e Leituras somam; odômetros e responsável não
+        $ws->getColumnDimension('A')->setWidth(max(24, min(36, 2 + max(array_map(fn ($l) => mb_strlen($l[0]), $linhas) ?: [0]))));
+        foreach (range(2, 13) as $c) {
+            $ws->getColumnDimension($this->col($c))->setWidth(8);
+        }
+        foreach (range(14, $nC) as $c) {
+            $ws->getColumnDimension($this->col($c))->setWidth($c === $nC && $nE > 1 ? 24 : 15);
+        }
+        $ws->setAutoFilter("A3:{$ult}{$rl}");
+        $ws->freezePane('B4');
+    }
+
+    private function todasLeituras(Worksheet $ws, array $anual): void
+    {
+        $ws->setTitle('LEITURAS');
+        $this->cabecalho($ws, 'LEITURAS DE ODÔMETRO — '.$anual['ano'], 'Todas as leituras do ano. Km rodado = leitura menos a leitura anterior do mesmo veículo. Filtre por mês, placa ou motorista nas setas do cabeçalho; o TOTAL acompanha o filtro.', 11);
+        $this->cabecaTabela($ws, ['Data', 'Dia', 'Mês', 'Placa', 'Modelo', 'Motorista', 'Leitura anterior', 'Leitura', 'Km rodado', 'Observação', 'Foto']);
+        $ls = $anual['leituras'] ?? [];
+        usort($ls, fn ($a, $b) => strcmp($a['data'], $b['data']) ?: $a['odometro'] <=> $b['odometro']);
+        $max = $ls ? max(array_column($ls, 'km_rodado')) : 0;
+        $r = 4;
+        foreach ($ls as $i => $l) {
+            $dow = (int) date('w', strtotime($l['data']));
+            $ws->setCellValue([1, $r], date('d/m/Y', strtotime($l['data'])));
+            $ws->setCellValue([2, $r], self::SEMANA[$dow]);
+            $ws->setCellValue([3, $r], self::MESES[$l['mes'] - 1]);
+            $ws->setCellValue([4, $r], $l['placa']);
+            $ws->setCellValue([5, $r], $l['modelo'] ?? '');
+            $ws->setCellValue([6, $r], $l['motorista'] ?? '');
+            if ($l['odometro_anterior'] !== null) {
+                $ws->setCellValue([7, $r], (int) $l['odometro_anterior']);
+            }
+            $ws->setCellValue([8, $r], (int) $l['odometro']);
+            $ws->setCellValue([9, $r], (int) $l['km_rodado']);
+            $ws->setCellValue([10, $r], $l['observacao'] ?? '');
+            $ws->setCellValue([11, $r], ! empty($l['foto']) ? 'sim' : '');
+            $base = ($dow === 0 || $dow === 6) ? self::FDS : ($i % 2 ? self::ZEBRA : null);
+            if ($base) {
+                $this->pintar($ws, "A{$r}:K{$r}", $base);
+            }
+            if ($cor = $this->calor((float) $l['km_rodado'], (float) $max)) {
+                $this->pintar($ws, "I{$r}", $cor);
+            }
+            $r++;
+        }
+        $rl = max(4, $r - 1);
+        $ws->getStyle("A4:D{$rl}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $ws->getStyle("K4:K{$rl}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $ws->getStyle("G4:I{$rl}")->getNumberFormat()->setFormatCode(self::FMT);
+        $ws->getStyle("G4:I{$rl}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $ws->getStyle("I4:I{$rl}")->getFont()->setBold(true);
+        $this->bordas($ws, "A4:K{$rl}");
+        $this->total($ws, $r, 11, [9], 4, $rl);
+        foreach (['A' => 12, 'B' => 7, 'C' => 7, 'D' => 11, 'E' => 16, 'F' => 22, 'G' => 14, 'H' => 12, 'I' => 12, 'J' => 40, 'K' => 7] as $c => $w) {
+            $ws->getColumnDimension($c)->setWidth($w);
+        }
+        $ws->setAutoFilter("A3:K{$rl}");
+        $ws->freezePane('A4');
+    }
+
     public function xlsx(Spreadsheet $ss, string $arquivo): void
     {
         (new Xlsx($ss))->save($arquivo);
