@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 498;
+const APP_BUILD = 499;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9748,7 +9748,7 @@ function _modalGrupoNota(n, grupos) {
               ${atual(g) ? '✅ ' : ''}${g.rotulo} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${g.nota}</span>
             </button>`).join('')}
         </div>
-        <p style="opacity:.75;font-size:13px;margin-bottom:0">Muda só o grupo — valor, anexo e empresa ficam como estão. O anexo já enviado ao Drive só troca de pasta quando alguém usar <b>🗂️ Reorganizar pastas no padrão</b>.</p>
+        <p style="opacity:.75;font-size:13px;margin-bottom:0">Muda só o grupo — valor, anexo e empresa ficam como estão. O anexo acompanha o novo grupo sozinho na pasta de <b>Arquivos</b>.</p>
       </div>
     </div>`;
   document.body.appendChild(ov);
