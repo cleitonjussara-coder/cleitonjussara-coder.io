@@ -101,7 +101,8 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/relatorio/cv', [RelatorioController::class, 'cv']);
     Route::get('/relatorio/equipe', [RelatorioController::class, 'equipe']);
     Route::get('/relatorio/cv-equipe', [RelatorioController::class, 'cvEquipe']);
-    Route::get('/relatorio/rdmrda', [RelatorioController::class, 'rdmrda']);   // modelo RDM/RDA da empresa (21/09/2026)
+    Route::get('/relatorio/km', [RelatorioController::class, 'km']);   // Planilha de KM montada no servidor (31/10/2026)
+    Route::get('/relatorio/rdmrda',[RelatorioController::class, 'rdmrda']);   // modelo RDM/RDA da empresa (21/09/2026)
     Route::get('/relatorio/faturamento', [RelatorioController::class, 'faturamento']);   // pago direto pela empresa (26/09/2026)
 
     /* arquivos no servidor, no lugar do Drive (19/09/2026) */

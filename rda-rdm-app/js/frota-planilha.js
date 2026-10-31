@@ -260,7 +260,20 @@ window.FrotaPlanilha = (() => {
     const alvo = _pessoas().filter(p => S.sel.has(p.user_id));
     if (!alvo.length) { toast('Escolha ao menos um colaborador', 'err'); return; }
     setLoading(true, 'Gerando a planilha…');
-    try { const n = await Excel.exportarFrotaPlanilha(S.anual, alvo, { mes: S.mes, separado }); toast(separado ? `${n} planilhas geradas 📗` : 'Planilha gerada 📗'); }
+    try {
+      /* Modelo montado no servidor (cores e filtros garantidos); sem internet, cai no gerador do aparelho. */
+      if (navigator.onLine && window.API?.relatorio?.km) {
+        const blob = await window.API.relatorio.km(S.ano, S.mes, alvo.map(p => p.user_id), separado ? 'zip' : 'unico');
+        const nome = separado ? `Planilhas_KM_${S.ano}.zip` : (alvo.length === 1 ? `Planilha_KM_${String(alvo[0].nome).trim().replace(/\s+/g, '_')}_${S.ano}.xlsx` : `Planilha_KM_Selecionados_${S.ano}.xlsx`);
+        const url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        toast('Planilha gerada 📗');
+      } else {
+        const n = await Excel.exportarFrotaPlanilha(S.anual, alvo, { mes: S.mes, separado });
+        toast(separado ? `${n} planilhas geradas 📗` : 'Planilha gerada 📗');
+      }
+    }
     catch (e) { toast('Planilha: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }

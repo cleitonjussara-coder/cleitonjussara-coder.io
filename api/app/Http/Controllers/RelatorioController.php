@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Services\RelatorioCv;
+use App\Services\RelatorioKm;
 use App\Services\RelatorioRdmRda;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -178,6 +179,72 @@ class RelatorioController extends Controller
 
         return response()->download($zipPath, "Planilhas_CV_Equipe_{$ano}.zip", ['Content-Type' => 'application/zip'])
             ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * GET /relatorio/km?ano&mes&ids=a,b&modo=unico|zip — Planilha de KM (31/10/2026), montada no servidor.
+     * Colaborador comum só gera a própria; gestor/admin escolhem quem (sem `ids` = quem tem leitura no ano).
+     *   modo=unico: um xlsx (RESUMO + DIA A DIA + uma aba por pessoa) · modo=zip: um xlsx por pessoa.
+     */
+    public function km(Request $r): BinaryFileResponse
+    {
+        $u = $r->user();
+        abort_if($u->soLeitura(), 403, 'Contabilidade não usa este módulo.');
+        $d = $r->validate([
+            'ano' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'mes' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'ids' => ['nullable', 'string', 'max:4000'],
+            'modo' => ['nullable', 'in:unico,zip'],
+        ]);
+        $ano = (int) ($d['ano'] ?? now()->year);
+        $mes = (int) ($d['mes'] ?? now()->month);
+        $modo = $d['modo'] ?? 'unico';
+        $anual = app(FrotaController::class)->anual($r)->getData(true);   // já respeita quem vê o quê
+
+        $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? '')))));
+        $pessoas = [];
+        foreach ($anual['motoristas'] as $m) {
+            if (($u->veTudo() || $m['user_id'] === $u->id) && (! $ids || in_array($m['user_id'], $ids, true))) {
+                $pessoas[] = ['user_id' => $m['user_id'], 'nome' => $m['nome']];
+            }
+        }
+        usort($pessoas, fn ($a, $b) => strcasecmp($a['nome'], $b['nome']));
+        abort_unless($pessoas, 404, 'Ninguém com leitura de km neste ano');
+
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+        $svc = app(RelatorioKm::class);
+        $slug = fn ($s) => preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($s ?: 'colaborador'));
+        if ($modo === 'unico') {
+            $arquivo = $this->temporario('km_', 'xlsx');
+            $ss = $svc->gerar($anual, $pessoas, $mes);
+            $svc->xlsx($ss, $arquivo);
+            $ss->disconnectWorksheets();
+            $nome = count($pessoas) === 1 ? 'Planilha_KM_'.$slug($pessoas[0]['nome'])."_{$ano}.xlsx" : "Planilha_KM_Selecionados_{$ano}.xlsx";
+
+            return response()->download($arquivo, $nome, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);
+        }
+        $zipPath = $this->temporario('kmz_', 'zip');
+        $zip = new \ZipArchive();
+        abort_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
+        $temps = [];
+        try {
+            foreach ($pessoas as $p) {
+                $tmp = $this->temporario('km_', 'xlsx');
+                $temps[] = $tmp;
+                $ss = $svc->gerar($anual, [$p], $mes);
+                $svc->xlsx($ss, $tmp);
+                $ss->disconnectWorksheets();
+                $zip->addFile($tmp, 'Planilha_KM_'.$slug($p['nome'])."_{$ano}.xlsx");
+            }
+            $zip->close();
+        } finally {
+            foreach ($temps as $t) {
+                @unlink($t);
+            }
+        }
+
+        return response()->download($zipPath, "Planilhas_KM_{$ano}.zip", ['Content-Type' => 'application/zip'])->deleteFileAfterSend(true);
     }
 
     /** GET /relatorio/equipe?ano&mes — PDF da equipe no mês (gestor/admin). */

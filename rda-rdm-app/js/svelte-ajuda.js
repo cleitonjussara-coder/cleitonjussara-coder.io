@@ -218,6 +218,7 @@
       <p><b>Toque no cartão</b> para abrir o detalhe: a foto do odômetro (toque nela para ampliar), os valores, quem registrou e quando, e de onde a leitura partiu. <b>Editar</b> e <b>Excluir</b> aparecem para quem registrou e para o <b>gestor e o admin</b>, que corrigem erro de digitação de qualquer pessoa — fica registrado <b>quem corrigiu</b>. O colaborador não mexe na leitura dos outros.</p>
       <p>Funciona <b>sem internet</b>: o registro fica guardado no aparelho (aparece como ⏳ pendente) e sobe sozinho quando o sinal volta. O Painel e o Histórico mostram os últimos dados baixados. O pendente é <b>de quem registrou</b> (desde 14/10/2026): se outra pessoa entrar no mesmo aparelho, o registro seu espera e só sobe quando <b>você</b> entrar de novo — nunca sai no nome de outra conta.</p>
       <p>No fim do <b>Painel</b> fica o quadro <b>📗 Planilhas de controle</b>: ‹ › muda o mês, <b>CSV</b> baixa o mês e <b>Excel</b> baixa o ano — abas Veículos × mês, Motoristas × mês e todas as Leituras.</p>
+      <p><b>Planilha de KM por colaborador (31/10/2026):</b> na aba <b>Planilha</b> da Frota, escolha os colaboradores e baixe o Excel (junto ou um arquivo por pessoa). O arquivo vem pronto, no padrão das planilhas de notas: <b>RESUMO</b> (colaborador × mês, com mapa de calor), <b>DIA A DIA</b> do mês (fim de semana em amarelo) e uma aba por pessoa com as leituras. Todas têm <b>filtro</b> nas setas do cabeçalho, e o <b>TOTAL</b> acompanha o filtro.</p>
     </div>
 
     <div class="ajuda-sec ajuda-gestor">

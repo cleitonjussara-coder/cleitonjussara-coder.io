@@ -491,69 +491,130 @@ window.Excel = (() => {
     usados.add(n.toLowerCase());
     return n;
   };
+  /* Visual da planilha de KM: mesmo padrão do modelo de notas (título verde, subtítulo, cabeçalho verde,
+     zebrado, TOTAL em faixa verde) + mapa de calor no km e filtro em todas as abas. O TOTAL usa SUBTOTAL,
+     então acompanha o filtro (filtrou um colaborador/veículo, o total é só dele). */
+  const KM_FMT = '#,##0;-#,##0;"–"';
+  const FILL_ZEBRA = { fgColor:{rgb:'F0F4F1'}, patternType:'solid' };
+  const FILL_FDS   = { fgColor:{rgb:'FEF3C7'}, patternType:'solid' };
+  const FILL_TOTKM = { fgColor:{rgb:'D1FAE5'}, patternType:'solid' };
+  const BORDER_TOT = { top:{style:'medium',color:{rgb:COR.verde}}, bottom:{style:'medium',color:{rgb:COR.verde}}, left:{style:'thin',color:{rgb:COR.texto2}}, right:{style:'thin',color:{rgb:COR.texto2}} };
+  const calor = (v, max) => {
+    if (!v || !max) return null;
+    const p = v / max;
+    return { fgColor:{rgb: p > 0.66 ? '95D5B2' : p > 0.33 ? 'B7E4C7' : 'D8F3DC'}, patternType:'solid' };
+  };
+  const kmNum = (v, { bold = false, fill = null } = {}) => ({ t:'n', v:Math.round(Number(v || 0)), s:{ font: bold ? { ...FONT_BODY, bold:true } : FONT_BODY, border:BORDER_THIN, alignment:ALIGN_R, numFmt:KM_FMT, ...(fill ? { fill } : {}) } });
+  const kmTxt = (v, centro, fill) => { const c = centro ? strCenter(v) : strCell(v); if (fill) c.s = { ...c.s, fill }; return c; };
+  const kmTot = (v, formula) => { const c = { t:'n', v:Math.round(Number(v || 0)), s:{ font:FONT_TOT, fill:FILL_TOTKM, border:BORDER_TOT, alignment:ALIGN_R, numFmt:'#,##0' } }; if (formula) c.f = formula; return c; };
+  const kmTotRot = (v, centro) => ({ t:'s', v, s:{ font:{ ...FONT_TOT, color:{rgb:COR.branco} }, fill:FILL_HDR, border:BORDER_TOT, alignment: centro ? ALIGN_C : ALIGN_L } });
+  const colL = c => XLSX.utils.encode_col(c);
+  const SEMANA = ['dom','seg','ter','qua','qui','sex','sáb'];
+
+  function _cabecalhoKm(ws, titulo, sub, nCols) {
+    merge(ws, 0, 0, 0, nCols - 1);
+    ws[XLSX.utils.encode_cell({r:0,c:0})] = titCell(titulo);
+    merge(ws, 1, 0, 1, nCols - 1);
+    ws[XLSX.utils.encode_cell({r:1,c:0})] = subCell(sub);
+    ws['!rows'] = [{ hpt:26 }, { hpt:16 }, { hpt:22 }];
+  }
+
   function _abaDiaADia(anual, pessoas, mes) {
-    const ws = {}; ws['!merges'] = []; let r = 0;
-    const dias = new Date(anual.ano, mes, 0).getDate(), nC = 2 + pessoas.length + (pessoas.length > 1 ? 1 : 0);
-    ws['!cols'] = [{wch:12}, {wch:7}, ...pessoas.map(() => ({wch:16})), ...(pessoas.length > 1 ? [{wch:11}] : [])];
-    merge(ws, r, 0, r, nC - 1);
-    ws[XLSX.utils.encode_cell({r,c:0})] = titCell(`KM POR DIA — ${MESES[mes-1].toUpperCase()}/${anual.ano}`); r += 2;
-    hdrRow(ws, r, ['Data', 'Dia', ...pessoas.map(p => p.nome), ...(pessoas.length > 1 ? ['TOTAL DO DIA'] : [])]); r++;
-    const SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+    const ws = {}; ws['!merges'] = [];
+    const varias = pessoas.length > 1;
+    const dias = new Date(anual.ano, mes, 0).getDate(), nC = 2 + pessoas.length + (varias ? 1 : 0);
+    const largura = Math.max(14, Math.min(24, Math.max(...pessoas.map(p => String(p.nome).length)) + 2));
+    ws['!cols'] = [{wch:12}, {wch:7}, ...pessoas.map(() => ({wch:largura})), ...(varias ? [{wch:14}] : [])];
+    _cabecalhoKm(ws, `KM POR DIA — ${MESES[mes-1].toUpperCase()}/${anual.ano}`, 'Km rodado por dia, por colaborador. Sábados e domingos em amarelo; quanto mais km, mais forte o verde. Use as setas do cabeçalho para filtrar.', nC);
+    hdrRow(ws, 2, ['Data', 'Dia', ...pessoas.map(p => p.nome), ...(varias ? ['TOTAL DO DIA'] : [])]);
     const porPD = {};
     (anual.leituras || []).filter(l => l.mes === mes).forEach(l => { const k = `${l.user_id}|${Number(l.data.slice(8))}`; porPD[k] = (porPD[k] || 0) + (l.km_rodado || 0); });
-    const tot = pessoas.map(() => 0);
-    for (let d = 1; d <= dias; d++) {
-      const dt = `${String(d).padStart(2,'0')}/${String(mes).padStart(2,'0')}/${anual.ano}`;
-      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(dt);
-      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(SEM[new Date(Date.UTC(anual.ano, mes - 1, d)).getUTCDay()]);
+    const max = Math.max(0, ...Object.values(porPD));
+    const tot = pessoas.map(() => 0); let r = 3; const r0 = r;
+    for (let d = 1; d <= dias; d++, r++) {
+      const dow = new Date(Date.UTC(anual.ano, mes - 1, d)).getUTCDay(), fds = dow === 0 || dow === 6;
+      const base = fds ? FILL_FDS : (d % 2 === 0 ? FILL_ZEBRA : null);
+      ws[XLSX.utils.encode_cell({r,c:0})] = kmTxt(`${String(d).padStart(2,'0')}/${String(mes).padStart(2,'0')}/${anual.ano}`, true, base);
+      ws[XLSX.utils.encode_cell({r,c:1})] = kmTxt(SEMANA[dow], true, base);
       let soma = 0;
-      pessoas.forEach((p, j) => { const v = porPD[`${p.user_id}|${d}`] || 0; soma += v; tot[j] += v; ws[XLSX.utils.encode_cell({r,c:2+j})] = v ? intCell(v) : strCell(''); });
-      if (pessoas.length > 1) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = soma ? intCell(soma, true) : strCell('');
-      r++;
+      pessoas.forEach((p, j) => { const v = porPD[`${p.user_id}|${d}`] || 0; soma += v; tot[j] += v; ws[XLSX.utils.encode_cell({r,c:2+j})] = kmNum(v, { fill: calor(v, max) || base }); });
+      if (varias) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = kmNum(soma, { bold:true, fill: base });
     }
-    ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL', s:{ font:FONT_TOT, border:BORDER_BOTTOM, alignment:ALIGN_L } };
-    ws[XLSX.utils.encode_cell({r,c:1})] = { t:'s', v:'', s:{ font:FONT_TOT, border:BORDER_BOTTOM } };
-    tot.forEach((v, j) => { ws[XLSX.utils.encode_cell({r,c:2+j})] = intCell(v, true); });
-    if (pessoas.length > 1) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = intCell(tot.reduce((a,b)=>a+b,0), true);
+    const rl = r - 1;
+    ws[XLSX.utils.encode_cell({r,c:0})] = kmTotRot('TOTAL', true);
+    ws[XLSX.utils.encode_cell({r,c:1})] = kmTotRot('', true);
+    pessoas.forEach((p, j) => { ws[XLSX.utils.encode_cell({r,c:2+j})] = kmTot(tot[j], `SUBTOTAL(109,${colL(2+j)}${r0+1}:${colL(2+j)}${rl+1})`); });
+    if (varias) ws[XLSX.utils.encode_cell({r,c:2+pessoas.length})] = kmTot(tot.reduce((a,b)=>a+b,0), `SUBTOTAL(109,${colL(2+pessoas.length)}${r0+1}:${colL(2+pessoas.length)}${rl+1})`);
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:2,c:0},e:{r:rl,c:nC-1}}) };
     ws['!freeze'] = { xSplit:2, ySplit:3 };
     ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:nC-1}});
     return ws;
   }
+
   function _abaLeiturasPessoa(anual, p) {
-    const ws = {}; ws['!merges'] = []; let r = 0;
-    ws['!cols'] = [{wch:12},{wch:7},{wch:10},{wch:13},{wch:13},{wch:11},{wch:36}];
-    merge(ws, r, 0, r, 6);
-    ws[XLSX.utils.encode_cell({r,c:0})] = titCell(`${p.nome} — LEITURAS DE ${anual.ano}`); r++;
-    merge(ws, r, 0, r, 6);
-    ws[XLSX.utils.encode_cell({r,c:0})] = subCell('Km = leitura menos a leitura anterior do mesmo veículo (que pode ser de outra pessoa).'); r++;
-    hdrRow(ws, r, ['Data', 'Dia', 'Placa', 'Leitura anterior', 'Leitura', 'Km rodado', 'Observação']); const h = r; r++;
-    const SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
+    const ws = {}; ws['!merges'] = [];
+    ws['!cols'] = [{wch:12},{wch:7},{wch:7},{wch:11},{wch:16},{wch:14},{wch:12},{wch:12},{wch:40}];
+    _cabecalhoKm(ws, `${p.nome} — LEITURAS DE ${anual.ano}`, 'Km rodado = leitura menos a leitura anterior do mesmo veículo (que pode ser de outra pessoa). Filtre por mês, placa ou dia da semana nas setas do cabeçalho.', 9);
+    hdrRow(ws, 2, ['Data', 'Dia', 'Mês', 'Placa', 'Modelo', 'Leitura anterior', 'Leitura', 'Km rodado', 'Observação']);
     const ls = (anual.leituras || []).filter(l => l.user_id === p.user_id).sort((a,b) => a.data.localeCompare(b.data) || a.odometro - b.odometro);
-    let soma = 0;
-    ls.forEach(l => {
-      ws[XLSX.utils.encode_cell({r,c:0})] = strCenter(l.data.split('-').reverse().join('/'));
-      ws[XLSX.utils.encode_cell({r,c:1})] = strCenter(SEM[new Date(l.data + 'T00:00:00Z').getUTCDay()]);
-      ws[XLSX.utils.encode_cell({r,c:2})] = strCenter(l.placa);
-      ws[XLSX.utils.encode_cell({r,c:3})] = l.odometro_anterior != null ? intCell(l.odometro_anterior) : strCell('');
-      ws[XLSX.utils.encode_cell({r,c:4})] = intCell(l.odometro);
-      ws[XLSX.utils.encode_cell({r,c:5})] = intCell(l.km_rodado, true);
-      ws[XLSX.utils.encode_cell({r,c:6})] = strCell(l.observacao || '');
+    const max = Math.max(0, ...ls.map(l => l.km_rodado || 0));
+    let r = 3, soma = 0;
+    ls.forEach((l, i) => {
+      const dow = new Date(l.data + 'T00:00:00Z').getUTCDay();
+      const base = (dow === 0 || dow === 6) ? FILL_FDS : (i % 2 ? FILL_ZEBRA : null);
+      ws[XLSX.utils.encode_cell({r,c:0})] = kmTxt(l.data.split('-').reverse().join('/'), true, base);
+      ws[XLSX.utils.encode_cell({r,c:1})] = kmTxt(SEMANA[dow], true, base);
+      ws[XLSX.utils.encode_cell({r,c:2})] = kmTxt(MESES[l.mes-1], true, base);
+      ws[XLSX.utils.encode_cell({r,c:3})] = kmTxt(l.placa, true, base);
+      ws[XLSX.utils.encode_cell({r,c:4})] = kmTxt(l.modelo || '', false, base);
+      ws[XLSX.utils.encode_cell({r,c:5})] = l.odometro_anterior != null ? kmNum(l.odometro_anterior, { fill: base }) : kmTxt('', false, base);
+      ws[XLSX.utils.encode_cell({r,c:6})] = kmNum(l.odometro, { fill: base });
+      ws[XLSX.utils.encode_cell({r,c:7})] = kmNum(l.km_rodado, { bold:true, fill: calor(l.km_rodado, max) || base });
+      ws[XLSX.utils.encode_cell({r,c:8})] = kmTxt(l.observacao || '', false, base);
       soma += l.km_rodado || 0; r++;
     });
-    ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL', s:{ font:FONT_TOT, border:BORDER_BOTTOM, alignment:ALIGN_L } };
-    ws[XLSX.utils.encode_cell({r,c:5})] = intCell(soma, true);
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:h,c:0},e:{r:Math.max(h+1,r-1),c:6}}) };
-    ws['!freeze'] = { xSplit:0, ySplit:h+1 };
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:6}});
+    const rl = Math.max(3, r - 1);
+    ws[XLSX.utils.encode_cell({r,c:0})] = kmTotRot('TOTAL', true);
+    for (let c = 1; c <= 8; c++) if (c !== 7) ws[XLSX.utils.encode_cell({r,c})] = kmTotRot('', true);
+    ws[XLSX.utils.encode_cell({r,c:7})] = kmTot(soma, `SUBTOTAL(109,H4:H${rl+1})`);
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:2,c:0},e:{r:rl,c:8}}) };
+    ws['!freeze'] = { xSplit:0, ySplit:3 };
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:8}});
     return ws;
   }
+
   function _resumoPessoas(anual, pessoas) {
+    const ws = {}; ws['!merges'] = [];
+    const nC = 15;
     const linhas = pessoas.map(p => {
       const m = (anual.motoristas || []).find(x => x.user_id === p.user_id);
       return { nome: p.nome, meses: m?.meses || Array(12).fill(0), total: m?.total || 0, leituras: m?.leituras || 0 };
     });
-    return _abaMeses(`KM POR COLABORADOR — ${anual.ano}`, linhas, 'Colaborador', [{titulo:'Leituras',campo:'leituras',num:true}]);
+    ws['!cols'] = [{wch:Math.max(22, Math.min(32, Math.max(...linhas.map(l => String(l.nome).length)) + 2))}, ...Array(12).fill({wch:8}), {wch:11}, {wch:10}];
+    _cabecalhoKm(ws, `KM POR COLABORADOR — ${anual.ano}`, 'Km rodado por mês. Quanto mais km, mais forte o verde. Use as setas do cabeçalho para ordenar ou filtrar.', nC);
+    hdrRow(ws, 2, ['Colaborador', ...MESES, 'TOTAL', 'Leituras']);
+    const max = Math.max(0, ...linhas.flatMap(l => l.meses.map(Number)));
+    let r = 3; const tot = Array(12).fill(0); let tl = 0;
+    linhas.forEach((l, i) => {
+      const base = i % 2 ? FILL_ZEBRA : null;
+      ws[XLSX.utils.encode_cell({r,c:0})] = kmTxt(l.nome, false, base);
+      l.meses.forEach((v, j) => { tot[j] += Number(v || 0); ws[XLSX.utils.encode_cell({r,c:1+j})] = kmNum(v, { fill: calor(Number(v), max) || base }); });
+      ws[XLSX.utils.encode_cell({r,c:13})] = kmNum(l.total, { bold:true, fill: base });
+      ws[XLSX.utils.encode_cell({r,c:14})] = kmNum(l.leituras, { fill: base });
+      tl += l.leituras; r++;
+    });
+    const rl = Math.max(3, r - 1);
+    ws[XLSX.utils.encode_cell({r,c:0})] = kmTotRot('TOTAL', false);
+    for (let c = 1; c <= 14; c++) {
+      const v = c <= 12 ? tot[c-1] : c === 13 ? tot.reduce((a,b)=>a+b,0) : tl;
+      ws[XLSX.utils.encode_cell({r,c})] = kmTot(v, `SUBTOTAL(109,${colL(c)}4:${colL(c)}${rl+1})`);
+    }
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:2,c:0},e:{r:rl,c:nC-1}}) };
+    ws['!freeze'] = { xSplit:1, ySplit:3 };
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:nC-1}});
+    return ws;
   }
+
   function exportarFrotaPlanilha(anual, pessoas, { mes, separado = false } = {}) {
     if (!pessoas?.length) throw new Error('Escolha ao menos um colaborador');
     const mesX = Math.min(12, Math.max(1, Number(mes) || 1));
