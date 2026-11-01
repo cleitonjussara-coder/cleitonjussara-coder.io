@@ -66,11 +66,15 @@ class AssistenteAjudaTest extends TestCase
     {
         config(['petermann.anthropic.key' => 'chave-teste', 'petermann.anthropic.limite_dia_assistente' => 2]);
         Cache::flush();
-        Http::fake(['api.anthropic.com/*' => Http::response(['stop_reason' => 'end_turn', 'content' => [['type' => 'text', 'text' => 'Toque em Avisar.']]])]);
+        Http::fake(['api.anthropic.com/*' => Http::response(['stop_reason' => 'end_turn', 'content' => [['type' => 'text', 'text' => "## Passos
+**Toque** em `Avisar`.
+* item um"]]])]);
         Sanctum::actingAs($this->pessoa('gestor'));
 
         $r = $this->postJson('/api/assistente/perguntar', ['pergunta' => 'como avisar o dono da nota para corrigir?'])->assertOk();
-        $r->assertJsonPath('resposta', 'Toque em Avisar.')->assertJsonPath('motivo', null);
+        $r->assertJsonPath('resposta', "Passos
+Toque em Avisar.
+• item um")->assertJsonPath('motivo', null);
         $this->assertNotEmpty($r->json('fontes'));
         Http::assertSent(fn ($req) => str_contains($req['messages'][0]['content'][0]['text'], '<trechos>') && isset($req['system']));
 

@@ -46,7 +46,7 @@
       <form class="ajuda-assist" onsubmit={enviar}>
         <label for="ajuda-pergunta"><b>🤖 Pergunte ao assistente</b></label>
         <div class="ajuda-assist-linha">
-          <input id="ajuda-pergunta" type="text" maxlength="400" placeholder="Ex.: como registro o km do carro?" bind:value={pergunta} autocomplete="off" />
+          <input id="ajuda-pergunta" type="text" maxlength="400" placeholder="Escreva sua dúvida" bind:value={pergunta} autocomplete="off" />
           <button type="submit" class="btn btn-primary" disabled={carregando || pergunta.trim().length < 3}>{carregando ? '…' : 'Perguntar'}</button>
         </div>
         {#if resposta?.texto}
