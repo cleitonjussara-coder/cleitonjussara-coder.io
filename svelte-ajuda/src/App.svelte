@@ -4,7 +4,32 @@
   // errar um parágrafo de ajuda real da equipe.
   import conteudo from './ajuda-conteudo.html?raw';
 
-  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {} } = $props();
+  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {}, perguntar = null } = $props();
+
+  // Assistente (01/11/2026): pergunta em linguagem comum; o servidor busca na PRÓPRIA ajuda (respeitando o papel)
+  // e a IA só redige a resposta. Nenhum dado de nota ou pessoa vai junto.
+  let pergunta = $state('');
+  let carregando = $state(false);
+  let resposta = $state(null);   // { texto, fontes } | { erro }
+
+  async function enviar(e) {
+    e?.preventDefault();
+    const p = pergunta.trim();
+    if (p.length < 3 || carregando || !perguntar) return;
+    carregando = true;
+    resposta = null;
+    try {
+      const r = await perguntar(p);
+      if (r?.resposta) resposta = { texto: r.resposta, fontes: r.fontes || [] };
+      else if (r?.motivo === 'limite') resposta = { erro: 'Você chegou ao limite de perguntas de hoje. Leia a ajuda abaixo ou tente amanhã.' };
+      else if (r?.motivo === 'sem_trecho') resposta = { erro: 'Não encontrei isso na ajuda. Tente outras palavras ou fale com o gestor.' };
+      else resposta = { erro: 'O assistente está indisponível agora. Procure nos tópicos abaixo.', fontes: r?.fontes || [] };
+    } catch (_) {
+      resposta = { erro: 'Sem conexão com o servidor. Procure nos tópicos abaixo.' };
+    } finally {
+      carregando = false;
+    }
+  }
 </script>
 
 <!-- Reaproveita as MESMAS classes globais do app (full-overlay, form-hdr,
@@ -17,6 +42,22 @@
     <h3>Como usar o app</h3>
   </div>
   <div class="form-body" class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}>
+    {#if perguntar}
+      <form class="ajuda-assist" onsubmit={enviar}>
+        <label for="ajuda-pergunta"><b>🤖 Pergunte ao assistente</b></label>
+        <div class="ajuda-assist-linha">
+          <input id="ajuda-pergunta" type="text" maxlength="400" placeholder="Ex.: como registro o km do carro?" bind:value={pergunta} autocomplete="off" />
+          <button type="submit" class="btn btn-primary" disabled={carregando || pergunta.trim().length < 3}>{carregando ? '…' : 'Perguntar'}</button>
+        </div>
+        {#if resposta?.texto}
+          <div class="ajuda-assist-resp">{resposta.texto}</div>
+          {#if resposta.fontes?.length}<div class="ajuda-assist-fontes">Baseado em: {resposta.fontes.join(' · ')}</div>{/if}
+        {:else if resposta?.erro}
+          <div class="ajuda-assist-resp ajuda-assist-erro">{resposta.erro}</div>
+        {/if}
+        <div class="ajuda-assist-fontes">Respostas geradas por IA a partir deste texto de ajuda. Confira nos tópicos abaixo.</div>
+      </form>
+    {/if}
     {@html conteudo}
   </div>
 </div>
@@ -40,4 +81,10 @@
   .form-body.eh-contador :global(.ajuda-sec.ajuda-contador),
   .form-body.eh-contador :global(.ajuda-sec.ajuda-so-contador),
   .form-body.eh-contador :global(p.ajuda-contador) { display: block; }
+  .ajuda-assist { margin: 0 0 16px; padding: 12px; border: 1px solid var(--border, #d9d9d9); border-radius: 12px; background: var(--card, transparent); }
+  .ajuda-assist-linha { display: flex; gap: 8px; margin-top: 8px; }
+  .ajuda-assist-linha input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; border: 1px solid var(--border, #ccc); border-radius: 10px; background: transparent; color: inherit; }
+  .ajuda-assist-resp { margin-top: 10px; white-space: pre-wrap; line-height: 1.45; }
+  .ajuda-assist-erro { opacity: .8; }
+  .ajuda-assist-fontes { margin-top: 6px; font-size: 12px; opacity: .65; }
 </style>

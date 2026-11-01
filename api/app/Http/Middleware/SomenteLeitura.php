@@ -36,6 +36,7 @@ class SomenteLeitura
         'POST notas/chave-existe',   // checagem de duplicata no formulário
         'POST notas/duplicada',      // idem, com número/fornecedor/valor (só leitura)
         'POST notas/ler-foto',       // leitura do anexo trocado
+        'POST assistente/perguntar', // só consulta a ajuda do app (01/11/2026)
     ];
 
     /** Módulos que ele não usa: nem a leitura (ponto, quilometragem, frota). */

@@ -483,10 +483,15 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     armazenamento: () => req('GET', '/admin/armazenamento'),   // espaço em disco (21/09/2026)
   };
 
+  /* Assistente do "Como usar" (01/11/2026): RAG só sobre o texto da ajuda → { resposta, fontes, motivo }. */
+  const assistente = {
+    perguntar: pergunta => req('POST', '/assistente/perguntar', { body: { pergunta }, timeout: 40_000 }),
+  };
+
   const cnpj = {
     get: c => req('GET', `/cnpj/${c}`),
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao };
 })();

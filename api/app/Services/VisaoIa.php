@@ -46,14 +46,36 @@ class VisaoIa
      */
     public function perguntar(string $origem, string $modelo, string $bytes, string $mime, string $pedido, int $maxTokens = 1024, string $effort = 'low', int $timeout = 20): ?string
     {
-        $this->ultimoMotivo = null;
-        if (! $this->disponivel() || $bytes === '') {
+        if ($bytes === '') {
             $this->ultimoMotivo = 'indisponivel';
 
             return null;
         }
         if (! in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
             $mime = 'image/jpeg';
+        }
+
+        return $this->chamar($origem, $modelo, [
+            ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => base64_encode($bytes)]],
+            ['type' => 'text', 'text' => $pedido],
+        ], null, $maxTokens, $effort, $timeout);
+    }
+
+    /**
+     * Pergunta só de texto (assistente do "Como usar", 01/11/2026): mesma chave, mesmo disjuntor e mesmos avisos.
+     */
+    public function perguntarTexto(string $origem, string $modelo, string $sistema, string $pergunta, int $maxTokens = 700, string $effort = 'low', int $timeout = 25): ?string
+    {
+        return $this->chamar($origem, $modelo, [['type' => 'text', 'text' => $pergunta]], $sistema, $maxTokens, $effort, $timeout);
+    }
+
+    private function chamar(string $origem, string $modelo, array $conteudo, ?string $sistema, int $maxTokens, string $effort, int $timeout): ?string
+    {
+        $this->ultimoMotivo = null;
+        if (! $this->disponivel()) {
+            $this->ultimoMotivo = 'indisponivel';
+
+            return null;
         }
 
         try {
@@ -65,18 +87,16 @@ class VisaoIa
                 $req = $req->withOptions(['verify' => $ca]);
             }
 
-            $res = $req->post(self::URL, [
+            $corpo = [
                 'model' => $modelo,
                 'max_tokens' => $maxTokens,                 // folga: o raciocínio do modelo também conta
                 'output_config' => ['effort' => $effort],
-                'messages' => [[
-                    'role' => 'user',
-                    'content' => [
-                        ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => base64_encode($bytes)]],
-                        ['type' => 'text', 'text' => $pedido],
-                    ],
-                ]],
-            ]);
+                'messages' => [['role' => 'user', 'content' => $conteudo]],
+            ];
+            if ($sistema !== null) {
+                $corpo['system'] = $sistema;
+            }
+            $res = $req->post(self::URL, $corpo);
 
             if (! $res->successful()) {
                 $st = $res->status();

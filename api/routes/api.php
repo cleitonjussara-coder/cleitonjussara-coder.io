@@ -75,6 +75,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/notas/duplicada', [NotaController::class, 'duplicada']);   // chave, NFS-e, nº+fornecedor, dia+valor+fornecedor em TODAS as notas (21/10/2026)
     Route::post('/notas/existem', [NotaController::class, 'existem']);
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
+    Route::post('/assistente/perguntar', [\App\Http\Controllers\AssistenteController::class, 'perguntar'])->middleware('throttle:12,1');   // RAG da ajuda (01/11/2026)
     Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto']);   // IA de visão lê a nota (10/10/2026)
     Route::post('/notas/reparar-fotos', [NotaController::class, 'repararFotos']);
     Route::put('/notas/{id}', [NotaController::class, 'upsert']);

@@ -85,6 +85,9 @@ return [
         'modelo_nota' => env('ANTHROPIC_MODELO_NOTA', 'claude-haiku-5-5'),
         'effort_nota' => env('ANTHROPIC_EFFORT_NOTA', 'low'),
         'limite_dia_notas' => (int) env('NOTA_IA_LIMITE_DIA', 80),
+        /* Assistente do "Como usar" (01/11/2026): só texto da ajuda, nenhum dado de nota/pessoa. */
+        'modelo_assistente' => env('ANTHROPIC_MODELO_ASSISTENTE', 'claude-haiku-5-5'),
+        'limite_dia_assistente' => (int) env('ASSISTENTE_IA_LIMITE_DIA', 40),
     ],
 
     /* Só para desenvolvimento no Windows (curl do PHP sem CA): caminho de um

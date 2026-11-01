@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 499;
+const APP_BUILD = 500;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10172,7 +10172,7 @@ async function compartilharFotoViewer() {
    dinheiro envolvido, só texto de ajuda. abrirAjuda()/fecharAjuda() viraram
    uma ponte fina para window.SvelteAjuda (js/svelte-ajuda.js); o resto do
    app nem percebe a troca, chama do mesmo jeito de sempre. */
-function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), veFrota: _veFrota(), onFechar: fecharAjuda }); }
+function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), veFrota: _veFrota(), onFechar: fecharAjuda, perguntar: p => sb.assistente.perguntar(p) }); }
 function fecharAjuda() { window.SvelteAjuda?.desmontar(); }
 
 /* ── Form Repasse ────────────────────────────────────────── */
