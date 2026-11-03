@@ -117,8 +117,9 @@ class RelatorioCv
            do cartão) e REEMBOLSO ao colaborador em I/J. Lançamento antigo,
            sem destino gravado, conta como reembolso: era assim que o
            relatório o tratava antes desta separação. */
+        $this->separarReembolso($bd);
         $linhaExtrato = 15;      // B/C — recarga
-        $linhaReembolso = 15;    // I/J — reembolso
+        $linhaReembolso = ['RDM' => 15, 'RDA' => 15];    // I/J — reembolso RDM; L/M — reembolso RDA
         foreach ($reps as $r) {
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
             $ehRecarga = $c->usaCartao() && $r->destino === 'recarga';
@@ -130,10 +131,12 @@ class RelatorioCv
                 }
             }
             if (! $ehRecarga) {
-                if ($linhaReembolso <= 94) {
-                    $bd->setCellValue([9, $linhaReembolso], $dt);
-                    $bd->setCellValue([10, $linhaReembolso], (float) $r->valor);
-                    $linhaReembolso++;
+                $tipo = $r->tipo === 'RDA' ? 'RDA' : 'RDM';
+                $col = $tipo === 'RDA' ? 12 : 9;
+                if ($linhaReembolso[$tipo] <= 94) {
+                    $bd->setCellValue([$col, $linhaReembolso[$tipo]], $dt);
+                    $bd->setCellValue([$col + 1, $linhaReembolso[$tipo]], (float) $r->valor);
+                    $linhaReembolso[$tipo]++;
                 }
             }
         }
@@ -146,6 +149,43 @@ class RelatorioCv
     }
 
     /**
+     * Reembolso separado em RDM e RDA no BANCO DE DADOS (03/11/2026, pedido do Cleiton): I/J fica com o RDM e L/M, com o
+     * mesmo visual, com o RDA. Cada bloco tem o seu "REEMBOLSO DE" (gasto da aba CV REEMBOLSO − total pago dele) e J96 soma
+     * os dois TOTAL PAGO, para a faixa da aba CV REEMBOLSO. Na grade, RDA é a coluna Alimentação (L) e RDM são as outras três
+     * (D, H e P): é a mesma regra de categoria(), que manda toda nota RDA para Alimentação e nenhuma RDM para lá.
+     */
+    private function separarReembolso(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $bd): void
+    {
+        foreach (range(13, 95) as $linha) {
+            $bd->duplicateStyle($bd->getStyle("I$linha"), "L$linha");
+            $bd->duplicateStyle($bd->getStyle("J$linha"), "M$linha");
+        }
+        $bd->getColumnDimension('K')->setWidth(4);
+        foreach (['I' => 22, 'J' => 16.3, 'L' => 22, 'M' => 16.3] as $col => $largura) {
+            $bd->getColumnDimension($col)->setWidth($largura);
+        }
+
+        $gasto = fn (array $colunas) => 'SUM('.implode(',', array_merge(...array_map(
+            fn (string $col) => array_map(fn (array $b) => "'CV REEMBOLSO'!$col{$b[1]}", array_values(self::BLOCOS)),
+            $colunas
+        ))).')';
+        $bd->setCellValue('I13', 'REEMBOLSO RDM DE:');
+        $bd->setCellValue('J13', '='.$gasto(['D', 'H', 'P']).'-J95');
+        $bd->setCellValue('L13', 'REEMBOLSO RDA DE:');
+        $bd->setCellValue('M13', '='.$gasto(['L']).'-M95');
+        $bd->setCellValue('L14', 'DATA');
+        $bd->setCellValue('M14', 'R$');
+        $bd->setCellValue('I95', 'TOTAL PAGO RDM');
+        $bd->setCellValue('L95', 'TOTAL PAGO RDA');
+        $bd->setCellValue('M95', '=SUM(M15:M94)');
+
+        $bd->duplicateStyle($bd->getStyle('I95'), 'I96');
+        $bd->duplicateStyle($bd->getStyle('J95'), 'J96');
+        $bd->setCellValue('I96', 'TOTAL PAGO');
+        $bd->setCellValue('J96', '=J95+M95');
+    }
+
+    /**
      * Faixa do topo das abas de gasto — TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO (16/10/2026, pedido do Cleiton).
      *
      * No modelo, "TOTAL RECEBIDO" é um rótulo mesclado em G2:J2 e o valor fica em K2 — coluna OCULTA (C, G, K e O são as
@@ -153,7 +193,7 @@ class RelatorioCv
      * J2, visível, como nos outros dois quadros (rótulo mesclado + valor ao lado).
      *
      * Cada aba usa o SEU recebido, o mesmo que o PDF já usava: CARTÃO CORPORATIVO = recargas (BANCO DE DADOS!C95) e
-     * CV REEMBOLSO = reembolsos pagos (BANCO DE DADOS!J95). O modelo ligava as duas ao total de recargas.
+     * CV REEMBOLSO = reembolsos pagos, RDM + RDA (BANCO DE DADOS!J96). O modelo ligava as duas ao total de recargas.
      *
      * O SALDO do modelo era "=D2-H2", células vazias de rótulos mesclados: dava sempre R$ 0,00. Vira recebido − gasto,
      * como o "SALDO DE C.V. RECEBIDO" do BANCO DE DADOS e como o PDF (negativo = a empresa ainda deve).
@@ -162,7 +202,7 @@ class RelatorioCv
     {
         $abas = [
             [$this->abaDoCartao($ss), "='BANCO DE DADOS'!C95"],
-            [$ss->getSheetByName('CV REEMBOLSO'), "='BANCO DE DADOS'!J95"],
+            [$ss->getSheetByName('CV REEMBOLSO'), "='BANCO DE DADOS'!J96"],
         ];
         foreach ($abas as [$ws, $recebido]) {
             /* só mexe se o modelo for o que conhecemos (rótulo em G2): outro layout fica como está */
@@ -602,7 +642,7 @@ class RelatorioCv
         /* o modelo tem células formatadas muito além da área útil (CABEÇALHO até
            AE137, RDM_RDA até AO) — cada uma vira HTML; cortamos o excesso */
         $this->enxugar($ss, 'CABEÇALHO', 'I', 34);
-        $this->enxugar($ss, 'BANCO DE DADOS', 'K', 95);
+        $this->enxugar($ss, 'BANCO DE DADOS', 'N', 96);
         $this->enxugar($ss, 'RDM_RDA', 'P', null);
         $this->enxugar($ss, 'CV REEMBOLSO', 'P', null);
         $this->enxugar($ss, 'AJUDA DE CUSTOS', 'E', null);

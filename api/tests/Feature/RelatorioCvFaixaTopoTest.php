@@ -93,7 +93,7 @@ class RelatorioCvFaixaTopoTest extends TestCase
         }
 
         $this->assertSame("='BANCO DE DADOS'!C95", $ss->getSheetByName(RelatorioCv::ABA_CARTAO)->getCell('J2')->getValue(), 'cartão: recebido = recargas');
-        $this->assertSame("='BANCO DE DADOS'!J95", $ss->getSheetByName('CV REEMBOLSO')->getCell('J2')->getValue(), 'carteira: recebido = reembolsos pagos');
+        $this->assertSame("='BANCO DE DADOS'!J96", $ss->getSheetByName('CV REEMBOLSO')->getCell('J2')->getValue(), 'carteira: recebido = reembolsos pagos');
         $ss->disconnectWorksheets();
     }
 

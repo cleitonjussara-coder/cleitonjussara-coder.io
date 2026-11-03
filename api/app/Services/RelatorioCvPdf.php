@@ -97,16 +97,29 @@ class RelatorioCvPdf
         };
         $detTipo = fn ($lista) => '<span class="det">RDM '.$brl($lista->where('tipo', 'RDM')->sum('valor')).' · RDA '.$brl($lista->where('tipo', 'RDA')->sum('valor')).'</span>';
         $extratoRecarga = $linhas($recargas);
-        $extratoReembolso = $linhas($reembolsos);
         $extratoAjuda = $linhas($ajudas);
         $totalRecarga = (float) $recargas->sum('valor');
         $totalReembolso = (float) $reembolsos->sum('valor');
         $totalAjuda = (float) $ajudas->sum('valor');
+        /* Reembolso separado em RDM e RDA (03/11/2026), como no BANCO DE DADOS do Excel: gasto da aba CV REEMBOLSO − total pago.
+           No CV essa aba só tem o que saiu do bolso; antes o PDF descontava de TODAS as notas e não batia com a planilha. */
+        $notasReembolso = $ehCv ? $notas->filter(fn ($n) => $n->pagamento === 'carteira') : $notas;
+        $reembolsoPor = function (string $t) use ($notasReembolso, $reembolsos, $linhas) {
+            $doTipo = fn ($x) => ($x->tipo === 'RDA' ? 'RDA' : 'RDM') === $t;
+            $pagos = $reembolsos->filter($doTipo);
+            $pago = (float) $pagos->sum('valor');
+
+            return ['extrato' => $linhas($pagos), 'pago' => $pago, 'deve' => (float) $notasReembolso->filter($doTipo)->sum('valor') - $pago];
+        };
+        $reembRdm = $reembolsoPor('RDM');
+        $reembRda = $reembolsoPor('RDA');
+        $blocoReembolso = fn (string $t, array $b) => '<h3>REEMBOLSO '.$t.' DE: <span class="num">'.$brl($b['deve']).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($b['extrato'] ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td colspan="2">TOTAL PAGO '.$t.'</td><td class="num">'.$brl($b['pago']).'</td></tr></table>';
         $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'
             .'<table class="resumo"><tr>'
             .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span><br>'.$detTipo($ehCv ? $recargas : $reps).'</td>'
             .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>'
-            .'<td><b>REEMBOLSO DE:</b><br><span class="big">'.$brl($gastoTotal - $recebido).'</span></td></tr><tr>'
+            .'<td><b>REEMBOLSO DE:</b><br><span class="big">'.$brl($reembRdm['deve'] + $reembRda['deve']).'</span><br><span class="det">RDM '.$brl($reembRdm['deve']).' · RDA '.$brl($reembRda['deve']).'</span></td></tr><tr>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE C.V.</b><br><span class="big">'.$brl($gastoTotal).'</span></td>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>'
             .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span><br>'.$detTipo($ehCv ? $reembolsos : $reps).'</td></tr><tr>'
@@ -117,8 +130,7 @@ class RelatorioCvPdf
             .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
             .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
             .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
-            .'<td class="col"><h3>REEMBOLSO DE: <span class="num">'.$brl($gastoTotal - $recebido).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoReembolso ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td colspan="2">TOTAL PAGO</td><td class="num">'.$brl($ehCv ? $totalReembolso : $recebido).'</td></tr></table></td></tr></table></div>';
+            .'<td class="col">'.$blocoReembolso('RDM', $reembRdm).$blocoReembolso('RDA', $reembRda).'</td></tr></table></div>';
 
         /* ── CARTÃO CORPORATIVO (aba "CV ALELO" do modelo) e CV REEMBOLSO ───────────────────────── */
         /* 14/10/2026: as duas páginas listavam as MESMAS notas ("tudo junto"). No CV cada uma tem as suas, como na
