@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 504;
+const APP_BUILD = 505;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3819,13 +3819,13 @@ function renderInicio() {
       /* RDM e RDA lançados no cartão e lançados na carteira (pedido do Cleiton): o gasto de cada lado aberto por aba */
       const _gasto = (carteira, tipo) => _soma(A.ns.filter(x => _naoEhFaturamento(x) && x.tipo === tipo
         && (carteira ? x.pagamento === 'carteira' : _notaDoCartao(x))));
-      const _det = carteira => 'RDM ' + brlCurto(_gasto(carteira, 'RDM')) + ' · RDA ' + brlCurto(_gasto(carteira, 'RDA'));
+      const _det = carteira => 'RDM ' + brl(_gasto(carteira, 'RDM')) + ' · RDA ' + brl(_gasto(carteira, 'RDA'));
       _tipos = [
         { sigla: '💳 Cartão', cor: 'var(--accent-d)', gasto: A.gastoCartao,
-          txt: _saldoCart == null ? '' : 'saldo ' + brlCurto(_saldoCart) + (_saldoCart < CARTAO_SALDO_MINIMO ? ' · acabando' : ''),
+          txt: _saldoCart == null ? '' : 'saldo ' + brl(_saldoCart) + (_saldoCart < CARTAO_SALDO_MINIMO ? ' · acabando' : ''),
           cls: _saldoCart != null && _saldoCart < CARTAO_SALDO_MINIMO ? 'receber' : 'adiantado', det: _det(false) },
         { sigla: '💵 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
-          txt: _aReemb > 0.004 ? brlCurto(_aReemb) + ' a receber' : _aReemb < -0.004 ? brlCurto(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
+          txt: _aReemb > 0.004 ? brl(_aReemb) + ' a receber' : _aReemb < -0.004 ? brl(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
           cls: _aReemb > 0.004 ? 'receber' : 'adiantado', det: _det(true) },
       ];
     } else {
@@ -3858,7 +3858,7 @@ function renderInicio() {
               <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>${t.txt === '' ? '' : `
               <span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
                 t.txt != null ? esc(t.txt)
-                : t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
+                : t.saldo > 0 ? brl(t.saldo) + ' a receber' : t.saldo < 0 ? brl(-t.saldo) + ' adiantado' : 'em dia'
               }</span>`}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}
             </div>
           </div>`).join('')}
