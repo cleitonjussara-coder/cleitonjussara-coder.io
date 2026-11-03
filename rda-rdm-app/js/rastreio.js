@@ -24,6 +24,8 @@ window.Rastreio = (() => {
   const diaBR = d => new Date(d).toLocaleDateString('en-CA', { timeZone: TZ });          // AAAA-MM-DD
   const hhmm = d => new Date(d).toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
   const ddmm = d => new Date(d).toLocaleDateString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit' });
+  /* dado em atributo (data-*): escapa aspas também; handler lê this.dataset (nunca dado dentro do JS do onclick) */
+  const _atG = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const diasDeDiferenca = iso => Math.round((Date.parse(diaBR(Date.now())) - Date.parse(diaBR(iso))) / 86400000);
 
   /* "há 12 min", "há 3 h", "ontem 18:40", "há 6 dias", "03/09" */
@@ -66,8 +68,8 @@ window.Rastreio = (() => {
     if (p.role !== 'colaborador') return estado;
     const livre = !p.justificativa_libera_em || Date.parse(p.justificativa_libera_em) <= Date.now();
     const botao = j?.status === 'pendente'
-      ? `<button class="rs-bt suave" onclick="event.stopPropagation();Rastreio.cancelarJustificativa('${esc(p.id)}')">↩ Cancelar pedido</button>`
-      : `<button class="rs-bt" ${livre ? '' : 'disabled'} onclick="event.stopPropagation();Rastreio.pedirJustificativa('${esc(p.id)}')">📨 Pedir justificativa</button>`;
+      ? `<button class="rs-bt suave" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.cancelarJustificativa(this.dataset.uid)">↩ Cancelar pedido</button>`
+      : `<button class="rs-bt" ${livre ? '' : 'disabled'} data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.pedirJustificativa(this.dataset.uid)">📨 Pedir justificativa</button>`;
     const nota = j?.status !== 'pendente' && !livre ? `<span class="rs-nota">Novo pedido liberado ${esc(quandoFuturo(p.justificativa_libera_em))}.</span>` : '';
     return `${estado}<div class="rs-ac">${botao}${nota}</div>`;
   }
@@ -132,16 +134,16 @@ window.Rastreio = (() => {
         <span class="t">${esc(quando(n.quando))}</span>
       </div>`).join('');
     return `
-    <div class="db-card rs-card" onclick="Rastreio.abrir('${esc(p.id)}')">
+    <div class="db-card rs-card" data-uid="${_atG(p.id)}" onclick="Rastreio.abrir(this.dataset.uid)">
       <div class="rs-top">
         <div class="rs-av">${esc(ini)}</div>
         <div><div class="rs-nm">${esc(p.nome)}</div><div class="rs-pp">${esc(papel)}${regime}</div></div>
-        <span class="rs-dot" style="background:${sit.cor}" title="${esc(sit.txt || 'em dia')}"></span>
+        <span class="rs-dot" style="background:${sit.cor}" title="${_atG(sit.txt || 'em dia')}"></span>
       </div>
       <div class="rs-ln">Visto no app <b>${p.visto_em ? esc(quando(p.visto_em)) : 'nunca'}</b> · última nota <b>${p.ultimo_lancamento_em ? esc(quando(p.ultimo_lancamento_em)) : '—'}</b></div>
       ${linhaUlt}
       ${sit.txt && sit.parado ? `<div class="rs-warn">${esc(sit.txt)}</div>` : ''}
-      <div class="rs-kp"><span class="rs-k">Hoje: ${p.hoje}</span><span class="rs-k">Semana: ${p.semana}</span><span class="rs-k">Mês: ${p.mes}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>
+      <div class="rs-kp"><span class="rs-k">Hoje: ${Number(p.hoje) || 0}</span><span class="rs-k">Semana: ${Number(p.semana) || 0}</span><span class="rs-k">Mês: ${Number(p.mes) || 0}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>
       ${_blocoJustificativa(p, abre)}
       ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>` : ''}
     </div>`;

@@ -26,6 +26,8 @@ window.Ponto = (() => {
   const hoje = () => FusoBR.hojeISO();
   const agoraHM = () => FusoBR.hora(new Date(), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const diaSemanaBR = () => new Date(hoje() + 'T12:00:00').getDay();
+  /* dado em atributo (data-*, value): escapa aspas também; handler lê this.dataset (nunca dado dentro do JS do onclick) */
+  const _atG = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   let dias = [];          // registros do mês (visíveis)
   let resumo = null;      // GET /ponto/resumo
@@ -139,9 +141,9 @@ window.Ponto = (() => {
 
       <div class="db-card">
         <div class="db-card-title"><span>Hoje · ${fmtData(hoje())} (${DIAS[diaSemanaBR()]})</span>
-          ${h.meu ? `<button class="btn btn-sm btn-outline" onclick="Ponto.abrirForm('${h.meu.id}')">Corrigir</button>` : ''}</div>
+          ${h.meu ? `<button class="btn btn-sm btn-outline" data-ponto="${_atG(h.meu.id)}" onclick="Ponto.abrirForm(this.dataset.ponto)">Corrigir</button>` : ''}</div>
         <div class="ponto-marcs">
-          ${h.feitas.map(m => `<div class="ponto-marc ${m.hora ? 'ok' : ''} ${m.pendente ? 'pend' : ''}"><span class="ponto-marc-ico">${m.ico}</span><span class="ponto-marc-rot">${m.rot}</span><span class="ponto-marc-h">${m.hora || '—'}${m.pendente ? ' ⏳' : ''}</span></div>`).join('')}
+          ${h.feitas.map(m => `<div class="ponto-marc ${m.hora ? 'ok' : ''} ${m.pendente ? 'pend' : ''}"><span class="ponto-marc-ico">${m.ico}</span><span class="ponto-marc-rot">${m.rot}</span><span class="ponto-marc-h">${esc(m.hora || '—')}${m.pendente ? ' ⏳' : ''}</span></div>`).join('')}
         </div>
         ${h.meu && h.meu.minutos ? `<div class="ponto-hoje-tot">Trabalhado: <b>${hm(h.meu.minutos)}</b>${h.meu.extra50 ? ` · extra 50%: <b>${hm(h.meu.extra50)}</b>` : ''}${h.meu.extra100 ? ` · extra 100%: <b>${hm(h.meu.extra100)}</b>` : ''}</div>` : ''}
         ${h.meu?.feriado ? `<div class="ponto-hoje-tot">🎉 Feriado: ${esc(h.meu.feriado)} — horas contam como extra 100%</div>` : (diaSemanaBR() === 0 ? '<div class="ponto-hoje-tot">Domingo — horas contam como extra 100%</div>' : '')}
@@ -175,19 +177,19 @@ window.Ponto = (() => {
             ${gestor && d.user_nome ? `<span class="subtipo-tag">👤 ${esc(d.user_nome)}</span>` : ''}
             ${d.feriado ? `<span class="doc-tag nfse">🎉 ${esc(d.feriado)}</span>` : ''}
             ${d.domingo ? '<span class="doc-tag danfe">domingo</span>' : ''}
-            ${d.tipo_dia !== 'trabalho' ? `<span class="doc-tag outro">${d.tipo_dia}</span>` : ''}
+            ${d.tipo_dia !== 'trabalho' ? `<span class="doc-tag outro">${esc(d.tipo_dia)}</span>` : ''}
             ${d.aberto ? '<span class="sync-pill pending">⏳ em aberto</span>' : ''}
           </div>
           <div class="nota-body">
-            <div class="nota-empresa" style="font-size:15.5px">${[d.entrada, d.saida_intervalo, d.volta_intervalo, d.saida].map(x => x || '—').join(' · ')}</div>
+            <div class="nota-empresa" style="font-size:15.5px">${[d.entrada, d.saida_intervalo, d.volta_intervalo, d.saida].map(x => x ? esc(x) : '—').join(' · ')}</div>
             <div class="nota-cnpj">${d.minutos ? `${hm(d.minutos)} trabalhadas` : (d.tipo_dia === 'trabalho' ? 'sem horas' : '')}${d.extra50 ? ` · <b>+${hm(d.extra50)} (50%)</b>` : ''}${d.extra100 ? ` · <b>+${hm(d.extra100)} (100%)</b>` : ''}</div>
             ${d.observacao ? `<div class="nota-obs">${esc(d.observacao)}</div>` : ''}
           </div>
           <div class="nota-foot">
             <span></span>
             <div class="nota-actions">
-              ${(gestor || d.user_id === user?.id) ? `<button class="btn-icon-sm" onclick="Ponto.abrirForm('${d.id}')" title="Corrigir">✏️</button>` : ''}
-              ${gestor ? `<button class="btn-icon-sm danger" onclick="Ponto.excluir('${d.id}')" title="Excluir">🗑</button>` : ''}
+              ${(gestor || d.user_id === user?.id) ? `<button class="btn-icon-sm" data-ponto="${_atG(d.id)}" onclick="Ponto.abrirForm(this.dataset.ponto)" title="Corrigir">✏️</button>` : ''}
+              ${gestor ? `<button class="btn-icon-sm danger" data-ponto="${_atG(d.id)}" onclick="Ponto.excluir(this.dataset.ponto)" title="Excluir">🗑</button>` : ''}
             </div>
           </div>
         </div>`).join('') : '<p class="muted-p">Nenhum registro neste mês.</p>'}
@@ -201,7 +203,7 @@ window.Ponto = (() => {
         <button class="btn btn-sm btn-primary" onclick="Ponto.abrirFeriado()" ${_offline ? 'disabled' : ''}>＋ Feriado</button>
       </div>
       <div class="db-card">
-        ${feriados.length ? feriados.map(f => `<div class="ponto-feriado"><span>${fmtData(f.data)} — ${esc(f.nome)}</span><button class="btn-icon-sm danger" onclick="Ponto.excluirFeriado('${f.data}')" title="Remover">🗑</button></div>`).join('') : '<p class="muted-p">Nenhum feriado cadastrado para o ano. Cadastre os nacionais, estaduais e municipais — eles viram extra 100%.</p>'}
+        ${feriados.length ? feriados.map(f => `<div class="ponto-feriado"><span>${fmtData(f.data)} — ${esc(f.nome)}</span><button class="btn-icon-sm danger" data-feriado="${_atG(f.data)}" onclick="Ponto.excluirFeriado(this.dataset.feriado)" title="Remover">🗑</button></div>`).join('') : '<p class="muted-p">Nenhum feriado cadastrado para o ano. Cadastre os nacionais, estaduais e municipais — eles viram extra 100%.</p>'}
       </div>`;
     }
 
@@ -233,7 +235,7 @@ window.Ponto = (() => {
         <div class="db-card-title"><span>Horas por colaborador</span><span style="font-size:13px;color:var(--text2)">toque para filtrar</span></div>
         <div class="db-rank">
           ${pessoas.slice().sort((a, b) => b.minutos - a.minutos).map((p, i) => `
-          <div class="db-rank-item" style="cursor:pointer" onclick="Ponto.filtrarPessoa('${p.user_id}')">
+          <div class="db-rank-item" style="cursor:pointer" data-uid="${_atG(p.user_id)}" onclick="Ponto.filtrarPessoa(this.dataset.uid)">
             <div class="db-rank-meta"><span class="db-rank-pos">${i + 1}º</span><span class="db-rank-name">${esc(p.nome)}</span>
               <span class="db-rank-val">${hm(p.minutos)}${p.extra50 || p.extra100 ? ` <small style="opacity:.8">(+${hm(p.extra50 + p.extra100)})</small>` : ''}${p.abertos ? ' ⏳' : ''}</span></div>
             <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(3, Math.round(p.minutos / max * 100))}%"></div></div>
@@ -314,10 +316,10 @@ window.Ponto = (() => {
     const sel = $('pt-pessoa');
     if (gestor) {
       const pessoas = Object.values(window.equipePorId || {}).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
-      sel.innerHTML = pessoas.map(p => `<option value="${p.id}">${esc(p.nome || p.email)}</option>`).join('');
+      sel.innerHTML = pessoas.map(p => `<option value="${_atG(p.id)}">${esc(p.nome || p.email)}</option>`).join('');
       sel.value = d?.user_id || user?.id; sel.disabled = !!d;
       $('pt-pessoa-wrap').style.display = '';
-    } else { $('pt-pessoa-wrap').style.display = 'none'; sel.innerHTML = `<option value="${user?.id}">${esc(user?.nome || '')}</option>`; }
+    } else { $('pt-pessoa-wrap').style.display = 'none'; sel.innerHTML = `<option value="${_atG(user?.id)}">${esc(user?.nome || '')}</option>`; }
     $('pt-data').value = d?.data || hoje();
     $('pt-data').disabled = !!d;
     for (const m of MARC) $('pt-' + m.k).value = d?.[m.k] || '';

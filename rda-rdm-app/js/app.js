@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 505;
+const APP_BUILD = 506;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1007,11 +1007,11 @@ function _pintarBarraUsuario() {
   const papel = user?.role || 'colaborador';
   el.style.display = '';
   if (avEl) avEl.innerHTML = `
-    <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${esc(user.foto_path)}" data-nome="${esc(user?.nome || '')}" data-sub="${esc(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>`;
+    <div class="avatar ${user?.foto_path ? 'clicavel' : ''}" ${user?.foto_path ? `data-foto="${_at(user.foto_path)}" data-nome="${_at(user?.nome || '')}" data-sub="${_at(PAPEL_NOME[papel] || papel)}" onclick="Gestor.verFoto(this)"` : 'onclick="switchView(\'perfil\')" title="Adicionar foto no Perfil"'}>${esc((user?.nome || user?.email || '?')[0].toUpperCase())}</div>`;
   conteudo.innerHTML = `
     <div class="ini-ola-txt">
       <h2>${saud}${nome ? ', ' + esc(nome) : ''} 👋</h2>
-      <span><span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · <span class="data-longa">${esc(hojeTxt)}</span><span class="data-curta">${esc(hojeCurto)}</span></span></span>
+      <span><span class="role-pill role-${_at(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span><span class="ini-ola-data"> · <span class="data-longa">${esc(hojeTxt)}</span><span class="data-curta">${esc(hojeCurto)}</span></span></span>
     </div>`;
   _mostrarAvatar();
 }
@@ -1055,7 +1055,7 @@ function abrirMenu() {
   const av = $('menu-avatar');
   if (av) av.textContent = (user?.nome || user?.email || '?')[0].toUpperCase();
   const nm = $('menu-nome'); if (nm) nm.textContent = nome || 'Usuário';
-  const rp = $('menu-role-pill'); if (rp) rp.innerHTML = `<span class="role-pill role-${esc(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span>`;
+  const rp = $('menu-role-pill'); if (rp) rp.innerHTML = `<span class="role-pill role-${_at(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span>`;
   const lista = $('menu-lista');
   if (lista) lista.innerHTML = _itensMenu().map(it => `
       <li>
@@ -1773,7 +1773,7 @@ function renderAuth(mode='login') {
     ${_bannerInstalarIOS()}
     <h2 class="auth-title">${_convite ? 'Aceitar convite' : 'Criar conta'}</h2>
     ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : `<div class="install-slot"></div>`}
-    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${esc(_convite?.nome || '')}">
+    <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${_at(_convite?.nome || '')}">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
     ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
     <button class="btn btn-primary btn-full" onclick="register()">${_convite ? 'Aceitar e criar conta' : 'Criar conta'}</button>
@@ -2416,27 +2416,27 @@ function abrirNotificacoes() {
           ${(() => { const nn = _notaPorId(it.notaId); return nn && (nn.foto_path || nn.foto_local) ? `<button class="btn btn-sm btn-outline" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); verFoto(this.dataset.nota)">📎 Ver anexo</button>` : ''; })()}
           <button class="btn btn-sm btn-outline" data-aviso="${_at(it.aviso.id)}" onclick="dispensarAvisoCorrecao(this.dataset.aviso, this)">OK, vi</button>
         </div>` : it.tipo === 'justificativa' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="responderJustificativa('${it.just.id}')">✍️ Responder</button>
+          <button class="btn btn-sm btn-primary" data-just="${_at(it.just.id)}" onclick="responderJustificativa(this.dataset.just)">✍️ Responder</button>
         </div>` : it.tipo === 'justresp' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="verRespostaJustificativa('${it.just.id}')">💬 Ler resposta</button>
-          <button class="btn btn-sm btn-outline" onclick="dispensarJustificativa('${it.just.id}', this)">OK, vi</button>
+          <button class="btn btn-sm btn-primary" data-just="${_at(it.just.id)}" onclick="verRespostaJustificativa(this.dataset.just)">💬 Ler resposta</button>
+          <button class="btn btn-sm btn-outline" data-just="${_at(it.just.id)}" onclick="dispensarJustificativa(this.dataset.just, this)">OK, vi</button>
         </div>` : it.tipo === 'fotobranca' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); verFoto('${esc(it.notaId)}')">📎 Ver foto</button>
-          <button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); editarNota('${esc(it.notaId)}')">✏️ Corrigir a nota</button>
-          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${esc(it.id)}')">OK, vi</button>
+          <button class="btn btn-sm btn-primary" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); verFoto(this.dataset.nota)">📎 Ver foto</button>
+          <button class="btn btn-sm btn-outline" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); editarNota(this.dataset.nota)">✏️ Corrigir a nota</button>
+          <button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif)">OK, vi</button>
         </div>` : it.tipo === 'cartao' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: '${it.userId}', nome: '${esc((it.nome || '').replace(/'/g, ''))}' }, 'recarga')">💳 Registrar recarga</button>
-          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
-          <button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}')">Fechar</button>
+          <button class="btn btn-sm btn-primary" data-uid="${_at(it.userId)}" data-nome="${_at((it.nome || '').replace(/'/g, ''))}" onclick="const d=this.dataset; document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: d.uid, nome: d.nome }, 'recarga')">💳 Registrar recarga</button>
+          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" data-uid="${_at(it.userId)}" onclick="const u=this.dataset.uid; document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Ver colaborador</button>` : ''}
+          <button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif)">Fechar</button>
         </div>` : it.tipo === 'novo' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${it.userId}', true, this)">✅ Confirmar entrada</button>
-          <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${it.userId}', false, this)">🚫 Recusar</button>
+          <button class="btn btn-sm btn-primary" data-uid="${_at(it.userId)}" onclick="confirmarEntrada(this.dataset.uid, true, this)">✅ Confirmar entrada</button>
+          <button class="btn btn-sm btn-danger-outline" data-uid="${_at(it.userId)}" onclick="confirmarEntrada(this.dataset.uid, false, this)">🚫 Recusar</button>
         </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
-          ${_veEquipe() ? `<button class="btn btn-sm btn-primary" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.userId}'), 400)">👤 Ver colaborador</button>` : ''}
+          ${_veEquipe() ? `<button class="btn btn-sm btn-primary" data-uid="${_at(it.userId)}" onclick="const u=this.dataset.uid; document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" onclick="abrirModalAtenderPedido('${it.id}')">✅ Marcar como pago</button>
-          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir('${it.rep.user_id}'), 400)">👤 Ver colaborador</button>` : ''}
-        </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" onclick="dispensarNotificacao('${it.id}', this)">OK, vi</button></div>`}
+          <button class="btn btn-sm btn-primary" data-pedido="${_at(it.id)}" onclick="abrirModalAtenderPedido(this.dataset.pedido)">✅ Marcar como pago</button>
+          ${_veEquipe() ? `<button class="btn btn-sm btn-outline" data-uid="${_at(it.rep.user_id)}" onclick="const u=this.dataset.uid; document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Ver colaborador</button>` : ''}
+        </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif, this)">OK, vi</button></div>`}
       </div>
     </div>`).join('') : '<div class="empty-state" style="padding:24px 8px">Nenhuma notificação. 🎉</div>';
   ov.innerHTML = `
@@ -2796,8 +2796,8 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
           ${lista.length ? '<div style="border-top:1px solid var(--border);margin-bottom:10px"></div>' : ''}
         ` : ''}
         ${lista.map(c => `
-          <button class="btn btn-outline btn-full" data-busca="${esc(`${c.nome || ''} ${c.email || ''}`)}" style="justify-content:flex-start;margin-bottom:8px;text-align:left;height:auto;min-height:48px;padding:8px 14px;line-height:1.25;white-space:normal;flex-wrap:wrap;gap:0 8px"
-                  onclick="document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback('${c.id}')">
+          <button class="btn btn-outline btn-full" data-busca="${_at(`${c.nome || ''} ${c.email || ''}`)}" data-uid="${_at(c.id)}" style="justify-content:flex-start;margin-bottom:8px;text-align:left;height:auto;min-height:48px;padding:8px 14px;line-height:1.25;white-space:normal;flex-wrap:wrap;gap:0 8px"
+                  onclick="const u=this.dataset.uid; document.getElementById('seletor-colab-overlay')?.remove(); window._seletorColabCallback(u)">
             ${esc(c.nome || c.email)} <span style="opacity:.7;font-size:13px;font-weight:600;overflow-wrap:anywhere">${esc(c.email || '')}</span>
           </button>`).join('')}
         <p id="seletor-colab-vazio" style="display:none;opacity:.7;font-size:14px;text-align:center;margin:10px 0 0">Nenhum colaborador encontrado.</p>
@@ -2922,8 +2922,8 @@ function abrirModalAtenderPedido(id) {
         <p style="opacity:.7;font-size:13px;margin:6px 0 0">Pedido original: ${brl(r.valor)}. Mude o valor se o acerto for diferente do que foi pedido.</p>
       </div>
       <div class="modal-ft" style="flex-wrap:wrap;gap:8px">
-        <button class="btn btn-danger-outline" onclick="_recusarPedido('${id}', this)">🚫 Recusar</button>
-        <button class="btn btn-primary" onclick="_confirmarAtenderPedido('${id}', this)">✅ Confirmar pagamento</button>
+        <button class="btn btn-danger-outline" data-pedido="${_at(id)}" onclick="_recusarPedido(this.dataset.pedido, this)">🚫 Recusar</button>
+        <button class="btn btn-primary" data-pedido="${_at(id)}" onclick="_confirmarAtenderPedido(this.dataset.pedido, this)">✅ Confirmar pagamento</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -3503,8 +3503,8 @@ function _avisoEquipeDevedoraHTML() {
      preenchidos; o valor continua editável). No cartão corporativo (C.V.) a
      dívida é uma só, sem divisão por aba, e há também a recarga. */
   const linhas = outros.map(c => {
-    const id = esc(c.id);
-    const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" onclick="${fn}('${id}'${extra})">${rot}</button>`;
+    const id = _at(c.id);
+    const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" data-uid="${id}" onclick="${fn}(this.dataset.uid${extra})">${rot}</button>`;
     const info = c.cv && !_histEq.dados
       ? `<span>C.V. · carregando os valores do servidor…</span>`
       : c.cv
@@ -4028,12 +4028,12 @@ function _cartaoPedidoAbertoHTML(noForm = false) {
   return `
     <div class="aviso-gestor" style="border:2px solid var(--accent-d);border-radius:14px;padding:14px;margin:12px 0;background:var(--card,rgba(255,255,255,.06))">
       <div style="font-weight:700;font-size:16px">⏳ ${recarga ? 'Recarga do cartão' : 'Repasse'} pedido — aguardando</div>
-      <div style="font-size:22px;font-weight:800;margin:6px 0">${brl(p.valor)} <span class="tipo-badge tipo-${esc(p.tipo)}">${esc(p.tipo)}</span></div>
+      <div style="font-size:22px;font-weight:800;margin:6px 0">${brl(p.valor)} <span class="tipo-badge tipo-${_at(p.tipo)}">${esc(p.tipo)}</span></div>
       <div style="opacity:.75;font-size:13.5px">Pedido de ${fmtDataBR(p.data)}${p.descricao ? ' · ' + esc(p.descricao) : ''}</div>
       <div style="opacity:.75;font-size:13.5px;margin-top:6px">O dinheiro já caiu? Confirme — se o valor depositado foi diferente, você pode corrigir. Enquanto este pedido estiver aberto, não dá para fazer outro.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button class="btn btn-primary" onclick="${fecha}abrirConfirmarRecebimento('${esc(p.id)}')">✅ Recebi</button>
-        <button class="btn btn-outline" onclick="${fecha}cancelarPedidoAberto('${esc(p.id)}')">Cancelar pedido</button>
+        <button class="btn btn-primary" data-rep="${_at(p.id)}" onclick="const r=this.dataset.rep; ${fecha}abrirConfirmarRecebimento(r)">✅ Recebi</button>
+        <button class="btn btn-outline" data-rep="${_at(p.id)}" onclick="const r=this.dataset.rep; ${fecha}cancelarPedidoAberto(r)">Cancelar pedido</button>
       </div>
     </div>`;
 }
@@ -4058,7 +4058,7 @@ function abrirConfirmarRecebimento(id) {
         <p style="opacity:.7;font-size:13px;margin:6px 0 0">Você pediu ${brl(p.valor)}. Se o depósito foi maior ou menor, altere o valor — o saldo usa o que realmente caiu.</p>
       </div>
       <div class="modal-ft">
-        <button class="btn btn-primary" onclick="_confirmarRecebimento('${esc(p.id)}', this)">✅ Confirmar</button>
+        <button class="btn btn-primary" data-rep="${_at(p.id)}" onclick="_confirmarRecebimento(this.dataset.rep, this)">✅ Confirmar</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -4102,7 +4102,7 @@ function _historicoRepasseFormHTML(destino) {
     const st = pedido ? (r.atendido_em ? 'pedido encerrado' : 'pedido pendente') : 'recebido';
     return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border)">
       <span style="font-size:20px">${ico}</span>
-      <span class="tipo-badge tipo-${esc(r.tipo)}">${esc(r.tipo)}</span>
+      <span class="tipo-badge tipo-${_at(r.tipo)}">${esc(r.tipo)}</span>
       <div style="flex:1;min-width:0"><div style="font-size:15px;overflow:hidden;text-overflow:ellipsis">${esc(r.descricao || (pedido ? 'Pedido' : 'Recebimento'))}</div>
         <div style="font-size:13px;color:var(--text2)">${fmtDataBR(r.data)} · ${st}</div></div>
       <b style="white-space:nowrap">${brl(r.valor)}</b></div>`;
@@ -4586,7 +4586,7 @@ function renderHome() {
 
   const itensPend = pendentes.slice(0, 10).map(n => `
     <div class="db-pend-item" style="gap:10px">
-      <span class="tipo-badge tipo-${n.tipo}" style="flex-shrink:0">${esc(n.tipo)}</span>
+      <span class="tipo-badge tipo-${_at(n.tipo)}" style="flex-shrink:0">${esc(n.tipo)}</span>
       <div style="flex:1;min-width:0">
         <div class="db-pend-txt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
@@ -4594,12 +4594,12 @@ function renderHome() {
           ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
       </div>
       <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
-      <button class="btn btn-sm btn-outline" onclick="corrigirGrupoNota('${n.id}')" style="flex-shrink:0">Mover</button>
+      <button class="btn btn-sm btn-outline" data-nota="${_at(n.id)}" onclick="corrigirGrupoNota(this.dataset.nota)" style="flex-shrink:0">Mover</button>
     </div>`).join('');
 
   const itemEquipePendHtml = n => `
     <div class="db-pend-item" style="gap:10px">
-      <span class="tipo-badge tipo-${n.tipo}" style="flex-shrink:0">${esc(n.tipo)}</span>
+      <span class="tipo-badge tipo-${_at(n.tipo)}" style="flex-shrink:0">${esc(n.tipo)}</span>
       <div style="flex:1;min-width:0">
         <div class="db-pend-txt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           👤 ${esc(n.user_nome || _rotuloProprietario(n))} · ${esc(n.razao_social || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
@@ -4607,7 +4607,7 @@ function renderHome() {
           ${esc(fmtData(n.data))} · ${motivosDe(n)}</div>
       </div>
       <span class="db-pend-n" style="margin-right:4px">${_n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
-      <button class="btn btn-sm btn-outline" onclick="corrigirGrupoNota('${n.id}')" style="flex-shrink:0">Mover</button>
+      <button class="btn btn-sm btn-outline" data-nota="${_at(n.id)}" onclick="corrigirGrupoNota(this.dataset.nota)" style="flex-shrink:0">Mover</button>
     </div>`;
   const pendEquipeHtml = pendentesEquipe.length ? `
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
@@ -4678,17 +4678,17 @@ function renderHome() {
                 || String(b.created_at||'').localeCompare(String(a.created_at||'')))
     .slice(0, 5);
   const recHtml = recentes.length ? recentes.map(n => `
-    <div class="recent-item" onclick="editarNota('${n.id}')" style="cursor:pointer">
+    <div class="recent-item" data-nota="${_at(n.id)}" onclick="editarNota(this.dataset.nota)" style="cursor:pointer">
       ${n.foto_path || n.foto_local ? `
-      <button class="recent-thumb" id="dbthumb-${n.id}" title="Ver anexo da nota"
-              onclick="event.stopPropagation();verFoto('${n.id}')"><span class="nota-thumb-ph">📎</span></button>` : ''}
-      <span class="tipo-badge tipo-${n.tipo}">${esc(n.tipo)}</span>
+      <button class="recent-thumb" id="dbthumb-${_at(n.id)}" data-nota="${_at(n.id)}" title="Ver anexo da nota"
+              onclick="event.stopPropagation();verFoto(this.dataset.nota)"><span class="nota-thumb-ph">📎</span></button>` : ''}
+      <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
       <div class="recent-info">
         <div class="recent-tit">${esc(n.razao_social
           || (n.cnpj ? (window.BrasilAPI?.formatar?.(n.cnpj) || n.cnpj) : 'Sem empresa'))}</div>
         <div class="recent-sub">${esc(fmtData(n.data))}${n.subtipo ? ' · ' + esc(n.subtipo) : ''}</div>
       </div>
-      <span class="recent-val ${String(n.tipo||'').toLowerCase()}">${
+      <span class="recent-val ${_at(String(n.tipo||'').toLowerCase())}">${
         _n(n.valor) > 0 ? brl(n.valor) : '⚠️'}</span>
     </div>`).join('') : '<p class="muted-p">Nenhuma nota lançada no período.</p>';
 
@@ -4869,7 +4869,7 @@ function renderHome() {
         <span class="db-kpi-val">${brl(mediaNota)}</span>
         <span class="db-kpi-sub">${totalNotas} nota${totalNotas === 1 ? '' : 's'} no período</span>
       </button>
-      <button class="db-kpi maior" onclick="${maior ? `editarNota('${maior.id}')` : 'abrirCaptura()'}">
+      <button class="db-kpi maior" ${maior ? `data-nota="${_at(maior.id)}" ` : ''}onclick="${maior ? 'editarNota(this.dataset.nota)' : 'abrirCaptura()'}">
         <div class="db-kpi-top"><span class="db-kpi-title">Maior nota</span></div>
         <span class="db-kpi-val">${maior ? brl(maior.valor) : brl(0)}</span>
         <span class="db-kpi-sub">${maior ? esc(maior.razao_social || 'Sem empresa') : 'Nenhuma nota'}</span>
@@ -5055,7 +5055,7 @@ async function detalharFalhaSync(id) {
 }
 
 function _statusNota(n) {
-  if (n?.sync_status === 'failed') return `<button type="button" class="sync-pill failed" title="Toque para ver o motivo" onclick="event.stopPropagation();detalharFalhaSync('${n.id}')">⚠️ falhou ›</button>`;
+  if (n?.sync_status === 'failed') return `<button type="button" class="sync-pill failed" title="Toque para ver o motivo" data-nota="${_at(n.id)}" onclick="event.stopPropagation();detalharFalhaSync(this.dataset.nota)">⚠️ falhou ›</button>`;
   if (n?.sync_status === 'pending' || n?.synced === false) return '<span class="sync-pill pending" title="Pendente de sincronização">⏳ pendente</span>';
   return '<span class="sync-pill synced" title="Sincronizado">✓ ok</span>';
 }
@@ -5223,11 +5223,11 @@ async function renderNotasApagadas() {
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => {
       html += `
-      <div class="nota-card" data-tipo="${n.tipo}">
-        ${n._orfa ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar este lançamento">`}
+      <div class="nota-card" data-tipo="${_at(n.tipo)}">
+        ${n._orfa ? '' : `<input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar este lançamento">`}
         <div class="nota-head">
-          <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
-          ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
+          <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
+          ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
           <span class="nota-data">${fmtHora(n.deleted_at || n.updated_at || n.created_at)}</span>
         </div>
         <div class="nota-body">
@@ -5245,10 +5245,10 @@ async function renderNotasApagadas() {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n._orfa
-              ? `<button class="btn btn-sm btn-danger-outline" onclick="limparDaLixeira('${n.id}')">Limpar daqui</button>`
-              : `<button class="btn btn-sm ${_dupNaLixeira(n) ? 'btn-outline' : 'btn-primary'}" onclick="restaurarNota('${n.id}')">Restaurar</button>
-            ${_podeApagarDefinitivo(n) ? `<button class="btn btn-sm btn-danger-outline"
-              onclick="apagarDefinitivo('${n.id}')" title="Apagar em definitivo">Apagar definitivo</button>` : ''}`}
+              ? `<button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}" onclick="limparDaLixeira(this.dataset.nota)">Limpar daqui</button>`
+              : `<button class="btn btn-sm ${_dupNaLixeira(n) ? 'btn-outline' : 'btn-primary'}" data-nota="${_at(n.id)}" onclick="restaurarNota(this.dataset.nota)">Restaurar</button>
+            ${_podeApagarDefinitivo(n) ? `<button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}"
+              onclick="apagarDefinitivo(this.dataset.nota)" title="Apagar em definitivo">Apagar definitivo</button>` : ''}`}
           </div>
         </div>
       </div>`;
@@ -5274,10 +5274,10 @@ async function renderNotasApagadas() {
     daEquipe.forEach(n => {
       const quem = n.updated_by ? nomeDe(n.updated_by) : 'não registrado';
       html += `
-      <div class="nota-card" data-tipo="${esc(n.tipo)}">
-        <input type="checkbox" class="nota-chk" value="${esc(n.id)}" onchange="marcarEquipe(this.value,this.checked)" aria-label="Selecionar este lançamento">
+      <div class="nota-card" data-tipo="${_at(n.tipo)}">
+        <input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarEquipe(this.value,this.checked)" aria-label="Selecionar este lançamento">
         <div class="nota-head">
-          <span class="tipo-badge tipo-${esc(n.tipo)}">${esc(n.tipo)}</span>
+          <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
           ${n.pagamento === 'empresa' ? '<span class="subtipo-tag">🏢 Faturamento</span>' : ''}
           <span class="nota-data">${fmtHora(n.updated_at)}</span>
@@ -5289,8 +5289,8 @@ async function renderNotasApagadas() {
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
-            <button class="btn btn-sm btn-primary" onclick="lixeiraEquipeRestaurar('${esc(n.id)}')">Restaurar</button>
-            <button class="btn btn-sm btn-danger-outline" onclick="lixeiraEquipeApagar('${esc(n.id)}')" title="Apagar em definitivo">Apagar definitivo</button>
+            <button class="btn btn-sm btn-primary" data-nota="${_at(n.id)}" onclick="lixeiraEquipeRestaurar(this.dataset.nota)">Restaurar</button>
+            <button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}" onclick="lixeiraEquipeApagar(this.dataset.nota)" title="Apagar em definitivo">Apagar definitivo</button>
           </div>
         </div>
       </div>`;
@@ -5626,7 +5626,7 @@ function renderDashEquipe() {
         <label class="lbl">Colaborador</label>
         <select class="inp" onchange="_dashEquipeSetFiltro('colab', this.value)">
           <option value="todos" ${_deColab === 'todos' ? 'selected' : ''}>Todos (${pessoasTodas.length})</option>
-          ${pessoasTodas.map(p => `<option value="${esc(p.id)}" ${_deColab === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
+          ${pessoasTodas.map(p => `<option value="${_at(p.id)}" ${_deColab === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -5671,7 +5671,7 @@ function renderDashEquipe() {
         <span class="db-kpi-val">${brl(media)}</span>
         <span class="db-kpi-sub">${nColab} no filtro</span>
       </div>
-      <button class="db-kpi maior" onclick="${maior ? `switchView('equipe');setTimeout(()=>Gestor.abrir('${maior.uid}'),400)` : ''}">
+      <button class="db-kpi maior" ${maior ? `data-uid="${_at(maior.uid)}" ` : ''}onclick="${maior ? `const u=this.dataset.uid;switchView('equipe');setTimeout(()=>Gestor.abrir(u),400)` : ''}">
         <div class="db-kpi-top"><span class="db-kpi-title">Maior gasto individual</span></div>
         <span class="db-kpi-val">${maior ? brl(maior.val) : brl(0)}</span>
         <span class="db-kpi-sub">${maior ? esc(maior.nome) : 'Sem dados no filtro'}</span>
@@ -5701,7 +5701,7 @@ function renderDashEquipe() {
       </div>
       <div class="db-rank">
         ${ranking.length ? ranking.map((p, i) => `
-          <div class="db-rank-item" style="cursor:pointer" onclick="switchView('equipe');setTimeout(()=>Gestor.abrir('${p.uid}'),400)">
+          <div class="db-rank-item" style="cursor:pointer" data-uid="${_at(p.uid)}" onclick="const u=this.dataset.uid;switchView('equipe');setTimeout(()=>Gestor.abrir(u),400)">
             <div class="db-rank-meta">
               <span class="db-rank-pos">${i + 1}º</span>
               <span class="db-rank-name">${esc(p.nome)}</span>
@@ -6049,17 +6049,17 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
   _notasDesenhadas.set(n.id, n);
   const pendSync = _statusNota(n);
   return `
-      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${n.tipo}" data-pag="${n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao'}">
-        ${_ehContabilidade() ? '' : `<input type="checkbox" class="nota-chk" value="${n.id}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">`}
+      <div class="nota-card ${n.foto_path||n.foto_local ? 'com-thumb' : ''}" data-tipo="${_at(n.tipo)}" data-pag="${n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao'}">
+        ${_ehContabilidade() ? '' : `<input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar esta nota">`}
         ${n.foto_path||n.foto_local ? `
-        <button class="nota-thumb" id="${pref}${n.id}" onclick="verFoto('${n.id}')"
+        <button class="nota-thumb" id="${pref}${_at(n.id)}" data-nota="${_at(n.id)}" onclick="verFoto(this.dataset.nota)"
                 title="Ver anexo da nota"><span class="nota-thumb-ph">📎</span></button>` : ''}
         <div class="nota-head">
-          <span class="tipo-badge tipo-${n.tipo}">${n.tipo}</span>
+          <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
           ${docBadgeHTML(n)}
           ${_pagamentoBadgeHTML(n, opts)}
-          ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${esc(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
-          ${n.subtipo ? `<span class="subtipo-tag">${n.subtipo}</span>` : ''}
+          ${_dupMapa.has(n.id) ? `<span class="doc-tag dup" title="Possível duplicata: ${_MOTIVO_DUP[_dupMapa.get(n.id).motivo]} — ${_at(_resumoNota(_dupMapa.get(n.id).nota))}">🔁 duplicada?</span>` : ''}
+          ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
           ${!opts.semDono && _ehGestorOuAdmin() && (_ehNotaDeOutroUsuario(n) || !n.user_id)
             ? `<span class="subtipo-tag" title="${n.user_id ? 'Nota de outro colaborador' : 'Faturamento sem colaborador específico'}">${n.user_id ? '👤' : '🏢'} ${esc(_rotuloProprietario(n))}</span>`
             : ''}
@@ -6077,12 +6077,12 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
-            ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" onclick="consultarNota('${n.id}')" title="Consultar a nota no portal">🔗</button>` : ''}
-            ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" onclick="emitirNfsePedagio('${n.id}')" title="Emitir a NFS-e do pedágio no portal da EcoRodovias">🧾</button>` : ''}
+            ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="consultarNota(this.dataset.nota)" title="Consultar a nota no portal">🔗</button>` : ''}
+            ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="emitirNfsePedagio(this.dataset.nota)" title="Emitir a NFS-e do pedágio no portal da EcoRodovias">🧾</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
-              ? `<button class="btn-icon-sm" onclick="corrigirGrupoNota('${n.id}')" title="Corrigir a categoria">🔀</button>` : ''}
-            <button class="btn-icon-sm" onclick="editarNota('${n.id}')" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
-            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm danger" onclick="excluirNota('${n.id}')" title="Excluir">🗑</button>`}
+              ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="corrigirGrupoNota(this.dataset.nota)" title="Corrigir a categoria">🔀</button>` : ''}
+            <button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="editarNota(this.dataset.nota)" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
+            ${_ehContabilidade() ? '' : `<button class="btn-icon-sm danger" data-nota="${_at(n.id)}" onclick="excluirNota(this.dataset.nota)" title="Excluir">🗑</button>`}
           </div>
         </div>
       </div>`;
@@ -6219,13 +6219,13 @@ function renderSaldo() {
       : (recarga ? 'Vai para o cartão — não abate os repasses' : (cvR ? 'Abate dos repasses registrados' : 'Registrado como repasse recebido'));
     return `
       <div class="rep-item">
-        <span class="tipo-badge tipo-${r.tipo}">${r.tipo}</span>
+        <span class="tipo-badge tipo-${_at(r.tipo)}">${esc(r.tipo)}</span>
         <div style="flex:1;min-width:0">
           <div class="rep-desc">${desc}</div>
           <div style="font-size:13px;color:var(--text2);margin-top:2px">${fmtDataBR(r.data)} · ${label} · ${detail}</div>
         </div>
         <span class="rep-val">${brl(r.valor)}</span>
-        ${_podeExcluirRepasse(r) ? `<button class="btn-icon-sm danger" onclick="excluirRepasse('${r.id}')">🗑</button>` : ''}
+        ${_podeExcluirRepasse(r) ? `<button class="btn-icon-sm danger" data-rep="${_at(r.id)}" onclick="excluirRepasse(this.dataset.rep)">🗑</button>` : ''}
       </div>`;
   };
   const secaoTipo = (tipo, lbl) => {
@@ -7036,7 +7036,7 @@ async function _listarBackupsAuto() {
     const dias = Math.floor((Date.now() - new Date(backups[0].em).getTime()) / 86_400_000);
     const alerta = dias > 8 ? `<div style="color:#b45309;font-weight:700;margin-bottom:4px">⚠️ Último backup automático há ${dias} dias — confira o Crontab no painel da Locaweb.</div>` : '';
     el.innerHTML = alerta + '<b>Automáticos no servidor:</b><br>' + backups.slice(0, 8).map(b =>
-      `<a class="link" onclick="baixarBackupAuto('${esc(b.nome)}')">${esc(b.nome)}</a> · ${(b.bytes / 1048576).toFixed(1)} MB`).join('<br>');
+      `<a class="link" data-arquivo="${_at(b.nome)}" onclick="baixarBackupAuto(this.dataset.arquivo)">${esc(b.nome)}</a> · ${(b.bytes / 1048576).toFixed(1)} MB`).join('<br>');
   } catch (e) { const el = $('backups-auto'); if (el) el.textContent = 'Não consegui listar os backups: ' + (e.message || 'erro'); }
 }
 async function _baixarBlob(promessa, nomeArquivo, msg) {
@@ -9872,7 +9872,8 @@ function _modalGrupoNota(n, grupos) {
           ${grupos.map(g => `
             <button class="btn btn-full ${atual(g) ? 'btn-primary' : 'btn-outline'}" style="justify-content:flex-start;margin-bottom:8px"
                     ${atual(g) ? 'disabled' : ''}
-                    onclick="_aplicarGrupoNota('${n.id}', '${g.tipo}', ${g.subtipo ? "'" + g.subtipo + "'" : 'null'}, this)">
+                    data-nota="${_at(n.id)}"
+                    onclick="_aplicarGrupoNota(this.dataset.nota, '${g.tipo}', ${g.subtipo ? "'" + g.subtipo + "'" : 'null'}, this)">
               ${atual(g) ? '✅ ' : ''}${g.rotulo} <span style="margin-left:6px;opacity:.7;font-size:13px;font-weight:600">${g.nota}</span>
             </button>`).join('')}
         </div>
@@ -10170,10 +10171,14 @@ let _fotoSeq = [];
 
 function _sequenciaDeAnexosVisiveis() {
   const ids = [];
-  document.querySelectorAll('[onclick*="verFoto(\'"]').forEach(el => {
+  document.querySelectorAll('[onclick*="verFoto("]').forEach(el => {
     if (!el.offsetParent) return;                       // fora da tela / aba escondida
-    const m = /(?:^|[^.\w])verFoto\('([^']+)'\)/.exec(el.getAttribute('onclick') || '');
-    if (m && !ids.includes(m[1])) ids.push(m[1]);
+    const oc = el.getAttribute('onclick') || '';
+    /* verFoto('id') (forma antiga) ou verFoto(this.dataset.xxx) (id no data-*, sem XSS) */
+    const m = /(?:^|[^.\w])verFoto\('([^']+)'\)/.exec(oc);
+    const d = m ? null : /(?:^|[^.\w])verFoto\(this\.dataset\.(\w+)\)/.exec(oc);
+    const id = m ? m[1] : d ? el.dataset[d[1]] : '';
+    if (id && !ids.includes(id)) ids.push(id);
   });
   return ids;
 }

@@ -17,6 +17,8 @@ window.Gestor = (() => {
   const brl = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
   const ini = nome => (nome||'?').split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /* para atributo (data-*, value, title): escapa também as aspas. Dado nunca vai dentro do JS do onclick — vai num data-* e o handler lê this.dataset */
+  const _at = s => esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   /* Gráfico de evolução do ano (Equipe e ficha do colaborador). 14/10/2026, pedido do
      Paulo: tocar numa coluna mostra os valores do mês (RDM, RDA, Total), igual ao
      gráfico do Painel; "Abrir" leva a tela para aquele mês. Redesenha só a faixa. */
@@ -91,7 +93,7 @@ window.Gestor = (() => {
           </div>
           <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
             <b>${brl(n.valor)}</b>
-            ${n.foto_path ? `<button class="btn-icon-sm" onclick="verFoto('${esc(n.id)}')" title="Ver o anexo">📎</button>` : ''}
+            ${n.foto_path ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="verFoto(this.dataset.nota)" title="Ver o anexo">📎</button>` : ''}
           </div>
         </div>`).join('') : '<div style="color:var(--text2);font-size:13px;padding:8px 0">Nenhuma nota neste mês.</div>';
     } catch (e) {
@@ -483,7 +485,7 @@ window.Gestor = (() => {
         const pessoasHtml = [...porPessoa].sort((a, b) => b[1].v - a[1].v).map(([id, c]) => {
           const col = todos.find(x => x.id === id);
           const nome = esc(col?.nome || col?.email || 'Desconhecido');
-          return linha(col ? `<a href="#" style="color:var(--primary-d);font-weight:600;text-decoration:none" onclick="event.preventDefault();Gestor.abrir('${esc(id)}')">${nome} ›</a>` : nome, c.v, nn(c.q));
+          return linha(col ? `<a href="#" style="color:var(--primary-d);font-weight:600;text-decoration:none" data-uid="${_at(id)}" onclick="event.preventDefault();Gestor.abrir(this.dataset.uid)">${nome} ›</a>` : nome, c.v, nn(c.q));
         }).join('');
 
         html += `<div class="dash-card fat-card">
@@ -578,17 +580,17 @@ window.Gestor = (() => {
               + (semValorM ? ` · <span class="alerta">${semValorM} sem valor</span>` : '')
             : 'Nenhuma nota no mês';
           mHtml += `
-          <div class="colab-card clicavel" data-busca="${esc(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" onclick="Gestor.abrir('${m.id}')" title="Ver notas de ${esc(m.nome||m.email)}">
+          <div class="colab-card clicavel" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" data-uid="${_at(m.id)}" onclick="Gestor.abrir(this.dataset.uid)" title="Ver notas de ${_at(m.nome||m.email)}">
             <div class="colab-head">
-              <div class="avatar ${m.foto_path ? 'clicavel' : ''}" data-foto="${esc(m.foto_path||'')}" data-nome="${esc(m.nome||m.email)}" data-sub="${esc(m.email)} · ${esc(m.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(m.nome))}</div>
+              <div class="avatar ${m.foto_path ? 'clicavel' : ''}" data-foto="${_at(m.foto_path||'')}" data-nome="${_at(m.nome||m.email)}" data-sub="${_at(m.email)} · ${_at(m.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(m.nome))}</div>
               <div class="colab-info">
                 <div class="colab-nome">${esc(m.nome||m.email)}</div>
                 <div class="colab-email">${esc(m.email)}</div>
               </div>
-              <span class="role-pill role-${m.role}">${m.role}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
+              <span class="role-pill role-${_at(m.role)}">${esc(m.role)}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
               ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
-              ${canEdit?`<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>`:''}
-              ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" onclick="event.stopPropagation();Gestor.alternarPrevia(this,'${m.id}')">⋯</button>`}
+              ${canEdit?`<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>`:''}
+              ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" data-uid="${_at(m.id)}" onclick="event.stopPropagation();Gestor.alternarPrevia(this,this.dataset.uid)">⋯</button>`}
               <span class="colab-seta">›</span>
             </div>
             <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
@@ -623,14 +625,14 @@ window.Gestor = (() => {
         if (inativos.length) {
           html += `<details class="dash-card" style="margin-top:10px"><summary style="cursor:pointer;font-weight:800">🚫 Desativados (${inativos.length})</summary>
             <div class="colab-list" style="margin-top:8px;opacity:.85">${inativos.map(m => `
-            <div class="colab-card" data-busca="${esc(((m.nome||'')+' '+(m.email||'')).toLowerCase())}">
+            <div class="colab-card" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}">
               <div class="colab-head">
-                <div class="avatar" data-foto="${esc(m.foto_path||'')}">${esc(ini(m.nome))}</div>
+                <div class="avatar" data-foto="${_at(m.foto_path||'')}">${esc(ini(m.nome))}</div>
                 <div class="colab-info">
                   <div class="colab-nome">${esc(m.nome||m.email)}</div>
                   <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + FusoBR.data(m.desativado_em) : ''}</div>
                 </div>
-                ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${m.id}" title="Editar">✏️</button>` : ''}
+                ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>` : ''}
               </div>
             </div>`).join('')}</div></details>`;
         }
@@ -794,12 +796,12 @@ window.Gestor = (() => {
         </div>
       </div>`}
 
-      <div class="cdet" data-ficha="${chaveFicha}">
+      <div class="cdet" data-ficha="${_at(chaveFicha)}">
         <div class="cdet-hero">
-          <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${esc(colab.foto_path||'')}" data-nome="${esc(colab.nome||colab.email)}" data-sub="${esc(colab.email)} · ${esc(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
+          <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${_at(colab.foto_path||'')}" data-nome="${_at(colab.nome||colab.email)}" data-sub="${_at(colab.email)} · ${_at(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
           <div class="cdet-email">${esc(colab.email)}</div>
-          <div class="cdet-pills"><span class="role-pill role-${colab.role}">${colab.role}</span>${ehContador ? '' : (colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>')}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}${('confirmado_em' in colab) && !colab.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e">🙋 aguardando liberação</span>' : ''}</div>
+          <div class="cdet-pills"><span class="role-pill role-${_at(colab.role)}">${esc(colab.role)}</span>${ehContador ? '' : (colab.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff">💳 CV · cartão corporativo</span>' : '<span class="role-pill" style="background:rgba(255,255,255,.14);color:#eef9f0">💰 RDM/RDA</span>')}${colab.ativo === false ? '<span class="role-pill" style="background:#fde2e2;color:#9b1c1c">🚫 desativado</span>' : ''}${('confirmado_em' in colab) && !colab.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e">🙋 aguardando liberação</span>' : ''}</div>
         </div>
 
         ${podeEditar && ('confirmado_em' in colab) && !colab.confirmado_em ? `
@@ -807,24 +809,24 @@ window.Gestor = (() => {
           <b>🙋 Cadastro novo aguardando liberação</b>
           <p>${esc(colab.nome || colab.email)} criou a conta ${({ convite: 'pelo link de convite', google: 'entrando com o Google', livre: 'pelo cadastro do app' })[colab.criado_via] || 'pelo app'}${colab.created_at ? ' em ' + new Date(colab.created_at).toLocaleDateString('pt-BR') : ''} e só usa o app depois que você confirmar.</p>
           <div class="cdet-pendente-btns">
-            <button class="btn btn-sm btn-primary" onclick="confirmarEntrada('${colab.id}', true, this)">✅ Confirmar entrada</button>
-            <button class="btn btn-sm btn-danger-outline" onclick="confirmarEntrada('${colab.id}', false, this)">🚫 Recusar</button>
+            <button class="btn btn-sm btn-primary" data-uid="${_at(colab.id)}" onclick="confirmarEntrada(this.dataset.uid, true, this)">✅ Confirmar entrada</button>
+            <button class="btn btn-sm btn-danger-outline" data-uid="${_at(colab.id)}" onclick="confirmarEntrada(this.dataset.uid, false, this)">🚫 Recusar</button>
           </div>
         </div>` : ''}
 
         ${ehContador ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_acoesAbertas ? 'on' : ''}" aria-expanded="${_acoesAbertas}" onclick="Gestor.alternarAcoes(this)">⋯ Relatórios e ações</button></div>`}
         <div class="cdet-acoes" style="display:${ehContador || _acoesAbertas ? 'grid' : 'none'}">
           ${ehContador ? '' : `${colab.regime === 'cv' ? `
-          <button class="cdet-acao" onclick="baixarRelatorioCv('xlsx','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
-          <button class="cdet-acao" onclick="baixarRelatorioCv('pdf','${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
-          <button class="cdet-acao" onclick="baixarRelatorioRdmRda('${colab.id}','${esc(colab.nome||'')}')"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
-          <button class="cdet-acao" onclick="baixarRelatorioRdmRda('${colab.id}','${esc(colab.nome||'')}','pdf')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">PDF ${ano}</span></button>
-          <button class="cdet-acao" onclick="Gestor.excelAnualColab('${colab.id}')"><span class="cdet-acao-ico">📄</span><span class="cdet-acao-lbl">Excel resumo</span><span class="cdet-acao-sub">do app · ${ano}</span></button>`}
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('xlsx',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('pdf',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome,'pdf')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">PDF ${ano}</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" onclick="Gestor.excelAnualColab(this.dataset.uid)"><span class="cdet-acao-ico">📄</span><span class="cdet-acao-lbl">Excel resumo</span><span class="cdet-acao-sub">do app · ${ano}</span></button>`}
           ${podeEditar ? (colab.regime === 'cv' ? `
-          <button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' }, 'carteira')"><span class="cdet-acao-ico">💵</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">carteira, entra direto no saldo</span></button>
-          <button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' }, 'recarga')"><span class="cdet-acao-ico">💳</span><span class="cdet-acao-lbl">Lançar recarga</span><span class="cdet-acao-sub">cartão corporativo, sem esperar pedido</span></button>
-          ` : `<button class="cdet-acao" onclick="abrirFormRepasse('received', null, { id: '${colab.id}', nome: '${esc((colab.nome || colab.email || '').replace(/'/g, ''))}' })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>`) : ''}
-          <button class="cdet-acao" onclick="switchView('arquivos');setTimeout(()=>Arquivos.abrirColab('${colab.id}'),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>`}
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'carteira')"><span class="cdet-acao-ico">💵</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">carteira, entra direto no saldo</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'recarga')"><span class="cdet-acao-ico">💳</span><span class="cdet-acao-lbl">Lançar recarga</span><span class="cdet-acao-sub">cartão corporativo, sem esperar pedido</span></button>
+          ` : `<button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>`) : ''}
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" onclick="const u=this.dataset.uid;switchView('arquivos');setTimeout(()=>Arquivos.abrirColab(u),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>`}
           ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
 
@@ -931,10 +933,10 @@ window.Gestor = (() => {
           <button class="btn btn-sm btn-outline" onclick="Gestor.selecionarRepasses(false)">Cancelar</button>
         </div>`;
         html += `<div class="colab-list" id="cdet-replista">${reps.map(x => `
-          <div class="rep-item cdet-rep" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" data-tp="${esc(x.tipo)}" data-sit="${recebido(x) || x.atendido_em ? 'fin' : 'nao'}" data-val="${Number(x.valor) || 0}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
-            ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${x.id}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
+          <div class="rep-item cdet-rep" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" data-tp="${_at(x.tipo)}" data-sit="${recebido(x) || x.atendido_em ? 'fin' : 'nao'}" data-val="${Number(x.valor) || 0}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
+            ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${_at(x.id)}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
             <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
-            <span class="tipo-badge tipo-${x.tipo}">${x.tipo}</span>
+            <span class="tipo-badge tipo-${_at(x.tipo)}">${esc(x.tipo)}</span>
             <div style="flex:1;min-width:0">
               <div class="rep-desc">${esc(x.descricao || (recebido(x) ? 'Repasse recebido' : 'Solicitação de repasse'))}</div>
               <div class="cdet-rep-sub">${fmtData(x.data)} · ${recebido(x) ? 'recebido' : x.atendido_em ? 'pedido pago ✅' : 'pedido pendente'}${ehRecarga(x) ? ' · 💳 recarga do cartão' : ''}</div>
@@ -942,8 +944,8 @@ window.Gestor = (() => {
             <span class="rep-val cdet-rep-val">${brl(x.valor)}</span>
             ${podeEditar ? `
             <div style="display:flex;gap:4px">
-              <button class="btn-icon-sm" title="Corrigir este repasse" onclick="editarRepasseDeOutro('${x.id}')">✏️</button>
-              <button class="btn-icon-sm danger" title="Excluir este repasse" onclick="excluirRepasseDeOutro('${x.id}')">🗑</button>
+              <button class="btn-icon-sm" title="Corrigir este repasse" data-rep="${_at(x.id)}" onclick="editarRepasseDeOutro(this.dataset.rep)">✏️</button>
+              <button class="btn-icon-sm danger" title="Excluir este repasse" data-rep="${_at(x.id)}" onclick="excluirRepasseDeOutro(this.dataset.rep)">🗑</button>
             </div>` : ''}
           </div>`).join('')}</div>`;
       }
@@ -1029,7 +1031,7 @@ window.Gestor = (() => {
           <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">
             ${collabs.map(c => `
               <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:15.5px;cursor:pointer">
-                <input type="checkbox" class="sel-chk" value="${c.id}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
+                <input type="checkbox" class="sel-chk" value="${_at(c.id)}" ${comLanc.has(c.id) ? 'checked' : ''} style="width:18px;height:18px">
                 <span style="flex:1">${esc(c.nome || c.email)} <span style="font-size:13px;color:var(--text2)">${c.regime === 'cv' ? '💳 CV' : '💰 RDM/RDA'}</span></span>
                 ${comLanc.has(c.id) ? '' : `<span style="font-size:13px;color:var(--text2)">${esc(etiqueta)}</span>`}
               </label>`).join('')}
@@ -1037,7 +1039,7 @@ window.Gestor = (() => {
           <p id="sel-qtd" style="font-size:14px;color:var(--text2);margin-top:8px"></p>
         </div>
         <div class="modal-ft" style="flex-wrap:wrap">
-          ${botoes.map(b => `<button class="btn ${b.primario ? 'btn-primary' : 'btn-outline'}" data-modo="${b.modo}" title="${esc(b.title || '')}">${b.label}</button>`).join('')}
+          ${botoes.map(b => `<button class="btn ${b.primario ? 'btn-primary' : 'btn-outline'}" data-modo="${_at(b.modo)}" title="${_at(b.title || '')}">${b.label}</button>`).join('')}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -1229,7 +1231,7 @@ window.Gestor = (() => {
         </div>
         <div class="modal-bd">
           <label class="lbl">Nome</label>
-          <input class="inp" id="g-nome" value="${esc(colab.nome||'')}" autocapitalize="words" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
+          <input class="inp" id="g-nome" value="${_at(colab.nome||'')}" autocapitalize="words" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
           <label class="lbl">Papel</label>
           <select class="inp" id="g-role" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
             ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
@@ -1335,7 +1337,7 @@ window.Gestor = (() => {
     if (paths.length) {
       try { Object.assign(_avatarCache, await sb.fotos.urls(paths)); } catch (_) {}
     }
-    els.forEach(e => { const u = _avatarCache[e.dataset.foto]; if (u) { e.innerHTML = `<img src="${u}" alt="">`; e.classList.add('com-foto'); } });
+    els.forEach(e => { const u = _avatarCache[e.dataset.foto]; if (u) { e.innerHTML = `<img src="${_at(u)}" alt="">`; e.classList.add('com-foto'); } });
   }
   new MutationObserver(() => { if (document.querySelector('.avatar[data-foto]:not(.com-foto)')) _carregarAvatares(); })
     .observe(document.body, { childList: true, subtree: true });
