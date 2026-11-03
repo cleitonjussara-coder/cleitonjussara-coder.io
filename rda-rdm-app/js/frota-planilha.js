@@ -23,7 +23,7 @@ window.FrotaPlanilha = (() => {
   const primeiroNome = n => String(n || '').trim().split(/\s+/)[0] || '?';
   const dow = (ano, mes, d) => new Date(Date.UTC(ano, mes - 1, d)).getUTCDay();
 
-  const estadoInicial = () => ({ ano: null, mes: null, anual: null, off: false, sel: null, view: 'dia', pick: null });
+  const estadoInicial = () => ({ ano: null, mes: null, anual: null, off: false, sel: null, view: 'dia', pick: null, busca: '' });
   let S = estadoInicial();
   let _gen = 0;             // resposta de ano que já foi trocado (ou de aba que já saiu) não pinta nada
 
@@ -35,6 +35,11 @@ window.FrotaPlanilha = (() => {
       .fp-chips{display:flex;gap:6px;flex-wrap:wrap;padding:6px 14px 0}
       .fp-chips .chip{padding:7px 12px;min-height:36px}
       .fp-chips .chip.todos{border-style:dashed}
+      .fp-busca{position:relative;padding:6px 14px 0}
+      .fp-busca input{width:100%;box-sizing:border-box;min-height:42px;padding:8px 40px 8px 38px;font-size:16px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:#eef9f0}
+      .fp-busca .lupa{position:absolute;left:25px;top:50%;transform:translateY(-35%);pointer-events:none}
+      .fp-busca .x{position:absolute;right:20px;top:9px;min-width:36px;min-height:36px;border:0;background:none;color:#d9f5a0;font-size:18px}
+      .fp-cont{padding:4px 14px 0;font-size:13px;color:var(--text2)}
       .fp-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -2px}
       .fp-tab{border-collapse:separate;border-spacing:0;width:100%;font-size:14px}
       .fp-tab th{font-size:12px;font-weight:700;color:var(--text2);padding:6px 3px;text-align:center;min-width:52px;max-width:96px;
@@ -124,10 +129,10 @@ window.FrotaPlanilha = (() => {
         <button class="btn-mes-nav" onclick="FrotaPlanilha.mes(1)" aria-label="Próximo mês" ${noFim ? 'disabled' : ''}>›</button>
       </div>`;
     if (varias) {
-      html += `<div class="fp-chips">
-        <button class="chip todos" onclick="FrotaPlanilha.todos()">${S.sel.size === pessoas.length ? 'Limpar' : 'Todos'}</button>
-        ${pessoas.map(p => `<button class="chip ${S.sel.has(p.user_id) ? 'active' : ''}" data-id="${at(p.user_id)}" onclick="FrotaPlanilha.alternar(this.dataset.id)">${S.sel.has(p.user_id) ? '✓ ' : ''}${esc(p.nome)}</button>`).join('')}
-      </div>`;
+      html += `<div class="fp-busca"><span class="lupa">🔍</span>
+        <input type="search" id="fp-busca" value="${at(S.busca)}" placeholder="Buscar colaborador…" autocomplete="off" aria-label="Buscar colaborador" oninput="FrotaPlanilha.buscar(this.value)">
+        <button class="x" id="fp-busca-x" aria-label="Limpar busca" onclick="FrotaPlanilha.limparBusca()" ${S.busca ? '' : 'hidden'}>✕</button></div>
+      <div id="fp-chips-area">${_chipsHTML(pessoas)}</div>`;
     }
     if (!escolhidas.length) {
       el.innerHTML = html + `<p class="muted-p" style="padding:14px">${pessoas.length ? 'Escolha ao menos um colaborador acima.' : 'Nenhuma leitura de KM neste ano.'}</p>`;
@@ -165,6 +170,23 @@ window.FrotaPlanilha = (() => {
       <p class="fq-dica" style="margin:8px 0 0">${escolhidas.length > 1 ? 'Cada arquivo traz o resumo do ano, o dia a dia do mês e as leituras de cada pessoa.' : 'Traz o resumo do ano, o dia a dia do mês e todas as leituras da pessoa.'}</p></div>
       <div style="height:18px"></div>`;
     el.innerHTML = html;
+  }
+
+  /* busca sem acento nem maiúscula; "jo" acha João e Jose */
+  const _norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const _filtradas = pessoas => { const q = _norm(S.busca); return q ? pessoas.filter(p => _norm(p.nome).includes(q)) : pessoas; };
+
+  function _chipsHTML(pessoas) {
+    const vis = _filtradas(pessoas);
+    const todasVis = vis.length > 0 && vis.every(p => S.sel.has(p.user_id));
+    const enc = vis.length === 1 ? 'o encontrado' : 'os ' + vis.length + ' encontrados';
+    const rotulo = S.busca ? (todasVis ? 'Limpar ' + enc : 'Todos ' + enc) : (todasVis ? 'Limpar' : 'Todos');
+    return `<div class="fp-chips">
+        ${vis.length ? `<button class="chip todos" onclick="FrotaPlanilha.todos()">${rotulo}</button>` : ''}
+        ${vis.map(p => `<button class="chip ${S.sel.has(p.user_id) ? 'active' : ''}" data-id="${at(p.user_id)}" onclick="FrotaPlanilha.alternar(this.dataset.id)">${S.sel.has(p.user_id) ? '✓ ' : ''}${esc(p.nome)}</button>`).join('')}
+        ${vis.length ? '' : '<span class="muted-p">Nenhum colaborador com esse nome.</span>'}
+      </div>
+      <div class="fp-cont">${S.sel.size} de ${pessoas.length} selecionados${S.busca ? ' · mostrando ' + vis.length : ''}</div>`;
   }
 
   /* planilha individual: uma pessoa só escolhida (fixo) ou aberta pelo ranking/célula */
@@ -243,7 +265,22 @@ window.FrotaPlanilha = (() => {
   /* ── Ações ───────────────────────────────────────────────── */
   function ver(k) { S.view = k; S.pick = null; _pintar(); }
   function alternar(id) { if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id); S.pick = null; _pintar(); }
-  function todos() { const ids = _pessoas().map(p => p.user_id); S.sel = S.sel.size === ids.length ? new Set() : new Set(ids); S.pick = null; _pintar(); }
+  /* Todos/Limpar vale só para os nomes que a busca está mostrando; as marcas fora dela ficam como estão */
+  function todos() {
+    const ids = _filtradas(_pessoas()).map(p => p.user_id);
+    const todas = ids.length && ids.every(i => S.sel.has(i));
+    ids.forEach(i => todas ? S.sel.delete(i) : S.sel.add(i));
+    S.pick = null; _pintar();
+  }
+  /* digitar só refaz a área dos nomes (o campo mantém o foco); o ✕ refaz a tela */
+  function buscar(v) {
+    S.busca = String(v || '');
+    const area = $('fp-chips-area');
+    if (!area) return;
+    area.innerHTML = _chipsHTML(_pessoas());
+    const x = $('fp-busca-x'); if (x) x.hidden = !S.busca;
+  }
+  function limparBusca() { const i = $('fp-busca'); if (i) i.value = ''; buscar(''); i?.focus(); }
   function celula(id, d) { S.pick = { uid: id, d }; _pintar(); }
   function individual(id) { S.pick = { uid: id, ind: true }; S.view = 'dia'; _pintar(); $('fq-corpo')?.querySelector('.fp-ind')?.scrollIntoView?.({ block: 'start' }); }
   function fechar() { S.pick = null; _pintar(); }
@@ -279,7 +316,7 @@ window.FrotaPlanilha = (() => {
   }
 
   return {
-    montar, ver, alternar, todos, celula, individual, fechar, mes, exportar,
+    montar, ver, alternar, todos, buscar, limparBusca, celula, individual, fechar, mes, exportar,
     cancelar() { _gen++; },                       // trocou de aba: resposta em voo não pinta mais nada
     esquecer() { _gen++; S = estadoInicial(); },  // logout: nada de uma conta fica na memória da próxima
   };

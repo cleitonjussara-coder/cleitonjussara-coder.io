@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 501;
+const APP_BUILD = 504;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3807,10 +3807,9 @@ function renderInicio() {
      Cleiton: "mostrar saldo dos dois separados", "de forma mais resumida
      possível" — por isso não repete as subcategorias do Painel aqui). */
   const _ehCartaoIni = _usaCartao();
-  let _cats = [], _tipos = [];
+  let _tipos = [];
   if (!_ehContabilidade()) {
     if (_ehCartaoIni) {
-      _cats = _composicaoGastos(A);
       /* 16/10/2026 (pedido do Cleiton): o resumo também aparece para o C.V., com gasto do cartão e da carteira, o saldo do
          cartão e o reembolso a receber — as mesmas contas do Saldo (_saldoCartao e _devedorDe), só leitura. As duas linhas
          aparecem sempre: o saldo do cartão e o que falta reembolsar valem mesmo num mês sem gasto de um dos lados. */
@@ -3831,32 +3830,41 @@ function renderInicio() {
       ];
     } else {
       const _nsAll = notas.filter(n => !n.deleted), _rsAll = repasses.filter(r => !r.deleted);
-      _cats = [
-        { key:'rdm', curto:'RDM', cor:'var(--accent-d)', val:A.rdmG },
-        { key:'rda', curto:'RDA', cor:'var(--primary)',  val:A.rdaG },
-      ].filter(c => c.val > 0).sort((a,b) => b.val - a.val);
       _tipos = [
         { sigla:'RDM', cor:'var(--accent-d)', gasto:A.rdmG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDM') },
         { sigla:'RDA', cor:'var(--primary)',  gasto:A.rdaG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDA') },
-      ].filter(t => t.gasto > 0);
+      ];
     }
   }
+  /* 03/11/2026 (pedido do Cleiton, por print): o total único saiu — RDM à esquerda e RDA à direita, cada um com o próprio
+     gasto do mês, saldo e um donut pequeno (fatia dele no gasto do mês). Os dois lados aparecem sempre, mesmo com um deles
+     zerado, para o saldo (adiantado / a receber) não sumir. */
+  const _totTipos = _tipos.reduce((s, t) => s + (t.gasto > 0 ? t.gasto : 0), 0);
+  const _miniDonut = t => {
+    const R = 17, C = 2 * Math.PI * R, len = _totTipos > 0 && t.gasto > 0 ? Math.min(1, t.gasto / _totTipos) * C : 0;
+    return `<svg viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="${R}" fill="none" stroke="var(--border)" stroke-width="7"/>`
+      + (len > 0 ? `<circle cx="23" cy="23" r="${R}" fill="none" stroke="${t.cor}" stroke-width="7" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" transform="rotate(-90 23 23)"/>` : '')
+      + '</svg>';
+  };
   const resumoGastos = (!_ehContabilidade() && A.gasto > 0) ? `
     <div class="ini-resumo" onclick="switchView('home')">
       <div class="ini-resumo-cab">
-        <div class="ini-resumo-donut">${gerarDonut(_cats, A.gasto)}</div>
-        <div class="ini-resumo-txt">
-          <div class="ini-resumo-tot">${brl(A.gasto)}</div>
-          <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>
+        <div class="ini-resumo-duo">${_tipos.map(t => `
+          <div class="ini-resumo-lado">
+            <div class="ini-resumo-donut">${_miniDonut(t)}</div>
+            <div class="ini-resumo-txt">
+              <div class="ini-resumo-sigla">${t.sigla}</div>
+              <div class="ini-resumo-tot">${brl(t.gasto)}</div>
+              <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>${t.txt === '' ? '' : `
+              <span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
+                t.txt != null ? esc(t.txt)
+                : t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
+              }</span>`}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}
+            </div>
+          </div>`).join('')}
         </div>
         <span class="ini-resumo-seta">›</span>
       </div>
-      ${_tipos.length ? `<div class="ini-resumo-tipos">${_tipos.map(t => `
-        <div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${t.cor}"></span><b>${t.sigla}</b> ${brlCurto(t.gasto)}${t.txt === '' ? '' : `<span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
-          t.txt != null ? esc(t.txt)
-          : t.saldo > 0 ? brlCurto(t.saldo) + ' a receber' : t.saldo < 0 ? brlCurto(-t.saldo) + ' adiantado' : 'em dia'
-        }</span>`}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}</div>`).join('')}</div>`
-        : `<div class="ini-resumo-tipos">${_cats.slice(0, 3).map(c => `<div class="ini-resumo-tipo"><span class="ini-resumo-dot" style="background:${c.cor}"></span>${esc(c.curto)} <b>${brlCurto(c.val)}</b></div>`).join('')}</div>`}
     </div>` : '';
 
   $('app-content').innerHTML = `
@@ -5250,12 +5258,24 @@ async function renderNotasApagadas() {
 
   if (daEquipe.length) {
     const nomeDe = uid => uid ? (equipePorId[uid]?.nome || equipePorId[uid]?.email || (uid === user.id ? (user.nome || user.email) : 'colaborador removido')) : 'Faturamento geral (sem colaborador)';
-    html += `<div style="padding:14px 14px 6px;font-weight:700;font-size:16px">👥 Apagadas pela equipe <span style="opacity:.7;font-weight:600">(${daEquipe.length})</span></div>
+    html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 6px">
+      <span style="font-weight:700;font-size:16px">👥 Apagadas pela equipe <span style="opacity:.7;font-weight:600">(${daEquipe.length})</span></span>
+      <button class="btn btn-sm btn-outline" id="eq-selbtn" onclick="selecionarEquipe(!this.classList.contains('on'))">☑️ Selecionar</button>
+    </div>
+    <div id="eq-selbar" class="cdet-selbar" style="display:none">
+      <span class="sel-qtd"></span>
+      <a href="#" onclick="event.preventDefault();marcarTodasEquipe(true)">marcar todas</a>
+      <a href="#" onclick="event.preventDefault();marcarTodasEquipe(false)">limpar</a>
+      <button class="btn btn-sm btn-primary sel-acao" data-rotulo="♻️ Restaurar" onclick="restaurarEquipeSelecionadas()" disabled>♻️ Restaurar</button>
+      <button class="btn btn-sm btn-danger-outline sel-acao" data-rotulo="🗑 Apagar definitivo" onclick="apagarEquipeSelecionadas()" disabled>🗑 Apagar definitivo</button>
+      <button class="btn btn-sm btn-outline" onclick="selecionarEquipe(false)">Cancelar</button>
+    </div>
     <div class="notas-list" id="notas-equipe-apagadas">`;
     daEquipe.forEach(n => {
       const quem = n.updated_by ? nomeDe(n.updated_by) : 'não registrado';
       html += `
       <div class="nota-card" data-tipo="${esc(n.tipo)}">
+        <input type="checkbox" class="nota-chk" value="${esc(n.id)}" onchange="marcarEquipe(this.value,this.checked)" aria-label="Selecionar este lançamento">
         <div class="nota-head">
           <span class="tipo-badge tipo-${esc(n.tipo)}">${esc(n.tipo)}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
@@ -5279,7 +5299,115 @@ async function renderNotasApagadas() {
   }
 
   _selNotas.clear();
+  _selEq.clear();
+  _equipeApagadasCache = daEquipe;
   el.innerHTML = html;
+}
+
+/* Seleção em lote das apagadas pela equipe (01/11/2026, pedido do Cleiton): mesma ideia da lixeira própria, mas com conjunto
+   e barra próprios — a nota é de outra pessoa, então tudo vai direto ao servidor (sem fila local). */
+const _selEq = new Set();
+let _equipeApagadasCache = [];
+
+function _eqChks() { return [...document.querySelectorAll('#notas-equipe-apagadas .nota-chk')]; }
+
+function _eqAtualizar() {
+  const barra = $('eq-selbar');
+  if (!barra) return;
+  const n = _selEq.size;
+  barra.querySelector('.sel-qtd').textContent = n ? `${n} selecionada${n > 1 ? 's' : ''}` : 'Nenhuma selecionada';
+  barra.querySelectorAll('.sel-acao').forEach(b => {
+    b.disabled = !n;
+    b.textContent = n ? `${b.dataset.rotulo} ${n}` : b.dataset.rotulo;
+  });
+  _eqChks().forEach(c => {
+    c.checked = _selEq.has(c.value);
+    c.closest('.nota-card').classList.toggle('sel', c.checked);
+  });
+}
+
+function selecionarEquipe(ligar) {
+  const lista = $('notas-equipe-apagadas'), barra = $('eq-selbar');
+  if (!lista || !barra) return;
+  _selEq.clear();
+  lista.classList.toggle('nota-sel-on', !!ligar);
+  barra.style.display = ligar ? 'flex' : 'none';
+  $('eq-selbtn')?.classList.toggle('on', !!ligar);
+  lista.onclick = ligar ? e => {
+    if (e.target.closest('button,a,input')) return;
+    const c = e.target.closest('.nota-card')?.querySelector('.nota-chk');
+    if (c) marcarEquipe(c.value, !c.checked);
+  } : null;
+  _eqAtualizar();
+}
+
+function marcarEquipe(id, on) { on ? _selEq.add(id) : _selEq.delete(id); _eqAtualizar(); }
+
+function marcarTodasEquipe(on) {
+  _selEq.clear();
+  if (on) _eqChks().forEach(c => _selEq.add(c.value));
+  _eqAtualizar();
+}
+
+function _eqSelecionadas() {
+  const porId = new Map(_equipeApagadasCache.map(n => [n.id, n]));
+  return [..._selEq].map(id => porId.get(id)).filter(Boolean);
+}
+
+async function _eqEmLote(lista, acao) {
+  let feitas = 0, falhou = 0;
+  setLoading(true, acao === 'apagar' ? 'Apagando…' : 'Restaurando…');
+  try {
+    for (const n of lista) {
+      try {
+        if (acao === 'apagar') await sb.notas.delete(n.id); else await sb.notas.lixeira(n.id, false);
+        feitas++;
+      } catch (e) {
+        if (acao === 'apagar' && e?.status === 404) feitas++;   // já não existia no servidor
+        else falhou++;
+      }
+    }
+  } finally { setLoading(false); }
+  if (viewAtual === 'lixeira') await renderNotasApagadas();
+  return { feitas, falhou };
+}
+
+async function restaurarEquipeSelecionadas() {
+  if (!_ehGestorOuAdmin() || !sb || !navigator.onLine) { toast('Precisa de internet e de conta de gestor ou admin', 'err'); return false; }
+  const lista = _eqSelecionadas();
+  if (!lista.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
+  const ok = await pedirConfirmacao({
+    titulo: `Restaurar ${lista.length} lançamento${lista.length > 1 ? 's' : ''}?`,
+    mensagem: `Soma: ${brl(_somaNotas(lista))}
+
+Eles voltam para as notas de quem os lançou, no saldo e nas planilhas.`,
+    confirmar: `Restaurar ${lista.length}`,
+  });
+  if (!ok) return false;
+  const { feitas, falhou } = await _eqEmLote(lista, 'restaurar');
+  toast(falhou
+    ? `${feitas} restaurado${feitas === 1 ? '' : 's'}, ${falhou} não deu`
+    : (feitas === 1 ? 'Lançamento restaurado' : `${feitas} lançamentos restaurados`), falhou ? 'err' : undefined);
+  return feitas > 0;
+}
+
+async function apagarEquipeSelecionadas() {
+  if (!_ehGestorOuAdmin() || !sb || !navigator.onLine) { toast('Precisa de internet e de conta de gestor ou admin', 'err'); return false; }
+  const lista = _eqSelecionadas();
+  if (!lista.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
+  const ok = await pedirPalavra({
+    titulo: `Apagar ${lista.length} em definitivo`,
+    mensagem: `Soma: ${brl(_somaNotas(lista))}
+
+As notas e os anexos saem do sistema para sempre. Não vão para a lixeira e não há como restaurar.`,
+    confirmar: `Apagar ${lista.length}`,
+  });
+  if (!ok) return false;
+  const { feitas, falhou } = await _eqEmLote(lista, 'apagar');
+  toast(falhou
+    ? `${feitas} apagado${feitas === 1 ? '' : 's'} em definitivo, ${falhou} não deu`
+    : (feitas === 1 ? 'Lançamento apagado em definitivo' : `${feitas} lançamentos apagados em definitivo`), falhou ? 'err' : undefined);
+  return feitas > 0;
 }
 
 /* Apagadas pela equipe (30/10/2026): a nota não está no aparelho de quem restaura, então vai direto ao servidor. */

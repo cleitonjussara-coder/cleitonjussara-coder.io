@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=501">
+  <link rel="manifest" href="manifest.json?v=504">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1889,6 +1889,26 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 .ini-resumo-saldo.receber{color:#b45309;font-weight:700}
 .ini-resumo-saldo.adiantado{color:var(--primary-d);font-weight:700}
 .ini-resumo-det{display:block;font-size:11px;color:var(--text2);padding-left:12px;line-height:1.5}
+/* 03/11/2026 — RDM | RDA (ou Cartão | Carteira) lado a lado, cada um com donut pequeno, gasto e saldo. minmax(0,1fr) e
+   min-width:0 para não estourar a tela a 320 px (grid 1fr + valor longo estoura). */
+.ini-resumo-duo{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.ini-resumo-lado{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.ini-resumo-lado+.ini-resumo-lado{border-left:1px solid var(--border);padding-left:12px;margin-left:4px}
+.ini-resumo-lado .ini-resumo-donut{width:42px;height:42px;margin-top:2px}
+.ini-resumo-lado .ini-resumo-donut svg{width:42px;height:42px}
+.ini-resumo-lado .ini-resumo-txt{overflow-wrap:anywhere}
+.ini-resumo-lado .ini-resumo-saldo,.ini-resumo-lado .ini-resumo-det{padding-left:0;margin-top:1px}
+.ini-resumo-sigla{font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text2)}
+.ini-resumo-lado .ini-resumo-tot{font-size:17px;line-height:1.2}
+@media (max-width:360px){
+  .ini-resumo-lado{gap:6px}
+  .ini-resumo-lado .ini-resumo-donut,.ini-resumo-lado .ini-resumo-donut svg{width:34px;height:34px}
+  .ini-resumo-lado .ini-resumo-tot{font-size:15px}
+  .ini-resumo-lado+.ini-resumo-lado{padding-left:8px;margin-left:2px}
+}
+.ini-resumo-lado .ini-resumo-tot{white-space:nowrap}
+/* telas bem estreitas (320 px): o donut pequeno cede o lugar para o valor caber inteiro, sem quebrar o número */
+@media (max-width:340px){.ini-resumo-lado .ini-resumo-donut{display:none}}
 /* Sub-abas RDA/RDM do repasse (23/09/2026; maiores em 24/09 a pedido do
    Cleiton). Cada uma já nasce com a cor da sua conta, para dar vontade de
    tocar e para não haver dúvida de qual está marcada. */
@@ -1985,7 +2005,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=501" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=504" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2680,38 +2700,38 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=501"></script>
-<script defer src="js/db.js?v=501"></script>
-<script defer src="js/nfce.js?v=501"></script>
-<script defer src="js/sefaz.js?v=501"></script>
-<script defer src="js/brasilapi.js?v=501"></script>
-<script defer src="js/ocr.js?v=501"></script>
-<script defer src="js/scanner.js?v=501"></script>
-<script defer src="js/foto-branca.js?v=501"></script>
-<script defer src="js/recorte.js?v=501"></script>
-<script defer src="js/excel.js?v=501"></script>
-<script defer src="js/gestor.js?v=501"></script>
-<script defer src="js/frota.js?v=501"></script>
-<script defer src="js/frota-painel.js?v=501"></script>
-<script defer src="js/frota-planilha.js?v=501"></script>
-<script defer src="js/ponto.js?v=501"></script>
-<script defer src="js/rastreio.js?v=501"></script>
-<script defer src="js/gdrive.js?v=501"></script>
+<script defer src="js/api.js?v=504"></script>
+<script defer src="js/db.js?v=504"></script>
+<script defer src="js/nfce.js?v=504"></script>
+<script defer src="js/sefaz.js?v=504"></script>
+<script defer src="js/brasilapi.js?v=504"></script>
+<script defer src="js/ocr.js?v=504"></script>
+<script defer src="js/scanner.js?v=504"></script>
+<script defer src="js/foto-branca.js?v=504"></script>
+<script defer src="js/recorte.js?v=504"></script>
+<script defer src="js/excel.js?v=504"></script>
+<script defer src="js/gestor.js?v=504"></script>
+<script defer src="js/frota.js?v=504"></script>
+<script defer src="js/frota-painel.js?v=504"></script>
+<script defer src="js/frota-planilha.js?v=504"></script>
+<script defer src="js/ponto.js?v=504"></script>
+<script defer src="js/rastreio.js?v=504"></script>
+<script defer src="js/gdrive.js?v=504"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=501"></script>
+<script defer src="js/svelte-ajuda.js?v=504"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=501"></script>
+<script defer src="js/svelte-historico.js?v=504"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=501"></script>
+<script defer src="js/svelte-arquivos.js?v=504"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=501"></script>
-<script defer src="js/app.js?v=501"></script>
-<script defer src="js/instalar.js?v=501"></script>
+<script defer src="js/svelte-perfil.js?v=504"></script>
+<script defer src="js/app.js?v=504"></script>
+<script defer src="js/instalar.js?v=504"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=501').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=504').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
