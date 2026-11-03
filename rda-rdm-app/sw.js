@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v507';
+const CACHE   = 'petermann-v508';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -37,6 +37,7 @@ const SHELL   = [
   './js/frota-planilha.js',
   './js/ponto.js',
   './js/rastreio.js',
+  './js/repasses-equipe.js',
   './topo.png?v=188',
   './fundo.jpg?v=1',
   './js/gdrive.js',

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 507;
+const APP_BUILD = 508;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -683,8 +683,10 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, camp
         caixa.appendChild(lab);
       }
       /* c.linhas (19/10/2026): campo de texto de várias linhas (justificativa). Enter vira quebra de linha em vez de enviar. */
-      const inp = document.createElement(c.linhas ? 'textarea' : 'input');
-      if (c.linhas) { inp.rows = c.linhas; }
+      /* c.opcoes (03/11/2026): lista de escolha [{ valor, rotulo }] */
+      const inp = document.createElement(c.opcoes ? 'select' : c.linhas ? 'textarea' : 'input');
+      if (c.opcoes) { c.opcoes.forEach(o => inp.add(new Option(o.rotulo, o.valor))); }
+      else if (c.linhas) { inp.rows = c.linhas; }
       else { inp.type = 'text'; inp.inputMode = c.inputmode || 'text'; }
       if (c.maxlength) inp.maxLength = c.maxlength;
       inp.placeholder = c.placeholder || '';
@@ -2652,34 +2654,52 @@ async function editarRepasseDeOutro(id) {
   const r = _repasseDaEquipe(id);
   if (!r) { toast('Repasse não encontrado', 'err'); return; }
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
+  const ehRecarga = r.destino === 'recarga';
+  const dono = r.user_id === user?.id ? user : equipePorId[r.user_id];
+  /* Grupo (03/11/2026): cartão só para quem usa cartão; recarga antiga de quem mudou de regime continua podendo ser corrigida */
+  const usaCartaoDono = !!dono && _usaCartao(dono);   // sem o dono, _usaCartao() olharia o regime de quem está usando
+  const comCartao = ehRecarga || usaCartaoDono;
+  const grupos = [
+    { valor: 'RDM', rotulo: 'RDM' }, { valor: 'RDA', rotulo: 'RDA' },
+    ...(comCartao ? [{ valor: 'CARTAO_RDM', rotulo: '💳 Cartão RDM' }, { valor: 'CARTAO_RDA', rotulo: '💳 Cartão RDA' }] : []),
+  ];
 
   const campos = await pedirCampos({
-    titulo: 'Corrigir repasse',
-    dica: equipePorId[r.user_id]?.nome ? `Repasse de ${quem}.` : 'Corrija os dados deste repasse.',
+    titulo: ehRecarga ? 'Corrigir recarga' : 'Corrigir repasse',
+    dica: equipePorId[r.user_id]?.nome ? `${ehRecarga ? 'Recarga' : 'Repasse'} de ${quem}.` : 'Corrija os dados deste lançamento.',
     confirmar: 'Salvar',
     campos: [
+      { id: 'grupo', rotulo: 'Grupo', opcoes: grupos, valor: (ehRecarga ? 'CARTAO_' : '') + (r.tipo === 'RDA' ? 'RDA' : 'RDM') },
       { id: 'valor', rotulo: 'Valor (R$)', valor: String(Number(r.valor) || 0), inputmode: 'decimal',
         validar: t => (parseFloat(t.replace(',', '.')) > 0 ? '' : 'Valor inválido.') },
       { id: 'data', rotulo: 'Data (dd/mm/aaaa)', valor: fmtDataBR(r.data),
-        validar: t => (_parseDataBR(t) ? '' : 'Data inválida — use dd/mm/aaaa.') },
+        validar: t => { const d = _parseDataBR(t); return !d ? 'Data inválida — use dd/mm/aaaa.' : (_dataNoFuturo(d.iso) || ''); } },
       { id: 'desc', rotulo: 'Descrição', valor: r.descricao || '', placeholder: 'Opcional' },
     ],
   });
   if (!campos) return;
   const v = parseFloat(campos.valor.replace(',', '.'));
   const dt = _parseDataBR(campos.data);
+  const paraCartao = campos.grupo.startsWith('CARTAO_');
+  /* saiu do cartão: no C.V. vira carteira; quem é RDM/RDA não tem destino */
+  const destino = paraCartao ? 'recarga' : ehRecarga ? (usaCartaoDono ? 'carteira' : null) : r.destino;
 
   setLoading(true);
   try {
-    await sb.repasses.upsert({
+    const salvo = await sb.repasses.upsert({
       ...r,
+      tipo: campos.grupo.endsWith('RDA') ? 'RDA' : 'RDM',
+      destino,
       valor: v,
       data: dt.iso,
       mes: dt.mes,
       ano: dt.ano,
       descricao: campos.desc.trim() || null,
     });
-    toast('Repasse corrigido ✅');
+    try { if (salvo?.id) await DB.mesclarRepassesRemotos(salvo); } catch (_) {}
+    _histEq.em = 0;   // o aviso do Início refaz a conta com o valor novo
+    /* a data manda no mês: dizer para onde foi, senão parece que sumiu da lista */
+    toast(dt.mes !== r.mes || dt.ano !== r.ano ? `Corrigido ✅ — agora em ${MESES[dt.mes - 1]}/${dt.ano}` : 'Corrigido ✅');
     await _recarregarEquipe();
   } catch (e) {
     toast('Não deu: ' + (e.message || 'erro'), 'err');
@@ -2763,6 +2783,7 @@ async function _recarregarEquipe() {
     await carregarDadosLocais();
   } catch (_) {}
   if (viewAtual === 'equipe') renderEquipe();
+  else if (viewAtual === 'repasses') window.RepassesEquipe?.atualizar();
 }
 
 /* Seletor de colaborador único (25/09/2026) — usado pelo Gestor pra escolher
@@ -2978,7 +2999,7 @@ const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
   perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
-  dashequipe: 'Dashboard Equipe',
+  dashequipe: 'Dashboard Equipe', repasses: 'Repasses e recargas',
 };
 let _histViews = [];
 
@@ -3119,6 +3140,7 @@ function switchView(v, voltando = false, avancando = false) {
   else if (v==='perfil') renderPerfil();
   else if (v==='historico') renderHistorico();
   else if (v==='rastreio') { if (_ehGestorOuAdmin()) window.Rastreio?.render(); else switchView('inicio'); }
+  else if (v==='repasses') { if (_ehGestorOuAdmin()) window.RepassesEquipe?.render(); else switchView('inicio'); }
   else if (v==='dashequipe') renderDashEquipe();
 }
 
@@ -3372,7 +3394,7 @@ function _resumoHub() {
   const gastoDe = (t, mes) => cv
     ? _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhPedido(r)))
     : _soma(ns.filter(n => n.tipo === t && n.mes === mes && n.ano === filAno));
-  const recebidoDe = (t, mes) => _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhRecebido(r)));
+  const recebidoDe = (t, mes) => _soma(rs.filter(r => r.tipo === t && r.mes === mes && r.ano === filAno && _repasseEhRecebido(r) && _repasseEhCarteira(r)));
 
   /* 23/09/2026: no regime de dinheiro em conta o RDA e o RDM são contas
      separadas — o valor a receber sai por aba, não somado. Cada caixa diz
@@ -10394,7 +10416,7 @@ function irParaPassoRepasse(n) {
   { const t = $('rep-title'); if (t) t.textContent = _repasseTituloCabecalho(); }
   const p1 = $('rep-passo-1'), p2 = $('rep-passo-2'), p3 = $('rep-dados');
   if (p1) p1.hidden = n !== 1;
-  if (p2) p2.hidden = n !== 2 || _repasseSemCategoria();
+  if (p2) p2.hidden = n !== 2;
   if (p3) p3.hidden = n !== 3;
   { const h = $('rep-historico'); if (h) h.hidden = n >= 3; }
   const salvar = $('rep-btn-salvar');
@@ -10414,9 +10436,7 @@ function irParaPassoRepasse(n) {
 function escolherModoRepasse(modo) {
   _modoEscolhido = true;
   setRepasseModo(modo);
-  /* recarga do cartão não tem passo de aba: do "o que fazer" vai direto
-     para os campos (24/09/2026, ajustado 28/09/2026) */
-  irParaPassoRepasse(_repasseSemCategoria() ? 3 : 2);
+  irParaPassoRepasse(2);
 }
 
 function escolherTipoRepasse(tipo) {
@@ -10428,13 +10448,8 @@ function voltarPassoRepasse() {
   if (_repassePasso > _repassePassoMin) {
     /* voltando do 3 para o 2, a sub-aba é desmarcada: quem volta está
        trocando de aba, e deixar a antiga marcada convida ao engano. */
-    if (_repassePasso === 3 && !_repasseSemCategoria()) {
-      setRepasseTipo('');
-      irParaPassoRepasse(2);
-      return;
-    }
-    /* sem passo de aba (CV), o 3 volta direto para o "o que fazer" */
-    irParaPassoRepasse(_repassePasso === 3 && _repasseSemCategoria() ? 1 : _repassePasso - 1);
+    if (_repassePasso === 3) setRepasseTipo('');
+    irParaPassoRepasse(_repassePasso - 1);
     return;
   }
   fecharFormRepasse();
@@ -10463,18 +10478,9 @@ function _repasseEhCarteira(r) {
   return r && r.destino !== 'recarga';
 }
 
-/* Recarga do cartão não passa por aba (24/09/2026): a coluna do BANCO DE
-   DADOS — recarga — traz só DATA e R$, sem RDA x RDM.
-   28/09/2026, pedido do Cleiton: reembolso de carteira (destino
-   'carteira') passou a perguntar a aba também, igual pra quem é
-   RDM/RDA — antes ficava sempre RDM sem dar escolha, e "RDA não
-   aparecia" pro CV no repasse. Só recarga continua sem esse passo. */
-/* 19/10/2026, pedido do Cleiton: a recarga NÃO especifica RDM/RDA — os dois
-   tipos de gasto saem do mesmo saldo do cartão. A diferença entre RDM e RDA
-   fica só no lançamento das notas (controle de gasto por categoria). */
-function _repasseSemCategoria() {
-  return _repasseDestino === 'recarga';
-}
+/* 03/11/2026, pedido do Cleiton (reverte a decisão de 19/10/2026): a recarga
+   volta a dizer se é RDM ou RDA, para os filtros Cartão RDM e Cartão RDA. O
+   saldo do cartão continua um só: nenhuma conta dele olha o tipo da recarga. */
 const CARTAO_SALDO_MINIMO = 300;   // abaixo disso o gestor é avisado
 
 /* Regra da empresa para o consumidor da nota (24/09/2026): pode sair SEM
@@ -10601,18 +10607,15 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
   /* Começa no passo 1 quando nada foi decidido ainda (painel do Início). Quem
      já chega com o modo (botões do saldo, lançamento do gestor) entra no 2, e
      o repasse vindo de uma nota, que já traz modo e aba, entra no 3. */
-  /* A recarga do cartão não tem categoria na planilha (a coluna do extrato
-     tem só DATA e R$), então o passo das abas não faz sentido para ela. */
-  if (_repasseSemCategoria()) setRepasseTipo('RDM');
   _repassePassoMin = pre?.tipo ? 3
-    : (modo || _repasseAlvo) ? (_repasseSemCategoria() ? 3 : 2)
+    : (modo || _repasseAlvo) ? 2
     : 1;
   _modoEscolhido = _repassePassoMin > 1;
   _atualizarUiRepasse();
   /* Sem este reset o <select> guardava o tipo do repasse anterior: quem
      lançava um RDM e depois um RDA reabria o form já em RDM e o RDA entrava
      como RDM em silêncio — o saldo de um tipo inflava e o do outro zerava. */
-  if (!_repasseSemCategoria()) setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
+  setRepasseTipo(pre?.tipo || '');   // sem pré-escolha: a pessoa marca a aba
   /* CV pedindo repasse: o valor não é chute — é o que a empresa deve pelas
      notas pagas do bolso, menos o que já transferiu (24/09/2026). */
   if (!pre && !_repasseAlvo && _repasseDestino === 'carteira') {

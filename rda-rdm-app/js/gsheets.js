@@ -580,16 +580,19 @@ window.GSheets = (() => {
   /* Faturamento (pagamento='empresa', 25/09/2026): a empresa pagou direto,
      não é gasto DO colaborador — sai de toda planilha ao vivo. */
   const _semFaturamento = notas => notas.filter(n => n.pagamento !== 'empresa');
+  /* Recarga do cartão vai para o cartão, não é repasse da pessoa (03/11/2026): mesma regra do Excel (_soRecebidos).
+     Antes entrava como RDM; agora que a recarga pode ser RDA, inflaria o repasse de qualquer um dos dois. */
+  const _semRecarga = repasses => repasses.filter(r => r.destino !== 'recarga');
 
   function exportarAnual(ano, notas, repasses, colab) {
     return _publicar(`Petermann ${((colab && colab.nome) || 'Colaborador').trim()} ${ano}`,
-                     montarAnual(ano, _semFaturamento(notas), repasses, colab));
+                     montarAnual(ano, _semFaturamento(notas), _semRecarga(repasses), colab));
   }
 
   /* planilha consolidada da equipe (mensal, 1 aba) */
   function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome) {
     return _publicar(`Petermann Equipe ${MESES[mes-1]} ${ano}`,
-                     [buildEquipe(_semFaturamento(notas), repasses, collabs, mes, ano, gestorNome)]);
+                     [buildEquipe(_semFaturamento(notas), _semRecarga(repasses), collabs, mes, ano, gestorNome)]);
   }
 
   return {
