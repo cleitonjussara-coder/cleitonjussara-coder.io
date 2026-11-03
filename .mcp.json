@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ajuda-notas-pm": {
+      "command": "node",
+      "args": ["scripts/mcp-ajuda/server.js"]
+    }
+  }
+}
