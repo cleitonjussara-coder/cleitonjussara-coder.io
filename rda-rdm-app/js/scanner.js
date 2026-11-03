@@ -13,7 +13,8 @@
    2. aoVivo()     — desenha o contorno sobre o vídeo e avisa quando os
                      cantos ficaram parados (disparo automático).
    3. endireitar() — na foto final, acha os cantos de novo e corrige a
-                     perspectiva (homografia) + clareia o fundo do papel.
+                     perspectiva (homografia) + realça como scanner (realcar:
+                     tira a sombra, papel branco, letra escura e nítida).
 
    REGRA DE OURO: nunca piorar a foto. Qualquer dúvida (sem papel, papel
    cortado pela borda, quadrilátero torto, falta de memória, erro) devolve a
@@ -502,6 +503,88 @@ window.Scanner = (() => {
     }
   }
 
+  /* Realce de documento (03/11/2026, "igual ao scanner do Drive"): o clarear() estica o brilho da foto inteira por
+     igual, então a sombra da mão e o reflexo continuavam lá e a letra de cupom térmico (cinza-claro) ficava lavada —
+     parecia desfocada. Aqui o fundo é medido POR REGIÃO (tom do papel em blocos, sem a letra), cada pixel é dividido
+     pelo fundo do seu lugar (sombra some, papel fica branco por igual), a curva escurece a tinta clara e uma máscara
+     de nitidez leve devolve a borda da letra que a amostragem da perspectiva amacia. Cor fica (carimbo, logo). */
+  const REALCE_NITIDEZ = 0.8;    // força da máscara de nitidez (0 = nenhuma)
+  function realcar(px, w, h) {
+    const n = w * h;
+    const L = new Float32Array(n);
+    for (let i = 0, j = 0; i < n; i++, j += 4) L[i] = px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114;
+
+    // 1) fundo em blocos: percentil 90 do brilho (letra e QR são minoria no bloco), alarga 1 bloco e suaviza
+    const B = Math.max(12, Math.round(Math.min(w, h) / 40));
+    const gw = Math.ceil(w / B), gh = Math.ceil(h / B);
+    let g = new Float32Array(gw * gh);
+    const hist = new Uint32Array(256);
+    for (let by = 0; by < gh; by++) {
+      for (let bx = 0; bx < gw; bx++) {
+        hist.fill(0);
+        let cnt = 0;
+        const x0 = bx * B, y0 = by * B, x1 = Math.min(w, x0 + B), y1 = Math.min(h, y0 + B);
+        for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { hist[L[y * w + x] | 0]++; cnt++; }
+        let c = 0, v = 255;
+        for (let k = 0; k < 256; k++) { c += hist[k]; if (c >= cnt * 0.9) { v = k; break; } }
+        g[by * gw + bx] = v;
+      }
+    }
+    const vizinhos = (fn) => {
+      const o = new Float32Array(gw * gh);
+      for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+        let a = 0, c = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const yy = y + dy, xx = x + dx;
+          if (yy < 0 || xx < 0 || yy >= gh || xx >= gw) continue;
+          const v = g[yy * gw + xx];
+          if (fn === 'max') { if (v > a) a = v; } else { a += v; c++; }
+        }
+        o[y * gw + x] = fn === 'max' ? a : a / c;
+      }
+      g = o;
+    };
+    vizinhos('max'); vizinhos('media'); vizinhos('media');
+
+    // 2) divide pelo fundo do lugar (interpolado entre os centros dos blocos) + curva que escurece a tinta clara
+    const curva = new Float32Array(256);
+    for (let v = 0; v < 256; v++) {
+      const t = Math.min(1, Math.max(0, (v / 255 - 0.08) / (0.90 - 0.08)));
+      curva[v] = 255 * Math.pow(t, 1.3);
+    }
+    const Lo = new Float32Array(n);
+    for (let y = 0; y < h; y++) {
+      const gy = Math.min(gh - 1, Math.max(0, (y + 0.5) / B - 0.5));
+      const y0 = Math.max(0, Math.min(gh - 2, Math.floor(gy))), y1 = Math.min(gh - 1, y0 + 1), fy = gy - y0;
+      for (let x = 0; x < w; x++) {
+        const gx = Math.min(gw - 1, Math.max(0, (x + 0.5) / B - 0.5));
+        const x0 = Math.max(0, Math.min(gw - 2, Math.floor(gx))), x1 = Math.min(gw - 1, x0 + 1), fx = gx - x0;
+        const fundo = (g[y0 * gw + x0] * (1 - fx) + g[y0 * gw + x1] * fx) * (1 - fy) + (g[y1 * gw + x0] * (1 - fx) + g[y1 * gw + x1] * fx) * fy;
+        const i = y * w + x;
+        const v = Math.min(255, L[i] * 255 / Math.max(fundo, 60));    // ganho no máximo ~4x: foto escura não vira chuvisco
+        Lo[i] = curva[v | 0];
+      }
+    }
+
+    // 3) nitidez: Lo + a·(Lo − borrado 3×3), e a cor acompanha a razão de brilho
+    for (let y = 0; y < h; y++) {
+      const ya = y > 0 ? y - 1 : y, yb = y < h - 1 ? y + 1 : y;
+      for (let x = 0; x < w; x++) {
+        const xa = x > 0 ? x - 1 : x, xb = x < w - 1 ? x + 1 : x;
+        const i = y * w + x;
+        const borr = (Lo[ya * w + xa] + 2 * Lo[ya * w + x] + Lo[ya * w + xb]
+                    + 2 * Lo[y * w + xa] + 4 * Lo[i] + 2 * Lo[y * w + xb]
+                    + Lo[yb * w + xa] + 2 * Lo[yb * w + x] + Lo[yb * w + xb]) / 16;
+        const alvo = Lo[i] + REALCE_NITIDEZ * (Lo[i] - borr);
+        const j = i * 4, k = alvo / Math.max(L[i], 1);
+        if (alvo >= 254) { px[j] = px[j + 1] = px[j + 2] = 255; continue; }   // papel: branco limpo, sem tom de cor
+        const r = px[j], gg = px[j + 1], b = px[j + 2];
+        if (Math.max(r, gg, b) - Math.min(r, gg, b) < CROMA_MAX) { px[j] = px[j + 1] = px[j + 2] = alvo; continue; }   // tom fraco (sombra azulada, papel amarelado) vira cinza
+        px[j] = px[j] * k; px[j + 1] = px[j + 1] * k; px[j + 2] = px[j + 2] * k;   // Uint8ClampedArray prende em 0..255
+      }
+    }
+  }
+
   async function _carregar(blob) {
     try { return await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (_) {}
     return await new Promise((res, rej) => {
@@ -547,10 +630,10 @@ window.Scanner = (() => {
 
       const px = aplanar(src, sw, sh, q, dw, dh, r.curvas, r.K);
       if (!px) return { blob, endireitou: false };
-      clarear(px);
+      realcar(px, dw, dh);
       const cv = document.createElement('canvas'); cv.width = dw; cv.height = dh;
       cv.getContext('2d').putImageData(new ImageData(px, dw, dh), 0, 0);
-      const out = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+      const out = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.95));
       if (!out || out.size < 5000) return { blob, endireitou: false };
       return { blob: out, endireitou: true };
     } catch (_) {
@@ -558,5 +641,5 @@ window.Scanner = (() => {
     }
   }
 
-  return { achar, aoVivo, aplanar, clarear, endireitar, _homografia };
+  return { achar, aoVivo, aplanar, clarear, realcar, endireitar, _homografia };
 })();

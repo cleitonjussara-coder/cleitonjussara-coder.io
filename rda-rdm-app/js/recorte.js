@@ -32,6 +32,7 @@ window.Recorte = (() => {
   let _bloqueio = null;      // último "cortaria o texto": { chave: caixa, quando } — permite salvar mesmo assim se a pessoa insistir com a caixa igual
   let _dicaPadrao = '';      // texto de ajuda da abertura (volta quando a pessoa mexe de novo na caixa depois de um aviso)
   let _ocupado = false;      // um "Usar recorte" em andamento (corte + salvar): ignora toques repetidos
+  let _blobAberto = null;    // o arquivo recebido em abrir(): devolvido sem recomprimir quando a caixa pega a foto inteira
   let _origem = null;        // 'papel' | 'texto' | null — qual detector enquadrou (a garantia usa a mesma régua)
   let _papel = null;         // retângulo do papel achado por brilho e cor (px do mapa) — a borda dele não conta como texto
   let _alvo = null;          // o que o recorte não deve cortar sem avisar (px do mapa): o papel ou o miolo de texto
@@ -811,10 +812,15 @@ window.Recorte = (() => {
     const dw = Math.max(1, Math.round(sw * escala));
     const dh = Math.max(1, Math.round(sh * escala));
 
+    /* 03/11/2026: caixa na foto inteira (o caso da nota já endireitada pelo Scanner) e sem reduzir = o próprio arquivo.
+       Recomprimir o JPEG mais uma vez só amaciava a letra. */
+    if (escala === 1 && sx <= 2 && sy <= 2 && sx + sw >= W - 2 && sy + sh >= H - 2
+        && _blobAberto && /^image\/jpe?g$/i.test(_blobAberto.type || '')) return Promise.resolve(_blobAberto);
+
     const cv = document.createElement('canvas');
     cv.width = dw; cv.height = dh;
     cv.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
-    return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.92));
+    return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.95));
   }
 
   function _fechar(valor) {
@@ -824,6 +830,7 @@ window.Recorte = (() => {
     $('crop-img').src = ''; delete $('crop-img').dataset.url;
     _trabalho = null;                       // libera o canvas reduzido
     _mapa = null;
+    _blobAberto = null;
     const r = _resolver; _resolver = null;
     if (r) r(valor);
   }
@@ -908,6 +915,7 @@ window.Recorte = (() => {
     if (!blob || !/^image\//i.test(blob.type || '')) return null;
     if (!$('crop-overlay')) return null;          // markup ausente → segue sem recorte
     _ligarEventos();
+    _blobAberto = blob;
 
     const url = URL.createObjectURL(blob);
     const img = $('crop-img');
