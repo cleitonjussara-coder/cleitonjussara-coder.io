@@ -99,7 +99,8 @@ class RelatorioController extends Controller
      *   modo=unico (padrão): UM xlsx com as 4 abas de cada um (Ana_RDM_RDA…).
      *   modo=zip: um xlsx completo por colaborador, num ZIP.
      * `ids` = quem o gestor marcou na tela; sem `ids`, todo colaborador ativo
-     * que tem nota ou repasse no ano (planilha vazia não ajuda e custa segundos).
+     * que tem nota ou repasse no ano (planilha vazia não ajuda e custa segundos)
+     * ou que carrega saldo de ano anterior (04/11/2026: sem ele o RESUMO sai menor que a dívida real).
      */
     public function cvEquipe(Request $r): BinaryFileResponse
     {
@@ -120,7 +121,8 @@ class RelatorioController extends Controller
         } else {
             $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
             $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->unique());   // cada um sai no modelo do seu regime (21/09/2026)
+            $carregam = app(\App\Services\SaldoAnterior::class)->quemCarrega($ano);
+            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->merge($carregam)->unique());   // cada um sai no modelo do seu regime (21/09/2026)
         }
         $colabs = $q->get();
         abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");

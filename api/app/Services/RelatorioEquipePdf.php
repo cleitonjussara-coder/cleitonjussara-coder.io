@@ -198,7 +198,7 @@ class RelatorioEquipePdf
             ->selectRaw('user_id, tipo, SUM(valor) AS v')->groupBy('user_id', 'tipo')->get();
         $recebido = Repasse::query()->where('deleted', false)
             ->whereRaw('(ano * 12 + mes) < ?', [$k])
-            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', 'received'))
+            ->where(fn ($q) => $q->whereNull('kind')->orWhereIn('kind', ['', 'received']))   // 04/11/2026: kind vazio também é recebido, como no mês aberto, no app e em SaldoAnterior
             ->whereNotNull('confirmado_em')
             ->where(fn ($q) => $q->whereNull('destino')->orWhere('destino', '!=', 'recarga'))
             ->when($ids, fn ($q) => $q->whereIn('user_id', $ids))

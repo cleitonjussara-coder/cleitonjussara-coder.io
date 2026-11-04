@@ -230,7 +230,8 @@ class RelatorioRdmRdaAmostraTest extends TestCase
         $c = $this->colaborador();
         $ss = app(RelatorioRdmRda::class)->gerar($c, self::ANO);
 
-        $this->assertSame('=G2-D2', $ss->getSheetByName('R.D.M.')->getCell('J2')->getValue());
+        /* 04/11/2026: K2 é o saldo do ano anterior; o sentido segue recebido − gasto */
+        $this->assertSame('=K2+G2-D2', $ss->getSheetByName('R.D.M.')->getCell('J2')->getValue());
         $ss->disconnectWorksheets();
     }
 

@@ -40,8 +40,9 @@ class RelatorioRdmRdaPdf
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
-        $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
+        /* 04/11/2026: mesma regra de recebido do saldo anterior e do Excel */
+        $reps = SaldoAnterior::semRecarga(SaldoAnterior::recebidos(Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)))
+            ->orderBy('data')->get();
 
         $rdm = [];   // mês → categoria → notas
         $rda = [];   // mês → notas
@@ -68,6 +69,11 @@ class RelatorioRdmRdaPdf
         $repsRda = $reps->where('tipo', 'RDA');
         $recRdm = (float) $repsRdm->sum('valor');
         $recRda = (float) $repsRda->sum('valor');
+        /* 04/11/2026: saldo do ano anterior, nos mesmos números da planilha (RelatorioRdmRda::escreverSaldoAnterior) */
+        $svcSaldo = app(SaldoAnterior::class);
+        $antes = $svcSaldo->porTipo($c, $svcSaldo->de($c, $ano));
+        $saldoRdm = $antes['RDM'] + $recRdm - $gastoRdm;
+        $saldoRda = $antes['RDA'] + $recRda - $gastoRda;
 
         $nome = mb_strtoupper($c->nome ?: $c->email);
         $safra = sprintf('%02d/%02d', ($ano - 1) % 100, $ano % 100);
@@ -128,8 +134,10 @@ class RelatorioRdmRdaPdf
             .'<td><b>CUSTOS TOTAIS DE RDA RECEBIDO</b><br><span class="big">'.$brl($recRda).'</span></td></tr><tr>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE RDM</b><br><span class="big">'.$brl($gastoRdm).'</span></td>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE RDA</b><br><span class="big">'.$brl($gastoRda).'</span></td></tr><tr>'
-            .'<td><b>SALDO DE RDM RECEBIDO</b><br><span class="big '.$neg($recRdm - $gastoRdm).'">'.$brl($recRdm - $gastoRdm).'</span></td>'
-            .'<td><b>SALDO DE RDA RECEBIDO</b><br><span class="big '.$neg($recRda - $gastoRda).'">'.$brl($recRda - $gastoRda).'</span></td></tr></table>'
+            .'<td><b>'.SaldoAnterior::ROTULO.' RDM</b><br><span class="big '.$neg($antes['RDM']).'">'.$brl($antes['RDM']).'</span></td>'
+            .'<td><b>'.SaldoAnterior::ROTULO.' RDA</b><br><span class="big '.$neg($antes['RDA']).'">'.$brl($antes['RDA']).'</span></td></tr><tr>'
+            .'<td><b>SALDO DE RDM RECEBIDO</b><br><span class="big '.$neg($saldoRdm).'">'.$brl($saldoRdm).'</span></td>'
+            .'<td><b>SALDO DE RDA RECEBIDO</b><br><span class="big '.$neg($saldoRda).'">'.$brl($saldoRda).'</span></td></tr></table>'
             .'<table class="tres"><tr><td class="col2">'
             .'<h3>EXTRATO DE RDM RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>R$</th></tr>'.$ext($repsRdm)
             .'<tr class="tot"><td>TOTAL</td><td class="num">'.$brl($recRdm).'</td></tr></table></td>'
@@ -141,7 +149,8 @@ class RelatorioRdmRdaPdf
         $s = '<div class="pagina"><div class="faixa verde">RELATÓRIO DE DESPESAS MENSAIS (R.D.M.) — '.$e($nome).' — '.$ano.'</div>'
             .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoRdm).'</td>'
             .'<td><b>TOTAL RECEBIDO</b> '.$brl($recRdm).'</td>'
-            .'<td><b>SALDO</b> <span class="'.$neg($recRdm - $gastoRdm).'">'.$brl($recRdm - $gastoRdm).'</span></td></tr></table>';
+            .'<td><b>'.SaldoAnterior::ROTULO.'</b> <span class="'.$neg($antes['RDM']).'">'.$brl($antes['RDM']).'</span></td>'
+            .'<td><b>SALDO</b> <span class="'.$neg($saldoRdm).'">'.$brl($saldoRdm).'</span></td></tr></table>';
         if (! $rdm) {
             $s .= '<p class="vazio">Nenhuma nota RDM em '.$ano.'.</p>';
         }
@@ -178,7 +187,8 @@ class RelatorioRdmRdaPdf
         $s = '<div class="pagina"><div class="faixa verde">RELATÓRIO DE DESPESAS COM ALIMENTAÇÃO (R.D.A) — '.$e($nome).' — '.$ano.'</div>'
             .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoRda).'</td>'
             .'<td><b>TOTAL RECEBIDO</b> '.$brl($recRda).'</td>'
-            .'<td><b>SALDO</b> <span class="'.$neg($recRda - $gastoRda).'">'.$brl($recRda - $gastoRda).'</span></td></tr></table>';
+            .'<td><b>'.SaldoAnterior::ROTULO.'</b> <span class="'.$neg($antes['RDA']).'">'.$brl($antes['RDA']).'</span></td>'
+            .'<td><b>SALDO</b> <span class="'.$neg($saldoRda).'">'.$brl($saldoRda).'</span></td></tr></table>';
         if (! $rda) {
             $s .= '<p class="vazio">Nenhuma nota RDA em '.$ano.'.</p>';
         }

@@ -103,7 +103,7 @@ window.Excel = (() => {
     const abRDM = abertura ? Number(abertura.RDM) || 0 : 0, abRDA = abertura ? Number(abertura.RDA) || 0 : 0;
     merge(ws, r, 0, r, 8);
     ws[XLSX.utils.encode_cell({r, c:0})] = subCell(abertura
-      ? `Saldo trazido de anos anteriores: RDM ${brlTxt(abRDM)} · RDA ${brlTxt(abRDA)} (já somado em Pend. Anterior e Saldo Acum.)`
+      ? `Saldo do ano anterior: RDM ${brlTxt(abRDM)} · RDA ${brlTxt(abRDA)} (já somado em Pend. Anterior e Saldo Acum.)`
       : 'Saldo de anos anteriores não incluído (histórico indisponível).');
     r++;
 

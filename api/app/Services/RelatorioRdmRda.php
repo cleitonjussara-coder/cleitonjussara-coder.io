@@ -25,7 +25,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  *   R.D.A           12 blocos de 15 linhas em DUAS colunas (B–D e E–G): 30 notas/mês (fevereiro: 14 linhas).
  *                   Jan e Fev têm uma linha de cabeçalho abaixo do rótulo; Mar–Dez começam os dados na linha
  *                   seguinte — ver primeiraLinhaRda().
- *   BANCO DE DADOS  extrato RDM recebido B15:C94 (80 linhas) · RDA recebido F15:H26 (12 linhas)
+ *   BANCO DE DADOS  extrato RDM recebido B15:C94 (80 linhas) · RDA recebido F15:H26 (12 linhas; cresce, ver abrirExtratoRda())
  */
 class RelatorioRdmRda
 {
@@ -68,10 +68,6 @@ class RelatorioRdmRda
         /* ── R.D.M. ─────────────────────────────────────────── */
         $rdm = $ss->getSheetByName('R.D.M.');
         $rda = $ss->getSheetByName('R.D.A');
-        /* 15/10/2026: o modelo traz SALDO = gasto − recebido (J2 =D2-G2), o que dá negativo para quem recebeu mais do que gastou.
-           Saldo é recebido − gasto, como no PDF e na aba BANCO DE DADOS. */
-        $rdm->setCellValue('J2', '=G2-D2');
-
         /* 15/10/2026: lançou mais do que cabe no bloco do mês → o bloco ganha linhas (antes as notas excedentes eram descartadas
            com um aviso). As linhas entram antes da última de dados, para que as fórmulas SUM do TOTAL e as referências da aba
            BANCO DE DADOS acompanhem; os blocos seguintes descem junto, e $blocosRdm/$blocosRda guardam as posições já deslocadas. */
@@ -176,21 +172,22 @@ class RelatorioRdmRda
         $this->limpar($bd, 2, 15, 3, 94);     // RDM: B15:C94
         $this->limpar($bd, 6, 15, 6, 26);     // RDA: F15 (data, mesclada F:G)
         $this->limpar($bd, 8, 15, 8, 26);     //      H15 (R$)
-        $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
+        /* 04/11/2026: mesma regra de recebido do saldo anterior; recarga de quem já foi do C.V. é do cartão, não entra aqui */
+        $reps = SaldoAnterior::semRecarga(SaldoAnterior::recebidos(Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)))
+            ->orderBy('data')->get();
+        $totalRda = $this->abrirExtratoRda($bd, $reps->where('tipo', 'RDA')->count());
         $r1 = 15;
         $r2 = 15;
+        $repForaRdm = 0;
         foreach ($reps as $r) {
             $dt = XlsDate::PHPToExcel($r->data->format('Y-m-d'));
             if ($r->tipo === 'RDA') {
-                if ($r2 > 26) {
-                    continue;
-                }
                 $bd->setCellValue([6, $r2], $dt);
                 $bd->setCellValue([8, $r2], (float) $r->valor);
                 $r2++;
             } else {
                 if ($r1 > 94) {
+                    $repForaRdm++;
                     continue;
                 }
                 $bd->setCellValue([2, $r1], $dt);
@@ -198,10 +195,119 @@ class RelatorioRdmRda
                 $r1++;
             }
         }
+        if ($repForaRdm) {
+            /* 04/11/2026: o saldo desta planilha fica menor que o do PDF e o de Arquivos; quem abre precisa saber */
+            $cab->setCellValue('A10', trim($cab->getCell('A10')->getValue()." ATENÇÃO: {$repForaRdm} repasse(s) de RDM não couberam no extrato (limite do modelo)."));
+        }
+
+        $this->escreverSaldoAnterior($c, $ano, $bd, $rdm, $totalRda);
 
         $ss->setActiveSheetIndex(0);
 
         return $ss;
+    }
+
+    /**
+     * O extrato do RDA tem 12 linhas no modelo (F15:H26) e o repasse seguinte sumia, enquanto PDF, Arquivos e o saldo anterior
+     * do ano seguinte somavam tudo (04/11/2026). Com parcelas nos dias 5 e 20 são 24 no ano. Cresce só em F:H, descendo
+     * TOTAL, CONSUMIDO e SALDO: inserir linha inteira rasgaria o extrato do RDM, nas colunas B:C. Só F7 aponta para o TOTAL.
+     *
+     * @return int a linha do TOTAL
+     */
+    private function abrirExtratoRda(Worksheet $bd, int $repasses): int
+    {
+        $total = 27;
+        $extra = max(0, $repasses - ($total - 15));
+        if ($extra < 1) {
+            return $total;
+        }
+
+        /* de baixo para cima: com 1 linha a mais, cada linha cai em cima da de baixo */
+        foreach ([29, 28, 27] as $r) {
+            $bd->unmergeCells("F{$r}:G{$r}");
+            foreach (['F', 'G', 'H'] as $col) {
+                $bd->duplicateStyle($bd->getStyle("{$col}{$r}"), $col.($r + $extra));
+            }
+            $bd->mergeCells('F'.($r + $extra).':G'.($r + $extra));
+        }
+        for ($r = $total; $r < $total + $extra; $r++) {
+            foreach (['F', 'G', 'H'] as $col) {
+                $bd->duplicateStyle($bd->getStyle("{$col}26"), "{$col}{$r}");
+            }
+            $bd->mergeCells("F{$r}:G{$r}");
+        }
+
+        $total += $extra;
+        $bd->setCellValue("F{$total}", 'TOTAL');
+        $bd->setCellValue("H{$total}", '=SUM(H15:H'.($total - 1).')');
+        $bd->setCellValue('F'.($total + 1), 'CONSUMIDO');
+        $bd->setCellValue('H'.($total + 1), '=F9');
+        $bd->setCellValue('F7', "=H{$total}");
+
+        return $total;
+    }
+
+    /**
+     * "Saldo do ano anterior" (04/11/2026), em células livres do modelo, sem deslocar nada que outra fórmula use:
+     *   BANCO DE DADOS  L13:X14, embaixo do quadro de meses e ainda na parte congelada: o logo ocupa A1:E4 e os quadros de
+     *                   RDM e RDA não têm linha sobrando. B11 e F11 passam a somar S13 e S14;
+     *   extrato do RDA  TOTAL, CONSUMIDO, SALDO DO ANO ANTERIOR, SALDO: o SALDO desce uma linha (nenhuma fórmula o usa). Sem
+     *                   extrato aberto, $total é 27 e o SALDO vai de H29 para H30;
+     *   R.D.M.          K1:M2, ao lado do SALDO da faixa do topo, que está cheia. J2 passa a somar K2.
+     * A aba R.D.A não tem saldo próprio: o dela é o do BANCO DE DADOS.
+     */
+    private function escreverSaldoAnterior(Colaborador $c, int $ano, Worksheet $bd, Worksheet $rdm, int $total): void
+    {
+        $svc = app(SaldoAnterior::class);
+        $tipos = $svc->porTipo($c, $svc->de($c, $ano));
+        $borda = ['outline' => ['borderStyle' => 'medium']];
+
+        foreach ([13 => 'RDM', 14 => 'RDA'] as $linha => $tipo) {
+            $bd->mergeCells("L{$linha}:R{$linha}");
+            $bd->mergeCells("S{$linha}:X{$linha}");
+            $bd->getStyle("L{$linha}:R{$linha}")->applyFromArray([
+                'font' => ['bold' => true], 'alignment' => ['horizontal' => 'center'], 'borders' => $borda,
+                'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => 'F2F2F2']],
+            ]);
+            $bd->getStyle("S{$linha}:X{$linha}")->applyFromArray(['font' => ['bold' => true], 'alignment' => ['horizontal' => 'center'], 'borders' => $borda]);
+            $bd->getStyle("S{$linha}")->getNumberFormat()->setFormatCode($bd->getStyle('B7')->getNumberFormat()->getFormatCode());
+            $bd->setCellValue("L{$linha}", SaldoAnterior::ROTULO.' '.$tipo);
+            $bd->setCellValue("S{$linha}", $tipos[$tipo]);
+        }
+        $bd->setCellValue('B11', '=B7+S13-B9');
+        $bd->setCellValue('F11', '=F7+S14-F9');
+
+        /* primeiro o SALDO desce, levando o estilo; depois a linha nova herda o da CONSUMIDO */
+        $consumido = $total + 1;
+        $anterior = $total + 2;
+        $saldo = $total + 3;
+        foreach (['F', 'G', 'H'] as $col) {
+            $bd->duplicateStyle($bd->getStyle("{$col}{$anterior}"), "{$col}{$saldo}");
+            $bd->duplicateStyle($bd->getStyle("{$col}{$consumido}"), "{$col}{$anterior}");
+        }
+        $bd->mergeCells("F{$saldo}:G{$saldo}");
+        $bd->getStyle("F{$anterior}")->getAlignment()->setShrinkToFit(true);
+        $bd->getStyle("H{$anterior}")->getNumberFormat()->setFormatCode($bd->getStyle("H{$total}")->getNumberFormat()->getFormatCode());
+        $bd->setCellValue("F{$anterior}", SaldoAnterior::ROTULO);
+        $bd->setCellValue("H{$anterior}", '=S14');
+        $bd->setCellValue("F{$saldo}", 'SALDO');
+        $bd->setCellValue("H{$saldo}", "=H{$anterior}+H{$total}-H{$consumido}");
+
+        $rdm->mergeCells('K1:M1');
+        $rdm->mergeCells('K2:M2');
+        $verde = ['fillType' => 'solid', 'startColor' => ['rgb' => '00B050']];
+        foreach (['K1:M1', 'K2:M2'] as $faixa) {
+            $rdm->getStyle($faixa)->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12], 'fill' => $verde, 'borders' => $borda,
+                'alignment' => ['horizontal' => 'center', 'vertical' => 'center', 'shrinkToFit' => true],
+            ]);
+        }
+        $rdm->getStyle('K2')->getNumberFormat()->setFormatCode($rdm->getStyle('D2')->getNumberFormat()->getFormatCode());
+        $rdm->setCellValue('K1', SaldoAnterior::ROTULO);
+        $rdm->setCellValue('K2', "='BANCO DE DADOS'!S13");
+        /* 15/10/2026: o modelo traz SALDO = gasto − recebido (J2 =D2-G2), o que dá negativo para quem recebeu mais do que gastou.
+           Saldo é recebido − gasto, como no PDF e na aba BANCO DE DADOS. */
+        $rdm->setCellValue('J2', '=K2+G2-D2');
     }
 
     /**

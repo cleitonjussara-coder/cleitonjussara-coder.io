@@ -43,13 +43,20 @@ class RelatorioCvPdf
         $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
-        $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
+        /* 04/11/2026: mesma regra de recebido do saldo anterior e do Excel */
+        $reps = SaldoAnterior::recebidos(Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano))
+            ->when(! $c->usaCartao(), fn ($q) => SaldoAnterior::semRecarga($q))->orderBy('data')->get();
 
         /* 24/09/2026: no CV o dinheiro anda por dois caminhos e cada um tem
            a sua coluna — recarga do cartão e repasse (carteira) ao colaborador.
            Lançamento antigo, sem destino, conta como carteira (era 'reembolso'). */
         $ehCv = $c->usaCartao();
+        /* 04/11/2026: saldo do ano anterior, nos mesmos números da planilha (RelatorioCv::escreverSaldoAnterior) */
+        $svcSaldo = app(SaldoAnterior::class);
+        $saldoAntes = $svcSaldo->de($c, $ano);
+        $antTipo = $svcSaldo->porTipo($c, $saldoAntes);
+        $antReembolso = round($antTipo['RDM'] + $antTipo['RDA'], 2);
+        $antCartao = $ehCv ? $saldoAntes['cartao'] : $antReembolso;
         $recargas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'recarga') : $reps;
         $ajudas = $ehCv ? $reps->filter(fn ($r) => $r->destino === 'ajuda') : collect();
         $reembolsos = $ehCv
@@ -69,8 +76,9 @@ class RelatorioCvPdf
 
             return $g;
         };
-        $gastoTotal = (float) $notas->sum('valor');
-        $gastoCartao = $ehCv ? $gastoTotal - $gastoAjuda : $gastoTotal;
+        /* 04/11/2026: no C.V. o gasto do BANCO DE DADOS é o do cartão, como o B9 do Excel (aba do cartão). Antes somava também o
+           bolso, e o SALDO DE C.V. daqui não batia com a planilha nem com a página do cartão deste mesmo PDF. */
+        $gastoTotal = (float) ($ehCv ? $notas->reject(fn ($n) => $n->pagamento === 'carteira') : $notas)->sum('valor');
         $recebido = (float) $reps->sum('valor');
         $nome = mb_strtoupper($c->nome ?: $c->email);
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -104,17 +112,19 @@ class RelatorioCvPdf
         /* Reembolso separado em RDM e RDA (03/11/2026), como no BANCO DE DADOS do Excel: gasto da aba CV REEMBOLSO − total pago.
            No CV essa aba só tem o que saiu do bolso; antes o PDF descontava de TODAS as notas e não batia com a planilha. */
         $notasReembolso = $ehCv ? $notas->filter(fn ($n) => $n->pagamento === 'carteira') : $notas;
-        $reembolsoPor = function (string $t) use ($notasReembolso, $reembolsos, $linhas) {
+        $reembolsoPor = function (string $t) use ($notasReembolso, $reembolsos, $linhas, $antTipo) {
             $doTipo = fn ($x) => ($x->tipo === 'RDA' ? 'RDA' : 'RDM') === $t;
             $pagos = $reembolsos->filter($doTipo);
             $pago = (float) $pagos->sum('valor');
 
-            return ['extrato' => $linhas($pagos), 'pago' => $pago, 'deve' => (float) $notasReembolso->filter($doTipo)->sum('valor') - $pago];
+            return ['extrato' => $linhas($pagos), 'pago' => $pago, 'anterior' => $antTipo[$t], 'deve' => (float) $notasReembolso->filter($doTipo)->sum('valor') - $pago - $antTipo[$t]];
         };
         $reembRdm = $reembolsoPor('RDM');
         $reembRda = $reembolsoPor('RDA');
         $blocoReembolso = fn (string $t, array $b) => '<h3>REEMBOLSO '.$t.' DE: <span class="num">'.$brl($b['deve']).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($b['extrato'] ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td colspan="2">TOTAL PAGO '.$t.'</td><td class="num">'.$brl($b['pago']).'</td></tr></table>';
+            .'<tr class="tot"><td colspan="2">TOTAL PAGO '.$t.'</td><td class="num">'.$brl($b['pago']).'</td></tr>'
+            .'<tr><td colspan="2">'.SaldoAnterior::ROTULO.' '.$t.'</td><td class="num">'.$brl($b['anterior']).'</td></tr></table>';
+        $saldoCv = ($ehCv ? $totalRecarga : $recebido) + $antCartao - $gastoTotal;
         $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'
             .'<table class="resumo"><tr>'
             .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span><br>'.$detTipo($ehCv ? $recargas : $reps).'</td>'
@@ -123,7 +133,9 @@ class RelatorioCvPdf
             .'<td><b>TOTAL DE GASTO ACUMULADO DE C.V.</b><br><span class="big">'.$brl($gastoTotal).'</span></td>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>'
             .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span><br>'.$detTipo($ehCv ? $reembolsos : $reps).'</td></tr><tr>'
-            .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.(($ehCv ? $totalRecarga : $recebido) - $gastoTotal < 0 ? 'vermelho' : '').'">'.$brl(($ehCv ? $totalRecarga : $recebido) - $gastoTotal).'</span></td>'
+            .'<td><b>'.SaldoAnterior::ROTULO.($ehCv ? ' (CARTÃO)' : '').'</b><br><span class="big '.($antCartao < 0 ? 'vermelho' : '').'">'.$brl($antCartao).'</span></td><td></td>'
+            .'<td><b>'.SaldoAnterior::ROTULO.' (REEMBOLSO)</b><br><span class="big '.($antReembolso < 0 ? 'vermelho' : '').'">'.$brl($antReembolso).'</span><br><span class="det">RDM '.$brl($antTipo['RDM']).' · RDA '.$brl($antTipo['RDA']).'</span></td></tr><tr>'
+            .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.($saldoCv < 0 ? 'vermelho' : '').'">'.$brl($saldoCv).'</span></td>'
             .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
             .'<table class="tres"><tr><td class="col">'
             .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
@@ -140,19 +152,21 @@ class RelatorioCvPdf
            a mesma grade nas duas. */
         if ($ehCv) {
             $paginas = [
-                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga, $recargas],
-                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso, $reembolsos],
+                [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga, $recargas, $antCartao],
+                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso, $reembolsos, $antReembolso],
             ];
         } else {
-            $paginas = [['RDM_RDA', $notas, $recebido, $reps], ['CV REEMBOLSO', $notas, $recebido, $reps]];
+            $paginas = [['RDM_RDA', $notas, $recebido, $reps, $antCartao], ['CV REEMBOLSO', $notas, $recebido, $reps, $antReembolso]];
         }
-        foreach ($paginas as [$aba, $listaDaAba, $recebidoAba, $repsDaAba]) {
+        foreach ($paginas as [$aba, $listaDaAba, $recebidoAba, $repsDaAba, $antAba]) {
             $grade = $montarGrade($listaDaAba);
             $gastoAba = (float) $listaDaAba->sum('valor');
+            $saldoAba = $antAba + $recebidoAba - $gastoAba;
             $s = '<div class="pagina"><div class="faixa verde">CUSTOS VARIÁVEIS (C.V.) — '.$aba.' — '.$e($nome).'</div>'
                 .'<table class="topo"><tr><td class="amarelo"><b>TOTAL DE GASTO ACUMULADO</b> '.$brl($gastoAba).'</td>'
                 .'<td><b>TOTAL RECEBIDO</b> '.$brl($recebidoAba).'<br>'.$detTipo($repsDaAba).'</td>'
-                .'<td><b>SALDO</b> <span class="'.($recebidoAba - $gastoAba < 0 ? 'vermelho' : '').'">'.$brl($recebidoAba - $gastoAba).'</span></td></tr></table>';
+                .'<td><b>'.SaldoAnterior::ROTULO.'</b> <span class="'.($antAba < 0 ? 'vermelho' : '').'">'.$brl($antAba).'</span></td>'
+                .'<td><b>SALDO</b> <span class="'.($saldoAba < 0 ? 'vermelho' : '').'">'.$brl($saldoAba).'</span></td></tr></table>';
             if (! $grade) {
                 $s .= '<p class="vazio">Nenhum lançamento em '.$ano.'.</p>';
             }

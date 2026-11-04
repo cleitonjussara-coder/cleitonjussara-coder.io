@@ -184,9 +184,9 @@ class PlanilhaFaturamentoTest extends TestCase
         $ss->removeSheetByIndex(0);
         app(\App\Services\RelatorioCv::class)->abaResumo($ss, [$paulo], self::ANO);
         $res = $this->linhas($ss, 'RESUMO');
-        $linha = $this->linhaQueComeca($res, 'Paulo Silva');   // quadro 1: Colaborador, 4 categorias, Total gasto, Recebido, Saldo
+        $linha = $this->linhaQueComeca($res, 'Paulo Silva');   // quadro 1: Colaborador, 4 categorias, Total gasto, Recebido, Saldo do ano anterior (04/11/2026), Saldo
         $this->assertEqualsWithDelta(57, $linha[5], 0.001, 'Total gasto sem os R$ 300 da empresa');
-        $this->assertEqualsWithDelta(-57, $linha[7], 0.001, 'Saldo sem os R$ 300 da empresa');
+        $this->assertEqualsWithDelta(-57, $linha[8], 0.001, 'Saldo sem os R$ 300 da empresa');
         $ss->disconnectWorksheets();
     }
 

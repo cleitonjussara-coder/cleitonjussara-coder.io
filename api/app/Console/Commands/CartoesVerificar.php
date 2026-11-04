@@ -3,10 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\Colaborador;
-use App\Models\Nota;
-use App\Models\Repasse;
 use App\Services\PontoCalculo;
 use App\Services\PushService;
+use App\Services\SaldoAnterior;
 use Illuminate\Console\Command;
 
 /**
@@ -19,9 +18,11 @@ use Illuminate\Console\Command;
  * saldo, a pessoa passa a pagar do bolso — que é o que o aviso quer evitar
  * (24/09/2026).
  *
- * 04/11/2026: a conta é a do ANO corrente em Brasília, recargas confirmadas
- * menos gasto no cartão, igual à planilha CV (RelatorioCv), à ficha da Equipe
- * e ao cartao_saldo de Arquivos. Antes somava todos os anos.
+ * 04/11/2026: saldo do ano anterior + recargas confirmadas do ano corrente em
+ * Brasília − gasto no cartão do ano, igual à planilha CV (RelatorioCv), à ficha
+ * da Equipe e ao cartao_saldo de Arquivos. O anterior vem de SaldoAnterior: o
+ * dono pediu que o saldo acumule de um ano para o outro (substitui a regra da
+ * manhã do mesmo dia, que olhava só o ano).
  */
 class CartoesVerificar extends Command
 {
@@ -29,38 +30,33 @@ class CartoesVerificar extends Command
 
     protected $description = 'Avisa o gestor quando o cartão corporativo de alguém está acabando';
 
-    public function handle(PushService $push): int
+    public function handle(PushService $push, SaldoAnterior $saldos): int
     {
         $minimo = (float) $this->option('minimo');
         $baixos = [];
         $ano = now(PontoCalculo::TZ)->year;   // servidor fica em UTC: em 31/12 à noite já seria o ano seguinte
+        $colabs = Colaborador::where('regime', 'cv')->where('ativo', true)->get();
+        $anteriores = $saldos->deTodos($ano, $colabs->pluck('id'));
+        $acumulados = $saldos->deTodos($ano + 1, $colabs->pluck('id'));   // tudo até dezembro do ano corrente
 
-        foreach (Colaborador::where('regime', 'cv')->where('ativo', true)->get() as $c) {
-            $recarga = (float) Repasse::where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-                ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', 'received'))->where('destino', 'recarga')
-                ->whereNotNull('confirmado_em')->sum('valor');
-            /* 25/09/2026: só NÃO conta como gasto do cartão quem saiu da carteira
-               (era 'reembolso') ou é Faturamento (pagamento='empresa') — mesma
-               exclusão negativa usada em todo o resto do sistema, pra um valor de
-               pagamento novo no futuro não ficar de fora do gasto por engano aqui. */
-            $gasto = (float) Nota::where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-                ->where(function ($q) {
-                    $q->whereNotIn('pagamento', ['carteira', 'empresa'])->orWhereNull('pagamento');
-                })->sum('valor');
-            $saldo = round($recarga - $gasto, 2);
+        foreach ($colabs as $c) {
+            $antes = $anteriores[$c->id] ?? SaldoAnterior::zerado();
+            $ate = $acumulados[$c->id] ?? SaldoAnterior::zerado();
+            $saldo = $ate['cartao'];
 
             /* Sem nenhuma recarga registrada não se sabe o saldo do cartão —
                a conta daria zero e o gestor receberia um alarme falso por
                colaborador. Enquanto ninguém registrar a primeira recarga,
-               este fica de fora (24/09/2026). 04/11/2026: a primeira do ano. */
-            if ($recarga <= 0) {
+               este fica de fora (24/09/2026). 04/11/2026: de qualquer ano,
+               porque a de ano passado agora faz parte do saldo. */
+            if ($ate['recarga'] <= 0) {
                 $this->line(sprintf('  %-28s sem recarga registrada — ignorado', mb_substr($c->nome ?: $c->email, 0, 28)));
                 continue;
             }
 
-            $this->line(sprintf('  %-28s recarga %10.2f  gasto %10.2f  saldo %10.2f%s',
-                mb_substr($c->nome ?: $c->email, 0, 28), $recarga, $gasto, $saldo,
-                $saldo < $minimo ? '  <= AVISAR' : ''));
+            $this->line(sprintf('  %-28s anterior %10.2f  recarga %10.2f  gasto %10.2f  saldo %10.2f%s',
+                mb_substr($c->nome ?: $c->email, 0, 28), $antes['cartao'], $ate['recarga'] - $antes['recarga'],
+                $ate['cartao_gasto'] - $antes['cartao_gasto'], $saldo, $saldo < $minimo ? '  <= AVISAR' : ''));
 
             if ($saldo < $minimo) {
                 $baixos[] = [$c, $saldo];

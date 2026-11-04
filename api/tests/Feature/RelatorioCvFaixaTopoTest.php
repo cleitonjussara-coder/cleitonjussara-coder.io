@@ -85,7 +85,8 @@ class RelatorioCvFaixaTopoTest extends TestCase
             $this->assertTrue($ws->getColumnDimension('K')->getVisible() === false, "$nome: a coluna K segue oculta (é Nº DA NOTA)");
             $this->assertTrue($ws->getColumnDimension('J')->getVisible(), "$nome: o valor fica na coluna J, visível");
             $this->assertNull($ws->getCell('K2')->getValue(), "$nome: nada mais na coluna oculta");
-            $this->assertSame('=J2-F2', $ws->getCell('P2')->getValue(), "$nome: SALDO = recebido − gasto");
+            /* 04/11/2026: P1 é o saldo do ano anterior; o saldo soma ele ao recebido − gasto */
+            $this->assertSame('=P1+J2-F2', $ws->getCell('P2')->getValue(), "$nome: SALDO = anterior + recebido − gasto");
 
             $fmt = $ws->getStyle('J2')->getNumberFormat()->getFormatCode();
             $this->assertSame($ws->getStyle('F2')->getNumberFormat()->getFormatCode(), $fmt, "$nome: mesmo formato de moeda dos outros valores");

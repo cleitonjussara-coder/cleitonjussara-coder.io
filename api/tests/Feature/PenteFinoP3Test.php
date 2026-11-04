@@ -434,7 +434,9 @@ class PenteFinoP3Test extends TestCase
         return (float) $linha['saldo']['cartao_saldo'];
     }
 
-    public function test_aviso_do_cartao_nao_soma_o_rombo_do_ano_passado(): void
+    /* 04/11/2026: regra nova do dono, o saldo acumula de um ano para o outro. Este teste fixava o contrário (o rombo de 2025
+       não contava); agora o rombo vem como saldo do ano anterior e o aviso sai, com o mesmo número do app. */
+    public function test_aviso_do_cartao_soma_o_saldo_do_ano_anterior(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-11-04 12:00:00', PontoCalculo::TZ));
         $gestor = $this->pessoa('gestor', 'Gestora');
@@ -444,8 +446,23 @@ class PenteFinoP3Test extends TestCase
         $this->repasse($c, 2000);
         $this->nota($c, 500, 'cartao');
 
-        $this->assertSame([], $this->verificarCartoes(), 'somando todos os anos daria -3.400 e um alarme falso');
+        $avisos = $this->verificarCartoes();
+
+        $this->assertCount(1, $avisos);
+        $this->assertStringContainsString('R$ -3.400,00', $avisos[0]);
         $this->assertStringContainsString(number_format($this->saldoNoApp($gestor, $c), 2, '.', ''), Artisan::output());
+    }
+
+    public function test_sobra_do_ano_anterior_segura_o_aviso_do_cartao(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-04 12:00:00', PontoCalculo::TZ));
+        $this->pessoa('gestor', 'Gestora');
+        $c = $this->pessoa('colaborador', 'Edson', 'cv');
+        $this->repasse($c, 9000, 2025);
+        $this->repasse($c, 1000);
+        $this->nota($c, 900, 'cartao');
+
+        $this->assertSame([], $this->verificarCartoes(), 'sobram 9.100 no cartão: não há o que avisar');
     }
 
     public function test_aviso_do_cartao_sai_com_o_mesmo_numero_do_app(): void
@@ -453,7 +470,6 @@ class PenteFinoP3Test extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-11-04 12:00:00', PontoCalculo::TZ));
         $gestor = $this->pessoa('gestor', 'Gestora');
         $c = $this->pessoa('colaborador', 'Edson', 'cv');
-        $this->repasse($c, 9000, 2025);                       // sobra do ano passado não esconde o aviso
         $this->repasse($c, 1000);
         $this->nota($c, 700.5, 'cartao');
         $this->nota($c, 199.5, null);                         // nota antiga, sem pagamento gravado, é do cartão
@@ -489,14 +505,29 @@ class PenteFinoP3Test extends TestCase
         $this->assertStringContainsString('R$ 100,00', $avisos[0]);
     }
 
-    public function test_sem_recarga_no_ano_o_cartao_fica_de_fora_do_aviso(): void
+    /* 04/11/2026: recarga de ano passado agora faz parte do saldo, então só fica de fora quem nunca teve recarga. */
+    public function test_sem_recarga_nenhuma_o_cartao_fica_de_fora_do_aviso(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2027-01-05 12:00:00', PontoCalculo::TZ));
+        $this->pessoa('gestor', 'Gestora');
+        $c = $this->pessoa('colaborador', 'Edson', 'cv');
+        $this->nota($c, 50, 'cartao', 2026);
+        $this->nota($c, 50, 'cartao', 2027);
+
+        $this->assertSame([], $this->verificarCartoes(), 'sem recarga nunca não se sabe o saldo; o alarme seria falso');
+    }
+
+    public function test_recarga_de_ano_anterior_basta_para_o_cartao_entrar_no_aviso(): void
     {
         Carbon::setTestNow(Carbon::parse('2027-01-05 12:00:00', PontoCalculo::TZ));
         $this->pessoa('gestor', 'Gestora');
         $c = $this->pessoa('colaborador', 'Edson', 'cv');
         $this->repasse($c, 1000, 2026);
-        $this->nota($c, 50, 'cartao', 2027);
+        $this->nota($c, 900, 'cartao', 2027);
 
-        $this->assertSame([], $this->verificarCartoes(), 'sem recarga no ano não se sabe o saldo; o alarme seria falso');
+        $avisos = $this->verificarCartoes();
+
+        $this->assertCount(1, $avisos);
+        $this->assertStringContainsString('R$ 100,00', $avisos[0]);
     }
 }

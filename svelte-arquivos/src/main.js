@@ -96,11 +96,22 @@ async function renderColabs(s) {
     const deve = s.deve > 0.004 ? s.deve : 0;
     const nivel = !deve ? 0 : deve < 1000 ? 1 : deve < 3000 ? 2 : 3;
     const item = (rotulo, v) => v == null ? { rotulo, valor: '—', neg: false } : { rotulo, valor: brl(v), neg: v < -0.004 };
+    /* Saldo do ano anterior (04/11/2026): o que veio dos anos passados, já dentro dos saldos acima. RDM e RDA no sinal deste
+       cartão (positivo = empresa deve); no C.V. são o reembolso. Sem o campo (API antiga) diz que não tem, não mostra zero. */
+    /* cartão e reembolso têm sinais opostos no JSON: por extenso, para ninguém ler "-" como a mesma coisa nos dois */
+    const porExtenso = (v, devePositivo) => {
+      const x = Math.round((Number(v) || 0) * 100) / 100;
+      if (!x) return brl(0);
+      return `${brl(Math.abs(x))} ${(devePositivo ? x > 0 : x < 0) ? 'a empresa deve' : 'a favor da empresa'}`;
+    };
+    const anterior = s.rdm_anterior == null ? 'indisponível'
+      : `${s.cv ? `Cartão ${porExtenso(s.cartao_anterior, false)} · Reembolso ` : ''}RDM ${porExtenso(s.rdm_anterior, true)} · RDA ${porExtenso(s.rda_anterior, true)}`;
     return {
       nivel,
       rotulo: deve ? 'EMPRESA DEVE' : 'SALDO',
       valor: deve ? brl(deve) : 'Em dia',
       partes: [{ rotulo: 'RDM', valor: brl(s.rdm) }, { rotulo: 'RDA', valor: brl(s.rda) }],
+      anterior,
       itens: [
         item(s.cv ? 'RDA (bolso)' : 'RDA', s.rda), item(s.cv ? 'RDM (bolso)' : 'RDM', s.rdm), item('Saldo cartão', s.cartao_saldo),
         item('Gasto cartão', s.cartao_gasto), item('Gasto carteira', s.carteira),

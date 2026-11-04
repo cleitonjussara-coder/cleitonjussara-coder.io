@@ -101,6 +101,7 @@
             {#each c.saldo.itens as it}
               <div><span>{it.rotulo}</span><b>{it.valor}</b></div>
             {/each}
+            <div style="grid-column:1/-1"><span>Saldo do ano anterior</span><b style="white-space:normal;overflow-wrap:anywhere">{c.saldo.anterior}</b></div>
           </div>
         {/if}
       </button>

@@ -255,6 +255,44 @@ window.Gestor = (() => {
     return mapa;
   }
 
+  /* Saldo do ano anterior (04/11/2026, pedido do dono: "valores acumulativo de um ano, acumula para o ano
+     posterior, com especificação de saldo de ano anterior"): tudo o que veio de TODOS os anos antes de `ano`,
+     de UM colaborador, na conta única de sempre.
+       RDM/RDA → recebido − gasto, por tipo (regime RDM/RDA);
+       cartao  → recargas − notas fora de carteira/empresa, um valor só (sem separar RDM/RDA);
+       reemb   → reembolsos − notas de carteira (regime C.V.), com reembRDM e reembRDA. */
+  function saldoAnoAnterior(notas, repasses, ano) {
+    const s = { RDM: 0, RDA: 0, cartao: 0, reemb: 0, reembRDM: 0, reembRDA: 0 };
+    const antes = o => Number(o.ano) < Number(ano);
+    for (const r of repasses || []) {
+      if (!antes(r) || r.deleted || (r.kind && r.kind !== 'received')) continue;
+      const v = Number(r.valor || 0);
+      if (r.destino === 'recarga') { s.cartao += v; continue; }
+      s.reemb += v;
+      if (r.tipo === 'RDM' || r.tipo === 'RDA') { s[r.tipo] += v; s['reemb' + r.tipo] += v; }
+    }
+    for (const n of notas || []) {
+      if (!antes(n) || !_contaGasto(n)) continue;
+      const v = Number(n.valor || 0);
+      if (n.tipo === 'RDM' || n.tipo === 'RDA') s[n.tipo] -= v;
+      if (n.pagamento !== 'carteira') { s.cartao -= v; continue; }
+      s.reemb -= v;
+      if (n.tipo === 'RDM' || n.tipo === 'RDA') s['reemb' + n.tipo] -= v;
+    }
+    for (const k of Object.keys(s)) s[k] = _r2(s[k]);
+    return s;
+  }
+
+  /* Quem deve, em palavras (04/11/2026): o cartão e a ficha usam negativo = a empresa deve; o "a receber" do C.V. usa
+     positivo = a empresa deve (devePositivo). O número fica como a conta do quadro pede; a frase tira a dúvida do sinal. */
+  /* Em tela estreita o navegador quebrava a linha logo depois do menos e o valor parecia positivo (visto a 320 px, 04/11/2026). */
+  const brlInteiro = v => brl(v).replace('-', '-⁠');
+  function sentidoSaldo(v, devePositivo = false) {
+    const x = _r2(Number(v) || 0);
+    if (!x) return '';
+    return (devePositivo ? x > 0 : x < 0) ? 'a empresa deve' : 'a favor da empresa';
+  }
+
   /* O que um colaborador trazia ao abrir o ANO (saldo até dezembro do ano anterior);
      null se o histórico não carregou. Usado pelo Excel anual. */
   async function aberturaAnual(sb, userId, ano) {
@@ -495,6 +533,7 @@ window.Gestor = (() => {
       ]);
       const acumOk = !!hist;
       const antPorUser = acumOk ? saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano) : new Map();
+      const antAnoPorUser = acumOk ? saldoAnteriorPorUsuario(hist.notas, hist.repasses, 1, ano) : new Map();   // até dezembro do ano anterior (04/11/2026)
       const nsAno = (notasAno || []).filter(n => !n.deleted);
       /* só o que foi RECEBIDO conta como repasse; pedido pendente (kind='requested') não é dinheiro na mão */
       const rsAno = (repAno   || []).filter(r => !r.deleted && (!r.kind || r.kind === 'received'));
@@ -502,8 +541,14 @@ window.Gestor = (() => {
       const rs = rsAno.filter(r => r.mes === mes);
       /* quem carrega saldo de meses anteriores entra nos relatórios do mês mesmo sem lançar nada nele */
       const comSaldoAnterior = [...antPorUser].filter(([, v]) => Math.abs(v.RDM) > 0.004 || Math.abs(v.RDA) > 0.004).map(([id]) => id);
+      /* 04/11/2026: o modal manda `ids`, então quem só carrega saldo de ano anterior precisa vir marcado, senão fica fora do
+         arquivo e do RESUMO. Olha cada conta do regime dele, como SaldoAnterior::quemCarrega no servidor. */
+      const carregaSaldoAno = !acumOk ? [] : collabs.filter(c => {
+        const s = saldoAnoAnterior(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), ano);
+        return (c.regime === 'cv' ? [s.cartao, s.reembRDM, s.reembRDA] : [s.RDM, s.RDA]).some(v => Math.abs(v) > 0.004);
+      }).map(c => c.id);
       /* para o modal "CV da equipe": quem entra na lista e quem movimentou no ano */
-      _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id).concat(comSaldoAnterior)) };
+      _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id).concat(carregaSaldoAno)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id).concat(comSaldoAnterior)) };
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
 
       // ── Cabeçalho ──
@@ -646,6 +691,7 @@ window.Gestor = (() => {
           const rdaR = mrsConta.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
           /* saldo ACUMULADO: o que sobrou (ou faltou) dos meses anteriores + recebido − gasto do mês */
           const ant = antPorUser.get(m.id) || { RDM: 0, RDA: 0 };
+          const antAno = antAnoPorUser.get(m.id) || { RDM: 0, RDA: 0 };
           const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
           const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
 
@@ -679,14 +725,14 @@ window.Gestor = (() => {
               <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
                 <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
                 <span class="bal-val">${brl(rdmAcum)}</span>
-                ${acumOk ? `<span class="bal-detail">Anterior ${brl(ant.RDM)}</span>` : ''}
+                ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDM)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDM - antAno.RDM))}</span>` : ''}` : ''}
                 <span class="bal-detail">Gasto ${brl(rdmG)}</span>
                 <span class="bal-detail">Recebido ${brl(rdmR)}</span>
               </div>
               <div class="bal-box ${rdaAcum<0?'neg':'pos'}">
                 <span class="bal-type">RDA${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
                 <span class="bal-val">${brl(rdaAcum)}</span>
-                ${acumOk ? `<span class="bal-detail">Anterior ${brl(ant.RDA)}</span>` : ''}
+                ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDA)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDA - antAno.RDA))}</span>` : ''}` : ''}
                 <span class="bal-detail">Gasto ${brl(rdaG)}</span>
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
@@ -804,6 +850,7 @@ window.Gestor = (() => {
         : soma(histReps.filter(x => x.tipo === t && recebido(x) && !ehRecargaR(x) && chave(x) < kAberto))
         - soma(histNotas.filter(n => n.tipo === t && n.pagamento !== 'empresa' && chave(n) < kAberto));
       const antRDM = anterior('RDM'), antRDA = anterior('RDA');
+      const anoAnt = acumOk ? saldoAnoAnterior(histNotas, histReps, ano) : null;   // null = histórico não carregou: a tela diz isso, não inventa R$ 0,00
       const recebidos0 = reps.filter(x => recebido(x) && !ehRecargaR(x));
       const gasto = g('RDM') + g('RDA');
       const rec = r('RDM') + r('RDA');
@@ -829,9 +876,9 @@ window.Gestor = (() => {
           - soma(histReps.filter(x => recebido(x) && !ehRecargaR(x) && chave(x) <= kAberto))
         : gastoCarteira - rec;
       /* Faixa igual à da planilha (20/10/2026, pedido do Cleiton: "deixar igual mostra na planilha, lá os registros estão
-         corretos"): por aba, no ANO — TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO = recebido − gasto (negativo = a
-         empresa ainda deve). Cartão corporativo: gasto das notas fora da carteira × recargas. CV REEMBOLSO: gasto da
-         carteira × reembolsos (repasses que não são recarga). Mesmas regras de RelatorioCv.php. */
+         corretos"): por aba, no ANO — SALDO DO ANO ANTERIOR | TOTAL DE GASTO ACUMULADO | TOTAL RECEBIDO | SALDO = anterior +
+         recebido − gasto (negativo = a empresa ainda deve; o anterior entrou em 04/11/2026). Cartão corporativo: gasto das
+         notas fora da carteira × recargas. CV REEMBOLSO: gasto da carteira × reembolsos (repasses que não são recarga). */
       const planilhaCV = (ehCVcolab && acumOk) ? (() => {
         const doAno = o => Number(o.ano) === Number(ano);
         const ns1 = histNotas.filter(n => doAno(n) && n.pagamento !== 'empresa');
@@ -840,6 +887,7 @@ window.Gestor = (() => {
         const porTipo = (arr, t) => soma(arr.filter(x => x.tipo === t));
         const recargasA = rs1.filter(ehRecargaR), reembA = rs1.filter(x => !ehRecargaR(x));
         const aba = (k, ico, nome, gastoL, recL) => ({ k, ico, nome, gastoL, recL, gasto: soma(gastoL), rec: soma(recL),
+          ant: k === 'cartao' ? anoAnt.cartao : anoAnt.reemb, antRDM: anoAnt.reembRDM, antRDA: anoAnt.reembRDA,
           gRDM: porTipo(gastoL, 'RDM'), gRDA: porTipo(gastoL, 'RDA'), rRDM: porTipo(recL, 'RDM'), rRDA: porTipo(recL, 'RDA') });
         return [aba('cartao', '💳', 'Cartão corporativo', cartaoN, recargasA), aba('reemb', '💵', 'CV reembolso', carteiraN, reembA)];
       })() : null;
@@ -861,11 +909,13 @@ window.Gestor = (() => {
       const ehContador = colab.role === 'contabilidade';
       const bal = (t, ico, gasto, rec, ant, tp) => {
         const sd = centavos(ant + rec - gasto);
+        const antAno = anoAnt ? anoAnt[tp] : 0;
         const miolo = `<span class="cdet-bal-ico">${ico}</span>
           <span class="cdet-bal-tipo">${t}</span>
           <span class="cdet-bal-val" title="Saldo acumulado até ${MESES_LONGO[mes-1]}">${brl(sd)}</span>
           <span class="cdet-bal-det">Saldo acumulado${acumOk ? '' : ' (histórico indisponível — só o mês)'}<br>
-            Anterior <b>${brl(centavos(ant))}</b> · Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>`;
+            ${acumOk ? `Saldo do ano anterior <b>${brl(antAno)}</b>` : 'Saldo do ano anterior: indisponível, fora da conta'}<br>
+            ${acumOk && mes > 1 ? `Meses anteriores de ${ano} <b>${brl(centavos(ant - antAno))}</b> · ` : ''}Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>`;
         const cor = `cdet-bal ${sd < 0 ? 'neg' : 'pos'}`;
         return acumOk ? planToque(`reg-${tp}`, `Ver a conta do saldo ${tp}`, `${miolo}<span class="ver">Ver a conta ›</span>`, cor) : `<div class="${cor}">${miolo}</div>`;
       };
@@ -927,29 +977,36 @@ window.Gestor = (() => {
           ${planLancamentos(rL)}
         </div>`;
       };
+      /* A conta aberta, uma parcela por linha; a primeira é sempre "Saldo do ano anterior" (04/11/2026). */
+      const planContaLinhas = linhas => linhas.map(([rot, v], i) => `<span class="cdet-plan-sep"${i === linhas.length - 1 ? ' style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(234,247,238,.3)"' : ''}><span style="min-width:0">${rot}</span><b style="margin-left:auto;flex:none">${brl(v)}</b></span>`).join('');
       const planSaldo = (a, t) => {
         const gL = a.gastoL.filter(x => x.tipo === t), rL = a.recL.filter(x => x.tipo === t);
+        const antT = t === 'RDM' ? a.antRDM : a.antRDA;
         return planContaHTML(`${a.k}-saldo-${t}`, `Saldo ${t} em ${ano}`,
-          `Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(centavos(soma(rL) - soma(gL)))}</b>`, gL, rL, planPag(a), t);
+          planContaLinhas([['Saldo do ano anterior', antT], [`+ Recebido em ${ano}`, soma(rL)], [`− Gasto em ${ano}`, soma(gL)], [`= Saldo ${t}`, centavos(antT + soma(rL) - soma(gL))]]), gL, rL, planPag(a), t);
       };
       /* Regime RDM/RDA (03/11/2026, pedido do Cleiton sobre o print): os cartões do saldo abrem a mesma conta, até o mês aberto. */
       const regSaldo = (t, gasto, rec, ant) => {
         const doPeriodo = o => Number(o.ano) === Number(ano) && chave(o) <= kAberto;
         return planContaHTML(`reg-${t}`, `Saldo ${t} até ${MESES[mes - 1]} de ${ano}`,
-          `Anterior <b>${brl(centavos(ant))}</b> + Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b> = <b>${brl(centavos(ant + rec - gasto))}</b>`,
+          planContaLinhas([['Saldo do ano anterior', anoAnt[t]], ...(mes > 1 ? [[`+ Meses anteriores de ${ano}`, centavos(ant - anoAnt[t])]] : []),
+            [`+ Recebido em ${MESES[mes - 1]}`, rec], [`− Gasto em ${MESES[mes - 1]}`, gasto], [`= Saldo ${t}`, centavos(ant + rec - gasto)]]),
           histNotas.filter(n => doPeriodo(n) && n.tipo === t && n.pagamento !== 'empresa'),
           histReps.filter(x => doPeriodo(x) && x.tipo === t && recebido(x) && !ehRecargaR(x)), '', t);
       };
       const planLinha = (t, v) => `<span class="cdet-plan-sep"><span>${t}</span><b>${brl(v)}</b></span>`;
       const planToque = (painel, titulo, miolo, classe = '') => `<button type="button" class="cdet-plan-toque ${classe}" data-painel="${painel}" aria-expanded="false" title="${titulo}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">${miolo}</button>`;
       const planAbaHTML = a => {
-        const sd = centavos(a.rec - a.gasto), reemb = a.k === 'reemb';
-        const sdT = t => centavos(t === 'RDM' ? a.rRDM - a.gRDM : a.rRDA - a.gRDA);
+        const sd = centavos(a.ant + a.rec - a.gasto), reemb = a.k === 'reemb';
+        const sdT = t => centavos(t === 'RDM' ? a.antRDM + a.rRDM - a.gRDM : a.antRDA + a.rRDA - a.gRDA);
         const linhaSaldo = t => planToque(`${a.k}-saldo-${t}`, `Ver a conta do saldo ${t}`,
           `<span>${t}</span><b>${brl(sdT(t))}</b><i aria-hidden="true">›</i>`, `cdet-plan-sep ${sdT(t) < -0.004 ? 'neg' : ''}`);
         return `<div class="cdet-plan-aba">
             <div class="cdet-plan-tit">${a.ico} ${a.nome} · ${ano}</div>
             <div class="cdet-plan-grade">
+              <div class="cdet-plan-cel ${a.ant < -0.004 ? 'neg' : ''}"><span class="l">Saldo do ano anterior</span><b>${brl(a.ant)}</b>${reemb
+                ? `${planLinha('RDM', a.antRDM)}${planLinha('RDA', a.antRDA)}`
+                : ''}<span class="d">tudo até dezembro de ${ano - 1}${sentidoSaldo(a.ant) ? ` · ${sentidoSaldo(a.ant)}` : ''}</span></div>
               ${planToque(`${a.k}-gasto`, 'Ver os lançamentos deste valor',
                 `<span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b>${reemb
                   ? `${planLinha('RDM', a.gRDM)}${planLinha('RDA', a.gRDA)}`
@@ -958,7 +1015,7 @@ window.Gestor = (() => {
                 `<span class="l">Total recebido</span><b>${brl(a.rec)}</b><span class="d">RDM ${brl(a.rRDM)} · RDA ${brl(a.rRDA)}</span><span class="ver">Ver lançamentos ›</span>`, 'cdet-plan-cel')}
               <div class="cdet-plan-cel ${sd < -0.004 ? 'neg' : ''}"><span class="l">Saldo</span><b>${brl(sd)}</b>${reemb
                 ? `${linhaSaldo('RDM')}${linhaSaldo('RDA')}`
-                : ''}<span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'recebido − gasto'}</span></div>
+                : ''}<span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'anterior + recebido − gasto'}</span></div>
             </div>
             ${planGasto(a)}${planRecebido(a)}${reemb ? planSaldo(a, 'RDM') + planSaldo(a, 'RDA') : ''}
           </div>`;
@@ -1259,7 +1316,7 @@ window.Gestor = (() => {
     const nCV = collabs.filter(c => c.regime === 'cv').length;
     abrirSelecaoColabs({
       titulo: `Planilhas da equipe · ${ano}`,
-      dica: `Cada pessoa sai no modelo do seu regime: <b>💳 CV</b> → Planilha de C.V. (${nCV}); <b>💰 RDM/RDA</b> → Planilha de RDM e RDA (${collabs.length - nCV}). Quem não lançou nada em ${ano} começa desmarcado.`,
+      dica: `Cada pessoa sai no modelo do seu regime: <b>💳 CV</b> → Planilha de C.V. (${nCV}); <b>💰 RDM/RDA</b> → Planilha de RDM e RDA (${collabs.length - nCV}). Quem não lançou nada em ${ano} e não traz saldo do ano anterior começa desmarcado.`,
       comLanc: comLancAno, etiqueta: 'sem lançamento no ano', segundos: 15,
       botoes: [
         { label: '🗜️ ZIP separado', title: 'Um arquivo .xlsx completo por pessoa (+ Resumo_Geral)', modo: 'zip' },
@@ -1543,5 +1600,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { saldoAnoAnterior, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

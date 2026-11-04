@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Models\Nota;
-use App\Models\Repasse;
 use App\Services\FotoStorage;
 use App\Services\PastaModelo;
 use App\Services\RelatorioCv;
 use App\Services\RelatorioFaturamentoXlsx;
 use App\Services\RelatorioRdmRda;
+use App\Services\SaldoAnterior;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -87,79 +87,50 @@ class ArquivosController extends Controller
      * Arquivos). Mesma conta do app (_devedorDe, _gastoBolsoPorTipo, _cartaoPorTipo) e do PDF da equipe:
      *   RDM/RDA → gasto (sem Faturamento) − recebido confirmado, por tipo; a recarga do cartão fica fora;
      *   C.V.    → notas do bolso (pagamento=carteira) − repasse recebido; RDM/RDA mostram só a composição do bolso;
-     *   cartão  → recargas − gasto no cartão, no ANO (igual à planilha CV; negativo = empresa deve).
+     *   cartão  → saldo do ano anterior + recargas − gasto no cartão do ano (negativo = empresa deve). Até 04/11/2026
+     *             valia só o ano; agora acumula (SaldoAnterior).
+     *
+     * Campos *_anterior (04/11/2026): o que veio dos anos antes de $ano, já dentro do número sem o sufixo.
+     *   cartao_anterior  sinal de cartao_saldo: recebido − gasto, negativo = empresa deve;
+     *   rdm_anterior, rda_anterior, deve_anterior  sinal de deve: gasto − recebido, positivo = empresa deve. No C.V. são o
+     *   saldo do reembolso (bolso − repasse), não a composição bruta que rdm/rda mostram.
      *
      * @return array<string, array<string, mixed>>
      */
     private function saldosEquipe(int $ano, $colabs): array
     {
-        $k = $ano * 12 + 12;
-        $gastos = Nota::query()->where('deleted', false)->whereNotNull('user_id')
-            ->whereRaw('(ano * 12 + mes) <= ?', [$k])
-            ->selectRaw('user_id, tipo, pagamento, ano, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'pagamento', 'ano')->get();
-        $repasses = Repasse::query()->where('deleted', false)
-            ->whereRaw('(ano * 12 + mes) <= ?', [$k])
-            ->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', 'received'))
-            ->whereNotNull('confirmado_em')
-            ->selectRaw('user_id, tipo, destino, ano, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'destino', 'ano')->get();
-
-        $a = [];
-        foreach ($gastos as $g) {
-            $x = &$a[$g->user_id];
-            $x ??= ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
-            $v = (float) $g->v;
-            $t = $g->tipo;
-            if ($g->pagamento !== 'empresa') {
-                if (isset($x['gasto'][$t])) {
-                    $x['gasto'][$t] += $v;
-                }
-                if ($g->pagamento === 'carteira' && isset($x['bolso'][$t])) {
-                    $x['bolso'][$t] += $v;
-                }
-                if ($g->pagamento !== 'carteira' && (int) $g->ano === $ano) {
-                    $x['cartaoAno'] += $v;
-                }
-            }
-            unset($x);
-        }
-        foreach ($repasses as $r) {
-            $x = &$a[$r->user_id];
-            $x ??= ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
-            $v = (float) $r->v;
-            if ($r->destino === 'recarga') {
-                if ((int) $r->ano === $ano) {
-                    $x['recargaAno'] += $v;
-                }
-            } else {
-                $x['repassado'] += $v;
-                if (isset($x['recebido'][$r->tipo])) {
-                    $x['recebido'][$r->tipo] += $v;
-                }
-            }
-            unset($x);
-        }
+        $svc = app(SaldoAnterior::class);
+        $anteriores = $svc->deTodos($ano);
+        $acumulados = $svc->deTodos($ano + 1);   // tudo até dezembro de $ano
+        $contra = fn (float $v) => round(0.0 - $v, 2);   // vira o sinal sem criar -0.0
 
         $out = [];
         foreach ($colabs as $c) {
-            $x = $a[$c->id] ?? ['gasto' => ['RDM' => 0.0, 'RDA' => 0.0], 'bolso' => ['RDM' => 0.0, 'RDA' => 0.0], 'cartaoAno' => 0.0, 'recebido' => ['RDM' => 0.0, 'RDA' => 0.0], 'repassado' => 0.0, 'recargaAno' => 0.0];
+            $p = $anteriores[$c->id] ?? SaldoAnterior::zerado();
+            $x = $acumulados[$c->id] ?? SaldoAnterior::zerado();
             if ($c->usaCartao()) {
-                $bolso = $x['bolso']['RDM'] + $x['bolso']['RDA'];
                 $out[$c->id] = [
                     'cv' => true,
-                    'deve' => round($bolso - $x['repassado'], 2),
-                    'rdm' => round($x['bolso']['RDM'], 2), 'rda' => round($x['bolso']['RDA'], 2),
-                    'cartao_gasto' => round($x['cartaoAno'], 2), 'cartao_saldo' => round($x['recargaAno'] - $x['cartaoAno'], 2),
-                    'carteira' => round($bolso, 2),
+                    'deve' => $contra($x['reembolso']['RDM'] + $x['reembolso']['RDA']),
+                    'deve_anterior' => $contra($p['reembolso']['RDM'] + $p['reembolso']['RDA']),
+                    'rdm' => $x['bolso']['RDM'], 'rda' => $x['bolso']['RDA'],
+                    'rdm_anterior' => $contra($p['reembolso']['RDM']), 'rda_anterior' => $contra($p['reembolso']['RDA']),
+                    'cartao_gasto' => round($x['cartao_gasto'] - $p['cartao_gasto'], 2),
+                    'cartao_saldo' => $x['cartao'], 'cartao_anterior' => $p['cartao'],
+                    'carteira' => round($x['bolso']['RDM'] + $x['bolso']['RDA'], 2),
                 ];
             } else {
-                $rdm = $x['gasto']['RDM'] - $x['recebido']['RDM'];
-                $rda = $x['gasto']['RDA'] - $x['recebido']['RDA'];
+                $rdm = $contra($x['saldo']['RDM']);
+                $rda = $contra($x['saldo']['RDA']);
+                $rdmAntes = $contra($p['saldo']['RDM']);
+                $rdaAntes = $contra($p['saldo']['RDA']);
                 $out[$c->id] = [
                     'cv' => false,
                     /* RDM e RDA são independentes (como no PDF da equipe): crédito de um não paga a dívida do outro */
                     'deve' => round(max(0, $rdm) + max(0, $rda), 2),
-                    'rdm' => round($rdm, 2), 'rda' => round($rda, 2),
-                    'cartao_gasto' => null, 'cartao_saldo' => null,
+                    'deve_anterior' => round(max(0, $rdmAntes) + max(0, $rdaAntes), 2),
+                    'rdm' => $rdm, 'rda' => $rda, 'rdm_anterior' => $rdmAntes, 'rda_anterior' => $rdaAntes,
+                    'cartao_gasto' => null, 'cartao_saldo' => null, 'cartao_anterior' => null,
                     'carteira' => round($x['gasto']['RDM'] + $x['gasto']['RDA'], 2),
                 ];
             }

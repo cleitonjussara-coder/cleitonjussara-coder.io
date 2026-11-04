@@ -107,8 +107,9 @@ class RelatorioCv
             $bd->setCellValue('B13', str_replace('RECARGA ALELO', self::ROTULO_RECARGA, $rotulo));
             $bd->getStyle('B13')->getAlignment()->setShrinkToFit(true);
         }
-        $reps = Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
-            ->where('kind', 'received')->whereNotNull('confirmado_em')->orderBy('data')->get();
+        /* 04/11/2026: mesma regra de recebido do saldo anterior, para o ano não somar diferente dos anos passados */
+        $reps = SaldoAnterior::recebidos(Repasse::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano))
+            ->when(! $c->usaCartao(), fn ($q) => SaldoAnterior::semRecarga($q))->orderBy('data')->get();
         /* RDM/RDA (19/09/2026): repasse RECEBIDO entra nas duas colunas —
            "EXTRATO DE VALOR RECEBIDO" (B/C), que alimenta o saldo de C.V., e
            "REEMBOLSO DE / TOTAL PAGO" (I/J).
@@ -142,10 +143,42 @@ class RelatorioCv
         }
 
         $this->abrirTotalRecebido($ss);
+        $this->escreverSaldoAnterior($c, $ano, $bd);
 
         $ss->setActiveSheetIndex(0);
 
         return $ss;
+    }
+
+    /**
+     * "Saldo do ano anterior" no BANCO DE DADOS (04/11/2026), em células livres do modelo, sem deslocar nada:
+     *   I6:J7 cartão, ao lado do quadro B:D (F:H ficam ocultas no modelo; o logo ocupa A1:E4). B11 passa a somar I7;
+     *   I12/J12 e L12/M12 reembolso RDM e RDA, logo acima de cada "REEMBOLSO DE:", que desconta J12/M12 (separarReembolso).
+     * Fora do C.V. não há cartão: I7 traz RDM + RDA, porque ali o extrato B/C recebe os dois.
+     */
+    private function escreverSaldoAnterior(Colaborador $c, int $ano, \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $bd): void
+    {
+        $svc = app(SaldoAnterior::class);
+        $saldo = $svc->de($c, $ano);
+        $tipos = $svc->porTipo($c, $saldo);
+
+        $bd->mergeCells('I6:J6');
+        $bd->mergeCells('I7:J7');
+        foreach (['B6' => 'I6', 'D6' => 'J6', 'B7' => 'I7', 'D7' => 'J7'] as $de => $para) {
+            $bd->duplicateStyle($bd->getStyle($de), $para);
+        }
+        $bd->setCellValue('I6', SaldoAnterior::ROTULO.($c->usaCartao() ? ' (CARTÃO)' : ''));
+        $bd->setCellValue('I7', $c->usaCartao() ? $saldo['cartao'] : round($tipos['RDM'] + $tipos['RDA'], 2));
+        $bd->setCellValue('B11', '=B7+I7-B9');
+
+        foreach ([['I', 'J', 'RDM'], ['L', 'M', 'RDA']] as [$rotulo, $valor, $tipo]) {
+            $bd->duplicateStyle($bd->getStyle("{$rotulo}13"), "{$rotulo}12");
+            $bd->duplicateStyle($bd->getStyle("{$valor}13"), "{$valor}12");
+            $bd->getStyle("{$rotulo}12")->getAlignment()->setWrapText(true)->setVertical('center');
+            $bd->getStyle("{$valor}12")->getAlignment()->setVertical('center');
+            $bd->setCellValue("{$rotulo}12", SaldoAnterior::ROTULO.' '.$tipo);
+            $bd->setCellValue("{$valor}12", $tipos[$tipo]);
+        }
     }
 
     /**
@@ -170,9 +203,10 @@ class RelatorioCv
             $colunas
         ))).')';
         $bd->setCellValue('I13', 'REEMBOLSO RDM DE:');
-        $bd->setCellValue('J13', '='.$gasto(['D', 'H', 'P']).'-J95');
+        /* 04/11/2026: J12/M12 = saldo do ano anterior (recebido − gasto); negativo aumenta o que falta reembolsar */
+        $bd->setCellValue('J13', '='.$gasto(['D', 'H', 'P']).'-J95-J12');
         $bd->setCellValue('L13', 'REEMBOLSO RDA DE:');
-        $bd->setCellValue('M13', '='.$gasto(['L']).'-M95');
+        $bd->setCellValue('M13', '='.$gasto(['L']).'-M95-M12');
         $bd->setCellValue('L14', 'DATA');
         $bd->setCellValue('M14', 'R$');
         $bd->setCellValue('I95', 'TOTAL PAGO RDM');
@@ -197,14 +231,17 @@ class RelatorioCv
      *
      * O SALDO do modelo era "=D2-H2", células vazias de rótulos mesclados: dava sempre R$ 0,00. Vira recebido − gasto,
      * como o "SALDO DE C.V. RECEBIDO" do BANCO DE DADOS e como o PDF (negativo = a empresa ainda deve).
+     *
+     * 04/11/2026: a linha 1 abre "SALDO DO ANO ANTERIOR" bem acima do SALDO (L1:O1 e P1), que passa a somá-lo. A linha 2 está
+     * cheia e o título mesclado A1:P1 encolhe para A1:J1 (K é oculta). Os valores vêm do BANCO DE DADOS, um número só.
      */
     private function abrirTotalRecebido(Spreadsheet $ss): void
     {
         $abas = [
-            [$this->abaDoCartao($ss), "='BANCO DE DADOS'!C95"],
-            [$ss->getSheetByName('CV REEMBOLSO'), "='BANCO DE DADOS'!J96"],
+            [$this->abaDoCartao($ss), "='BANCO DE DADOS'!C95", "='BANCO DE DADOS'!I7"],
+            [$ss->getSheetByName('CV REEMBOLSO'), "='BANCO DE DADOS'!J96", "='BANCO DE DADOS'!J12+'BANCO DE DADOS'!M12"],
         ];
-        foreach ($abas as [$ws, $recebido]) {
+        foreach ($abas as [$ws, $recebido, $anterior]) {
             /* só mexe se o modelo for o que conhecemos (rótulo em G2): outro layout fica como está */
             if (! $ws || (string) $ws->getCell('G2')->getValue() !== 'TOTAL RECEBIDO') {
                 continue;
@@ -215,7 +252,16 @@ class RelatorioCv
             $ws->getStyle('J2')->getNumberFormat()->setFormatCode('"R$"\\ #,##0.00');   // o mesmo formato dos outros valores
             $ws->setCellValue('J2', $recebido);
             $ws->setCellValue('K2', null);
-            $ws->setCellValue('P2', '=J2-F2');
+
+            $ws->unmergeCells('A1:P1');
+            $ws->mergeCells('A1:J1');
+            $ws->mergeCells('L1:O1');
+            foreach (['L', 'M', 'N', 'O', 'P'] as $col) {
+                $ws->duplicateStyle($ws->getStyle("{$col}2"), "{$col}1");
+            }
+            $ws->setCellValue('L1', SaldoAnterior::ROTULO);
+            $ws->setCellValue('P1', $anterior);
+            $ws->setCellValue('P2', '=P1+J2-F2');
         }
     }
 
@@ -375,8 +421,14 @@ class RelatorioCv
                 $gMes[$n->user_id][$m] += $v;
                 $mCat[$m][$c] += $v;
             });
-        Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)->where('kind', 'received')->whereNotNull('confirmado_em')
-            ->select('user_id', 'valor', 'mes')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes) {
+        /* 04/11/2026: no C.V. o Recebido daqui junta recarga e reembolso; no RDM/RDA a recarga é do cartão e fica fora, como em
+           gerar(), senão o Saldo não fecha com a planilha da pessoa nem com Arquivos */
+        $usaCartao = $colabs->mapWithKeys(fn ($c) => [$c->id => $c->usaCartao()]);
+        SaldoAnterior::recebidos(Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano))
+            ->select('user_id', 'valor', 'mes', 'destino')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes, $usaCartao) {
+                if ($r->destino === 'recarga' && ! $usaCartao[$r->user_id]) {
+                    return;
+                }
                 $m = (int) $r->mes;
                 $rec[$r->user_id] += (float) $r->valor;
                 if ($m >= 1 && $m <= 12) {
@@ -404,7 +456,7 @@ class RelatorioCv
         $ws->getStyle([1, $r])->applyFromArray(['font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => $verde]]]);
         $r++;
         $ws->mergeCells([1, $r, 14, $r]);
-        $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · Saldo = Recebido − Total gasto (negativo = a reembolsar)', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i')));
+        $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · Saldo = Saldo do ano anterior + Recebido − Total gasto (negativo = a reembolsar)', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i')));
         $ws->getStyle([1, $r])->getFont()->setItalic(true)->setSize(10)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF666666'));
         $r += 2;
 
@@ -413,7 +465,9 @@ class RelatorioCv
         $ws->setCellValue([1, $r], '1 · POR COLABORADOR');
         $ws->getStyle([1, $r])->applyFromArray($titulo);
         $r++;
-        $cab = array_merge(['Colaborador'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo']);
+        /* 04/11/2026: a coluna do saldo trazido entra antes do Saldo, que passa a somá-la. Aqui o Recebido junta recarga e
+           reembolso, então o anterior é o total da pessoa: cartão + reembolso no C.V. */
+        $cab = array_merge(['Colaborador'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo do ano anterior', 'Saldo']);
         foreach ($cab as $i => $h) {
             $ws->setCellValue([$i + 1, $r], $h);
         }
@@ -424,9 +478,13 @@ class RelatorioCv
         $ini1 = $r;
         $totCat = array_fill_keys(array_keys($cats), 0.0);
         $totRec = 0.0;
+        $totAnt = 0.0;
+        $svcSaldo = app(SaldoAnterior::class);
+        $anteriores = $svcSaldo->deTodos($ano, $ids);
         foreach ($colabs as $c) {
             $id = $c->id;
             $gasto = array_sum($gCat[$id]);
+            $ant = $svcSaldo->total($c, $anteriores[$id] ?? SaldoAnterior::zerado());
             $ws->setCellValue([1, $r], $nomeColab($c));
             $i = 2;
             foreach (array_keys($cats) as $k) {
@@ -435,8 +493,10 @@ class RelatorioCv
             }
             $ws->setCellValue([$i++, $r], round($gasto, 2));
             $ws->setCellValue([$i++, $r], round($rec[$id], 2));
-            $ws->setCellValue([$i, $r], round($rec[$id] - $gasto, 2));
+            $ws->setCellValue([$i++, $r], $ant);
+            $ws->setCellValue([$i, $r], round($ant + $rec[$id] - $gasto, 2));
             $totRec += $rec[$id];
+            $totAnt += $ant;
             $r++;
         }
         $fim1 = $r - 1;
@@ -448,7 +508,8 @@ class RelatorioCv
         $totGasto = array_sum($totCat);
         $ws->setCellValue([$i++, $r], round($totGasto, 2));
         $ws->setCellValue([$i++, $r], round($totRec, 2));
-        $ws->setCellValue([$i, $r], round($totRec - $totGasto, 2));
+        $ws->setCellValue([$i++, $r], round($totAnt, 2));
+        $ws->setCellValue([$i, $r], round($totAnt + $totRec - $totGasto, 2));
         $ws->getStyle([1, $ini1, count($cab), $fim1])->applyFromArray($cel);
         $ws->getStyle([1, $r, count($cab), $r])->applyFromArray($tot);
         $ws->getStyle([2, $ini1, count($cab), $r])->getNumberFormat()->setFormatCode($brl);
@@ -480,6 +541,10 @@ class RelatorioCv
             $ws->setCellValue([$i, $r], round($recMes[$m] - $gasto, 2));
             $r++;
         }
+        /* a linha entra na soma do TOTAL GERAL da coluna Saldo, que assim fecha com o quadro 1 */
+        $ws->setCellValue([1, $r], 'Saldo do ano anterior');
+        $ws->setCellValue([count($cab2), $r], round($totAnt, 2));
+        $r++;
         $ws->setCellValue([1, $r], 'TOTAL GERAL');
         for ($c = 2; $c <= count($cab2); $c++) {
             $L = $colL($c);
