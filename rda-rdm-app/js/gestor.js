@@ -329,19 +329,20 @@ window.Gestor = (() => {
     const vale = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual;
     const f = vale ? _filtroNotas.tipo : null;
     const tp = vale ? _filtroNotas.tp || null : null;
-    const rot = f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : '';
+    const ativo = !!(f || tp);   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
+    const rot = f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : tp || '';
     const cards = [...document.querySelectorAll('#notas-list .nota-card')];
-    cards.forEach(c => { c.style.display = (!f || (c.dataset.pag === f && (!tp || c.dataset.tipo === tp))) ? '' : 'none'; });
+    cards.forEach(c => { c.style.display = ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp)) ? '' : 'none'; });
     document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', !tp && k.dataset.filtro === f));
     document.querySelectorAll('#cdet-filtros-notas [data-fn]').forEach(c => {
-      const on = c.dataset.fn === (f ? `${f}:${tp || ''}` : 'todas');
+      const on = c.dataset.fn === (ativo ? `${f || ''}:${tp || ''}` : 'todas');
       c.classList.toggle('btn-primary', on); c.classList.toggle('btn-outline', !on);
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     const info = document.getElementById('cdet-filtro-info');
     if (info) {
-      info.style.display = f ? 'flex' : 'none';
-      if (f) {
+      info.style.display = ativo ? 'flex' : 'none';
+      if (ativo) {
         const n = cards.filter(c => c.style.display !== 'none').length;
         info.querySelector('.txt').textContent = !cards.length ? 'Nenhuma nota neste mês.'
           : !n ? `Nenhuma nota de ${rot} neste mês.`
@@ -354,7 +355,7 @@ window.Gestor = (() => {
      (ou "Mostrar todas") volta à lista inteira. Os botões já estão na lista: só os cartões do resumo rolam até ela. */
   function filtrarNotas(tipo, tp = null) {
     const atual = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas : null;
-    if (!tipo || (atual && atual.tipo === tipo && (atual.tp || null) === tp)) _filtroNotas = null;
+    if ((!tipo && !tp) || (atual && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
     else _filtroNotas = { chave: _chaveFichaAtual, tipo, tp };
     _aplicarFiltroNotas();
     if (_filtroNotas && !tp) irParaNotas();
@@ -946,16 +947,19 @@ window.Gestor = (() => {
       if (!ehContador) {
       const _podeSelNotas = podeEditar && notas.length && typeof selNotasBarraHTML === 'function';
       html += `<div class="section-hd" id="cdet-notas" style="flex-wrap:wrap;gap:8px 12px"><span>🧾 Notas · ${notas.length}</span><button class="btn btn-sm btn-outline" title="Voltar ao topo" aria-label="Voltar ao topo" onclick="Gestor.irParaTopoFicha()">↑ Topo</button>${_podeSelNotas ? `<button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>` : ''}</div>`;
-      if (ehCVcolab && notas.length) {
-        /* 03/11/2026 (pedido do Cleiton sobre o print): RDM e RDA de carteira e de cartão. Mesma regra do data-pag do cartão da nota. */
+      if (notas.length) {
+        /* 03/11/2026 (pedido do Cleiton sobre o print): C.V. tem RDM e RDA de carteira e de cartão, com a mesma regra do data-pag do
+           cartão da nota; o regime RDM/RDA não tem carteira nem cartão, então filtra só pelo grupo. */
         const _pagDe = n => (n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao');
         const _chipN = (pag, tp, rot) => `<button type="button" class="btn btn-sm btn-outline" data-fn="${pag}:${tp}" aria-pressed="false" onclick="Gestor.filtrarNotas('${pag}','${tp}')">${rot} ${notas.filter(n => _pagDe(n) === pag && n.tipo === tp).length}</button>`;
         html += `<div id="cdet-filtros-notas" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;padding:0 6px">
           <button type="button" class="btn btn-sm btn-outline" data-fn="todas" aria-pressed="false" onclick="Gestor.filtrarNotas(null)">Todas ${notas.length}</button>
-          ${_chipN('carteira', 'RDM', '💵 RDM Carteira')}${_chipN('carteira', 'RDA', '💵 RDA Carteira')}${_chipN('cartao', 'RDM', '💳 RDM Cartão')}${_chipN('cartao', 'RDA', '💳 RDA Cartão')}
+          ${ehCVcolab
+            ? `${_chipN('carteira', 'RDM', '💵 RDM Carteira')}${_chipN('carteira', 'RDA', '💵 RDA Carteira')}${_chipN('cartao', 'RDM', '💳 RDM Cartão')}${_chipN('cartao', 'RDA', '💳 RDA Cartão')}`
+            : ['RDM', 'RDA'].map(t => `<button type="button" class="btn btn-sm btn-outline" data-fn=":${t}" aria-pressed="false" onclick="Gestor.filtrarNotas(null,'${t}')">${t} ${notas.filter(n => n.tipo === t).length}</button>`).join('')}
         </div>`;
       }
-      if (ehCVcolab) html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
+      html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
       if (!notas.length) {
         html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
       } else if (typeof cardNotaHTML === 'function') {
