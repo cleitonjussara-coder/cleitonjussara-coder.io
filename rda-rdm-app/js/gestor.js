@@ -331,12 +331,13 @@ window.Gestor = (() => {
     const f = vale ? _filtroNotas.tipo : null;
     const tp = vale ? _filtroNotas.tp || null : null;
     const ativo = !!(f || tp);   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
-    const rot = f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : tp || '';
+    const semEmp = !!(vale && _filtroNotas.semEmpresa);   // veio do gasto do mês no regime RDM/RDA: o valor não conta o Faturamento
+    const rot = f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : `${tp || ''}${semEmp ? ' sem Faturamento' : ''}`;
     const cards = [...document.querySelectorAll('#notas-list .nota-card')];
-    cards.forEach(c => { c.style.display = ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp)) ? '' : 'none'; });
+    cards.forEach(c => { c.style.display = ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp) && (!semEmp || c.dataset.pag !== 'empresa')) ? '' : 'none'; });
     document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', !tp && k.dataset.filtro === f));
     document.querySelectorAll('#cdet-filtros-notas [data-fn]').forEach(c => {
-      const on = c.dataset.fn === (ativo ? `${f || ''}:${tp || ''}` : 'todas');
+      const on = !semEmp && c.dataset.fn === (ativo ? `${f || ''}:${tp || ''}` : 'todas');
       c.classList.toggle('btn-primary', on); c.classList.toggle('btn-outline', !on);
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
@@ -356,7 +357,7 @@ window.Gestor = (() => {
      (ou "Mostrar todas") volta à lista inteira. Os botões já estão na lista: só os cartões do resumo rolam até ela. */
   function filtrarNotas(tipo, tp = null) {
     const atual = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas : null;
-    if ((!tipo && !tp) || (atual && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
+    if ((!tipo && !tp) || (atual && !atual.semEmpresa && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
     else _filtroNotas = { chave: _chaveFichaAtual, tipo, tp };
     _aplicarFiltroNotas();
     if (_filtroNotas && !tp) irParaNotas();
@@ -369,7 +370,7 @@ window.Gestor = (() => {
     const [id, ano, aberto] = String(_chaveFichaAtual).split('|');
     const m = Number(mes), mesAberto = Number(aberto);
     if (!id || !m) return;
-    _filtroNotas = { chave: `${id}|${ano}|${m}`, tipo: pag, tp: tp || null };
+    _filtroNotas = { chave: `${id}|${ano}|${m}`, tipo: pag || null, tp: tp || null, semEmpresa: !pag };   // regime RDM/RDA não tem carteira nem cartão
     if (m === mesAberto) { _aplicarFiltroNotas(); irParaNotas(); return; }
     _rolarParaNotas = true;
     irParaMesEquipe(m, Number(ano));   // destino absoluto: o mês global pode já não ser o da ficha pintada
@@ -816,14 +817,16 @@ window.Gestor = (() => {
       const podeEditar = currentUser.role === 'admin' || currentUser.role === 'gestor';
       /* o Contador só visualiza e baixa relatórios: a ficha dele traz só os dados da pessoa (14/10/2026) */
       const ehContador = colab.role === 'contabilidade';
-      const bal = (t, ico, gasto, rec, ant) => `
-        <div class="cdet-bal ${ant + rec - gasto < 0 ? 'neg' : 'pos'}">
-          <span class="cdet-bal-ico">${ico}</span>
+      const bal = (t, ico, gasto, rec, ant, tp) => {
+        const sd = centavos(ant + rec - gasto);
+        const miolo = `<span class="cdet-bal-ico">${ico}</span>
           <span class="cdet-bal-tipo">${t}</span>
-          <span class="cdet-bal-val" title="Saldo acumulado até ${MESES_LONGO[mes-1]}">${brl(ant + rec - gasto)}</span>
+          <span class="cdet-bal-val" title="Saldo acumulado até ${MESES_LONGO[mes-1]}">${brl(sd)}</span>
           <span class="cdet-bal-det">Saldo acumulado${acumOk ? '' : ' (histórico indisponível — só o mês)'}<br>
-            Anterior <b>${brl(ant)}</b> · Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>
-        </div>`;
+            Anterior <b>${brl(centavos(ant))}</b> · Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>`;
+        const cor = `cdet-bal ${sd < 0 ? 'neg' : 'pos'}`;
+        return acumOk ? planToque(`reg-${tp}`, `Ver a conta do saldo ${tp}`, `${miolo}<span class="ver">Ver a conta ›</span>`, cor) : `<div class="${cor}">${miolo}</div>`;
+      };
       const acumTotal = antRDM + antRDA + saldo;
 
       /* Detalhe da faixa C.V. (03/11/2026, pedido do Cleiton sobre o print): tocar em Total recebido lista os lançamentos que
@@ -855,21 +858,33 @@ window.Gestor = (() => {
           <div class="cdet-plan-det-tit">${a.k === 'cartao' ? 'Recargas lançadas' : 'Reembolsos lançados'} em ${ano} · ${a.recL.length}</div>
           ${planLancamentos(a.recL)}
         </div>`;
-      const planSaldo = (a, t) => {
-        const gL = a.gastoL.filter(x => x.tipo === t), rL = a.recL.filter(x => x.tipo === t);
+      const planContaHTML = (painel, titulo, conta, gL, rL, pag, t) => {
         const meses = [...new Set([...gL, ...rL].map(x => Number(x.mes)))].sort((p, q) => p - q);
         const doMes = (arr, m) => soma(arr.filter(x => Number(x.mes) === m));
-        return `<div class="cdet-plan-det" data-painel="${a.k}-saldo-${t}" hidden>
-          <div class="cdet-plan-det-tit">Saldo ${t} em ${ano}</div>
-          <div class="cdet-plan-conta">Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(centavos(soma(rL) - soma(gL)))}</b></div>
+        return `<div class="cdet-plan-det" data-painel="${painel}" hidden>
+          <div class="cdet-plan-det-tit">${titulo}</div>
+          <div class="cdet-plan-conta">${conta}</div>
           ${meses.length ? `<table class="cdet-plan-meses"><thead><tr><th>Mês</th><th>Gasto</th><th>Recebido</th></tr></thead><tbody>
             ${meses.map(m => `<tr><td>${MESES[m - 1]}</td><td>${doMes(gL, m) > 0.004
-              ? `<button type="button" class="cdet-plan-mes" title="Abrir as notas ${t} de ${MESES[m - 1]}" data-pag="${planPag(a)}" data-tp="${t}" data-mes="${m}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">${brl(doMes(gL, m))} ›</button>`
+              ? `<button type="button" class="cdet-plan-mes" title="Abrir as notas ${t} de ${MESES[m - 1]}" data-pag="${pag}" data-tp="${t}" data-mes="${m}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">${brl(doMes(gL, m))} ›</button>`
               : brl(0)}</td><td>${brl(doMes(rL, m))}</td></tr>`).join('')}
           </tbody></table>` : ''}
           <div class="cdet-plan-det-tit">Recebido ${t} · ${rL.length}</div>
           ${planLancamentos(rL)}
         </div>`;
+      };
+      const planSaldo = (a, t) => {
+        const gL = a.gastoL.filter(x => x.tipo === t), rL = a.recL.filter(x => x.tipo === t);
+        return planContaHTML(`${a.k}-saldo-${t}`, `Saldo ${t} em ${ano}`,
+          `Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(centavos(soma(rL) - soma(gL)))}</b>`, gL, rL, planPag(a), t);
+      };
+      /* Regime RDM/RDA (03/11/2026, pedido do Cleiton sobre o print): os cartões do saldo abrem a mesma conta, até o mês aberto. */
+      const regSaldo = (t, gasto, rec, ant) => {
+        const doPeriodo = o => Number(o.ano) === Number(ano) && chave(o) <= kAberto;
+        return planContaHTML(`reg-${t}`, `Saldo ${t} até ${MESES[mes - 1]} de ${ano}`,
+          `Anterior <b>${brl(centavos(ant))}</b> + Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b> = <b>${brl(centavos(ant + rec - gasto))}</b>`,
+          histNotas.filter(n => doPeriodo(n) && n.tipo === t && n.pagamento !== 'empresa'),
+          histReps.filter(x => doPeriodo(x) && x.tipo === t && recebido(x) && !ehRecargaR(x)), '', t);
       };
       const planLinha = (t, v) => `<span class="cdet-plan-sep"><span>${t}</span><b>${brl(v)}</b></span>`;
       const planToque = (painel, titulo, miolo, classe = '') => `<button type="button" class="cdet-plan-toque ${classe}" data-painel="${painel}" aria-expanded="false" title="${titulo}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">${miolo}</button>`;
@@ -952,7 +967,8 @@ window.Gestor = (() => {
 
         ${acumOk && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
         ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(planAbaHTML).join('')}</div>`
-        : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM)}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA)}</div>`}
+        : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM, 'RDM')}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA, 'RDA')}</div>
+          ${acumOk ? `<div class="cdet-bals-det">${regSaldo('RDM', g('RDM'), r('RDM'), antRDM)}${regSaldo('RDA', g('RDA'), r('RDA'), antRDA)}</div>` : ''}`}
         ${pagoEmpresaMes ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaMes)}</b> <span style="color:var(--text2)">(já incluso no Faturamento acima, não entra no saldo)</span></div>` : ''}
 
         <div class="dash-card">
