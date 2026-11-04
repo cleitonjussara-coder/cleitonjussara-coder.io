@@ -6,6 +6,7 @@ use App\Models\Nota;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use League\Flysystem\CorruptedPathDetected;
 use League\Flysystem\PathTraversalDetected;
@@ -79,17 +80,28 @@ class FotoStorage
     public function salvarPara(string $userId, string $notaId, UploadedFile $file, ?string $extHint = null): string
     {
         $ext = $this->extensaoDe($file, $extHint);
+        $final = "{$userId}/{$notaId}.{$ext}";
 
+        /* 04/11/2026: o novo é gravado ANTES de o antigo sair. Apagar primeiro perdia o comprovante se a gravação falhasse.
+           O nome temporário é único por envio (o app pode reenviar enquanto o primeiro corre) e nunca vale como anexo:
+           arquivoDaNota compara o nome exato e validarCaminho recusa o ponto inicial. A falha sobe (disco com throw) e o
+           app tenta de novo. */
+        $temp = "{$userId}/".self::TMP_PREFIXO."{$notaId}-".Str::random(8).".{$ext}";
+        try {
+            $this->disk()->putFileAs($userId, $file, basename($temp));
+            /* 23/09/2026: rede de segurança. O app novo já manda a foto em pé,
+               mas versão antiga (e qualquer outro cliente) manda o JPEG cru, com
+               a rotação só no EXIF — e aí PDF, ZIP e planilha saem deitados. */
+            $this->endireitar($temp);
+            $this->disk()->move($temp, $final);   // mesma extensão: troca o antigo de uma vez
+        } finally {
+            $this->apagar($temp);
+        }
         /* Troca de formato (jpg → pdf) não pode deixar o arquivo antigo para
            trás: o caminho muda e o velho viraria órfão para sempre. */
-        $this->apagarVersoesDe($userId, $notaId);
-        $this->disk()->putFileAs($userId, $file, "{$notaId}.{$ext}");
-        /* 23/09/2026: rede de segurança. O app novo já manda a foto em pé,
-           mas versão antiga (e qualquer outro cliente) manda o JPEG cru, com
-           a rotação só no EXIF — e aí PDF, ZIP e planilha saem deitados. */
-        $this->endireitar("{$userId}/{$notaId}.{$ext}");
+        $this->apagarVersoesDe($userId, $notaId, $final);
 
-        return "{$userId}/{$notaId}.{$ext}";
+        return $final;
     }
 
     /**
@@ -159,10 +171,22 @@ class FotoStorage
         $this->descartarEspera($this->pastaDe($nota), $nota->id);
     }
 
-    public function apagarVersoesDe(string $userId, string $notaId): void
+    /* 04/11/2026: temporário de quem morreu no meio da gravação. Com $manter (troca de anexo) só sai o velho, porque o recente
+       pode ser de outro envio em andamento; sem ele (anexo apagado) sai tudo. */
+    private const TMP_PREFIXO = '.tmp-';
+
+    private const TMP_VIDA_SEG = 3600;
+
+    /** $manter: a versão recém-gravada, que fica. A miniatura sai sempre: era da versão antiga. */
+    public function apagarVersoesDe(string $userId, string $notaId, ?string $manter = null): void
     {
         foreach ($this->disk()->files($userId) as $f) {
-            if (pathinfo($f, PATHINFO_FILENAME) === $notaId) {
+            if ($f === $manter) {
+                continue;
+            }
+            $temporario = str_starts_with(basename($f), self::TMP_PREFIXO."{$notaId}-");
+            if (pathinfo($f, PATHINFO_FILENAME) === $notaId
+                || ($temporario && ($manter === null || $this->disk()->lastModified($f) < time() - self::TMP_VIDA_SEG))) {
                 $this->disk()->delete($f);
             }
         }
@@ -204,8 +228,10 @@ class FotoStorage
             return null;
         }
         $final = "{$pasta}/".basename($arquivo);
-        $this->apagarVersoesDe($pasta, $notaId);
+        /* 04/11/2026: mesma regra de salvarPara, o antigo só sai com o novo no lugar. Se o move falhar, o erro sobe antes de a
+           nota ser gravada e os dois arquivos ficam onde estavam. */
         $this->disk()->move($arquivo, $final);
+        $this->apagarVersoesDe($pasta, $notaId, $final);
         $this->endireitar($final);
         try {
             $this->miniatura($final);

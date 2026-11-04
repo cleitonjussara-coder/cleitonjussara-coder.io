@@ -67,19 +67,6 @@ return [
             ]) : [],
         ],
 
-        /* Só para a migração (php artisan migrar:supabase): o Postgres do
-           Supabase, lido uma vez. Connection string em Project Settings >
-           Database (use a porta 5432, sessão, não o pooler 6543). */
-        'supabase' => [
-            'driver' => 'pgsql',
-            'url' => env('SUPABASE_DB_URL'),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => 'public,auth,storage',
-            'sslmode' => 'require',
-        ],
-
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

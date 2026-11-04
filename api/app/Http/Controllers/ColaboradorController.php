@@ -220,10 +220,21 @@ class ColaboradorController extends Controller
         abort_unless(mb_strtoupper(trim($d['confirmacao'])) === 'EXCLUIR', 422, 'Digite EXCLUIR para confirmar');
 
         /* executa */
-        $contagem = DB::transaction(function () use ($alvo) {
-            $notas = Nota::where('user_id', $alvo->id)->get();
-            foreach ($notas as $n) {
-                $this->fotos->apagarTodasVersoes($n);
+        $contagem = DB::transaction(function () use ($alvo, $u) {
+            /* 04/11/2026: sem lápide as cópias ficavam nos aparelhos da gestão para sempre (o sync incremental não vê linha
+               que sumiu). Vale também para a nota que já estava na lixeira. Em lotes pelo limite de variáveis do SQLite. */
+            $avisosDasNotas = 0;
+            $agora = now();
+            foreach (Nota::where('user_id', $alvo->id)->pluck('id')->chunk(200) as $lote) {
+                DB::table('notas_apagadas')->upsert(
+                    $lote->map(fn ($id) => ['id' => $id, 'user_id' => $alvo->id, 'apagada_por' => $u->id, 'apagada_em' => $agora])->values()->all(),
+                    ['id'],
+                    ['user_id', 'apagada_por', 'apagada_em'],
+                );
+                /* aviso em nome de outra pessoa (a nota mudou de dono depois) apontaria para nota que não existe mais */
+                if (\App\Models\AvisoCorrecao::tabelaExiste()) {
+                    $avisosDasNotas += \App\Models\AvisoCorrecao::whereIn('nota_id', $lote->all())->delete();
+                }
             }
             $c = [
                 'notas' => Nota::where('user_id', $alvo->id)->delete(),
@@ -231,17 +242,31 @@ class ColaboradorController extends Controller
                 'km' => KmRegistro::where('user_id', $alvo->id)->delete(),
                 'pontos' => Ponto::where('user_id', $alvo->id)->delete(),
                 'justificativas' => \App\Models\Justificativa::tabelaExiste() ? \App\Models\Justificativa::where('colaborador_id', $alvo->id)->delete() : 0,   // 19/10/2026
-                'avisos_correcao' => \App\Models\AvisoCorrecao::tabelaExiste() ? \App\Models\AvisoCorrecao::where('colaborador_id', $alvo->id)->delete() : 0,   // 24/10/2026
+                'avisos_correcao' => $avisosDasNotas + (\App\Models\AvisoCorrecao::tabelaExiste() ? \App\Models\AvisoCorrecao::where('colaborador_id', $alvo->id)->delete() : 0),   // 24/10/2026
             ];
+            /* 04/11/2026: a chave estrangeira já leva junto, mas só com ela ligada no SQLite (DB_FOREIGN_KEYS) */
+            \App\Models\PushSubscription::where('user_id', $alvo->id)->delete();
             Veiculo::where('responsavel_id', $alvo->id)->update(['responsavel_id' => null]);
             $alvo->tokens()->delete();
             $alvo->delete();
 
             return $c;
         });
-        /* pasta inteira do colaborador (perfil, km-*.jpg, miniaturas) */
+        /* Pasta do colaborador: anexos das notas, perfil, km-*.jpg, miniaturas e espera. 04/11/2026: os arquivos só saem depois
+           do commit; dentro da transação, uma falha voltava o banco com os comprovantes já perdidos. Nota que mudou de dono
+           segue com o anexo nesta pasta (o PUT não move o arquivo): esse fica, senão ela perde o comprovante sem volta. */
         try {
-            $this->fotos->disk()->deleteDirectory($alvo->id);
+            $disco = $this->fotos->disk();
+            $deOutros = Nota::where('foto_path', 'like', $alvo->id.'/%')->pluck('foto_path')->all();
+            $apagou = $deOutros === []
+                ? $disco->deleteDirectory($alvo->id)
+                : $disco->delete(array_values(array_diff($disco->allFiles($alvo->id), $deOutros)));
+            if (! $apagou) {
+                Log::warning('exclusão: pasta de fotos não apagada', ['alvo' => $alvo->id]);
+            }
+            if ($deOutros !== []) {
+                Log::warning('exclusão: anexos de notas de outros donos ficaram na pasta', ['alvo' => $alvo->id, 'arquivos' => count($deOutros)]);
+            }
         } catch (\Throwable $e) {
             Log::warning('exclusão: pasta de fotos não apagada: '.$e->getMessage());
         }

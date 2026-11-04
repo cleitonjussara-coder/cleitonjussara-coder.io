@@ -12,9 +12,10 @@ Regra de ouro: **teste primeiro, produção só depois de conferido e com o "sim
 1. `git status` e `git log -3`: o que sobe é o que está no **disco**. Se houver mudança que não é desta tarefa (sessão paralela), pare e avise antes de seguir.
 2. Os 3 marcadores de build (`APP_BUILD` em `js/app.js`, `CACHE` em `sw.js`, `?v=NNN` no `index.html`) sobem juntos com `node scripts/bump-build.js` (sem argumento = build atual + 1; `--ver` só confere). Nunca republique conteúdo diferente sob o mesmo número.
 3. A mudança altera a interação? Então a seção correspondente do `#ajuda-overlay` ("Como usar") em `index.html` foi atualizada no mesmo build.
-4. Mudou `composer.lock`? Use `--vendor`. Mudou schema? Há migração em `rda-rdm-app/migrations/` e ela será aplicada no passo certo.
+4. Mudou `composer.lock`? Use `--vendor`. Mudou schema? Há migração em `api/database/migrations/` (skill `migrar-banco`) e ela será aplicada no passo certo.
 5. Sintaxe: `node --check` nos JS alterados; `php -l` nos PHP (lembre que `php -l` não pega barra invertida comida — execute o código de verdade quando mexer em PHP com namespaces).
 6. Commit feito (mensagem `feat|fix(escopo): ... (build N)`).
+7. O `publicar.sh` roda sozinho o PHPUnit (alvo `api`/`tudo`) e `scripts/testar-sync-conflito.js` antes de enviar; falhou, nada sobe. `--sem-testes` só em emergência e com o usuário sabendo.
 
 ## 2. Homologação
 

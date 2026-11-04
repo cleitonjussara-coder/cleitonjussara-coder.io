@@ -5,7 +5,7 @@ description: Cria e aplica migrações de schema do banco SQLite da API Laravel 
 
 # Migrar o banco
 
-O banco é **SQLite** em arquivo na Locaweb (`~/api-petermann/database/database.sqlite`; homologação em `~/api-teste`). O Supabase foi aposentado: `rda-rdm-app/migrations/*.sql` e `supabase_setup.sql` são histórico, **não use**. Toda mudança de schema é uma migração Laravel em `api/database/migrations/`.
+O banco é **SQLite** em arquivo na Locaweb (`~/api-petermann/database/database.sqlite`; homologação em `~/api-teste`). O Supabase foi aposentado e o SQL antigo dele saiu do repositório em 04/11/2026. Toda mudança de schema é uma migração Laravel em `api/database/migrations/`.
 
 ## 1. Criar a migração
 

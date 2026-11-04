@@ -15,7 +15,6 @@ Guia de implantação e migração de dados: [`../MIGRACAO-LOCAWEB.md`](../MIGRA
 | Rotas | `routes/api.php` (tudo sob `/api`) |
 | Controllers | `app/Http/Controllers/` — Auth, Nota, Repasse, Colaborador, Foto, Cnpj |
 | Serviços | `app/Services/` — `FotoStorage` (anexos em disco), `RepasseEmailService` (Resend), `GoogleOAuth` |
-| Migração do Supabase | `app/Console/Commands/MigrarSupabase.php` → `php artisan migrar:supabase` |
 | Configuração própria | `config/petermann.php` (tudo vem do `.env`) |
 | Manutenção sem terminal | `AdminController` (status, migrar) e `BackupController` (cópia íntegra do SQLite via VACUUM INTO) — só admin |
 

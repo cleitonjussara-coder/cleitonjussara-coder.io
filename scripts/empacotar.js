@@ -167,7 +167,7 @@ function empacotarFotos() {
 
 function empacotarBanco() {
   const src = path.join(API, 'database/database.sqlite');
-  if (!fs.existsSync(src)) throw new Error('api/database/database.sqlite não existe — rode php artisan migrate + migrar:supabase');
+  if (!fs.existsSync(src)) throw new Error('api/database/database.sqlite não existe — rode php artisan migrate');
   const t = path.join(TMP, 'banco');
   limpar(t); fs.mkdirSync(path.join(t, 'database'), { recursive: true });
   const dst = path.join(t, 'database/database.sqlite');
@@ -178,7 +178,7 @@ function empacotarBanco() {
   const srcPhp = src.replace(/\\/g, '/').replace(/'/g, "\\'");
   execSync(`"${PHP}" -r "$p = new PDO('sqlite:${srcPhp}'); $p->exec(\\"VACUUM INTO '${dstPhp}'\\"); echo $p->query('select count(*) from colaboradores')->fetchColumn(), ' colaboradores, ', $p->query('select count(*) from notas')->fetchColumn(), ' notas, ', $p->query('select count(*) from repasses')->fetchColumn(), ' repasses';"`, { stdio: 'inherit' });
   const mb = (fs.statSync(dst).size / 1048576).toFixed(2);
-  console.log(`\nbanco: ${mb} MB — confira que é o MIGRADO (migrar:supabase), não o de teste`);
+  console.log(`\nbanco: ${mb} MB — confira que é o banco de verdade, não o de teste`);
   zipar(t, path.join(RAIZ, 'petermann-banco.zip'));
 }
 

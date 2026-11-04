@@ -2,11 +2,15 @@
 # ─────────────────────────────────────────────────────────────
 #  Publica o app e/ou a API na Locaweb (21/09/2026)
 #
-#    bash scripts/publicar.sh teste    [app|api|tudo] [--vendor]
-#    bash scripts/publicar.sh producao [app|api|tudo] [--vendor]
+#    bash scripts/publicar.sh teste    [app|api|tudo] [--vendor] [--sem-testes]
+#    bash scripts/publicar.sh producao [app|api|tudo] [--vendor] [--sem-testes]
 #
 #  Fluxo recomendado: teste → conferir em teste.pmservicosagronomicos.com.br
 #  → producao. O que sobe é o que está no disco (commit antes!).
+#
+#  Antes de enviar qualquer coisa roda os testes (PHPUnit se o alvo tem api, e
+#  testar-sync-conflito.js sempre). Falhou, para sem enviar. --sem-testes pula
+#  a checagem: só em emergência.
 #
 #  app  = node scripts/empacotar.js app → scp → unzip na pasta do subdomínio
 #  api  = tar de app/ bootstrap/ config/ database/migrations/ lang/ resources/
@@ -19,15 +23,61 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-AMB="${1:-}"; ALVO="${2:-tudo}"; VENDOR=0
-for a in "$@"; do [[ "$a" == "--vendor" ]] && VENDOR=1; done
-[[ "$ALVO" == "--vendor" ]] && ALVO=tudo
+VENDOR=0; SEM_TESTES=0; POS=()
+for a in "$@"; do
+  case "$a" in
+    --vendor)     VENDOR=1 ;;
+    --sem-testes) SEM_TESTES=1 ;;
+    *)            POS+=("$a") ;;
+  esac
+done
+AMB="${POS[0]:-}"; ALVO="${POS[1]:-tudo}"
 
+USO="uso: bash scripts/publicar.sh teste|producao [app|api|tudo] [--vendor] [--sem-testes]"
+case "$ALVO" in app|api|tudo) ;; *) echo "$USO"; exit 1 ;; esac
 case "$AMB" in
   teste)    API_DIR=api-teste;     APP_DIR=public_html/teste; WEB_API=public_html/api-petermann/public/teste; PING=https://api.pmservicosagronomicos.com.br/teste/api/ping; APP_URL=https://teste.pmservicosagronomicos.com.br/rda-rdm-app/ ;;
   producao) API_DIR=api-petermann; APP_DIR=public_html/app;   WEB_API=public_html/api-petermann/public;       PING=https://api.pmservicosagronomicos.com.br/api/ping;       APP_URL=https://app.pmservicosagronomicos.com.br/rda-rdm-app/ ;;
-  *) echo "uso: bash scripts/publicar.sh teste|producao [app|api|tudo] [--vendor]"; exit 1 ;;
+  *) echo "$USO"; exit 1 ;;
 esac
+
+# 04/11/2026: nada conferia os testes antes de subir; bug já pego pela suíte podia ir ao ar.
+# Fica aqui em cima, antes do primeiro envio, e qualquer falha encerra sem tocar no servidor.
+php_local() {
+  local winget="/c/Users/user/AppData/Local/Microsoft/WinGet/Packages/PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe/php.exe"
+  if [[ -n "${PHP_BIN:-}" ]]; then echo "$PHP_BIN"
+  elif [[ -x "$winget" ]]; then echo "$winget"   # o php do winget não está no PATH do Git Bash
+  elif command -v php >/dev/null 2>&1; then echo php
+  else return 1
+  fi
+}
+
+rodar_testes() {
+  if [[ "$ALVO" == "api" || "$ALVO" == "tudo" ]]; then
+    echo "▸ testes: PHPUnit"
+    local php
+    php=$(php_local) || { echo "  ✗ php não encontrado: nada foi enviado"; exit 1; }
+    # --configuration é obrigatório: sem ele o PHPUnit roda migrate:fresh no banco local.
+    if ! (cd api && DB_CONNECTION=sqlite DB_DATABASE=:memory: "$php" vendor/bin/phpunit --configuration phpunit.xml --no-progress); then
+      echo "  ✗ PHPUnit falhou: nada foi enviado"; exit 1
+    fi
+  fi
+  echo "▸ testes: sincronização"
+  if ! node scripts/testar-sync-conflito.js; then
+    echo "  ✗ testar-sync-conflito falhou: nada foi enviado"; exit 1
+  fi
+  echo "  ✔ testes passaram"
+}
+
+if [[ "$SEM_TESTES" == "1" ]]; then
+  echo "════════════════════════════════════════════════════════════"
+  echo "  ⚠⚠⚠  --sem-testes: PUBLICANDO SEM RODAR OS TESTES ($AMB)  ⚠⚠⚠"
+  echo "  Só em emergência. Rode os testes assim que der."
+  echo "════════════════════════════════════════════════════════════"
+else
+  rodar_testes
+fi
+
 SSH_OPTS=(-o Ciphers=aes256-ctr -o MACs=hmac-sha2-256 -o BatchMode=yes -o ConnectTimeout=25)
 HOST=locaweb
 BUILD=$(grep -o 'APP_BUILD = [0-9]*' rda-rdm-app/js/app.js | grep -o '[0-9]*')

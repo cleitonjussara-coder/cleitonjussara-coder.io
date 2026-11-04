@@ -637,9 +637,6 @@ window.GDrive = (() => {
   function isConnected()  { return !DESATIVADO && !!accessToken && Date.now() < tokenExpiry; }
   function isConfigured() { return !DESATIVADO && !CLIENT_ID.includes('SEU_CLIENT'); }
 
-  /* token + pasta expostos p/ o módulo Google Sheets (mesmo escopo 'drive') */
-  function getToken()    { _checkConnected(); return accessToken; }
-  function getFolderId() { return FOLDER_ID; }
   function minutosRestantes() {
     if (!isConnected()) return 0;
     return Math.max(0, Math.round((tokenExpiry - Date.now()) / 60000));
@@ -651,6 +648,5 @@ window.GDrive = (() => {
     uploadFotoComDados, listarFotasComDados, getFotoUrl, getFotoExt,
     atualizarIndice, migrarParaModeloPadrao,
     isConnected, isConfigured, minutosRestantes, diagnostico,
-    getToken, getFolderId,
   };
 })();

@@ -139,7 +139,8 @@ const arq = (nome, tipo) => ({ name: nome, type: tipo, size: 1000 });
     confere(!motivos({ ...base, foto_em_branco: false }).includes('foto em branco'), 'foto com conteúdo: sem a etiqueta');
     confere(!motivos({ ...base, foto_em_branco: null }).includes('foto em branco'), 'não medida (null): sem a etiqueta');
     confere(!motivos({ ...base }).includes('foto em branco'), 'nota antiga sem o campo: sem a etiqueta');
-    confere(motivos({ ...base, foto_em_branco: true, numero: '' }).join('|').includes('foto em branco|sem nº'), 'a etiqueta aparece ao lado das outras pendências');
+    // 04/11/2026: "sem nº" deixou de ser pendência em 30/10/2026; quem acompanha a etiqueta aqui é "sem valor".
+    confere(motivos({ ...base, foto_em_branco: true, valor: 0 }).join('|').includes('foto em branco|sem valor'), 'a etiqueta aparece ao lado das outras pendências');
   }
   console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo');
   process.exit(falhas ? 1 : 0);

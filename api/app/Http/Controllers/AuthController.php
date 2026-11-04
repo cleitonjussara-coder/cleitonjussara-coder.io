@@ -24,6 +24,11 @@ class AuthController extends Controller
 
     public function register(Request $r): JsonResponse
     {
+        /* 04/11/2026: normaliza ANTES de validar. O unique compara sensível a maiúsculas: "FULANO@X" passava por ele e o
+           INSERT em minúsculas estourava em 500. Só register tem isso; login, forgot e reset não usam unique. */
+        if (is_string($r->input('email'))) {
+            $r->merge(['email' => strtolower(trim($r->input('email')))]);
+        }
         $d = $r->validate([
             'nome' => ['nullable', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', 'unique:colaboradores,email'],
@@ -46,7 +51,7 @@ class AuthController extends Controller
         $user = Colaborador::create([
             'id' => (string) Str::uuid(),
             'nome' => trim($d['nome'] ?? '') ?: Str::before($d['email'], '@'),
-            'email' => strtolower($d['email']),
+            'email' => $d['email'],
             'password' => $d['password'],
             'role' => $convite?->role ?? 'colaborador',
         ] + (Colaborador::temConfirmacao() ? ['criado_via' => $convite ? 'convite' : 'livre', 'confirmado_em' => null] : []));

@@ -6469,22 +6469,6 @@ function exportExcelEquipe(ids = []) {   // ids = marcados no seletor da Equipe 
   Gestor.exportEquipeExcel(sb, user, filMes, filAno, ids);
 }
 
-/* Planilha do Google da equipe (consolidada, mês atual) */
-async function exportSheetsEquipe() {
-  if (!(await _garantirDrive())) return;
-  const aba = window.open('', '_blank');   // abre no clique p/ não cair em bloqueio de popup
-  setLoading(true);
-  try {
-    const { collabs, notas, repasses, mes, ano } = await Gestor.renderForExcel(sb, user, filMes, filAno);
-    const url = await GSheets.exportarEquipe(notas, repasses, collabs, mes, ano, user.nome);
-    if (aba) aba.location = url; else window.open(url, '_blank');
-    toast('Planilha da equipe atualizada! 📊');
-  } catch (e) {
-    if (aba) aba.close();
-    toast('Sheets equipe: ' + e.message, 'err');
-  } finally { setLoading(false); }
-}
-
 /* Diagnóstico de anexos — percorre a MESMA cascata que a miniatura e o
    verFoto usam (blob local → Drive → Supabase) e reporta o erro exato de
    cada etapa. Existe porque "a foto não aparece" tem pelo menos quatro
@@ -10837,22 +10821,6 @@ async function exportExcel() {
     if (!abertura) toast('Planilha gerada — sem o saldo de anos anteriores (histórico indisponível)');
   }
   catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
-}
-
-/* Planilha do Google "ao vivo" — cria/atualiza na pasta do Drive e abre o link */
-async function exportSheets() {
-  if (!(await _garantirDrive())) return;
-  // abre a aba JÁ no clique (evita bloqueio de popup); navega quando a planilha estiver pronta
-  const aba = window.open('', '_blank');
-  setLoading(true);
-  try {
-    const url = await GSheets.exportarAnual(filAno, notas, repasses, user);
-    if (aba) aba.location = url; else window.open(url, '_blank');
-    toast('Planilha do Google atualizada! 📊');
-  } catch (e) {
-    if (aba) aba.close();
-    toast('Sheets: ' + e.message, 'err');
-  } finally { setLoading(false); }
 }
 
 /* ── Boot ────────────────────────────────────────────────── */

@@ -6,8 +6,8 @@ Servidor: **Petermann API** (Laravel + SQLite) em `../api/`, hospedada na
 Locaweb. O app fala com ela por `js/api.js`. Passo a passo de implantação:
 [`../MIGRACAO-LOCAWEB.md`](../MIGRACAO-LOCAWEB.md).
 
-> `supabase_setup.sql` e `migrations/*.sql` são o esquema **antigo** (Supabase),
-> mantidos como histórico. O esquema atual está em `../api/database/migrations/`.
+> O esquema do banco está em `../api/database/migrations/`. O SQL antigo do
+> Supabase saiu do repositório em 04/11/2026; quem precisar, acha no histórico do Git.
 
 ---
 
@@ -71,8 +71,7 @@ rda-rdm-app/
     ├── recorte.js      ← Enquadramento da foto
     ├── excel.js        ← SheetJS export formato Petermann
     ├── gestor.js       ← Dashboard equipe
-    ├── gdrive.js       ← Cópia dos anexos no Google Drive
-    └── gsheets.js      ← Planilha ao vivo no Google Sheets
+    └── gdrive.js       ← Cópia dos anexos no Google Drive
 ```
 
 ## Anexos
