@@ -71,8 +71,14 @@ class ColaboradorController extends Controller
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
         ]);
+        /* 04/11/2026: ninguém muda o próprio papel direto, nem o admin. Núcleo e regime o admin segue mudando em si mesmo,
+           para testar os dois regimes. Limite conhecido: o admin edita papéis de outros, então pode promover outra conta
+           e ela mudar o papel dele; isso só some quando ele for rebaixado em produção. */
+        if (! $gereOutro) {
+            unset($d['role']);
+        }
         if (! $gereOutro && ! $u->ehAdmin()) {
-            unset($d['role'], $d['nucleo'], $d['regime']);      // ninguém se promove nem muda o próprio regime
+            unset($d['nucleo'], $d['regime']);
         }
         /* Contador não tem cartão nem Frota: o regime dele é sempre o padrão
            (14/10/2026). Sem isto, um "CV" esquecido abria Frota/KM para ele. */

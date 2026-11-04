@@ -70,10 +70,15 @@ class FotoController extends Controller
             }
         }
 
-        return $this->fotos->disk()->response($path, basename($path), [
-            'Content-Type' => $this->fotos->mimeDe($path),
-            'Cache-Control' => 'private, max-age='.config('petermann.foto_url_ttl'),
-        ]);
+        $mime = $this->fotos->mimeDe($path);
+        $cabecalhos = ['Content-Type' => $mime, 'Cache-Control' => 'private, max-age='.config('petermann.foto_url_ttl')];
+        /* 04/11/2026: anexo XML aberto direto no navegador pode rodar script. Imagem não roda, e PDF precisa do leitor do
+           navegador, que o sandbox quebraria. */
+        if (! str_starts_with($mime, 'image/') && $mime !== 'application/pdf') {
+            $cabecalhos['Content-Security-Policy'] = "sandbox; default-src 'none'";
+        }
+
+        return $this->fotos->disk()->response($path, basename($path), $cabecalhos);
     }
 
     public function urlCheia(string $path): string

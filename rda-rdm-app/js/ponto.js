@@ -286,12 +286,6 @@ window.Ponto = (() => {
     if (!h.prox) { toast('As quatro marcações de hoje já foram feitas', 'err'); return; }
     if (!(await pedirConfirmacao({ mensagem: `${h.prox.prox} agora (${agoraHM()})?`, confirmar: 'Registrar' }))) return;
     const item = { marcacao: h.prox.k, hora: new Date().toISOString() };
-    if (h.prox.k === 'entrada' && navigator.geolocation) {
-      try {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000, maximumAge: 60000 }));
-        item.lat = pos.coords.latitude; item.lng = pos.coords.longitude;
-      } catch (_) {}
-    }
     setLoading(true);
     try {
       if (!navigator.onLine || !sb) { await _enfileirar(item); toast('📴 Sem internet: marcação guardada com a hora do aparelho'); }

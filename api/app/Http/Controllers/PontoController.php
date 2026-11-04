@@ -79,11 +79,9 @@ class PontoController extends Controller
                 return response()->json(['message' => 'Hora anterior à marcação já feita ('.$ant->format('H:i').'). Confira o relógio do aparelho.'], 422);
             }
         }
+        /* 04/11/2026: a localização deixou de ser gravada. Nenhuma tela usava e a política de privacidade diz que o app
+           não coleta. Aparelho antigo ainda manda lat/lng: a validação aceita e o valor é ignorado. */
         $p->{$marc} = $hora;
-        if ($marc === 'entrada') {
-            $p->lat = $d['lat'] ?? null;
-            $p->lng = $d['lng'] ?? null;
-        }
         if (! empty($d['observacao'])) {
             $p->observacao = trim(($p->observacao ? $p->observacao.' · ' : '').$d['observacao']);
         }
@@ -165,7 +163,7 @@ class PontoController extends Controller
             'id' => $p->id, 'user_id' => $p->user_id, 'user_nome' => $p->colaborador?->nome,
             'data' => $p->data->format('Y-m-d'), 'dia_semana' => (int) Carbon::parse($p->data)->dayOfWeek,
             'entrada' => $h($p->entrada), 'saida_intervalo' => $h($p->saida_intervalo), 'volta_intervalo' => $h($p->volta_intervalo), 'saida' => $h($p->saida),
-            'tipo_dia' => $p->tipo_dia, 'observacao' => $p->observacao, 'lat' => $p->lat, 'lng' => $p->lng,
+            'tipo_dia' => $p->tipo_dia, 'observacao' => $p->observacao,
             'minutos' => $c['minutos'], 'intervalo' => $c['intervalo'], 'normal' => $c['normal'], 'extra50' => $c['extra50'], 'extra100' => $c['extra100'],
             'domingo' => $c['domingo'], 'feriado' => $c['feriado'], 'aberto' => $c['aberto'], 'jornada' => $c['jornada'],
             'updated_at' => $p->updated_at?->toIso8601String(),

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 518;
+const APP_BUILD = 519;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -172,6 +172,7 @@ async function _renderPdfPagina1(file) {
   await _ensurePdfJs();
   const doc  = await pdfjsLib.getDocument({
     data: await file.arrayBuffer(),
+    isEvalSupported: false,   // 04/11/2026: CVE-2024-4367, PDF malicioso rodava script na sessão de quem abre (gestor corrigindo nota)
     // fontes padrão (Helvetica etc.) e cmaps vêm do CDN — sem isso o render trava
     standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
     cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
@@ -1756,7 +1757,7 @@ function renderAuth(mode='login') {
       <p class="auth-texto">
         Escolha a senha que você vai usar a partir de agora.
       </p>
-      ${_campoSenha('a-pass', 'Nova senha (min. 6 caracteres)', 'new-password', true)}
+      ${_campoSenha('a-pass', 'Nova senha (min. 8 caracteres)', 'new-password', true)}
       ${_campoSenha('a-pass2', 'Repita a nova senha', 'new-password', true)}
       <button class="btn btn-primary btn-full" id="a-btn-nova" onclick="definirNovaSenha()">Salvar senha</button>
       <p class="auth-switch"><a onclick="cancelarRecuperacao()">Cancelar</a></p>`;
@@ -1779,7 +1780,7 @@ function renderAuth(mode='login') {
     ${_convite ? `<div class="ini-dica" style="margin-bottom:10px">✉️ <b>${esc(_convite.gestor || 'O gestor')}</b> convidou você para entrar como <b>${esc(PAPEL_NOME[_convite.role] || _convite.role)}</b>. Crie sua conta abaixo — o papel já vem definido.</div>` : `<div class="install-slot"></div>`}
     <input class="inp" id="a-nome"  type="text"     placeholder="Seu nome" autocomplete="name" autocapitalize="words" value="${_at(_convite?.nome || '')}">
     <input class="inp" id="a-email" type="email"    placeholder="E-mail" autocomplete="email">
-    ${_campoSenha('a-pass', 'Senha (min. 6 caracteres)', 'new-password', true)}
+    ${_campoSenha('a-pass', 'Senha (min. 8 caracteres)', 'new-password', true)}
     <button class="btn btn-primary btn-full" onclick="register()">${_convite ? 'Aceitar e criar conta' : 'Criar conta'}</button>
     <p class="auth-switch">Já tem conta? <a onclick="renderAuth('login')">Entrar</a></p>
     ${_convite ? '' : rodapeGoogle}
@@ -1846,7 +1847,7 @@ async function definirNovaSenha() {
   if (_definindoSenha) return;
   const nova  = $('a-pass').value;
   const nova2 = $('a-pass2').value;
-  if (!nova || nova.length < 6) { toast('A senha precisa de pelo menos 6 caracteres','err'); return; }
+  if (!nova || nova.length < 8) { toast('A senha precisa de pelo menos 8 caracteres','err'); return; }
   if (nova !== nova2)           { toast('As duas senhas não são iguais','err'); return; }
 
   _definindoSenha = true;
@@ -1899,7 +1900,7 @@ async function register() {
   const email = $('a-email').value.trim();
   const pass  = $('a-pass').value;
   if (!email||!pass) { toast('Preencha os campos','err'); return; }
-  if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres','err'); return; }
+  if (pass.length < 8) { toast('Senha deve ter ao menos 8 caracteres','err'); return; }
   setLoading(true);
   try { await _ensureSb(); } catch (_) { setLoading(false); toast('Sem conexão para cadastrar','err'); return; }
   /* A API cria o perfil e já devolve o token: entra direto, sem e-mail de

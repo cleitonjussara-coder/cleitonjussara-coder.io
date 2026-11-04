@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
            subdomínio) — origens em config/cors.php. */
         // (statefulApi NÃO é chamado de propósito: nada de cookie/CSRF)
 
+        $middleware->append(\App\Http\Middleware\CabecalhosSeguranca::class);
+
         /* Sem token e sem "Accept: application/json" (robô, navegador na mão),
            o Authenticate tentava redirecionar para route('login'), que não
            existe → 500 + e-mail de erro à toa. Aqui não há tela de login:

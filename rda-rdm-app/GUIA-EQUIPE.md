@@ -24,7 +24,7 @@ O app se atualiza sozinho. Se parecer desatualizado, feche por completo e abra d
 ## 2. Entrar
 
 - **E-mail e senha** ou botão **Google**.
-- Sem conta? **Cadastrar** → nome, e-mail e senha (mín. 6 caracteres).
+- Sem conta? **Cadastrar** → nome, e-mail e senha (mín. 8 caracteres).
 - Esqueceu a senha? **Esqueci minha senha** → o link chega por e-mail (confira o spam), vale 1 hora.
 - Em **Perfil**, preencha o **nome completo** — ele dá nome à sua pasta de arquivos e ao cabeçalho da planilha. Ali também dá para colocar a **foto do perfil**.
 

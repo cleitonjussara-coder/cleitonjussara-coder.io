@@ -140,7 +140,7 @@ window.Rastreio = (() => {
         <div><div class="rs-nm">${esc(p.nome)}</div><div class="rs-pp">${esc(papel)}${regime}</div></div>
         <span class="rs-dot" style="background:${sit.cor}" title="${_atG(sit.txt || 'em dia')}"></span>
       </div>
-      <div class="rs-ln">Visto no app <b>${p.visto_em ? esc(quando(p.visto_em)) : 'nunca'}</b> · última nota <b>${p.ultimo_lancamento_em ? esc(quando(p.ultimo_lancamento_em)) : '—'}</b></div>
+      <div class="rs-ln">Visto no app <b>${p.visto_em ? esc(quando(p.visto_em)) : 'sem registro'}</b> · última nota <b>${p.ultimo_lancamento_em ? esc(quando(p.ultimo_lancamento_em)) : '—'}</b></div>
       ${linhaUlt}
       ${sit.txt && sit.parado ? `<div class="rs-warn">${esc(sit.txt)}</div>` : ''}
       <div class="rs-kp"><span class="rs-k">Hoje: ${Number(p.hoje) || 0}</span><span class="rs-k">Semana: ${Number(p.semana) || 0}</span><span class="rs-k">Mês: ${Number(p.mes) || 0}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>

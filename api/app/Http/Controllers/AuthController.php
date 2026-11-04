@@ -27,7 +27,7 @@ class AuthController extends Controller
         $d = $r->validate([
             'nome' => ['nullable', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', 'unique:colaboradores,email'],
-            'password' => ['required', 'string', 'min:6', 'max:200'],
+            'password' => ['required', 'string', 'min:8', 'max:200'],   // 04/11/2026: era 6; vale só para senha nova, quem já tem segue entrando
             'convite' => ['nullable', 'string', 'max:64'],   // link do gestor (21/09/2026): define o papel
         ]);
 
@@ -150,7 +150,7 @@ class AuthController extends Controller
         $d = $r->validate([
             'email' => ['required', 'email'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:6', 'max:200'],
+            'password' => ['required', 'string', 'min:8', 'max:200'],
         ]);
 
         $status = Password::reset(

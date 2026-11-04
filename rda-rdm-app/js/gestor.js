@@ -1366,7 +1366,7 @@ window.Gestor = (() => {
           <label class="lbl">Nome</label>
           <input class="inp" id="g-nome" value="${_at(colab.nome||'')}" autocapitalize="words" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
           <label class="lbl">Papel</label>
-          <select class="inp" id="g-role" ${podeEditar || (ehAdmin && souEu) ? '' : 'disabled'}>
+          <select class="inp" id="g-role" ${podeEditar && !souEu ? '' : 'disabled'}>
             ${papeis.map(r=>`<option value="${r}"${r===colab.role?' selected':''}>${PAPEL_TXT[r] || r}</option>`).join('')}
           </select>
           ${souEu ? '<p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Você não muda o próprio papel — peça a outro gestor.</p>'
