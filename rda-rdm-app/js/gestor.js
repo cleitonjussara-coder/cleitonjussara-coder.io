@@ -30,6 +30,8 @@ window.Gestor = (() => {
   const _previasAbertas = new Set();   // colaboradores com a prévia dos gastos aberta (lista da Equipe)
   let _kpisAbertos = false;            // cartões de resumo da ficha C.V. (20/10/2026: começam escondidos, botão abre)
   let _acoesAbertas = false;           // grade de relatórios/ações da ficha aberta
+  let _planAberto = null;              // detalhe aberto na faixa C.V. (recebido ou saldo); sobrevive ao redesenho da mesma ficha
+  let _planDono = null;                // colaborador|ano desse detalhe: outra pessoa ou outro ano começam fechados
   let _fichaSeq = 0;                   // número do último redesenho da ficha; fechar a ficha também o avança
   const _restaurarRolagem = el => { if (_evoScroll !== null) { const y = _evoScroll; _evoScroll = null; if (el) el.scrollTop = y; } };
   const _evoDica = '<div class="db-hint">Toque numa coluna para ver esse mês</div>';
@@ -143,6 +145,19 @@ window.Gestor = (() => {
     btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
     btn.querySelector('.txt').textContent = abrir ? 'Esconder resumo do mês' : 'Abrir resumo do mês';
     _kpisAbertos = abrir;
+  }
+  /* Faixa C.V. da ficha (03/11/2026): Total recebido e Saldo RDM/RDA são botões que abrem o que formou aquele número. */
+  function _aplicarPlanAberto() {
+    document.querySelectorAll('.cdet-plan-det').forEach(p => { p.hidden = p.dataset.painel !== _planAberto; });
+    document.querySelectorAll('[data-painel].cdet-plan-toque').forEach(b => {
+      const on = b.dataset.painel === _planAberto;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+  }
+  function alternarPlanilha(painel) {
+    _planAberto = _planAberto === painel ? null : painel;
+    _aplicarPlanAberto();
   }
   function alternarAcoes(btn) {
     const g = document.querySelector('.cdet-acoes');
@@ -675,6 +690,7 @@ window.Gestor = (() => {
     _chaveFichaAtual = chaveFicha;
     if (_filtroNotas && _filtroNotas.chave !== chaveFicha) _filtroNotas = null;   // outro mês ou outra pessoa: lista inteira
     if (_filtroReps && _filtroReps.chave !== chaveFicha) _filtroReps = null;
+    if (_planDono !== `${id}|${ano}`) { _planDono = `${id}|${ano}`; _planAberto = null; }
     const seq = ++_fichaSeq;
     const fichaAntes = el.querySelector('.cdet');
     if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
@@ -694,7 +710,7 @@ window.Gestor = (() => {
       const notas = ns || [], reps = rs || [];
       /* 24/09/2026: o app precisa achar o repasse pelo id para corrigir ou
          apagar — a ficha é quem tem a lista mais fresca. */
-      window._repassesDaFicha = reps;
+      window._repassesDaFicha = [...reps, ...(histReps || [])];   // o detalhe da faixa C.V. lista o ano inteiro, não só o mês aberto
       const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
       const recebido = r => !r.kind || r.kind === 'received';
       /* recarga do cartão (CV) não é dinheiro que a pessoa recebeu — vai para
@@ -758,9 +774,9 @@ window.Gestor = (() => {
         const cartaoN = ns1.filter(n => n.pagamento !== 'carteira'), carteiraN = ns1.filter(n => n.pagamento === 'carteira');
         const porTipo = (arr, t) => soma(arr.filter(x => x.tipo === t));
         const recargasA = rs1.filter(ehRecargaR), reembA = rs1.filter(x => !ehRecargaR(x));
-        const aba = (ico, nome, gastoL, recL) => ({ ico, nome, gasto: soma(gastoL), rec: soma(recL),
+        const aba = (k, ico, nome, gastoL, recL) => ({ k, ico, nome, gastoL, recL, gasto: soma(gastoL), rec: soma(recL),
           gRDM: porTipo(gastoL, 'RDM'), gRDA: porTipo(gastoL, 'RDA'), rRDM: porTipo(recL, 'RDM'), rRDA: porTipo(recL, 'RDA') });
-        return [aba('💳', 'Cartão corporativo', cartaoN, recargasA), aba('💵', 'CV reembolso', carteiraN, reembA)];
+        return [aba('cartao', '💳', 'Cartão corporativo', cartaoN, recargasA), aba('reemb', '💵', 'CV reembolso', carteiraN, reembA)];
       })() : null;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
@@ -787,6 +803,61 @@ window.Gestor = (() => {
             Anterior <b>${brl(ant)}</b> · Recebido <b>${brl(rec)}</b> − Gasto <b>${brl(gasto)}</b></span>
         </div>`;
       const acumTotal = antRDM + antRDA + saldo;
+
+      /* Detalhe da faixa C.V. (03/11/2026, pedido do Cleiton sobre o print): tocar em Total recebido lista os lançamentos que
+         formam o valor; tocar no Saldo RDM ou RDA abre a conta daquele grupo, mês a mês. Tudo no ANO, como a faixa. */
+      const planLancamentos = lista => lista.length
+        ? [...lista].sort((a, b) => String(b.data || '').localeCompare(String(a.data || ''))).map(x => `
+          <div class="cdet-plan-rep">
+            <span class="tipo-badge tipo-${_at(x.tipo)}">${esc(x.tipo)}</span>
+            <div class="t"><span class="n">${esc(x.descricao || (ehRecargaR(x) ? 'Recarga do cartão' : 'Repasse recebido'))}</span><span class="s">${fmtData(x.data)}</span></div>
+            <b class="v">${brl(x.valor)}</b>
+            ${podeEditar ? `<div class="a">
+              <button class="btn-icon-sm" title="Corrigir" aria-label="Corrigir" data-rep="${_at(x.id)}" onclick="editarRepasseDeOutro(this.dataset.rep)">✏️</button>
+              <button class="btn-icon-sm danger" title="Excluir" aria-label="Excluir" data-rep="${_at(x.id)}" onclick="excluirRepasseDeOutro(this.dataset.rep)">🗑</button>
+            </div>` : ''}
+          </div>`).join('')
+        : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`;
+      const planRecebido = a => `<div class="cdet-plan-det" data-painel="${a.k}-rec" hidden>
+          <div class="cdet-plan-det-tit">${a.k === 'cartao' ? 'Recargas lançadas' : 'Reembolsos lançados'} em ${ano} · ${a.recL.length}</div>
+          ${planLancamentos(a.recL)}
+        </div>`;
+      const planSaldo = (a, t) => {
+        const gL = a.gastoL.filter(x => x.tipo === t), rL = a.recL.filter(x => x.tipo === t);
+        const meses = [...new Set([...gL, ...rL].map(x => Number(x.mes)))].sort((p, q) => p - q);
+        const doMes = (arr, m) => soma(arr.filter(x => Number(x.mes) === m));
+        return `<div class="cdet-plan-det" data-painel="${a.k}-saldo-${t}" hidden>
+          <div class="cdet-plan-det-tit">Saldo ${t} em ${ano}</div>
+          <div class="cdet-plan-conta">Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(soma(rL) - soma(gL))}</b></div>
+          ${meses.length ? `<table class="cdet-plan-meses"><thead><tr><th>Mês</th><th>Gasto</th><th>Recebido</th></tr></thead><tbody>
+            ${meses.map(m => `<tr><td>${MESES[m - 1]}</td><td>${brl(doMes(gL, m))}</td><td>${brl(doMes(rL, m))}</td></tr>`).join('')}
+          </tbody></table>` : ''}
+          <div class="cdet-plan-det-tit">Recebido ${t} · ${rL.length}</div>
+          ${planLancamentos(rL)}
+        </div>`;
+      };
+      const planLinha = (t, v) => `<span class="cdet-plan-sep"><span>${t}</span><b>${brl(v)}</b></span>`;
+      const planToque = (painel, titulo, miolo, classe = '') => `<button type="button" class="cdet-plan-toque ${classe}" data-painel="${painel}" aria-expanded="false" title="${titulo}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">${miolo}</button>`;
+      const planAbaHTML = a => {
+        const sd = a.rec - a.gasto, reemb = a.k === 'reemb';
+        const sdT = t => (t === 'RDM' ? a.rRDM - a.gRDM : a.rRDA - a.gRDA);
+        const linhaSaldo = t => planToque(`${a.k}-saldo-${t}`, `Ver a conta do saldo ${t}`,
+          `<span>${t}</span><b>${brl(sdT(t))}</b><i aria-hidden="true">›</i>`, `cdet-plan-sep ${sdT(t) < -0.004 ? 'neg' : ''}`);
+        return `<div class="cdet-plan-aba">
+            <div class="cdet-plan-tit">${a.ico} ${a.nome} · ${ano}</div>
+            <div class="cdet-plan-grade">
+              <div class="cdet-plan-cel"><span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b>${reemb
+                ? `${planLinha('RDM', a.gRDM)}${planLinha('RDA', a.gRDA)}`
+                : `<span class="d">RDM ${brl(a.gRDM)} · RDA ${brl(a.gRDA)}</span>`}</div>
+              ${planToque(`${a.k}-rec`, 'Ver os lançamentos deste valor',
+                `<span class="l">Total recebido</span><b>${brl(a.rec)}</b><span class="d">RDM ${brl(a.rRDM)} · RDA ${brl(a.rRDA)}</span><span class="ver">Ver lançamentos ›</span>`, 'cdet-plan-cel')}
+              <div class="cdet-plan-cel ${sd < -0.004 ? 'neg' : ''}"><span class="l">Saldo</span><b>${brl(sd)}</b>${reemb
+                ? `${linhaSaldo('RDM')}${linhaSaldo('RDA')}`
+                : ''}<span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'recebido − gasto'}</span></div>
+            </div>
+            ${planRecebido(a)}${reemb ? planSaldo(a, 'RDM') + planSaldo(a, 'RDA') : ''}
+          </div>`;
+      };
 
       if (typeof _voltarRodape === 'function') _voltarRodape('Gestor.fechar()', '‹ Equipe');
       let html = `${ehContador ? '' : `<div class="page-hd">
@@ -844,15 +915,7 @@ window.Gestor = (() => {
         </div>
 
         ${acumOk && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
-        ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(a => {
-          const sd = a.rec - a.gasto;
-          return `<div class="cdet-plan-aba">
-            <div class="cdet-plan-tit">${a.ico} ${a.nome} · ${ano}</div>
-            <div class="cdet-plan-grade">
-              <div class="cdet-plan-cel"><span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b><span class="d">RDM ${brl(a.gRDM)} · RDA ${brl(a.gRDA)}</span></div>
-              <div class="cdet-plan-cel"><span class="l">Total recebido</span><b>${brl(a.rec)}</b><span class="d">RDM ${brl(a.rRDM)} · RDA ${brl(a.rRDA)}</span></div>
-              <div class="cdet-plan-cel ${sd < -0.004 ? 'neg' : ''}"><span class="l">Saldo</span><b>${brl(sd)}</b><span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'recebido − gasto'}</span></div>
-            </div></div>`; }).join('')}</div>`
+        ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(planAbaHTML).join('')}</div>`
         : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM)}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA)}</div>`}
         ${pagoEmpresaMes ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaMes)}</b> <span style="color:var(--text2)">(já incluso no Faturamento acima, não entra no saldo)</span></div>` : ''}
 
@@ -958,6 +1021,7 @@ window.Gestor = (() => {
       if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
       _aplicarFiltroNotas();   // o filtro por Cartão/Carteira continua depois de corrigir ou excluir uma nota
       _aplicarFiltroReps();    // idem para Repasse/Recarga
+      _aplicarPlanAberto();    // o detalhe da faixa C.V. continua aberto depois de corrigir um lançamento
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
@@ -1356,5 +1420,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
