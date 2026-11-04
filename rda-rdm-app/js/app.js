@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 523;
+const APP_BUILD = 524;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3211,8 +3211,14 @@ const CATEGORIAS_CV = [
     sub: 'Borracharia, oficina, EPIs e demais gastos.' },
 ];
 
+/* Locação de Veículos: só em nota de Faturamento. Fica fora de CATEGORIAS_CV porque aquela lista também monta os cartões e
+   filtros de gasto do colaborador, onde a locação não entra (nos painéis ela segue contando como Outros). */
+const CATEGORIA_LOCACAO = { chave: 'locacao', ico: '🚗', nome: 'Locação de Veículos', tipo: 'RDM', subtipo: 'Locação de Veículos',
+  sub: 'Aluguel de carro, pago pela empresa.' };
+const _ehLocacao = subtipo => String(subtipo || '').toLowerCase().startsWith('loca');
+
 function _categoriaCV(chave) {
-  return CATEGORIAS_CV.find(c => c.chave === chave) || null;
+  return [...CATEGORIAS_CV, CATEGORIA_LOCACAO].find(c => c.chave === chave) || null;
 }
 
 /* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
@@ -8276,15 +8282,16 @@ function _montarGradeDoSeletor() {
       ? 'Escolha a categoria da despesa. É por ela que a nota entra na planilha.'
       : 'Escolha com atenção a aba correta antes de preencher a nota. Isso evita lançar a despesa na aba errada.';
   }
-  if (!ehCv || cv.dataset.pronto === '1') return;
-  cv.innerHTML = CATEGORIAS_CV.map(c => `
+  if (!ehCv) return;
+  /* refeita a cada abertura: o cartão da locação depende de a nota ser de Faturamento */
+  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_CV, CATEGORIA_LOCACAO] : CATEGORIAS_CV;
+  cv.innerHTML = cats.map(c => `
     <button class="tipo-lancamento-card tipo-lancamento-card-${c.tipo.toLowerCase()}"
             onclick="selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})">
       <div class="tipo-lancamento-icon">${c.ico}</div>
       <div class="tipo-lancamento-title">${esc(c.nome)}</div>
       <div class="tipo-lancamento-subtitle">${esc(c.sub)}</div>
     </button>`).join('');
-  cv.dataset.pronto = '1';
 }
 
 function selecionarTipoLancamento(tipo, subtipo = null) {
@@ -8802,7 +8809,8 @@ async function abrirFormNota(dados = {}) {
      Pagamento (que é só cartão x carteira) — fica gravado à parte e prevalece
      na hora de salvar, não importa o regime de quem é a nota. */
   _pagamentoForcado = dados.pagamento === 'empresa' ? 'empresa' : null;
-  { const oL = $('nf-opt-locacao'); if (oL) { oL.hidden = !_pagamentoForcado; oL.disabled = !_pagamentoForcado; if (_pagamentoForcado) $('nf-subtipo').value = dados.subtipo || 'Abastecimento'; } }   // Locação de Veículos: só Faturamento
+  _oferecerLocacao(!!_pagamentoForcado || _ehLocacao(dados.subtipo));   // Locação de Veículos: só Faturamento
+  $('nf-subtipo').value = dados.subtipo || 'Abastecimento';
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
   { const donoCV = _usaCartaoDe(dados.user_id);
     const g = $('nf-pagamento-group'); if (g) g.style.display = (donoCV && !_pagamentoForcado) ? '' : 'none';
@@ -8970,6 +8978,20 @@ function aplicarCategoriaCV() {
   atualizarBannerTipoLancamento(c.tipo);
 }
 
+/* Põe ou tira a Locação de Veículos das duas listas de categoria. Tira de verdade: o Safari do iPhone ignora `hidden` em
+   <option> e mostraria a opção para quem não pode usá-la. */
+function _oferecerLocacao(sim) {
+  for (const [lista, valor] of [['nf-subtipo', CATEGORIA_LOCACAO.subtipo], ['nf-cat-cv', CATEGORIA_LOCACAO.chave]]) {
+    const sel = $(lista);
+    if (!sel) continue;
+    const opt = [...sel.options].find(o => o.value === valor);
+    if (!sim) { opt?.remove(); continue; }
+    if (opt) continue;
+    const novo = new Option(lista === 'nf-cat-cv' ? `${CATEGORIA_LOCACAO.ico} ${CATEGORIA_LOCACAO.nome}` : CATEGORIA_LOCACAO.nome, valor);
+    sel.add(novo, [...sel.options].find(o => o.value.toLowerCase().startsWith('outros')) || null);
+  }
+}
+
 /* Mostra a escolha certa para o regime e deixa a categoria no valor da nota. */
 function _ajustarCamposDeCategoria() {
   const grupo = $('nf-cat-cv-group'), linha = $('nf-aba-row');
@@ -8979,7 +9001,9 @@ function _ajustarCamposDeCategoria() {
   linha.style.display = ehCv ? 'none' : '';
   if (!ehCv) return;
   const sel = $('nf-cat-cv');
-  sel.value = _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: $('nf-subtipo').value });
+  /* a locação tem de voltar como locação: pela chave ela seria "outros" e o aplicar abaixo gravaria Outros sem avisar */
+  sel.value = _ehLocacao($('nf-subtipo').value) && $('nf-tipo').value === 'RDM' ? CATEGORIA_LOCACAO.chave
+    : _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: $('nf-subtipo').value });
   aplicarCategoriaCV();
 }
 
@@ -9968,7 +9992,7 @@ const _GRUPOS_FAT = [..._GRUPOS, { tipo: 'RDM', subtipo: 'Locação de Veículos
 function corrigirGrupoNota(id) {
   const n = _notaPorId(id);
   if (!n) { toast('Nota não encontrada', 'err'); return; }
-  _modalGrupoNota(n, _GRUPOS);
+  _modalGrupoNota(n, n.pagamento === 'empresa' ? _GRUPOS_FAT : _GRUPOS);
 }
 
 function _modalGrupoNota(n, grupos) {
