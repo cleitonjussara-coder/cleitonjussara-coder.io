@@ -227,7 +227,7 @@ window.Gestor = (() => {
   let _ctx = null;
   let _cvEquipe = null;   // { collabs, mes, ano, comLancAno, comLancMes } do último dashboard, para o seletor de colaboradores
   let _anoFicha = null;   // ano da ficha aberta (as setas da ficha mudam o ano sem passar por renderDashboard)
-  function abrir(id)  { if (id !== _detalheId) _evoScroll = null; _detalheId = id;   _ctx?.onRebuild?.(); }   // outra pessoa não herda a rolagem da ficha anterior
+  function abrir(id)  { if (id !== _detalheId) { _evoScroll = null; _rolarParaNotas = false; } _detalheId = id;   _ctx?.onRebuild?.(); }   // outra pessoa não herda a rolagem da ficha anterior
   /* Busca (20/09/2026): filtra os cartões na hora, sem ir ao servidor;
      abre a seção de desativados se algum deles bater. */
   let _buscaTxt = '';
@@ -247,13 +247,14 @@ window.Gestor = (() => {
   }
   /* Entrada direta (20/10/2026): marca o colaborador ANTES de a tela da Equipe desenhar, então ela já nasce na ficha dele —
      sem passar pela lista (o abrir() com atraso brigava com o carregamento da lista e podia cair nela). */
-  function abrirDireto(id) { if (id !== _detalheId) _evoScroll = null; _detalheId = id; }
+  function abrirDireto(id) { if (id !== _detalheId) { _evoScroll = null; _rolarParaNotas = false; } _detalheId = id; }
   function fechar()   { _detalheId = null; _fichaSeq++; _desarmarFicha(); _ctx?.onRebuild?.(); }   // a rolagem guardada era da ficha: a lista começa do topo
 
   /* Setas da lista de repasses na ficha: delta -1/+1 muda o mês, 0 volta ao
      mês atual. Reaproveita o seletor da Equipe (filMes/filAno), então o resto
      da ficha acompanha. */
   let _rolarParaRepasses = false;
+  let _rolarParaNotas = false;   // veio de um lançamento da faixa C.V.: depois de trocar de mês, a tela para na lista de notas
   /* Filtro das notas da ficha (16/10/2026, pedido do Cleiton): tocar em Cartão corporativo ou Carteira lista SÓ as notas
      daquele pagamento. Vale para a ficha/mês abertos (chave) e sobrevive ao redesenho depois de corrigir/excluir nota. */
   let _filtroNotas = null;      // { chave, tipo: 'cartao' | 'carteira', tp: 'RDM' | 'RDA' | null }
@@ -363,6 +364,16 @@ window.Gestor = (() => {
   function irParaNotas() {
     document.getElementById('cdet-notas')?.scrollIntoView({ block: 'start' });
   }
+  /* Lançamento da faixa C.V. (03/11/2026): abre as notas daquele mês já filtradas pelo grupo, com foto e correção à mão. */
+  function irParaNotasDoMes(pag, tp, mes) {
+    const [id, ano, aberto] = String(_chaveFichaAtual).split('|');
+    const m = Number(mes), mesAberto = Number(aberto);
+    if (!id || !m) return;
+    _filtroNotas = { chave: `${id}|${ano}|${m}`, tipo: pag, tp: tp || null };
+    if (m === mesAberto) { _aplicarFiltroNotas(); irParaNotas(); return; }
+    _rolarParaNotas = true;
+    irParaMesEquipe(m, Number(ano));   // destino absoluto: o mês global pode já não ser o da ficha pintada
+  }
   /* seta ↑ dos cabeçalhos Notas/Repasses: desfaz o salto dos cartões do resumo (↓) */
   function irParaTopoFicha() {
     (document.querySelector('.cdet-kpis') || document.querySelector('.page-hd'))?.scrollIntoView({ block: 'start' });
@@ -373,7 +384,7 @@ window.Gestor = (() => {
   function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); }
   /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
      não vale mais quando a ficha é fechada antes de ele terminar */
-  function _desarmarFicha() { _evoScroll = null; _rolarParaRepasses = false; _evoMantem = null; }
+  function _desarmarFicha() { _evoScroll = null; _rolarParaRepasses = false; _rolarParaNotas = false; _evoMantem = null; }
 
   /* Exclusão em lote dos repasses da ficha (05/10/2026): "Selecionar" mostra
      uma caixinha em cada linha; "todos" marca só o que está na tela (o mês
@@ -713,7 +724,7 @@ window.Gestor = (() => {
         sb.repasses.list({ user_id: id, ano, mes, deleted: '0' }),
         sb.notas.list({ user_id: id, ano, deleted: '0', fields: 'valor,mes,tipo,subtipo,pagamento' }).catch(() => []),
         /* histórico completo para o saldo acumulado (01/10/2026) */
-        sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento' }).catch(() => null),
+        sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento,data,subtipo,razao_social' }).catch(() => null),
         sb.repasses.list({ user_id: id, deleted: '0' }).catch(() => null),
       ]);
       if (seq !== _fichaSeq) return;   // chegou depois de outro redesenho (ou de a ficha ser fechada): não pinta por cima
@@ -830,6 +841,16 @@ window.Gestor = (() => {
             </div>` : ''}
           </div>`).join('')
         : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`;
+      const planPag = a => (a.k === 'cartao' ? 'cartao' : 'carteira');   // mesmo valor do data-pag do cartão da nota
+      const planGasto = a => `<div class="cdet-plan-det" data-painel="${a.k}-gasto" hidden>
+          <div class="cdet-plan-det-tit">Gastos lançados em ${ano} · ${a.gastoL.length}</div>
+          ${a.gastoL.length ? [...a.gastoL].sort((p, q) => String(q.data || '').localeCompare(String(p.data || ''))).map(n => `
+          <button type="button" class="cdet-plan-rep cdet-plan-nota" title="Abrir nas notas de ${MESES[Number(n.mes) - 1]}" data-pag="${planPag(a)}" data-tp="${_at(n.tipo)}" data-mes="${Number(n.mes)}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">
+            <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
+            <span class="t"><span class="n">${esc(n.razao_social || 'Sem fornecedor')}</span><span class="s">${fmtData(n.data)}${n.subtipo ? ` · ${esc(n.subtipo)}` : ''}</span></span>
+            <b class="v">${brl(n.valor)}</b><i aria-hidden="true">›</i>
+          </button>`).join('') : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`}
+        </div>`;
       const planRecebido = a => `<div class="cdet-plan-det" data-painel="${a.k}-rec" hidden>
           <div class="cdet-plan-det-tit">${a.k === 'cartao' ? 'Recargas lançadas' : 'Reembolsos lançados'} em ${ano} · ${a.recL.length}</div>
           ${planLancamentos(a.recL)}
@@ -842,7 +863,9 @@ window.Gestor = (() => {
           <div class="cdet-plan-det-tit">Saldo ${t} em ${ano}</div>
           <div class="cdet-plan-conta">Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(centavos(soma(rL) - soma(gL)))}</b></div>
           ${meses.length ? `<table class="cdet-plan-meses"><thead><tr><th>Mês</th><th>Gasto</th><th>Recebido</th></tr></thead><tbody>
-            ${meses.map(m => `<tr><td>${MESES[m - 1]}</td><td>${brl(doMes(gL, m))}</td><td>${brl(doMes(rL, m))}</td></tr>`).join('')}
+            ${meses.map(m => `<tr><td>${MESES[m - 1]}</td><td>${doMes(gL, m) > 0.004
+              ? `<button type="button" class="cdet-plan-mes" title="Abrir as notas ${t} de ${MESES[m - 1]}" data-pag="${planPag(a)}" data-tp="${t}" data-mes="${m}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">${brl(doMes(gL, m))} ›</button>`
+              : brl(0)}</td><td>${brl(doMes(rL, m))}</td></tr>`).join('')}
           </tbody></table>` : ''}
           <div class="cdet-plan-det-tit">Recebido ${t} · ${rL.length}</div>
           ${planLancamentos(rL)}
@@ -858,16 +881,17 @@ window.Gestor = (() => {
         return `<div class="cdet-plan-aba">
             <div class="cdet-plan-tit">${a.ico} ${a.nome} · ${ano}</div>
             <div class="cdet-plan-grade">
-              <div class="cdet-plan-cel"><span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b>${reemb
-                ? `${planLinha('RDM', a.gRDM)}${planLinha('RDA', a.gRDA)}`
-                : `<span class="d">RDM ${brl(a.gRDM)} · RDA ${brl(a.gRDA)}</span>`}</div>
+              ${planToque(`${a.k}-gasto`, 'Ver os lançamentos deste valor',
+                `<span class="l">Total de gasto acumulado</span><b>${brl(a.gasto)}</b>${reemb
+                  ? `${planLinha('RDM', a.gRDM)}${planLinha('RDA', a.gRDA)}`
+                  : `<span class="d">RDM ${brl(a.gRDM)} · RDA ${brl(a.gRDA)}</span>`}<span class="ver">Ver lançamentos ›</span>`, 'cdet-plan-cel')}
               ${planToque(`${a.k}-rec`, 'Ver os lançamentos deste valor',
                 `<span class="l">Total recebido</span><b>${brl(a.rec)}</b><span class="d">RDM ${brl(a.rRDM)} · RDA ${brl(a.rRDA)}</span><span class="ver">Ver lançamentos ›</span>`, 'cdet-plan-cel')}
               <div class="cdet-plan-cel ${sd < -0.004 ? 'neg' : ''}"><span class="l">Saldo</span><b>${brl(sd)}</b>${reemb
                 ? `${linhaSaldo('RDM')}${linhaSaldo('RDA')}`
                 : ''}<span class="d">${sd < -0.004 ? 'a empresa ainda deve' : 'recebido − gasto'}</span></div>
             </div>
-            ${planRecebido(a)}${reemb ? planSaldo(a, 'RDM') + planSaldo(a, 'RDA') : ''}
+            ${planGasto(a)}${planRecebido(a)}${reemb ? planSaldo(a, 'RDM') + planSaldo(a, 'RDA') : ''}
           </div>`;
       };
 
@@ -1050,6 +1074,10 @@ window.Gestor = (() => {
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
         el.querySelector('#cdet-repasses')?.scrollIntoView({ block: 'start' });
+      }
+      if (_rolarParaNotas) {
+        _rolarParaNotas = false;
+        el.querySelector('#cdet-notas')?.scrollIntoView({ block: 'start' });
       }
       const be = el.querySelector('#cdet-editar');
       if (be) be.onclick = () => showEditModal(colab, sb, () => _ctx?.onRebuild?.(), currentUser);
@@ -1444,5 +1472,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
