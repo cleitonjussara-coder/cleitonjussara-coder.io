@@ -29,6 +29,7 @@ window.Scanner = (() => {
   const PREENCHE  = 0.80;        // quanto do quadrilátero tem que ser papel (letra e QR são buracos, mas poucos)
   const FOLGA     = 0.01;        // folga do contorno, fração do lado médio do papel
   const MAX_SAIDA = 3000;        // maior lado da página endireitada
+  const FUNDO_FINO = 0.72;       // o quanto o fundo pode cair num vinco ou sombra estreita, em relação ao fundo largo
   const REALCE_GAMA = 1.3;       // escurece a tinta: letra desbotada sob sol forte continua legível
   const GRAD_BORDA = 22;         // degrau de brilho (0..255, entre vizinhos a 2 px) que já é borda do papel e barra o crescimento
   const BORDA     = 0.012;       // canto a menos que isto da borda do quadro = papel cortado
@@ -545,6 +546,18 @@ window.Scanner = (() => {
         g[by * gw + bx] = v;
       }
     }
+    /* cópia fina do fundo, antes de alargar: acompanha vinco e sombra estreita (borrão cinza no print de 04/11/2026). O fundo
+       largo abaixo é quem manda em letra grossa e QR; a fina só pode descer até FUNDO_FINO dele. */
+    const fino = new Float32Array(gw * gh);
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+      let a = 0, c = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const yy = y + dy, xx = x + dx;
+        if (yy < 0 || xx < 0 || yy >= gh || xx >= gw) continue;
+        a += g[yy * gw + xx]; c++;
+      }
+      fino[y * gw + x] = a / c;
+    }
     const vizinhos = (fn) => {
       const o = new Float32Array(gw * gh);
       for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
@@ -574,7 +587,9 @@ window.Scanner = (() => {
       for (let x = 0; x < w; x++) {
         const gx = Math.min(gw - 1, Math.max(0, (x + 0.5) / B - 0.5));
         const x0 = Math.max(0, Math.min(gw - 2, Math.floor(gx))), x1 = Math.min(gw - 1, x0 + 1), fx = gx - x0;
-        const fundo = (g[y0 * gw + x0] * (1 - fx) + g[y0 * gw + x1] * fx) * (1 - fy) + (g[y1 * gw + x0] * (1 - fx) + g[y1 * gw + x1] * fx) * fy;
+        const largo = (g[y0 * gw + x0] * (1 - fx) + g[y0 * gw + x1] * fx) * (1 - fy) + (g[y1 * gw + x0] * (1 - fx) + g[y1 * gw + x1] * fx) * fy;
+        const perto = (fino[y0 * gw + x0] * (1 - fx) + fino[y0 * gw + x1] * fx) * (1 - fy) + (fino[y1 * gw + x0] * (1 - fx) + fino[y1 * gw + x1] * fx) * fy;
+        const fundo = Math.min(largo, Math.max(perto, largo * FUNDO_FINO));
         const i = y * w + x;
         const v = Math.min(255, L[i] * 255 / Math.max(fundo, 60));    // ganho no máximo ~4x: foto escura não vira chuvisco
         Lo[i] = curva[v | 0];
