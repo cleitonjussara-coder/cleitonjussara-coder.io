@@ -8705,6 +8705,9 @@ function _mostrarFormAposLeitura() {
   if (!fotoBlob) _pedirFotoPasso2();   // cancelou a câmera: continua pedindo o anexo
 }
 
+/* 04/11/2026: versão do servidor que a pessoa estava vendo quando o formulário abriu. Se a correção da gestão chegar pelo
+   pull com o formulário aberto, é esta base que faz o servidor recusar (409) em vez de sobrescrever a correção. */
+let _baseFormNota = null;
 async function abrirFormNota(dados = {}) {
   if (_ehContabilidade() && !dados.id) { toast('Contador corrige notas existentes; não lança nota nova', 'err'); return; }
   if (!dados.id && !dados._tipoSelecionado && !dados._skipTipoSelector) {
@@ -8722,6 +8725,7 @@ async function abrirFormNota(dados = {}) {
      nunca undefined — dados aqui é o registro de verdade, já com a chave). */
   _semColaboradorForcado = dados.semColaborador === true || (!!dados.id && dados.user_id === null);
   $('nf-id').value       = dados.id       || '';
+  _baseFormNota          = dados.id ? (dados.server_updated_at || null) : null;
   $('nf-owner-id').value = _semColaboradorForcado ? '' : (dados.user_id || user?.id || '');
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
   $('nf-chave').value    = dados.chave    || dados.chave_nfce || '';
@@ -9759,6 +9763,7 @@ async function _salvarNotaInterno() {
      contas, e o lançamento para aqui. */
   const payload = {
     id             : $('nf-id').value || undefined,
+    base_formulario: _idEdicao ? _baseFormNota : undefined,
     tipo, valor, data, mes, ano,
     subtipo        : tipo==='RDM' ? $('nf-subtipo').value : null,
     pagamento      : _pagamentoForcado || ($('nf-pagamento-group')?.style.display !== 'none' ? ($('nf-pagamento')?.value || 'cv') : (_notaAtual?.pagamento || null)),
