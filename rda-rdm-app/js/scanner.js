@@ -29,6 +29,7 @@ window.Scanner = (() => {
   const PREENCHE  = 0.80;        // quanto do quadrilátero tem que ser papel (letra e QR são buracos, mas poucos)
   const FOLGA     = 0.01;        // folga do contorno, fração do lado médio do papel
   const MAX_SAIDA = 3000;        // maior lado da página endireitada
+  const REALCE_GAMA = 1.3;       // escurece a tinta: letra desbotada sob sol forte continua legível
   const GRAD_BORDA = 22;         // degrau de brilho (0..255, entre vizinhos a 2 px) que já é borda do papel e barra o crescimento
   const BORDA     = 0.012;       // canto a menos que isto da borda do quadro = papel cortado
 
@@ -348,7 +349,7 @@ window.Scanner = (() => {
       g.clearRect(0, 0, cw, ch);
       if (!quad) return;
       const vw = video.videoWidth, vh = video.videoHeight;
-      const k = Math.max(cw / vw, ch / vh);                  // object-fit: cover
+      const k = Math.min(cw / vw, ch / vh);                  // object-fit: contain (prévia mostra a foto inteira)
       const ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2;
       g.beginPath();
       quad.forEach((c, i) => { const X = ox + c.x * vw * k, Y = oy + c.y * vh * k; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
@@ -550,7 +551,7 @@ window.Scanner = (() => {
     const curva = new Float32Array(256);
     for (let v = 0; v < 256; v++) {
       const t = Math.min(1, Math.max(0, (v / 255 - 0.08) / (0.90 - 0.08)));
-      curva[v] = 255 * Math.pow(t, 1.3);
+      curva[v] = 255 * Math.pow(t, REALCE_GAMA);
     }
     const Lo = new Float32Array(n);
     for (let y = 0; y < h; y++) {
@@ -595,6 +596,46 @@ window.Scanner = (() => {
     });
   }
   const _larg = im => im.naturalWidth || im.width, _alt = im => im.naturalHeight || im.height;
+  /* iPhone: a memória de canvas é pequena e só volta quando a largura vai a zero; sem isso, depois de algumas fotos o
+     canvas novo sai em branco e a tela de recorte falha */
+  const _soltar = (...cs) => cs.forEach(c => { if (c) { c.width = 0; c.height = 0; } });
+
+  /* Sombra dura sobre o papel (03/11/2026): o achar enxerga só a parte clara e a nota seria cortada na linha da sombra,
+     sem aviso. Se logo além de um lado ainda há traço de letra tão denso quanto logo antes dele, o papel continua: não
+     endireita. O recorte abre com a foto como veio e a pessoa enquadra. */
+  function _papelContinua(im, quad, W0, H0) {
+    const k = Math.min(1, 1100 / Math.max(W0, H0)), w = Math.max(1, Math.round(W0 * k)), h = Math.max(1, Math.round(H0 * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    _soltar(c);
+    const cinza = (x, y) => { const i = (y * w + x) * 4; return d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; };
+    const croma = (x, y) => { const i = (y * w + x) * 4; return Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); };
+    /* traços por pixel numa faixa paralela ao lado, de `de` a `ate` (fração do tamanho da nota) para fora do centro */
+    const q = quad.map(p => ({ x: p.x * w, y: p.y * h }));
+    const cx = q.reduce((s, p) => s + p.x, 0) / 4, cy = q.reduce((s, p) => s + p.y, 0) / 4;
+    const faixa = (a, b, de, ate) => {
+      const nx = (a.x + b.x) / 2 - cx, ny = (a.y + b.y) / 2 - cy;
+      let tracos = 0, n = 0;
+      for (let t = 0.12; t <= 0.88; t += 0.004) {
+        for (let m = de; m <= ate; m += 0.006) {
+          const x = Math.round(a.x + (b.x - a.x) * t + nx * m), y = Math.round(a.y + (b.y - a.y) * t + ny * m);
+          if (x < 2 || y < 2 || x >= w - 2 || y >= h - 2) continue;
+          n++;
+          if (croma(x, y) > 40) continue;                      // tecido colorido, mesa: tinta de nota é neutra
+          if (Math.abs(cinza(x + 1, y) - cinza(x - 1, y)) + Math.abs(cinza(x, y + 1) - cinza(x, y - 1)) > 34) tracos++;
+        }
+      }
+      return n > 40 ? tracos / n : 0;
+    };
+    for (let i = 0; i < 4; i++) {
+      const a = q[i], b = q[(i + 1) % 4];
+      const fora = faixa(a, b, 0.06, 0.2), dentro = faixa(a, b, -0.24, -0.1);
+      if (dentro > 0.012 && fora > dentro * 0.45) return true;
+    }
+    return false;
+  }
 
   /* blob (foto) → { blob, endireitou }. Nunca lança: em qualquer dúvida devolve a foto original. */
   async function endireitar(blob) {
@@ -610,7 +651,10 @@ window.Scanner = (() => {
       mg.drawImage(im, 0, 0, mw, mh);
       const r = achar(mg.getImageData(0, 0, mw, mh).data, mw, mh);
       // papel cortado pela borda da foto: a página endireitada perderia o que já faltava e ainda daria falsa sensação de nota inteira
-      if (!r || r.cortada) { try { im.close && im.close(); } catch (_) {} return { blob, endireitou: false }; }
+      _soltar(mini);
+      let continua = false;
+      if (r && !r.cortada) { try { continua = _papelContinua(im, r.quad, W0, H0); } catch (_) {} }
+      if (!r || r.cortada || continua) { try { im.close && im.close(); } catch (_) {} return { blob, endireitou: false }; }
 
       // origem: no máximo 4096 px no maior lado (memória de celular modesto; a foto da câmera já vem limitada a isso)
       const k0 = Math.min(1, 4096 / Math.max(W0, H0));
@@ -620,20 +664,26 @@ window.Scanner = (() => {
       og.drawImage(im, 0, 0, sw, sh);
       try { im.close && im.close(); } catch (_) {}
       const src = og.getImageData(0, 0, sw, sh).data;
+      _soltar(orig);
 
       const q = r.quad.map(c => ({ x: c.x * sw, y: c.y * sh }));
       const topo = _dist(q[0], q[1]), base = _dist(q[3], q[2]), esq = _dist(q[0], q[3]), dir = _dist(q[1], q[2]);
-      let dw = Math.round((topo + base) / 2), dh = Math.round((esq + dir) / 2);
+      /* proporção pela média dos lados; o tamanho, pelo lado maior: só a média tirava pixels da ponta perto da câmera */
+      const amplia = Math.max(2 * Math.max(topo, base) / (topo + base), 2 * Math.max(esq, dir) / (esq + dir));
+      let dw = Math.round((topo + base) / 2 * amplia), dh = Math.round((esq + dir) / 2 * amplia);
       const esc = Math.min(1, MAX_SAIDA / Math.max(dw, dh));
       dw = Math.max(1, Math.round(dw * esc)); dh = Math.max(1, Math.round(dh * esc));
       if (dw < 200 || dh < 200) return { blob, endireitou: false };
 
-      const px = aplanar(src, sw, sh, q, dw, dh, r.curvas, r.K);
+      /* só os 4 cantos, como o scanner do Drive: seguir a borda amassada do cupom (curvas) ondulava as linhas de texto e a
+         letra parecia desfocada em parte da foto. A curva continua no contorno ao vivo. */
+      const px = aplanar(src, sw, sh, q, dw, dh);
       if (!px) return { blob, endireitou: false };
       realcar(px, dw, dh);
       const cv = document.createElement('canvas'); cv.width = dw; cv.height = dh;
       cv.getContext('2d').putImageData(new ImageData(px, dw, dh), 0, 0);
       const out = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.95));
+      _soltar(cv);
       if (!out || out.size < 5000) return { blob, endireitou: false };
       return { blob: out, endireitou: true };
     } catch (_) {

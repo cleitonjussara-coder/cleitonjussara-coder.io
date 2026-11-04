@@ -51,7 +51,9 @@ window.Recorte = (() => {
     const h = Math.max(1, Math.round(img.naturalHeight * escala));
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, w, h);
     return c;
   }
 
@@ -649,9 +651,21 @@ window.Recorte = (() => {
     const R = 4, lado = { esq: 0, dir: 0, topo: 0, base: 0 };
     let total = 0, fora = 0;
     const pontos = [];                                   // x,y (mapa) dos traços que ficaram de fora — a tela desenha em vermelho
+    /* Mancha de sol no banco, além do fim do papel (print de 04/11/2026), virava "texto cortado": é clara e tem textura. O
+       papel tem largura; a mancha é estreita. Linha cuja parte clara não chega a 60% da largura típica do papel não conta. */
+    const largClara = new Int32Array(H), amostra = [];
+    for (let y = y0; y < y1; y++) {
+      let c = 0;
+      for (let x = x0; x < x1; x++) if (cinza[y * W + x] >= claro) c++;
+      largClara[y] = c;
+      if (y >= r.y0 && y < r.y1 && c) amostra.push(c);
+    }
+    amostra.sort((a, b) => a - b);
+    const largMin = (amostra[amostra.length >> 1] || 0) * 0.6;
     for (let y = Math.max(R, y0); y < Math.min(H - R, y1); y++) {
       for (let x = Math.max(R, x0); x < Math.min(W - R, x1); x++) {
         if (E[y * W + x] <= T || croma[y * W + x] > CROMA_TEXTO) continue;   // fraco, ou tecido colorido (jeans, toalha)
+        if (largClara[y] < largMin) continue;
         /* Só vale traço DENTRO do papel (encolhido ~1,5%): fora dele é tecido, mesa, sombra; na borda, o contorno do
            papel faz traço denso nos dois sentidos. Papel girado ou em perspectiva também: o limite é por linha. */
         if (_papel) {
@@ -819,15 +833,21 @@ window.Recorte = (() => {
 
     const cv = document.createElement('canvas');
     cv.width = dw; cv.height = dh;
-    cv.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
-    return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.95));
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
+    /* iPhone sem memória de canvas desenha em branco sem dar erro: pixel transparente = não desenhou, tenta menor */
+    if (!g.getImageData(dw >> 1, dh >> 1, 1, 1).data[3]) { cv.width = cv.height = 0; return Promise.reject(new Error('canvas vazio')); }
+    return new Promise(res => cv.toBlob(b => { cv.width = cv.height = 0; res(b); }, 'image/jpeg', 0.95));
   }
 
   function _fechar(valor) {
     $('crop-overlay').style.display = 'none';
     const url = $('crop-img').dataset.url;
     if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
-    $('crop-img').src = ''; delete $('crop-img').dataset.url;
+    /* src='' dispara erro no Safari, e ele podia cair na foto seguinte: ela "não carregava" e ia inteira, sem recorte */
+    { const im = $('crop-img'); im.onload = im.onerror = null; im.removeAttribute('src'); delete im.dataset.url; }
+    if (_trabalho) { _trabalho.width = 0; _trabalho.height = 0; }
     _trabalho = null;                       // libera o canvas reduzido
     _mapa = null;
     _blobAberto = null;
@@ -912,7 +932,9 @@ window.Recorte = (() => {
        null → "Foto inteira", falha de carregamento, ou tipo não-imagem
        false → X: o usuário desistiu e a foto deve ser descartada */
   async function abrir(blob, opts = {}) {
-    if (!blob || !/^image\//i.test(blob.type || '')) return null;
+    /* o tipo não decide: no iPhone, foto vinda do iCloud ou da galeria pode chegar com type vazio, e ia inteira. Quem
+       não é imagem cai no erro de carregar, logo abaixo. */
+    if (!blob || (blob.type && !/^image\//i.test(blob.type))) return null;
     if (!$('crop-overlay')) return null;          // markup ausente → segue sem recorte
     _ligarEventos();
     _blobAberto = blob;
@@ -921,16 +943,19 @@ window.Recorte = (() => {
     const img = $('crop-img');
     img.dataset.url = url;
 
-    const carregou = await new Promise(res => {
+    const carregar = () => new Promise(res => {
       img.onload  = () => res(true);
       img.onerror = () => res(false);
       img.src = url;
     });
+    let carregou = await carregar();
+    if (!carregou) { await new Promise(r => setTimeout(r, 400)); carregou = await carregar(); }   // memória soltando: mais uma tentativa
     if (!carregou) { try { URL.revokeObjectURL(url); } catch (_) {} return null; }
 
-    _trabalho = _prepararTrabalho(img);
-    _mapa = null;
-    try { _mapa = _analisar(_trabalho); } catch (_) {}
+    /* A detecção é ajuda, não condição: sem memória para ela, a tela de recorte abre mesmo assim e a pessoa enquadra.
+       Antes o erro subia e a foto era salva inteira. */
+    _trabalho = null; _mapa = null;
+    try { _trabalho = _prepararTrabalho(img); _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
 
     /* Medir direto: getBoundingClientRect força o layout, então logo após

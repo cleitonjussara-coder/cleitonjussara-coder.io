@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=519">
+  <link rel="manifest" href="manifest.json?v=521">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1321,6 +1321,15 @@ button.cdet-plan-sep:hover,button.cdet-plan-sep.on{background:rgba(201,234,98,.1
 .cdet-plan-rep .a{display:flex;gap:4px}
 .cdet-plan-nota{appearance:none;-webkit-appearance:none;width:100%;border-width:1px 0 0;border-style:solid;border-color:rgba(255,255,255,.12);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;touch-action:manipulation}
 .cdet-plan-nota:hover{background:rgba(201,234,98,.1)}
+.cdet-plan-nota[hidden]{display:none}
+.cdet-plan-filtro{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px;margin:0 0 8px}
+.cdet-plan-filtro-tipos{display:flex;flex-wrap:wrap;gap:6px}
+.cdet-plan-filtro-datas{flex:1 1 280px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:380px}
+.cdet-plan-filtro-datas label{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px;font-weight:700;color:rgba(234,247,238,.85)}
+#app-content .cdet-plan-filtro-datas .inp{width:100%;min-width:0;min-height:42px;padding:7px 8px;font-size:16px;border-radius:10px}
+.cdet-plan-filtro-res{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;margin:0 0 8px;font-size:15px;font-weight:800;color:#b9e24a}
+.cdet-plan-filtro-res[hidden]{display:none}
+@media(max-width:420px){.cdet-plan-filtro-tipos{flex:1 1 100%;flex-wrap:nowrap}.cdet-plan-filtro-tipos .btn{flex:1 1 0;min-width:0;padding-left:4px;padding-right:4px;white-space:nowrap}.cdet-plan-filtro-datas{flex-basis:100%;grid-template-columns:minmax(0,1fr)}}
 .cdet-plan-nota i{font-style:normal;font-weight:800;color:#c9ea62}
 .cdet-plan-mes{appearance:none;-webkit-appearance:none;min-height:32px;padding:4px 8px;border:0;border-radius:8px;background:rgba(201,234,98,.14);box-shadow:inset 0 0 0 1px rgba(201,234,98,.45);font:inherit;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;touch-action:manipulation}
 .cdet-plan-mes:hover{background:rgba(201,234,98,.26)}
@@ -1466,14 +1475,19 @@ button.cdet-bal:hover,button.cdet-bal.on{border-color:#c9ea62}
 /* Câmera interna da nota: no Android, abrir a câmera do sistema mandava o
    app para segundo plano e o celular o fechava (voltava reiniciado). */
 .camera-aberta #instalar-faixa,.camera-aberta .aviso-versao{display:none}
-#cam-nota-overlay{position:fixed;inset:0;z-index:105;background:#000;display:none;
-  flex-direction:column;align-items:center;justify-content:flex-end}
-#cam-nota-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* 04/11/2026, modelo do scanner do Drive: a prévia mostra a foto INTEIRA (contain) e os botões ficam fora dela. Com cover,
+   a tela escondia as laterais e a foto saía com mais coisa que a pessoa enquadrou. */
+#cam-nota-overlay{position:fixed;inset:0;z-index:105;background:#000;display:none;flex-direction:column}
+.cam-nota-visor{position:relative;flex:1;min-height:0;width:100%;overflow:hidden}
+#cam-nota-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #cam-nota-guia{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.cam-nota-barra{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;
-  padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));width:100%;
-  background:linear-gradient(to top,rgba(0,0,0,.75),rgba(0,0,0,0))}
-.cam-nota-dica{color:#fff;font-size:16px;text-align:center;text-shadow:0 1px 3px #000}
+#cam-nota-foco{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border:2px solid #ffd54a;border-radius:50%;
+  pointer-events:none;display:none}
+.cam-nota-barra{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:10px;background:#111;
+  padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));width:100%}
+.cam-nota-dica{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);max-width:calc(100% - 24px);width:max-content;
+  margin:0;padding:7px 14px;border-radius:18px;background:rgba(0,0,0,.62);color:#fff;font-size:15px;line-height:1.3;
+  text-align:center;pointer-events:none}
 .cam-nota-disparo{width:76px;height:76px;border-radius:50%;border:5px solid #fff;
   background:#b9e24a;cursor:pointer}
 .cam-nota-disparo:active{transform:scale(.92)}
@@ -2041,7 +2055,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=519" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=521" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2183,17 +2197,20 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
 <!-- ═══════════ CÂMERA DA NOTA (dentro do app) ═══════════ -->
 <div id="cam-nota-overlay">
-  <video id="cam-nota-video" playsinline muted autoplay></video>
-  <canvas id="cam-nota-guia"></canvas>
-  <div class="cam-nota-barra">
+  <div class="cam-nota-visor">
+    <video id="cam-nota-video" playsinline muted autoplay onclick="focarCameraNoToque(event)"></video>
+    <canvas id="cam-nota-guia"></canvas>
+    <div id="cam-nota-foco"></div>
     <p class="cam-nota-dica" id="cam-nota-dica">Enquadre a nota inteira e toque no botão</p>
-    <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-flash" style="display:none"
-            onclick="alternarFlashNota()">🔦 Flash: Automático</button>
-    <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-auto" style="display:none"
-            onclick="alternarScannerNota()">📐 Contorno automático: ligado</button>
+  </div>
+  <div class="cam-nota-barra">
     <button type="button" class="cam-nota-disparo" id="cam-nota-disparo" aria-label="Tirar foto"
             onclick="dispararCameraNota()"></button>
     <div class="cam-nota-alts">
+      <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-flash" style="display:none"
+              onclick="alternarFlashNota()">🔦 Flash: Automático</button>
+      <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-auto" style="display:none"
+              onclick="alternarScannerNota()">📐 Contorno automático: ligado</button>
       <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-anexar" onclick="anexarArquivoNoLugarDaFoto()">📎 Anexar arquivo</button>
       <button type="button" class="btn btn-sm cam-nota-alt" onclick="cameraNotaDoSistema()">Câmera do celular</button>
     </div>
@@ -2736,39 +2753,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=519"></script>
-<script defer src="js/db.js?v=519"></script>
-<script defer src="js/nfce.js?v=519"></script>
-<script defer src="js/sefaz.js?v=519"></script>
-<script defer src="js/brasilapi.js?v=519"></script>
-<script defer src="js/ocr.js?v=519"></script>
-<script defer src="js/scanner.js?v=519"></script>
-<script defer src="js/foto-branca.js?v=519"></script>
-<script defer src="js/recorte.js?v=519"></script>
-<script defer src="js/excel.js?v=519"></script>
-<script defer src="js/gestor.js?v=519"></script>
-<script defer src="js/frota.js?v=519"></script>
-<script defer src="js/frota-painel.js?v=519"></script>
-<script defer src="js/frota-planilha.js?v=519"></script>
-<script defer src="js/ponto.js?v=519"></script>
-<script defer src="js/rastreio.js?v=519"></script>
-<script defer src="js/repasses-equipe.js?v=519"></script>
-<script defer src="js/gdrive.js?v=519"></script>
+<script defer src="js/api.js?v=521"></script>
+<script defer src="js/db.js?v=521"></script>
+<script defer src="js/nfce.js?v=521"></script>
+<script defer src="js/sefaz.js?v=521"></script>
+<script defer src="js/brasilapi.js?v=521"></script>
+<script defer src="js/ocr.js?v=521"></script>
+<script defer src="js/scanner.js?v=521"></script>
+<script defer src="js/foto-branca.js?v=521"></script>
+<script defer src="js/recorte.js?v=521"></script>
+<script defer src="js/excel.js?v=521"></script>
+<script defer src="js/gestor.js?v=521"></script>
+<script defer src="js/frota.js?v=521"></script>
+<script defer src="js/frota-painel.js?v=521"></script>
+<script defer src="js/frota-planilha.js?v=521"></script>
+<script defer src="js/ponto.js?v=521"></script>
+<script defer src="js/rastreio.js?v=521"></script>
+<script defer src="js/repasses-equipe.js?v=521"></script>
+<script defer src="js/gdrive.js?v=521"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=519"></script>
+<script defer src="js/svelte-ajuda.js?v=521"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=519"></script>
+<script defer src="js/svelte-historico.js?v=521"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=519"></script>
+<script defer src="js/svelte-arquivos.js?v=521"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=519"></script>
-<script defer src="js/app.js?v=519"></script>
-<script defer src="js/instalar.js?v=519"></script>
+<script defer src="js/svelte-perfil.js?v=521"></script>
+<script defer src="js/app.js?v=521"></script>
+<script defer src="js/instalar.js?v=521"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=519').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=521').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

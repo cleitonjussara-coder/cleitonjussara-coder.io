@@ -32,6 +32,7 @@ window.Gestor = (() => {
   let _acoesAbertas = false;           // grade de relatórios/ações da ficha aberta
   let _planAberto = null;              // detalhe aberto na faixa C.V. (recebido ou saldo); sobrevive ao redesenho da mesma ficha
   let _planDono = null;                // colaborador|ano desse detalhe: outra pessoa ou outro ano começam fechados
+  let _planFiltros = {};               // filtro da lista de gastos, por quadro (cartao, reemb); some junto com o detalhe
   let _fichaSeq = 0;                   // número do último redesenho da ficha; fechar a ficha também o avança
   const _restaurarRolagem = el => { if (_evoScroll !== null) { const y = _evoScroll; _evoScroll = null; if (el) el.scrollTop = y; } };
   const _evoDica = '<div class="db-hint">Toque numa coluna para ver esse mês</div>';
@@ -158,6 +159,47 @@ window.Gestor = (() => {
   function alternarPlanilha(painel) {
     _planAberto = _planAberto === painel ? null : painel;
     _aplicarPlanAberto();
+  }
+  /* Filtro da lista de gastos da faixa C.V. (04/11/2026, pedido do Cleiton sobre o print): tipo e período. Só esconde
+     linhas e mostra a soma do que sobrou; os totais da faixa continuam sendo os do ano. */
+  const _filtroGastos = k => _planFiltros[k] || (_planFiltros[k] = { tp: '', de: '', ate: '' });
+  function _aplicarFiltroGastos() {
+    document.querySelectorAll('.cdet-plan-det[data-gastos]').forEach(p => {
+      const f = _filtroGastos(p.dataset.gastos);
+      const linhas = [...p.querySelectorAll('.cdet-plan-nota')];
+      let n = 0, total = 0;
+      linhas.forEach(l => {
+        const dia = l.dataset.dia;
+        const ok = (!f.tp || l.dataset.tp === f.tp) && (!f.de || dia >= f.de) && (!f.ate || dia <= f.ate);
+        l.hidden = !ok;
+        if (ok) { n++; total += Number(l.dataset.valor) || 0; }
+      });
+      p.querySelectorAll('[data-gf-tp]').forEach(c => {
+        const on = c.dataset.gfTp === f.tp;
+        c.classList.toggle('btn-primary', on); c.classList.toggle('btn-outline', !on);
+        c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      const de = p.querySelector('[data-gf-de]'), ate = p.querySelector('[data-gf-ate]');
+      if (de && ate) {
+        de.value = f.de; ate.value = f.ate;
+        de.max = f.ate || ate.dataset.fim; ate.min = f.de || de.dataset.ini;
+      }
+      const res = p.querySelector('.cdet-plan-filtro-res');
+      if (res) {
+        res.hidden = !(f.tp || f.de || f.ate);
+        res.querySelector('.txt').textContent = `${n} de ${linhas.length} · ${brl(Math.round(total * 100) / 100)}`;
+      }
+      const vazio = p.querySelector('[data-gf-vazio]');
+      if (vazio) vazio.hidden = n > 0;
+    });
+  }
+  function filtrarGastos(k, campo, valor) {
+    _filtroGastos(k)[campo] = valor || '';
+    _aplicarFiltroGastos();
+  }
+  function limparFiltroGastos(k) {
+    delete _planFiltros[k];
+    _aplicarFiltroGastos();
   }
   function alternarAcoes(btn) {
     const g = document.querySelector('.cdet-acoes');
@@ -713,7 +755,7 @@ window.Gestor = (() => {
     _chaveFichaAtual = chaveFicha;
     if (_filtroNotas && _filtroNotas.chave !== chaveFicha) _filtroNotas = null;   // outro mês ou outra pessoa: lista inteira
     if (_filtroReps && _filtroReps.chave !== chaveFicha) _filtroReps = null;
-    if (_planDono !== `${id}|${ano}`) { _planDono = `${id}|${ano}`; _planAberto = null; }
+    if (_planDono !== `${id}|${ano}`) { _planDono = `${id}|${ano}`; _planAberto = null; _planFiltros = {}; }
     const seq = ++_fichaSeq;
     const fichaAntes = el.querySelector('.cdet');
     if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
@@ -845,14 +887,26 @@ window.Gestor = (() => {
           </div>`).join('')
         : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`;
       const planPag = a => (a.k === 'cartao' ? 'cartao' : 'carteira');   // mesmo valor do data-pag do cartão da nota
-      const planGasto = a => `<div class="cdet-plan-det" data-painel="${a.k}-gasto" hidden>
+      const planFiltroGastos = a => {
+        const chip = (t, rot, qtd) => `<button type="button" class="btn btn-sm btn-outline" data-gf-tp="${t}" aria-pressed="false" onclick="Gestor.filtrarGastos('${a.k}','tp',this.dataset.gfTp)">${rot} ${qtd}</button>`;
+        return `<div class="cdet-plan-filtro">
+            <div class="cdet-plan-filtro-tipos" role="group" aria-label="Filtrar por tipo">${chip('', 'Todos', a.gastoL.length)}${['RDM', 'RDA'].map(t => chip(t, t, a.gastoL.filter(n => n.tipo === t).length)).join('')}</div>
+            <div class="cdet-plan-filtro-datas">
+              <label><span>De</span><input class="inp" type="date" data-gf-de data-ini="${ano}-01-01" min="${ano}-01-01" max="${ano}-12-31" onchange="Gestor.filtrarGastos('${a.k}','de',this.value)"></label>
+              <label><span>Até</span><input class="inp" type="date" data-gf-ate data-fim="${ano}-12-31" min="${ano}-01-01" max="${ano}-12-31" onchange="Gestor.filtrarGastos('${a.k}','ate',this.value)"></label>
+            </div>
+          </div>
+          <div class="cdet-plan-filtro-res" hidden><span class="txt"></span><button type="button" class="btn btn-sm btn-outline" onclick="Gestor.limparFiltroGastos('${a.k}')">Limpar filtro</button></div>`;
+      };
+      const planGasto = a => `<div class="cdet-plan-det" data-painel="${a.k}-gasto"${a.gastoL.length ? ` data-gastos="${a.k}"` : ''} hidden>
           <div class="cdet-plan-det-tit">Gastos lançados em ${ano} · ${a.gastoL.length}</div>
+          ${a.gastoL.length ? planFiltroGastos(a) : ''}
           ${a.gastoL.length ? [...a.gastoL].sort((p, q) => String(q.data || '').localeCompare(String(p.data || ''))).map(n => `
-          <button type="button" class="cdet-plan-rep cdet-plan-nota" title="Abrir nas notas de ${MESES[Number(n.mes) - 1]}" data-pag="${planPag(a)}" data-tp="${_at(n.tipo)}" data-mes="${Number(n.mes)}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">
+          <button type="button" class="cdet-plan-rep cdet-plan-nota" title="Abrir nas notas de ${MESES[Number(n.mes) - 1]}" data-pag="${planPag(a)}" data-tp="${_at(n.tipo)}" data-mes="${Number(n.mes)}" data-dia="${_at(String(n.data || '').slice(0, 10))}" data-valor="${Number(n.valor) || 0}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">
             <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
             <span class="t"><span class="n">${esc(n.razao_social || 'Sem fornecedor')}</span><span class="s">${fmtData(n.data)}${n.subtipo ? ` · ${esc(n.subtipo)}` : ''}</span></span>
             <b class="v">${brl(n.valor)}</b><i aria-hidden="true">›</i>
-          </button>`).join('') : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`}
+          </button>`).join('') + '<div class="cdet-plan-vazio" data-gf-vazio hidden>Nenhum gasto com este filtro.</div>' : `<div class="cdet-plan-vazio">Nenhum lançamento em ${ano}.</div>`}
         </div>`;
       const planRecebido = a => `<div class="cdet-plan-det" data-painel="${a.k}-rec" hidden>
           <div class="cdet-plan-det-tit">${a.k === 'cartao' ? 'Recargas lançadas' : 'Reembolsos lançados'} em ${ano} · ${a.recL.length}</div>
@@ -1086,6 +1140,7 @@ window.Gestor = (() => {
       _aplicarFiltroNotas();   // o filtro por Cartão/Carteira continua depois de corrigir ou excluir uma nota
       _aplicarFiltroReps();    // idem para Repasse/Recarga
       _aplicarPlanAberto();    // o detalhe da faixa C.V. continua aberto depois de corrigir um lançamento
+      _aplicarFiltroGastos();  // e o filtro da lista de gastos também
       /* veio das setas da lista de repasses: volta para ela, não para o topo */
       if (_rolarParaRepasses) {
         _rolarParaRepasses = false;
@@ -1488,5 +1543,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

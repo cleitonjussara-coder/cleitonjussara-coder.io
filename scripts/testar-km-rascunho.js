@@ -80,7 +80,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     digita(w, 'km-obs', 'saída para Cristalina');
     w.Frota.fotografar();
     confere(w.__camera.length === 1 && w.__clicks === 0, 'usa a câmera de dentro do app, não a do sistema');
-    confere(w.__camera[0].ladoMax <= 2048, 'pede foto menor que a da nota');
+    confere(w.__camera[0].inputReserva === 'km-foto', 'a câmera do sistema de reserva é a do KM');
 
     w = abrirPagina(cel);                                  // página morreu: memória zerada
     confere(await w.Frota.restaurarRascunho() === true, 'ao voltar, o app reabre o formulário');

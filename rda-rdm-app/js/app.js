@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 519;
+const APP_BUILD = 521;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -7665,7 +7665,9 @@ async function onChaveNFCe(raw) {
    roda OCR p/ valor/data/CNPJ/razão. Junta tudo num formulário. */
 function lerFotoNota() {
   fecharCaptura();
-  $('f-foto-ocr').click();
+  /* 04/11/2026: abria a câmera do sistema e anexava a foto INTEIRA, sem recorte. Quem não consegue ler o QR ao vivo (o
+     iPhone, mais que o Android) caía aqui: era o "às vezes salva a imagem inteira". */
+  abrirCameraNota(null, { aoFoto: f => onFotoNota({ target: { files: [f], value: '' } }), scanner: true, inputReserva: 'f-foto-ocr' });
 }
 
 /* carrega um blob como <img> */
@@ -7690,9 +7692,11 @@ function _blobToImg(blob) {
    nunca motivo para perder o anexo. */
 /* 20/09/2026: 1800 px/q0,75 dava ~1 MB por nota; 1400 px/q0,72 fica em
    ~400 KB e o cupom continua legível (QR e OCR rodam antes, no original). */
-const _FOTO_LADO_MAX   = 1400;
-const _FOTO_QUALIDADE  = 0.72;
-const _FOTO_MIN_COMPRIMIR = 400 * 1024;   // abaixo disso não vale o esforço
+/* 04/11/2026: 1400 px/q0,72 pelo MAIOR lado amassava o cupom comprido (1400 de altura = letra ilegível) e o desfoque
+   aparecia no anexo salvo. O plano de armazenamento não tem limite; a foto segue pequena o bastante para sinal fraco. */
+const _FOTO_LADO_MAX   = 2600;
+const _FOTO_QUALIDADE  = 0.82;
+const _FOTO_MIN_COMPRIMIR = 900 * 1024;   // abaixo disso não vale o esforço
 
 /* Orientação gravada no EXIF (1 = já está em pé). Lê só o começo do arquivo:
    o bloco EXIF vem nos primeiros KB de um JPEG. */
@@ -7881,8 +7885,11 @@ async function _comprimirImagem(blob, ext) {
     const c = document.createElement('canvas');
     c.width  = Math.max(1, Math.round(img.width  * escala));
     c.height = Math.max(1, Math.round(img.height * escala));
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+    cx.drawImage(img, 0, 0, c.width, c.height);
     const menor = await new Promise(r => c.toBlob(r, 'image/jpeg', _FOTO_QUALIDADE));
+    c.width = c.height = 0;                                       // iPhone: memória de canvas só volta assim
     if (!menor || !menor.size || menor.size >= blob.size) return { blob, ext };   // nunca piora
     return { blob: menor, ext: 'jpg' };                            // reencodado
   } catch (_) { return { blob, ext }; }
@@ -8114,6 +8121,26 @@ async function onFotoNota(e) {
   file = await _endireitarComAviso(file);   // 08/10/2026
 
   const ov = $('ocr-overlay');
+  /* mesmo caminho da foto do formulário: endireita, recorta, e o recorte vira o anexo. O QR segue na foto inteira. */
+  const inteira = file;
+  let corrigida = false;
+  if (_camNotaScannerOn && typeof Scanner !== 'undefined') {
+    ov.style.display = 'flex'; $('ocr-progress').textContent = 'Endireitando a nota…';
+    try {
+      const r = await Scanner.endireitar(file);
+      if (r?.endireitou && r.blob) { file = new File([r.blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' }); corrigida = true; }
+    } catch (_) {}
+    ov.style.display = 'none';
+  }
+  if (window.Recorte) {
+    let rec = null;
+    try { rec = await Recorte.abrir(file, { corrigida }); }
+    catch (err) { console.error('Recorte não abriu', err); toast('O recorte não abriu — a foto ficou inteira. Feche e abra o app e tente de novo.', 'err'); }
+    if (rec === false) { e.target.value = ''; return; }                 // X: desistiu desta foto
+    if (rec) file = new File([rec], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    else if (corrigida) file = inteira;                                  // "Foto inteira": a foto como a câmera tirou
+  }
+
   ov.style.display = 'flex';
   $('ocr-progress').textContent = 'Lendo a nota…';
 
@@ -8126,7 +8153,7 @@ async function onFotoNota(e) {
   // 1) tenta ler o QR Code da própria foto (chave NFC-e)
   try {
     await _ensureJsQR().catch(() => {});
-    const qrTxt = await _lerQRDeImagem(file);
+    const qrTxt = await _lerQRDeImagem(inteira);
     if (qrTxt) {
       let parsed = NFCE.fromScan(qrTxt);
       if (!(parsed?.chave)) {
@@ -8172,6 +8199,7 @@ async function onFotoNota(e) {
   // abre o formulário e ANEXA a foto (abrirFormNota zera fotoBlob, então setamos depois)
   await abrirFormNota(dados);
   fotoBlob = file;
+  fotoOriginal = inteira;           // "Ler QR da foto" procura na foto inteira
   fotoExt  = _extDoArquivo(file);
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
@@ -8352,7 +8380,9 @@ async function _aplicarCamera(track, mudanca = {}) {
   const c = { advanced: adv };
   /* resolução: a maior que a câmera declara (alguns celulares abrem em 720p e só entregam mais se pedirem) */
   if (!est.semResolucao && caps.width?.max && caps.height?.max) {
-    c.width = { ideal: Math.min(caps.width.max, 3840) }; c.height = { ideal: Math.min(caps.height.max, 2160) };   // 4K ao vivo no máximo
+    const v = _videoFoto();
+    c.width = { ideal: Math.min(caps.width.max, v.width.ideal) }; c.height = { ideal: Math.min(caps.height.max, v.height.ideal) };
+    c.aspectRatio = v.aspectRatio;
   }
   try { await track.applyConstraints(c); _camEstado.set(track, est); return true; }
   catch (_) {
@@ -8362,6 +8392,18 @@ async function _aplicarCamera(track, mudanca = {}) {
 }
 
 function _temLanterna(track) { return !!_capsDaCamera(track).torch; }
+
+/* Foco num ponto da imagem (0..1), 04/11/2026: com foco só contínuo o celular escolhia sozinho, às vezes o fundo. Só no
+   Android/Chrome; o Safari não deixa o site mexer no foco e devolve false. */
+async function _focarCamera(track, x = 0.5, y = 0.5) {
+  if (!track || track.readyState === 'ended') return false;
+  const modos = _capsDaCamera(track).focusMode;
+  const adv = [];
+  if (navigator.mediaDevices?.getSupportedConstraints?.().pointsOfInterest) adv.push({ pointsOfInterest: [{ x, y }] });
+  if (Array.isArray(modos) && modos.includes('single-shot')) adv.push({ focusMode: 'single-shot' });
+  if (!adv.length) return false;
+  try { await track.applyConstraints({ advanced: adv }); return true; } catch (_) { return false; }
+}
 
 /* Brilho médio (0–255) do que a câmera está vendo agora: poucos pixels bastam. */
 function _brilhoDoVideo(video) {
@@ -8432,6 +8474,25 @@ let _fotoAntesDoScanner = null;    // a foto como a câmera tirou, quando o scan
    (o odômetro não precisa de 12 MP e cada megapixel é memória num celular fraco); inputReserva, id do input da câmera do sistema. */
 let _camNotaOpts = {};
 const _dicaCamera = () => _camNotaOpts.dica || _DICA_CAMERA_NOTA;
+let _camNotaPontoFoco = null;      // ponto tocado na prévia: { x, y, em }; vale por alguns segundos, depois volta ao centro
+const _FOCO_TOQUE_MS = 6000;
+/* toque na prévia foca ali. A prévia é contain: o ponto é medido sobre a imagem, sem as faixas pretas. */
+async function focarCameraNoToque(ev) {
+  const v = $('cam-nota-video'), track = _camNotaStream?.getVideoTracks()[0];
+  if (!v?.videoWidth || !track) return;
+  const r = v.getBoundingClientRect(), k = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
+  const iw = v.videoWidth * k, ih = v.videoHeight * k, ox = (r.width - iw) / 2, oy = (r.height - ih) / 2;
+  const px = ev.clientX - r.left, py = ev.clientY - r.top;
+  const x = (px - ox) / iw, y = (py - oy) / ih;
+  if (x < 0 || y < 0 || x > 1 || y > 1) return;       // tocou na faixa preta
+  if (!(await _focarCamera(track, x, y))) return;
+  _camNotaPontoFoco = { x, y, em: Date.now() };
+  const anel = $('cam-nota-foco');
+  if (anel) {
+    anel.style.left = px + 'px'; anel.style.top = py + 'px'; anel.style.display = 'block';
+    setTimeout(() => { anel.style.display = 'none'; }, 900);
+  }
+}
 /* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
    sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
 function _semCameraNoAutomatico() {
@@ -8440,9 +8501,16 @@ function _semCameraNoAutomatico() {
   _pararCameraNota();
   if (cb) cb();
 }
+/* Vídeo 4:3, a proporção do sensor e da foto: em 16:9 a foto saía com mais imagem que a prévia. Sem ImageCapture (iPhone), a
+   foto É o quadro do vídeo e precisa da resolução alta; com ele, a prévia não precisa pesar. */
+function _videoFoto() {
+  const w = typeof ImageCapture === 'undefined' ? 3840 : 2560;
+  return { width: { ideal: w }, height: { ideal: w * 3 / 4 }, aspectRatio: { ideal: 4 / 3 } };
+}
 async function abrirCameraNota(aoCancelar, opts = {}) {
   _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
   _camNotaOpts = opts;
+  _camNotaPontoFoco = null;
   const automatico = !!opts.automatico;
   if (!navigator.mediaDevices?.getUserMedia) { if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema(); return; }
   const ov = $('cam-nota-overlay');
@@ -8459,12 +8527,12 @@ async function abrirCameraNota(aoCancelar, opts = {}) {
   { const d = $('cam-nota-dica'); if (d) d.textContent = _dicaCamera(); }
   try {
     const pedir = () => navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, ...(opts.ladoMax ? { width: { ideal: 1920 }, height: { ideal: 1080 } } : { width: { ideal: 3840 }, height: { ideal: 2160 } }) },
+      video: { facingMode: { ideal: 'environment' }, ..._videoFoto() },
     }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
     let aberta;
     try { aberta = await pedir(); }
     catch (e) {
-      if (!automatico) throw e;
+      if (!automatico && !opts.aoFoto) throw e;
       await new Promise(r => setTimeout(r, 400));          // a câmera do leitor de QR acabou de ser solta: dá um instante e tenta de novo
       if (seq !== _camNotaSeq) return;                      // fechou nesse meio tempo
       aberta = await pedir();
@@ -8504,7 +8572,7 @@ async function _iniciarFlashNota() {
   const dica = $('cam-nota-dica');
   if (dica) dica.textContent = _dicaCamera();   // aviso de "escuro" de uma sessão anterior não fica
   if (!track) return;
-  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado', semResolucao: !!_camNotaOpts.ladoMax });
+  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado' });
   if (vez !== _camNotaFlashSeq || _camNotaStream?.getVideoTracks()[0] !== track) return;   // fechou/trocou durante a espera
   const temLanterna = _temLanterna(track);
   if (btn) { btn.style.display = temLanterna ? '' : 'none'; btn.textContent = _rotuloFlashNota(); }
@@ -8536,7 +8604,7 @@ async function alternarFlashNota() {
 function _iniciarScannerNota() {
   _pararScannerNota();
   const bt = $('cam-nota-auto');
-  if (typeof Scanner === 'undefined' || _camNotaOpts.aoFoto) { if (bt) bt.style.display = 'none'; return; }
+  if (typeof Scanner === 'undefined' || (_camNotaOpts.aoFoto && !_camNotaOpts.scanner)) { if (bt) bt.style.display = 'none'; return; }
   if (bt) { bt.style.display = ''; bt.textContent = '📐 Contorno automático: ' + (_camNotaScannerOn ? 'ligado' : 'desligado'); }
   if (!_camNotaScannerOn) return;
   const video = $('cam-nota-video'), guia = $('cam-nota-guia'), stream = _camNotaStream;
@@ -8610,13 +8678,16 @@ async function dispararCameraNota() {
      disparo deixa o foco e o tremor da mão assentarem (foto mexida era o borrão mais comum). */
   try {
     if (typeof ImageCapture !== 'undefined') {
-      await new Promise(r => setTimeout(r, 250));
+      /* foca de novo no ponto tocado (ou no centro, onde a pessoa pôs a nota) logo antes do disparo */
+      const p = _camNotaPontoFoco && Date.now() - _camNotaPontoFoco.em < _FOCO_TOQUE_MS ? _camNotaPontoFoco : { x: 0.5, y: 0.5 };
+      const focou = await _focarCamera(track, p.x, p.y);
+      await new Promise(r => setTimeout(r, focou ? 600 : 250));
       const ic = new ImageCapture(track);
       let opcoes = {};
       try {
         const pc = await Promise.race([ic.getPhotoCapabilities(), new Promise(r => setTimeout(() => r(null), 1500))]);
         if (pc?.imageWidth?.max && pc?.imageHeight?.max) {
-          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, (_camNotaOpts.ladoMax || 4096) / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
+          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, 4096 / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
           opcoes.imageWidth = Math.round(mw * k); opcoes.imageHeight = Math.round(mh * k);
         }
         const luz = pc?.fillLightMode;
@@ -9172,7 +9243,11 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
        à parte antes de tudo (o resultado só é usado depois da leitura da nota). */
     const chaveJaLida = _digitos($('nf-chave').value).length === 44;
     const nfseJaLida = !!$('nf-qr-url').value && _ehUrlNfse($('nf-qr-url').value);
-    const qrEmCurso = (chaveJaLida || nfseJaLida) ? Promise.resolve(null) : _lerQRdaImagem(file).catch(() => null);
+    const lerQr = () => ((chaveJaLida || nfseJaLida) ? Promise.resolve(null) : _lerQRdaImagem(file).catch(() => null));
+    /* sem leitor nativo (iPhone), o QR roda em JS sobre canvases grandes: junto da tela de recorte, travava o toque e
+       gastava a memória que o recorte precisa. Lá ele começa depois do recorte. */
+    const qrDepois = !ocrPronto && !('BarcodeDetector' in window);
+    let qrEmCurso = qrDepois ? null : lerQr();
 
     // OCR do texto impresso — usado principalmente para o VALOR
     let ocr = ocrPronto || {};
@@ -9210,7 +9285,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       $('ocr-progress').textContent = 'Lendo a nota…';
       ocr = await _lerNota(alvo);
     }
-    const qr = await qrEmCurso;
+    const qr = await (qrEmCurso || (qrEmCurso = lerQr()));
 
     if (qr?.documento === 'nfse' && !$('nf-qr-url').value) { $('nf-qr-url').value = qr.qr_url; _atualizarDocumentoAuto(); }
     // chave: QR desta foto → formulário (veio do "Escanear QR") → texto lido

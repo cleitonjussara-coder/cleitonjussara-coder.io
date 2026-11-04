@@ -497,7 +497,6 @@ window.Frota = (() => {
     abrirCameraNota(() => _guardarRascunho({ camera: false }), {
       aoFoto: file => onFoto({ target: { files: [file], value: '' } }),
       dica: 'Enquadre o odômetro e toque no botão',
-      ladoMax: 2048,
       inputReserva: 'km-foto',
     });
   }
