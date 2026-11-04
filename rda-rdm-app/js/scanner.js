@@ -93,10 +93,16 @@ window.Scanner = (() => {
       if (v <= t2) { nLo += hist[v]; sLo += v * hist[v]; } else { nHi += hist[v]; sHi += v * hist[v]; }
     }
     const separa = nLo > 0 && nHi > 0 && (sHi / nHi - sLo / nLo) >= 30 && Math.min(nLo, nHi) / (nLo + nHi) >= 0.12;
-    const thr = separa ? t2 : t1;
+    let thr = separa ? t2 : t1;
 
+    /* maior componente conectado (8 vizinhos). 04/11/2026: piso ou parede clara no canto da foto ganhava do cupom por ser
+       maior. Um papel solto na foto não toca a moldura: havendo um bloco assim com tamanho de nota, ele vale. Se o cupom é
+       menos claro que o piso, ele cai abaixo do 2º limiar: aí repete com o 1º, que o separa da mesa. */
+    const rot = new Int32Array(n), pilha = new Int32Array(n);
+    let melhorN = 0, melhorId = 0, soltoN = 0, soltoId = 0;
+    const componentes = limite => {
     const M = new Uint8Array(n);
-    for (let p = 0; p < n; p++) M[p] = (cinza[p] > thr && croma[p] < CROMA_MAX) ? 1 : 0;
+    for (let p = 0; p < n; p++) M[p] = (cinza[p] > limite && croma[p] < CROMA_MAX) ? 1 : 0;
 
     // erosão 3×3: solta pontes finas entre o papel e manchas claras
     const E = new Uint8Array(n);
@@ -106,18 +112,17 @@ window.Scanner = (() => {
         if (M[i] && M[i - 1] && M[i + 1] && M[i - W] && M[i + W] && M[i - W - 1] && M[i - W + 1] && M[i + W - 1] && M[i + W + 1]) E[i] = 1;
       }
     }
-
-    // maior componente conectado (8 vizinhos)
-    const rot = new Int32Array(n), pilha = new Int32Array(n);
-    let melhorN = 0, melhorId = 0, id = 0;
+    rot.fill(0); melhorN = melhorId = soltoN = soltoId = 0;
+    let id = 0;
     for (let p0 = 0; p0 < n; p0++) {
       if (!E[p0] || rot[p0]) continue;
       id++;
-      let topo = 0, cont = 0;
+      let topo = 0, cont = 0, toca = false;
       pilha[topo++] = p0; rot[p0] = id;
       while (topo) {
         const p = pilha[--topo]; cont++;
         const x = p % W, y = (p - x) / W;
+        if (x <= 1 || y <= 1 || x >= W - 2 || y >= H - 2) toca = true;
         for (let dy = -1; dy <= 1; dy++) {
           const yy = y + dy; if (yy < 0 || yy >= H) continue;
           for (let dx = -1; dx <= 1; dx++) {
@@ -128,7 +133,16 @@ window.Scanner = (() => {
         }
       }
       if (cont > melhorN) { melhorN = cont; melhorId = id; }
+      if (!toca && cont > soltoN) { soltoN = cont; soltoId = id; }
     }
+    };
+    const papelMin = n * AREA_MIN * 0.5;
+    componentes(thr);
+    if (soltoN < papelMin && thr !== t1) {
+      componentes(t1);
+      if (soltoN >= papelMin) thr = t1; else componentes(thr);
+    }
+    if (soltoN >= papelMin) { melhorN = soltoN; melhorId = soltoId; }
     if (!melhorId || melhorN < n * AREA_MIN * 0.5) return null;
 
     /* 19/10/2026 — o contorno cortava o cupom em dois casos reais: (1) sombra no pé/topo da nota: o papel sombreado fica

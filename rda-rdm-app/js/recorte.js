@@ -302,9 +302,13 @@ window.Recorte = (() => {
     const nAcima = nLo + nHi;
     const separa = nLo > 0 && nHi > 0 && (sHi / nHi - sLo / nLo) >= 30 && Math.min(nLo, nHi) / nAcima >= 0.12;
     const thr = separa ? t2 : limiar;
-
+    const R = 2, janela = (2 * R + 1) * (2 * R + 1);
+    const rot = new Int32Array(W * H);
+    const pilha = new Int32Array(W * H);
+    let melhorN = 0, melhorId = 0, soltoN = 0, soltoId = 0;
+    const componentes = limite => {
     const M = new Uint8Array(W * H);
-    for (let p = 0; p < W * H; p++) M[p] = (cinza[p] > thr && croma[p] < CROMA_MAX) ? 1 : 0;
+    for (let p = 0; p < W * H; p++) M[p] = (cinza[p] > limite && croma[p] < CROMA_MAX) ? 1 : 0;
 
     // erosão 5×5 (imagem integral): solta pontes finas entre o papel e manchas claras
     const S = new Int32Array((W + 1) * (H + 1));
@@ -312,7 +316,6 @@ window.Recorte = (() => {
       let linha = 0;
       for (let x = 0; x < W; x++) { linha += M[y * W + x]; S[(y + 1) * (W + 1) + x + 1] = S[y * (W + 1) + x + 1] + linha; }
     }
-    const R = 2, janela = (2 * R + 1) * (2 * R + 1);
     const E = new Uint8Array(W * H);
     for (let y = R; y < H - R; y++) {
       for (let x = R; x < W - R; x++) {
@@ -322,18 +325,20 @@ window.Recorte = (() => {
       }
     }
 
-    // maior componente conectado (8 vizinhos)
-    const rot = new Int32Array(W * H);
-    const pilha = new Int32Array(W * H);
-    let melhorN = 0, melhorId = 0, id = 0;
+    /* maior componente conectado (8 vizinhos). 04/11/2026: piso claro no canto da foto ganhava do cupom (print das 11:36).
+       Papel solto na foto não toca a moldura: havendo um bloco assim com tamanho de nota, ele vale. Se o cupom é menos
+       claro que o piso, ele cai abaixo do 2º limiar: aí repete com o 1º, que o separa da mesa. */
+    rot.fill(0); melhorN = melhorId = soltoN = soltoId = 0;
+    let id = 0;
     for (let p0 = 0; p0 < W * H; p0++) {
       if (!E[p0] || rot[p0]) continue;
       id++;
-      let topo = 0, n = 0;
+      let topo = 0, n = 0, toca = false;
       pilha[topo++] = p0; rot[p0] = id;
       while (topo) {
         const p = pilha[--topo]; n++;
         const x = p % W, y = (p - x) / W;
+        if (x <= R + 1 || y <= R + 1 || x >= W - R - 2 || y >= H - R - 2) toca = true;
         for (let dy = -1; dy <= 1; dy++) {
           const yy = y + dy; if (yy < 0 || yy >= H) continue;
           for (let dx = -1; dx <= 1; dx++) {
@@ -344,7 +349,17 @@ window.Recorte = (() => {
         }
       }
       if (n > melhorN) { melhorN = n; melhorId = id; }
+      if (!toca && n > soltoN) { soltoN = n; soltoId = id; }
     }
+    };
+    const papelMin = W * H * 0.04;
+    componentes(thr);
+    if (soltoN < papelMin && thr !== limiar) {
+      componentes(limiar);
+      if (soltoN < papelMin) componentes(thr);
+    }
+    const solto = soltoN >= papelMin;
+    if (solto) { melhorN = soltoN; melhorId = soltoId; }
     if (!melhorId || melhorN < W * H * 0.04) return null;
 
     const cols = new Uint32Array(W), rows = new Uint32Array(H);
@@ -375,6 +390,7 @@ window.Recorte = (() => {
       if (xx > lmax[yy]) lmax[yy] = xx;
     }
     r.lmin = lmin; r.lmax = lmax; r.R = R;
+    r.solto = solto;
     return r;
   }
 
@@ -476,7 +492,14 @@ window.Recorte = (() => {
       const rx = Math.round(W * 0.01), ry = Math.round(H * 0.01);
       return { x0: Math.max(0, r.x0 - rx), y0: Math.max(0, r.y0 - ry), x1: Math.min(W, r.x1 + rx), y1: Math.min(H, r.y1 + ry) };
     };
-    const pc = _papelPorCor(mapa);
+    let pc = _papelPorCor(mapa);
+    /* a nota é onde está o texto: bloco claro que não guarda a maior parte dele é fundo (piso, parede, janela) */
+    const texto = _limiteTexto(mapa);
+    if (pc && !pc.solto && texto) {
+      const ix = Math.min(pc.x1, texto.x1) - Math.max(pc.x0, texto.x0), iy = Math.min(pc.y1, texto.y1) - Math.max(pc.y0, texto.y0);
+      const comum = ix > 0 && iy > 0 ? ix * iy : 0;
+      if (comum < (texto.x1 - texto.x0) * (texto.y1 - texto.y0) * 0.5) pc = null;
+    }
     if (pc) {
       // texto na sombra do pé (ou do topo) da nota: papel escuro demais para o limiar de brilho
       const [ay, by] = _estenderLinhas(mapa, pc.x0, pc.x1 - 1, pc.y0, pc.y1 - 1);
@@ -486,7 +509,7 @@ window.Recorte = (() => {
                              x1: pc.x1, y1: by > pc.y1 - 1 ? Math.min(H, by + 1 + extra) : by + 1 });
       return { f: fr(alvo), origem: 'papel', alvo, papel: pc };
     }
-    const t = _limiteTexto(mapa);
+    const t = texto;
     const ft = t && _sugerirPorTexto(mapa, t);
     if (ft) {
       const fx = Math.round((t.x1 - t.x0) * FOLGA_TXT), fy = Math.round((t.y1 - t.y0) * FOLGA_TXT);
