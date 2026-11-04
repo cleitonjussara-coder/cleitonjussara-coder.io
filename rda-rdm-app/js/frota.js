@@ -28,7 +28,8 @@ window.Frota = (() => {
   let registros = [];     // do mês em foco (visíveis para mim) + pendentes locais
   let resumo = null;      // {veiculos:[...], total_km}
   let anual = null;       // GET /frota/anual do ano em foco
-  let _fotoKm = null;     // File escolhido no formulário
+  let _fotoKm = null;     // foto do formulário (Blob em memória; a cópia que sobrevive a recarga fica no rascunho)
+  let _idNovo = null;     // id da leitura nova, escolhido ao abrir: repetir o envio depois de uma recarga não duplica
   let _offline = false;   // renderizou a partir do cache
   let _cacheEm = null;    // quando o cache foi gravado
   let _aba = 'painel';    // painel | plan | hist | vei
@@ -43,6 +44,95 @@ window.Frota = (() => {
   const KEY_CACHE = () => `frota_cache_${filAno}_${filMes}`;
   const KEY_ANUAL = () => `frota_anual_${filAno}`;
   const KEY_FILA = 'frota_fila';
+
+  /* ── Rascunho do formulário (03/11/2026) ─────────────────
+     Relato do campo: "quando salva a foto volta para o início e não salva nada". O Android matava a página enquanto a
+     câmera do sistema estava aberta (log de acesso: página recarregada no mesmo build, sem PUT /km); a volta da câmera
+     também podia achar versão nova e recarregar. Tudo o que estava no formulário vivia só na memória da página.
+     Campos no localStorage (síncrono: fica gravado mesmo que a página morra logo depois), foto no IndexedDB. Sai do
+     aparelho só ao salvar ou ao tocar em Voltar. Cada conta tem o seu (num aparelho compartilhado, um não apaga o do
+     outro) e vale por RASCUNHO_VALIDADE. */
+  const KEY_RASCUNHO = () => `frota_rascunho_${user?.id}`;
+  const KEY_RASCUNHO_FOTO = () => `frota_rascunho_foto_${user?.id}`;
+  const RASCUNHO_VALIDADE = 3 * 24 * 3600 * 1000;
+
+  const _formAberto = () => $('km-overlay')?.style.display === 'flex';
+  function _lerRascunho() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY_RASCUNHO()) || 'null');
+      return d && d.uid === user?.id && Date.now() - d.em < RASCUNHO_VALIDADE ? d : null;
+    } catch (_) { return null; }
+  }
+  /* `extra`: camera (saiu para fotografar, foto ainda não voltou) e foto (há foto guardada no IndexedDB) */
+  function _guardarRascunho(extra = {}) {
+    if (!_formAberto() || !user?.id) return;
+    const antes = _lerRascunho();
+    const d = {
+      uid: user.id, em: Date.now(), id: $('km-id').value || null, id_novo: _idNovo,
+      veiculo_id: $('km-veiculo').value, data: $('km-data').value, odometro: $('km-odometro').value, obs: $('km-obs').value,
+      odo_lido: _odoLido, camera: !!antes?.camera, foto: !!antes?.foto, ...extra,
+    };
+    try { localStorage.setItem(KEY_RASCUNHO(), JSON.stringify(d)); } catch (_) {}
+  }
+  function _limparRascunho() {
+    try { localStorage.removeItem(KEY_RASCUNHO()); } catch (_) {}
+    DB.setMeta(KEY_RASCUNHO_FOTO(), null).catch(() => {});
+  }
+
+  /* Reabre o formulário como estava. Só preenche: a foto recuperada não passa de novo pelo recorte e pela leitura, que
+     podem ser o que derrubou a página; o número se digita. */
+  /* `_restaurando` nasce antes do primeiro await: tocar em "Lançar KM" enquanto o rascunho volta espera por ele em vez de
+     abrir um formulário em branco, que apagaria o rascunho. */
+  let _restaurando = null;
+  function restaurarRascunho() {
+    if (!_restaurando) _restaurando = _restaurar().finally(() => { _restaurando = null; });
+    return _restaurando;
+  }
+  async function _restaurar() {
+    const d = _lerRascunho();
+    if (!d || _formAberto()) return false;
+    /* a cópia do aparelho vem primeiro: com sinal fraco, esperar a rede deixaria a pessoa no Início por até 30 s */
+    if (!veiculos.length) { try { veiculos = (await DB.getMeta('frota_veiculos')) || []; } catch (_) {} }
+    if (!veiculos.length && sb && navigator.onLine) {
+      try { veiculos = (await sb.frota.veiculos(_ehGestorOuAdmin())) || []; await DB.setMeta('frota_veiculos', veiculos); } catch (_) {}
+    }
+    let foto = null;
+    if (d.foto) {
+      const f = await DB.getMeta(KEY_RASCUNHO_FOTO()).catch(() => null);
+      if (f?.uid === user?.id && f.blob?.size) foto = f.blob;
+    }
+    await abrirForm(null, null, d);
+    if (!_formAberto()) return false;
+    const sel = $('km-veiculo');
+    if (d.veiculo_id && sel.value !== d.veiculo_id) {
+      /* veículo fora da lista dos ativos (leitura antiga em correção): sem a opção, o Salvar trocaria o veículo */
+      if (![...sel.options].some(o => o.value === d.veiculo_id)) {
+        const v = veiculos.find(x => x.id === d.veiculo_id);
+        sel.insertAdjacentHTML('beforeend', `<option value="${_at(d.veiculo_id)}">${esc(v?.placa || 'Veículo da leitura')}</option>`);
+      }
+      sel.value = d.veiculo_id; sel.disabled = false; $('km-veiculo-fixo').style.display = 'none';
+    }
+    $('km-id').value = d.id || '';
+    if (d.id) $('km-titulo').textContent = 'Editar registro de KM';
+    _idNovo = d.id ? null : (d.id_novo || _idNovo);
+    if (d.data) $('km-data').value = d.data;
+    $('km-odometro').value = d.odometro || '';
+    $('km-obs').value = d.obs || '';
+    _odoLido = d.odo_lido ?? null;
+    _fotoKm = foto;
+    _mostrarUltimaLeitura();
+    if (foto) {
+      $('km-foto-nome').textContent = '📷 foto do odômetro pronta para enviar';
+      _avisoOdo($('km-odometro').value ? 'Registro recuperado com a foto. Confira e toque em Salvar.' : 'Registro recuperado com a foto. Digite o odômetro e toque em Salvar.', 'ok');
+    } else if (d.camera || d.foto) {
+      _avisoOdo('Registro recuperado, mas o celular fechou o app e a foto se perdeu. Fotografe de novo.', 'warn');
+    } else {
+      _avisoOdo('Registro recuperado. Confira e toque em Salvar.', 'ok');
+    }
+    _guardarRascunho({ camera: false, foto: !!foto });
+    toast('Registro de KM recuperado');
+    return true;
+  }
 
   /* ── Fila local (registros feitos sem internet) ─────────── */
   /* A fila é do APARELHO, mas cada item é de uma conta: `uid` grava quem
@@ -84,26 +174,31 @@ window.Frota = (() => {
     _subindo = true;
     let ok = 0;
     try {
-      const todos = await _fila();
-      const f = todos.filter(_meu);
+      const f = (await _fila()).filter(_meu);
       if (!f.length) return 0;
-      const outros = todos.filter(it => !_meu(it));      // de outras contas: ficam como estão
-      const resto = [];
+      const enviados = new Map(), erros = new Map();     // id → versão enviada; id → motivo da recusa
       for (const it of f) {
         try {
           await sb.frota.kmUpsert(it.id, it.payload);
           if (it.foto?.blob) {
             try { await sb.frota.kmFoto(it.id, it.foto.blob, it.foto.ext || 'jpg'); }
-            catch (e) { console.warn('[frota] foto da fila não subiu:', e.message); }
+            catch (e) {
+              if (!e?.status) throw e;                      // caiu a rede na foto: o item fica e repete (mesmo id, não duplica)
+              console.warn('[frota] foto da fila não subiu:', e.message);
+            }
           }
+          enviados.set(it.id, it.criado_em);
           ok++;
         } catch (e) {
-          const semRede = !e?.status;                       // fetch falhou: tenta depois
-          resto.push({ ...it, erro: semRede ? null : (e.message || 'falhou') });
-          if (semRede) { resto.push(...f.slice(f.indexOf(it) + 1)); break; }
+          if (!e?.status) break;                            // fetch falhou: tenta depois
+          erros.set(it.id, e.message || 'falhou');
         }
       }
-      await _salvarFila([...outros, ...resto]);
+      /* relê a fila: o que entrou ou foi corrigido durante o envio fica. Regravar a lista do começo apagava esses itens. */
+      const atual = await _fila();
+      await _salvarFila(atual
+        .filter(x => !(enviados.has(x.id) && enviados.get(x.id) === x.criado_em))
+        .map(x => (erros.has(x.id) ? { ...x, erro: erros.get(x.id) } : x)));
       if (ok) toast(`${ok} registro${ok > 1 ? 's' : ''} de KM enviado${ok > 1 ? 's' : ''} ✅`);
     } finally { _subindo = false; }
     return ok;
@@ -291,12 +386,19 @@ window.Frota = (() => {
   async function reenviar() { setLoading(true); try { await subirFila(); } finally { setLoading(false); } render(); }
 
   /* ── Formulário de KM ──────────────────────────────────── */
-  async function abrirForm(id = null, veiculoId = null) {
+  async function abrirForm(id = null, veiculoId = null, rascunho = null) {
+    if (!rascunho) {
+      if (_restaurando) await _restaurando.catch(() => {});
+      if (_formAberto()) return;                     // o rascunho voltou nesse meio tempo: não abre outro por cima
+    }
     if (!veiculos.length) { try { veiculos = (await DB.getMeta('frota_veiculos')) || []; } catch (_) {} }
     const ativos = veiculos.filter(v => v.ativo !== false);
     if (!ativos.length) { toast('Nenhum veículo cadastrado — peça ao gestor', 'err'); return; }
     const r = id ? _reg(id) : null;
     _fotoKm = null; _odoLido = null; _avisoOdo('');
+    _idNovo = r ? null : crypto.randomUUID();
+    if (!rascunho) _limparRascunho();              // formulário novo: o rascunho antigo foi resolvido (salvo ou Voltar)
+    _ligarRascunho();
     $('km-id').value = r?.id || '';
     const sel = $('km-veiculo');
     /* corrigir leitura de um veículo hoje inativo: o veículo dela tem que estar na lista, senão o campo fica em branco
@@ -326,7 +428,16 @@ window.Frota = (() => {
     $('km-overlay').style.display = 'flex';
     setTimeout(() => $('km-odometro').focus(), 50);
   }
-  function fecharForm() { $('km-overlay').style.display = 'none'; }
+  function fecharForm() { $('km-overlay').style.display = 'none'; _limparRascunho(); }
+  /* qualquer coisa digitada ou escolhida no formulário já vai para o rascunho */
+  let _rascunhoLigado = false;
+  function _ligarRascunho() {
+    if (_rascunhoLigado) return;
+    _rascunhoLigado = true;
+    const ov = $('km-overlay');
+    ov.addEventListener('input', e => { if (e.target.id !== 'km-foto') _guardarRascunho(); });
+    ov.addEventListener('change', e => { if (e.target.id !== 'km-foto') _guardarRascunho(); });
+  }
   function destravarVeiculo() { $('km-veiculo').disabled = false; $('km-veiculo-fixo').style.display = 'none'; $('km-veiculo').focus(); }
 
   /* A leitura de referência do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
@@ -378,11 +489,37 @@ window.Frota = (() => {
     el.style.display = texto ? '' : 'none';
   }
 
+  /* Câmera dentro do app, como a da nota (06/10/2026): a câmera do sistema põe o app em segundo plano e o Android, sem
+     memória, mata a página. A do sistema fica de reserva, para quem não tem getUserMedia ou recusou a permissão. */
+  function fotografar() {
+    _guardarRascunho({ camera: true });
+    if (typeof abrirCameraNota !== 'function') { $('km-foto').click(); return; }
+    abrirCameraNota(() => _guardarRascunho({ camera: false }), {
+      aoFoto: file => onFoto({ target: { files: [file], value: '' } }),
+      dica: 'Enquadre o odômetro e toque no botão',
+      ladoMax: 2048,
+      inputReserva: 'km-foto',
+    });
+  }
+
+  /* Copia os bytes para um Blob antes de qualquer outro passo: o File da câmera do sistema pode morrer depois (caso José,
+     20/10/2026), e guardada aqui a foto escapa se a página cair no recorte, na leitura ou na compressão. */
+  async function _guardarFotoRascunho(arquivo) {
+    const blob = new Blob([await arquivo.arrayBuffer()], { type: arquivo.type || 'image/jpeg' });
+    try {
+      await DB.setMeta(KEY_RASCUNHO_FOTO(), { uid: user?.id, blob });
+      _guardarRascunho({ camera: false, foto: true });
+    } catch (_) { _guardarRascunho({ camera: false, foto: false }); }
+    return blob;
+  }
+
   async function onFoto(e) {
     _fotoKm = e.target.files?.[0] || null;
-    $('km-foto-nome').textContent = _fotoKm ? `📷 ${_fotoKm.name || 'foto do odômetro'} pronta para enviar` : '';
+    $('km-foto-nome').textContent = _fotoKm ? '📷 foto do odômetro pronta para enviar' : '';
     _odoLido = null; _avisoOdo('');
-    if (!_fotoKm || !window.Recorte || !window.OCR) return;
+    if (!_fotoKm) { _guardarRascunho({ camera: false }); return; }
+    try { _fotoKm = await _guardarFotoRascunho(_fotoKm); } catch (_) { _guardarRascunho({ camera: false, foto: false }); }
+    if (!window.Recorte || !window.OCR) return;
     let foto = _fotoKm;
     try { if (typeof _normalizarOrientacao === 'function') foto = await _normalizarOrientacao(foto); } catch (_) {}
     const ov = $('crop-overlay');
@@ -399,6 +536,8 @@ window.Frota = (() => {
     if (recorte === false) {                                // X: descarta a foto do odômetro
       _fotoKm = null; e.target.value = '';
       $('km-foto-nome').textContent = '';
+      _guardarRascunho({ foto: false });
+      DB.setMeta(KEY_RASCUNHO_FOTO(), null).catch(() => {});
       return;
     }
     if (!recorte) return;                                   // "Pular leitura": fica só a foto anexada
@@ -424,6 +563,7 @@ window.Frota = (() => {
       const campo = $('km-odometro'), atual = campo.value.trim();
       if (atual && atual !== String(_odoLido)) { _avisoOdo(`A foto parece indicar ${kmFmt(r.valor)} km, mas o campo já tem um valor — confira.`, 'warn'); return; }
       campo.value = r.valor; _odoLido = r.valor;
+      _guardarRascunho();
       if (ref != null && r.valor < ref) _avisoOdo(`Li ${kmFmt(r.valor)} km, menor que a última leitura (${kmFmt(ref)} km). Pode ser o parcial — confira ou enquadre de novo.`, 'warn');
       else if (ref != null && r.valor - ref > SALTO_SUSPEITO) _avisoOdo(`Li ${kmFmt(r.valor)} km, ${kmFmt(r.valor - ref)} km acima da última leitura. Confira o número.`, 'warn');
       else _avisoOdo('Lido da foto. Confira o número.', 'ok');
@@ -447,7 +587,7 @@ window.Frota = (() => {
   }
 
   async function salvar() {
-    const id = $('km-id').value || crypto.randomUUID();
+    const id = $('km-id').value || _idNovo || crypto.randomUUID();
     const payload = {
       veiculo_id: $('km-veiculo').value,
       data: $('km-data').value,
@@ -463,11 +603,9 @@ window.Frota = (() => {
     /* A hora em que a leitura foi feita (relógio do aparelho acertado pelo servidor) acompanha o registro novo — é ela
        que o histórico mostra, mesmo que a leitura só suba horas depois, quando voltar o sinal. Ao editar, vale a original. */
     const existente = $('km-id').value ? _reg($('km-id').value) : null;
-    if (!existente) payload.registrado_em = new Date(sb?.horaServidorMs ? sb.horaServidorMs() : Date.now()).toISOString();
-    else if (existente._pendente) {
-      const q = (await _fila()).find(x => x.id === id);
-      if (q?.payload?.registrado_em) payload.registrado_em = q.payload.registrado_em;
-    }
+    if (!$('km-id').value) payload.registrado_em = new Date(sb?.horaServidorMs ? sb.horaServidorMs() : Date.now()).toISOString();
+    const naFila = (await _fila()).find(x => x.id === id);       // correção de leitura pendente (depois de recarregar, _reg não a conhece)
+    if (naFila?.payload?.registrado_em) payload.registrado_em = naFila.payload.registrado_em;
     /* número lido da foto com salto grande sobre a última leitura: confirma antes de gravar */
     if (_odoLido != null && payload.odometro === _odoLido) {
       const { odo: ref } = _ultimaLeitura();
@@ -481,7 +619,7 @@ window.Frota = (() => {
       /* _comprimirImagem já endireita pelo EXIF (23/09/2026) */
       try { if (typeof _comprimirImagem === 'function') ({ blob, ext } = await _comprimirImagem(_fotoKm, 'jpg')); } catch (_) {}
       foto = { blob, ext };
-    }
+    } else if (naFila?.foto?.blob) foto = naFila.foto;           // sem foto nova, vale a que estava na fila
 
     setLoading(true);
     try {
@@ -504,7 +642,14 @@ window.Frota = (() => {
       }
       if (foto) {
         try { await sb.frota.kmFoto(id, foto.blob, foto.ext); }
-        catch (e) { toast('Registro salvo, mas a foto não subiu: ' + e.message, 'err'); }
+        catch (e) {
+          if (!e?.status) {                        // caiu a rede na foto: fica na fila e sobe depois (mesmo id, não duplica)
+            await enfileirar(id, payload, foto);
+            fecharForm(); toast('📴 Registro salvo. A foto fica no aparelho e sobe quando o sinal melhorar');
+            await _aposSalvar(); return;
+          }
+          toast('Registro salvo, mas a foto não subiu: ' + e.message, 'err');
+        }
       }
       /* se era um item da fila (edição de pendente), tira da fila */
       const f = await _fila(); if (f.some(x => x.id === id)) await _salvarFila(f.filter(x => x.id !== id));
@@ -588,7 +733,7 @@ window.Frota = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, trocarAba, abaAtiva: () => _aba, mudarMes, lancar, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto,
+  return { render, trocarAba, abaAtiva: () => _aba, mudarMes, lancar, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto, fotografar, restaurarRascunho,
            destravarVeiculo, abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
            exportarExcel, exportarCSV, reenviar, subirFila,
            pendentes: () => _pendTodos };
