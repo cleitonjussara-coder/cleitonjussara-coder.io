@@ -92,7 +92,7 @@ async function renderColabs(s) {
   /* Saldo que a empresa deve (28/10/2026): faixas de cor pelo valor — até R$ 1.000 amarelo, até R$ 3.000 laranja, acima vermelho */
   const saldoDe = c => {
     const s = c.saldo;
-    if (!s || c.ativo === false && !c.qtd) return null;
+    if (!s || c.role === 'contabilidade' || c.ativo === false && !c.qtd) return null;   // Contador não lança notas: não tem saldo nem colunas de valores
     const deve = s.deve > 0.004 ? s.deve : 0;
     const nivel = !deve ? 0 : deve < 1000 ? 1 : deve < 3000 ? 2 : 3;
     const item = (rotulo, v) => v == null ? { rotulo, valor: '—', neg: false } : { rotulo, valor: brl(v), neg: v < -0.004 };
@@ -108,7 +108,8 @@ async function renderColabs(s) {
     };
   };
   const colaboradores = cs.map(c => {
-    const vazio = !c.qtd;
+    const contador = c.role === 'contabilidade';   // cartão do Contador: só o nome e o papel
+    const vazio = !c.qtd && !contador;
     return {
       saldo: saldoDe(c),
       busca: `${c.nome || ''} ${c.email || ''}`.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(),
@@ -117,7 +118,7 @@ async function renderColabs(s) {
       iniciais: ini(c.nome || c.email),
       vazio,
       nomeHtml: `${esc(c.nome || c.email)}${c.ativo === false ? ' <span style="font-size:14px;opacity:.75">🚫 desativado</span>' : ''}`,
-      subHtml: vazio ? `sem notas em ${ano}` : `${c.qtd} nota${c.qtd === 1 ? '' : 's'}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`,
+      subHtml: contador ? 'Contador' : vazio ? `sem notas em ${ano}` : `${c.qtd} nota${c.qtd === 1 ? '' : 's'}${c.qtd - c.com_anexo ? ` · <span style="color:#ffd166">${c.qtd - c.com_anexo} sem anexo</span>` : ''}`,
     };
   });
   mostrar('colabs', { cabecalhoSub, colaboradores, faturamento });
