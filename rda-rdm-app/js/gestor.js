@@ -806,6 +806,7 @@ window.Gestor = (() => {
 
       /* Detalhe da faixa C.V. (03/11/2026, pedido do Cleiton sobre o print): tocar em Total recebido lista os lançamentos que
          formam o valor; tocar no Saldo RDM ou RDA abre a conta daquele grupo, mês a mês. Tudo no ANO, como a faixa. */
+      const centavos = v => Math.round(v * 100) / 100 || 0;   // conta fechada dá resíduo de ponto flutuante, que sairia "-R$ 0,00"
       const planLancamentos = lista => lista.length
         ? [...lista].sort((a, b) => String(b.data || '').localeCompare(String(a.data || ''))).map(x => `
           <div class="cdet-plan-rep">
@@ -828,7 +829,7 @@ window.Gestor = (() => {
         const doMes = (arr, m) => soma(arr.filter(x => Number(x.mes) === m));
         return `<div class="cdet-plan-det" data-painel="${a.k}-saldo-${t}" hidden>
           <div class="cdet-plan-det-tit">Saldo ${t} em ${ano}</div>
-          <div class="cdet-plan-conta">Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(soma(rL) - soma(gL))}</b></div>
+          <div class="cdet-plan-conta">Recebido <b>${brl(soma(rL))}</b> − Gasto <b>${brl(soma(gL))}</b> = <b>${brl(centavos(soma(rL) - soma(gL)))}</b></div>
           ${meses.length ? `<table class="cdet-plan-meses"><thead><tr><th>Mês</th><th>Gasto</th><th>Recebido</th></tr></thead><tbody>
             ${meses.map(m => `<tr><td>${MESES[m - 1]}</td><td>${brl(doMes(gL, m))}</td><td>${brl(doMes(rL, m))}</td></tr>`).join('')}
           </tbody></table>` : ''}
@@ -839,8 +840,8 @@ window.Gestor = (() => {
       const planLinha = (t, v) => `<span class="cdet-plan-sep"><span>${t}</span><b>${brl(v)}</b></span>`;
       const planToque = (painel, titulo, miolo, classe = '') => `<button type="button" class="cdet-plan-toque ${classe}" data-painel="${painel}" aria-expanded="false" title="${titulo}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">${miolo}</button>`;
       const planAbaHTML = a => {
-        const sd = a.rec - a.gasto, reemb = a.k === 'reemb';
-        const sdT = t => (t === 'RDM' ? a.rRDM - a.gRDM : a.rRDA - a.gRDA);
+        const sd = centavos(a.rec - a.gasto), reemb = a.k === 'reemb';
+        const sdT = t => centavos(t === 'RDM' ? a.rRDM - a.gRDM : a.rRDA - a.gRDA);
         const linhaSaldo = t => planToque(`${a.k}-saldo-${t}`, `Ver a conta do saldo ${t}`,
           `<span>${t}</span><b>${brl(sdT(t))}</b><i aria-hidden="true">›</i>`, `cdet-plan-sep ${sdT(t) < -0.004 ? 'neg' : ''}`);
         return `<div class="cdet-plan-aba">
