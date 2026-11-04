@@ -8,6 +8,7 @@ use App\Services\FotoEmBrancoAviso;
 use App\Services\FotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -81,6 +82,11 @@ class NotaController extends Controller
     public function upsert(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
+        /* 03/11/2026: nota apagada em definitivo não renasce pela fila de um aparelho. Vem antes da validação: item velho
+           com corpo recusável também precisa ouvir que a nota acabou, senão fica preso tomando 422. */
+        if ($this->apagadaEmDefinitivo($id)) {
+            return $this->respostaApagada();
+        }
         /* O app pode mandar CNPJ e chave formatados; o banco guarda só dígitos. */
         foreach (['cnpj', 'chave_nfce', 'consumidor'] as $campo) {
             if ($r->filled($campo)) {
@@ -134,8 +140,10 @@ class NotaController extends Controller
             'deleted' => ['nullable', 'boolean'],
             'created_at' => ['nullable', 'date'],
         ]);
-
-
+        /* 03/11/2026: o caminho do anexo nunca vem do cliente. Ele só nasce de arquivoDaNota() (nota nova) e de foto(); aceitar
+           o que chega aqui gerava URL assinada para arquivo de outra pessoa e gravava "../../.env". A regra acima fica frouxa
+           de propósito: aparelho antigo segue mandando o campo e não pode tomar 422 por isso. */
+        unset($d['foto_path']);
 
         /* 24/09/2026: HOJE é o presente — nada é gravado com data adiante
            dele. O app já barra na hora de salvar; aqui o servidor garante,
@@ -197,11 +205,29 @@ class NotaController extends Controller
             abort_if($nota->deleted || ($d['deleted'] ?? false), 403, 'Contabilidade corrige notas, mas não as exclui.');
             abort_unless(($d['user_id'] ?? null) === $nota->user_id, 403, 'Contabilidade não troca o dono da nota.');
         }
+        /* 03/11/2026: a correção da gestão vence. O aparelho diz em cima de qual versão editou; se a gestão mexeu depois, nada
+           é gravado e ele recebe a nota atual. Fica ANTES da trava de Faturamento: a nota que a gestão virou Faturamento
+           daria 403 no colaborador e o item ficaria recusado para sempre; nos dois casos nada é gravado. */
+        if ($nota && $this->gestaoMexeuDepois($nota, $u, $r->input('base_updated_at'))) {
+            Log::warning('edição descartada: a gestão corrigiu a nota depois', [
+                'id' => $id, 'enviado_por' => $u->email,
+                'descartado' => Arr::only($d, ['valor', 'tipo', 'subtipo', 'data', 'razao_social', 'deleted']),
+                'anexo_descartado' => $this->fotos->descartarEspera($this->fotos->pastaDe($nota), $id),
+            ]);
+
+            return response()->json([
+                'message' => 'A gestão corrigiu esta nota depois da sua edição. Vale a versão corrigida.',
+                'conflito' => true,
+                'nota' => $nota,
+            ], 409);
+        }
         /* 25/09/2026: nota de Faturamento (paga direto pela empresa, exclui do
            saldo/cartão de quem for escolhido) só gestor ou admin lança —
-           mesma regra vale editando uma nota já existente. */
-        $pagamentoAlvo = $d['pagamento'] ?? $nota?->pagamento;
-        abort_if($pagamentoAlvo === 'empresa' && ! $u->gerencia(), 403, 'Só gestor ou admin lança nota de Faturamento.');
+           mesma regra vale editando uma nota já existente.
+           03/11/2026: olhava só o pagamento novo, e colaborador e contador
+           trocavam 'empresa' por 'carteira' com 200. Vale para o atual também. */
+        $mexeNoFaturamento = in_array('empresa', [$d['pagamento'] ?? null, $nota?->pagamento], true);
+        abort_if($mexeNoFaturamento && ! $u->gerencia(), 403, 'Só gestor ou admin lança nota de Faturamento.');
 
         $d['metodo_captura'] = $d['metodo_captura'] ?? 'manual';
         $d['deleted'] = (bool) ($d['deleted'] ?? false);
@@ -214,16 +240,18 @@ class NotaController extends Controller
             }
         }
 
+        $anexoTrocado = false;
         if ($nota) {
-            /* foto_path vazio do app NÃO é remoção: o anexo é obrigatório e o
-               app nunca tira, então null aqui é a cópia local que ficou para
-               trás. Só troca quando o app manda um caminho. */
-            if (empty($d['foto_path'])) {
-                unset($d['foto_path']);
-            }
             unset($d['created_at']);
             $nota->fill($d);
             $nota->updated_by = $u->id;
+            /* 03/11/2026: edição aceita traz junto o anexo que esperava por ela (ver foto()). Só quem não é da gestão guarda
+               anexo em espera, então um PUT da gestão não pode fazer entrar o arquivo do colaborador. */
+            $emEspera = $u->veTudo() ? null : $this->fotos->promoverEspera($this->fotos->pastaDe($nota), $id);
+            if ($emEspera !== null) {
+                $nota->foto_path = $emEspera;
+                $anexoTrocado = true;
+            }
             $nota->save();
         } else {
             /* ANEXO OBRIGATÓRIO também aqui, não só na tela: nota nova só entra
@@ -246,7 +274,7 @@ class NotaController extends Controller
 
         /* Foto em branco (21/10/2026): mede o anexo se ainda não foi medido (nota nova, ou antiga que acabou de ser
            editada). Só marca e avisa a gestão; nunca recusa nem apaga, e erro aqui nunca derruba o envio. */
-        $this->fotoBranca->avaliar($nota, $u);
+        $this->fotoBranca->avaliar($nota, $u, refazer: $anexoTrocado);
 
         return response()->json($nota->fresh());
     }
@@ -645,6 +673,10 @@ class NotaController extends Controller
     {
         abort_unless(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id), 422, 'Id da nota inválido');
         $u = $r->user();
+        /* 03/11/2026: anexo de nota apagada em definitivo ficaria órfão no disco; o upsert seguinte nem a deixa nascer */
+        if ($this->apagadaEmDefinitivo($id)) {
+            return $this->respostaApagada();
+        }
         $r->validate([
             'file' => ['required', 'file', 'max:'.config('petermann.foto_max_kb')],
             'ext' => ['nullable', 'string', 'max:5'],
@@ -660,6 +692,16 @@ class NotaController extends Controller
         } else {
             $pasta = $nota ? $nota->user_id : ($r->input('user_id') ?: $u->id);
             $this->podeGravar($u, $pasta, $nota !== null);
+        }
+
+        /* 03/11/2026: o app sobe o anexo ANTES da nota, e só o PUT diz de qual versão a edição veio. Em nota que a gestão
+           corrigiu por último, gravar aqui apagaria o anexo dela mesmo com o PUT tomando 409, sem rastro. O arquivo espera
+           o PUT; a nota não muda de autor nem de hora, e não há nada para os outros aparelhos puxarem até ele ser aceito. */
+        if ($nota && $this->ultimaEdicaoFoiDaGestao($nota, $u)) {
+            $path = $this->fotos->guardarEmEspera($pasta, $id, $r->file('file'), $r->input('ext'));
+            Log::warning('anexo em espera: a gestão foi a última a mexer na nota', ['id' => $id, 'enviado_por' => $u->email]);
+
+            return response()->json(['foto_path' => $path, 'updated_at' => $nota->updated_at]);
         }
 
         $path = $this->fotos->salvarPara($pasta, $id, $r->file('file'), $r->input('ext'));
@@ -698,11 +740,50 @@ class NotaController extends Controller
                 continue;
             }
             $n->foto_path = $arq;
+            $n->timestamps = ! $this->ultimaEdicaoFoiDaGestao($n, $u);   // 03/11/2026: subir a hora sem assinar viraria falso conflito em quem já conhecia a correção
             $n->save();
             $recuperadas[] = ['id' => $n->id, 'foto_path' => $arq];
         }
 
         return response()->json(['recuperadas' => count($recuperadas), 'notas' => $recuperadas]);
+    }
+
+    /* Tem lápide e não está na tabela. Nota com lápide que segue na tabela renasceu antes de 03/11/2026: está viva e continua editável. */
+    private function apagadaEmDefinitivo(string $id): bool
+    {
+        return DB::table('notas_apagadas')->where('id', $id)->exists() && ! Nota::whereKey($id)->exists();
+    }
+
+    private function respostaApagada(): JsonResponse
+    {
+        return response()->json(['message' => 'Esta nota foi apagada em definitivo.', 'apagada' => true], 410);
+    }
+
+    /* A última mão na nota foi de gestor, admin ou contabilidade, e quem chega agora não é da gestão (03/11/2026). */
+    private function ultimaEdicaoFoiDaGestao(Nota $nota, Colaborador $u): bool
+    {
+        if ($u->veTudo() || $nota->updated_by === null || $nota->updated_by === $u->id) {
+            return false;
+        }
+
+        return (bool) Colaborador::find($nota->updated_by)?->veTudo();
+    }
+
+    /* base_updated_at: o updated_at do servidor que o aparelho conhecia ao editar. Sem base (app antigo) ou com base
+       inválida, nunca é conflito: segue a última gravação. Compara instantes em segundos: o app manda milissegundos e o
+       banco guarda segundos. Só aceita data ISO porque o Carbon também entende "yesterday" e "0". */
+    private function gestaoMexeuDepois(Nota $nota, Colaborador $u, mixed $base): bool
+    {
+        if (! is_string($base) || ! preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/', $base)) {
+            return false;
+        }
+        try {
+            $conhecida = \Carbon\Carbon::parse($base)->utc();
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return $nota->updated_at?->getTimestamp() > $conhecida->getTimestamp() && $this->ultimaEdicaoFoiDaGestao($nota, $u);
     }
 
     /* $donoId nula só acontece em nota de Faturamento sem colaborador

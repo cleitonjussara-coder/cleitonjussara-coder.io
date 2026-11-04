@@ -7,6 +7,8 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use League\Flysystem\CorruptedPathDetected;
+use League\Flysystem\PathTraversalDetected;
 
 /**
  * Anexos das notas no DISCO do servidor. O MySQL guarda apenas o caminho
@@ -132,14 +134,20 @@ class FotoStorage
         }
     }
 
+    /* 03/11/2026: caminho malicioso já gravado no banco ("../../.env") fazia o Flysystem lançar exceção e derrubava Arquivos
+       e ZIP com 500. Só caminho inválido vira "não existe"; falha de verdade do disco continua aparecendo. */
     public function existe(?string $path): bool
     {
-        return $path !== null && $path !== '' && $this->disk()->exists($path);
+        try {
+            return $path !== null && $path !== '' && $this->disk()->exists($path);
+        } catch (PathTraversalDetected|CorruptedPathDetected) {
+            return false;
+        }
     }
 
     public function apagar(?string $path): void
     {
-        if ($path && $this->disk()->exists($path)) {
+        if ($this->existe($path)) {
             $this->disk()->delete($path);
         }
     }
@@ -148,6 +156,7 @@ class FotoStorage
     public function apagarTodasVersoes(Nota $nota): void
     {
         $this->apagarVersoesDe($this->pastaDe($nota), $nota->id);
+        $this->descartarEspera($this->pastaDe($nota), $nota->id);
     }
 
     public function apagarVersoesDe(string $userId, string $notaId): void
@@ -158,6 +167,52 @@ class FotoStorage
             }
         }
         $this->apagar("{$userId}/".self::MINI_DIR."/{$notaId}.jpg");
+    }
+
+    /* ── Anexo em espera (03/11/2026) ───────────────────────────────
+       O app sobe o anexo ANTES do PUT, e só o PUT diz de qual versão a edição veio. Em nota que a gestão corrigiu por
+       último, o arquivo fica em <pasta>/espera/ sem encostar no atual: o PUT aceito o promove, o 409 o descarta. Fora de
+       arquivoDaNota() e de validarCaminho() de propósito: não vira anexo de nota nem sai por URL. */
+    public const ESPERA_DIR = 'espera';
+
+    /** Devolve o caminho que o anexo terá quando for promovido. */
+    public function guardarEmEspera(string $pasta, string $notaId, UploadedFile $file, ?string $extHint = null): string
+    {
+        $ext = $this->extensaoDe($file, $extHint);
+        $this->descartarEspera($pasta, $notaId);
+        $this->disk()->putFileAs("{$pasta}/".self::ESPERA_DIR, $file, "{$notaId}.{$ext}");
+
+        return "{$pasta}/{$notaId}.{$ext}";
+    }
+
+    /** Devolve true se havia anexo em espera. */
+    public function descartarEspera(string $pasta, string $notaId): bool
+    {
+        $arquivo = $this->arquivoDaNota("{$pasta}/".self::ESPERA_DIR, $notaId);
+        if ($arquivo !== null) {
+            $this->disk()->delete($arquivo);
+        }
+
+        return $arquivo !== null;
+    }
+
+    /** O anexo em espera vira o anexo da nota. Devolve o caminho novo, ou null se não havia nada esperando. */
+    public function promoverEspera(string $pasta, string $notaId): ?string
+    {
+        $arquivo = $this->arquivoDaNota("{$pasta}/".self::ESPERA_DIR, $notaId);
+        if ($arquivo === null) {
+            return null;
+        }
+        $final = "{$pasta}/".basename($arquivo);
+        $this->apagarVersoesDe($pasta, $notaId);
+        $this->disk()->move($arquivo, $final);
+        $this->endireitar($final);
+        try {
+            $this->miniatura($final);
+        } catch (\Throwable) {
+        }
+
+        return $final;
     }
 
     /* ── Miniaturas (19/09/2026) ────────────────────────────────────

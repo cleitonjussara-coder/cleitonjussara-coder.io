@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Colaborador;
 use App\Models\Repasse;
 use App\Services\PushService;
 use App\Services\RepasseEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -133,6 +136,68 @@ class RepasseController extends Controller
             $d['mes'] = $mesCerto;
             $d['ano'] = $anoCerto;
         }
+        /* 03/11/2026: ler e gravar numa transação só. Separadas, duas chamadas juntas passavam pelas mesmas
+           checagens (pedido aberto, repetido) e o dinheiro entrava em dobro. Push e e-mail ficam de fora. */
+        [$rep, $novo] = DB::transaction(function () use ($id, $d, $u) {
+            $this->pegarEscrita($id);
+
+            return $this->gravar($id, $d, $u);
+        });
+
+        /* Depois de gravado — falha de e-mail nunca impede o registro. */
+        $this->enviarEmailUmaVez($rep);
+
+        /* 24/09/2026: o pedido também toca no celular de quem gerencia. O
+           push é aviso, nunca caminho principal: qualquer erro fica no log e
+           o registro segue valendo. */
+        if ($novo && $rep->kind === 'requested') {
+            $dono = $rep->dono?->nome ?: 'Um colaborador';
+            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
+            $this->push->avisarGestores(
+                'Pedido de ' . $oque,
+                $dono . ' pediu ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
+                '/',
+                'pedido-' . $rep->id
+            );
+        }
+
+        /* 07/10/2026: colaborador registrou o próprio recebimento → avisa o gestor. */
+        if ($novo && $rep->kind === 'received' && ! $rep->deleted && ! $rep->pedido_id
+            && $rep->user_id === $u->id && ! $u->gerencia()) {
+            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
+            $this->push->avisarGestores(
+                'Recebimento registrado',
+                ($rep->dono?->nome ?: 'Um colaborador') . ' registrou ' . $oque . ' recebido de ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
+                '/',
+                'recebido-' . $rep->id
+            );
+        }
+
+        return response()->json($rep->fresh());
+    }
+
+    /**
+     * 03/11/2026: o serviço olha email_sent e só grava a marca depois do envio, então um reenvio por timeout
+     * com a Resend ainda respondendo mandava dois e-mails. Com a trava, quem chega enquanto o e-mail sai
+     * não espera nem envia; quem pega a trava relê a marca. Se o envio falhar, o próximo reenvio tenta.
+     * Sem a trava (cache fora do ar) o e-mail segue como antes: repetido é melhor que perdido.
+     */
+    private function enviarEmailUmaVez(Repasse $rep): void
+    {
+        if ($rep->kind !== 'requested') {
+            return;
+        }
+        try {
+            Cache::lock('repasse-email-' . $rep->id, 60)->get(fn () => $this->email->enviarSePreciso($rep->fresh()));
+        } catch (\Throwable $e) {
+            Log::warning('trava do e-mail de repasse indisponível: ' . $e->getMessage(), ['id' => $rep->id]);
+            $this->email->enviarSePreciso($rep);
+        }
+    }
+
+    /** O miolo do upsert, sempre dentro de DB::transaction. Devolve [registro, se é novo]. */
+    private function gravar(string $id, array $d, Colaborador $u): array
+    {
         $rep = Repasse::find($id);
         $novo = ! $rep;                 // 24/09/2026: só o pedido NOVO toca o celular
         /* 24/10/2026: para o colaborador (C.V. ou RDM/RDA) só existe UM pedido aberto por vez — enquanto o último não for confirmado
@@ -161,8 +226,17 @@ class RepasseController extends Controller
             if (! $u->gerencia() && ! $registroDoDono && ($rep->kind === 'received' || ! $rep->kind || $rep->atendido_em || $rep->pedido_id)) {
                 $mudaValor = abs((float) $d['valor'] - (float) $rep->valor) > 0.004;
                 $mudaKind = ($d['kind'] ?? 'received') !== ($rep->kind ?: 'received');
+                /* sem destino e 'carteira' são o mesmo dinheiro: só a recarga muda de conta */
                 $mudaRecarga = (($d['destino'] ?? null) === 'recarga') !== ($rep->destino === 'recarga');
-                if ($d['deleted'] || $mudaValor || $mudaKind || $mudaRecarga) {
+                /* 03/11/2026: tipo e data também são do gestor — mudavam com HTTP 200, levando o valor para
+                   outra conta ou outro mês. mes/ano ficam de fora: saem da data, e um registro antigo com
+                   mês errado não pode barrar o reenvio. A descrição segue editável. */
+                $mudaTipo = $d['tipo'] !== $rep->tipo;
+                $mudaData = $d['data'] !== $rep->data->format('Y-m-d');
+                /* 03/11/2026: cancelar e DESFAZER o cancelamento — deleted=false num repasse que o gestor
+                   cancelou punha o dinheiro de volta no saldo. Reenvio do que já está cancelado segue passando. */
+                $mudaDeleted = $d['deleted'] !== (bool) $rep->deleted;
+                if ($mudaDeleted || $mudaValor || $mudaKind || $mudaRecarga || $mudaTipo || $mudaData) {
                     Log::warning('repasse registrado pelo gestor: alteração do colaborador recusada', [
                         'id' => $id, 'user' => $u->email, 'apagar' => $d['deleted'],
                     ]);
@@ -208,43 +282,14 @@ class RepasseController extends Controller
             $aberto = Repasse::where('user_id', $rep->user_id)->where('kind', 'requested')
                 ->where('deleted', false)->whereNull('atendido_em')
                 ->where(fn ($q) => $rep->destino === 'recarga' ? $q->where('destino', 'recarga') : $q->where(fn ($w) => $w->whereNull('destino')->orWhere('destino', '!=', 'recarga')))
-                ->orderBy('data')->first();
+                ->orderBy('data')->lockForUpdate()->first();
             if ($aberto) {
                 $rep->forceFill(['pedido_id' => $aberto->id])->save();
                 $aberto->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
             }
         }
 
-        /* Depois de gravado — falha de e-mail nunca impede o registro. */
-        $this->email->enviarSePreciso($rep);
-
-        /* 24/09/2026: o pedido também toca no celular de quem gerencia. O
-           push é aviso, nunca caminho principal: qualquer erro fica no log e
-           o registro segue valendo. */
-        if ($novo && $rep->kind === 'requested') {
-            $dono = $rep->dono?->nome ?: 'Um colaborador';
-            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
-            $this->push->avisarGestores(
-                'Pedido de ' . $oque,
-                $dono . ' pediu ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
-                '/',
-                'pedido-' . $rep->id
-            );
-        }
-
-        /* 07/10/2026: colaborador registrou o próprio recebimento → avisa o gestor. */
-        if ($novo && $rep->kind === 'received' && ! $rep->deleted && ! $rep->pedido_id
-            && $rep->user_id === $u->id && ! $u->gerencia()) {
-            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
-            $this->push->avisarGestores(
-                'Recebimento registrado',
-                ($rep->dono?->nome ?: 'Um colaborador') . ' registrou ' . $oque . ' recebido de ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
-                '/',
-                'recebido-' . $rep->id
-            );
-        }
-
-        return response()->json($rep->fresh());
+        return [$rep, $novo];
     }
 
     /** PATCH /repasses/{id}/atendido {valor?} — gestor/admin. Idempotente: pedido já atendido devolve o
@@ -256,43 +301,11 @@ class RepasseController extends Controller
         $u = $r->user();
         abort_unless($u->gerencia(), 403, 'Só gestor ou admin marca o pedido como pago');
         $valor = $r->validate(['valor' => ['nullable', 'numeric', 'min:0.01']])['valor'] ?? null;
-        $pedido = Repasse::findOrFail($id);
-        abort_if($pedido->deleted, 404, 'Pedido excluído');
-        abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+        [$pedido, $recebido, $jaEstava] = $this->encerrarPedido($id, $u, $valor, 'Repasse do pedido de ');
 
-        if ($pedido->atendido_em) {
-            $recebido = Repasse::where('pedido_id', $pedido->id)->where('deleted', false)->first();
-
+        if ($jaEstava) {
             return response()->json(['pedido' => $pedido, 'recebido' => $recebido, 'ja_estava' => true]);
         }
-
-        $hoje = now('America/Sao_Paulo');
-        $recebido = new Repasse([
-            'id' => (string) Str::uuid(),
-            'user_id' => $pedido->user_id,
-            'tipo' => $pedido->tipo,
-            'valor' => $valor ?? (float) $pedido->valor,
-            'data' => $hoje->format('Y-m-d'),
-            'mes' => (int) $hoje->format('n'),
-            'ano' => (int) $hoje->format('Y'),
-            'descricao' => 'Repasse do pedido de '.$pedido->data->format('d/m/Y').($pedido->descricao ? ' — '.$pedido->descricao : ''),
-            'kind' => 'received',
-            'deleted' => false,
-        ]);
-        /* 23/09/2026 (2ª decisão): o registro do gestor JÁ VALE. Quem paga é
-           quem registra, então o repasse entra no saldo, no gráfico e na
-           planilha na hora — sem esperar o "recebi" do colaborador. */
-        $recebido->forceFill([
-            'pedido_id' => $pedido->id,
-            'confirmado_em' => now(),
-            'confirmado_por' => $u->id,
-            /* 24/09/2026: pedido de recarga do cartão vira recarga recebida —
-               sem isto o valor cairia na coluna de reembolso da planilha. */
-            'destino' => $pedido->destino,
-            'created_by' => $u->id,
-            'updated_by' => $u->id,
-        ])->save();
-        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
 
         $oque = $pedido->destino === 'recarga' ? 'Recarga do cartão registrada' : 'Repasse pago';
         $this->push->enviar(
@@ -314,39 +327,13 @@ class RepasseController extends Controller
         $valor = $r->validate(['valor' => ['nullable', 'numeric', 'min:0.01']])['valor'] ?? null;
         $pedido = Repasse::findOrFail($id);
         abort_unless($pedido->user_id === $u->id, 403, 'Só quem fez o pedido confirma o recebimento');
-        abort_if($pedido->deleted, 404, 'Pedido excluído');
-        abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+        [$pedido, $recebido, $jaEstava] = $this->encerrarPedido($id, $u, $valor, 'Recebimento do pedido de ');
 
-        if ($pedido->atendido_em) {
-            $recebido = Repasse::where('pedido_id', $pedido->id)->where('deleted', false)->first();
-
+        if ($jaEstava) {
             return response()->json(['pedido' => $pedido, 'recebido' => $recebido, 'ja_estava' => true]);
         }
 
-        $pago = $valor ?? (float) $pedido->valor;
-        $hoje = now('America/Sao_Paulo');
-        $recebido = new Repasse([
-            'id' => (string) Str::uuid(),
-            'user_id' => $pedido->user_id,
-            'tipo' => $pedido->tipo,
-            'valor' => $pago,
-            'data' => $hoje->format('Y-m-d'),
-            'mes' => (int) $hoje->format('n'),
-            'ano' => (int) $hoje->format('Y'),
-            'descricao' => 'Recebimento do pedido de ' . $pedido->data->format('d/m/Y') . ($pedido->descricao ? ' — ' . $pedido->descricao : ''),
-            'kind' => 'received',
-            'deleted' => false,
-        ]);
-        $recebido->forceFill([
-            'pedido_id' => $pedido->id,
-            'confirmado_em' => now(),
-            'confirmado_por' => $u->id,
-            'destino' => $pedido->destino,
-            'created_by' => $u->id,
-            'updated_by' => $u->id,
-        ])->save();
-        $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
-
+        $pago = (float) $recebido->valor;
         $oque = $pedido->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
         $dif = abs($pago - (float) $pedido->valor) > 0.004
             ? ' (pedido de ' . $this->emReais($pedido->valor) . ')' : '';
@@ -358,6 +345,71 @@ class RepasseController extends Controller
         );
 
         return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
+    }
+
+    /**
+     * Encerra o pedido criando o recebido dele. Devolve [pedido, recebido, já estava encerrado].
+     *
+     * 03/11/2026: atendido e recebi liam "em aberto" e só depois criavam o recebido; duas chamadas
+     * juntas criavam dois, dinheiro em dobro no saldo. Agora o pedido é relido DENTRO da transação
+     * (IMMEDIATE no SQLite; lockForUpdate para o MySQL) e quem chega depois encontra o pedido encerrado.
+     * Sem índice único de propósito: os dados de produção ainda não foram conferidos para isso.
+     */
+    private function encerrarPedido(string $id, Colaborador $u, ?float $valor, string $rotulo): array
+    {
+        return DB::transaction(function () use ($id, $u, $valor, $rotulo) {
+            $this->pegarEscrita($id);
+            $pedido = Repasse::lockForUpdate()->findOrFail($id);
+            abort_if($pedido->deleted, 404, 'Pedido excluído');
+            abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+
+            if ($pedido->atendido_em) {
+                return [$pedido, Repasse::where('pedido_id', $pedido->id)->where('deleted', false)->first(), true];
+            }
+
+            $hoje = now('America/Sao_Paulo');
+            $recebido = new Repasse([
+                'id' => (string) Str::uuid(),
+                'user_id' => $pedido->user_id,
+                'tipo' => $pedido->tipo,
+                'valor' => $valor ?? (float) $pedido->valor,
+                'data' => $hoje->format('Y-m-d'),
+                'mes' => (int) $hoje->format('n'),
+                'ano' => (int) $hoje->format('Y'),
+                'descricao' => $rotulo . $pedido->data->format('d/m/Y') . ($pedido->descricao ? ' — ' . $pedido->descricao : ''),
+                'kind' => 'received',
+                'deleted' => false,
+            ]);
+            /* 23/09/2026 (2ª decisão): o registro do gestor JÁ VALE. Quem paga é
+               quem registra, então o repasse entra no saldo, no gráfico e na
+               planilha na hora — sem esperar o "recebi" do colaborador. */
+            $recebido->forceFill([
+                'pedido_id' => $pedido->id,
+                'confirmado_em' => now(),
+                'confirmado_por' => $u->id,
+                /* 24/09/2026: pedido de recarga do cartão vira recarga recebida —
+                   sem isto o valor cairia na coluna de reembolso da planilha. */
+                'destino' => $pedido->destino,
+                'created_by' => $u->id,
+                'updated_by' => $u->id,
+            ])->save();
+            $pedido->forceFill(['atendido_em' => now(), 'atendido_por' => $u->id, 'updated_by' => $u->id])->save();
+
+            return [$pedido, $recebido, false];
+        });
+    }
+
+    /**
+     * Pega a vez de escrever ANTES de ler, com uma escrita que não muda nada (nem o updated_at).
+     *
+     * 03/11/2026: o Laravel só aplica o transaction_mode IMMEDIATE em PHP 8.4 ou mais novo. Abaixo disso a
+     * transação nasce DEFERRED: quem leu e depois tenta gravar leva "database is locked" na hora, sem
+     * esperar o busy_timeout (visto com duas chamadas reais em PHP 8.3). Assim o resultado é o mesmo em
+     * qualquer versão: a segunda chamada espera a primeira e responde ja_estava, em vez de erro 500.
+     */
+    private function pegarEscrita(string $id): void
+    {
+        DB::table('repasses')->where('id', $id)->update(['updated_by' => DB::raw('updated_by')]);
     }
 
     private function emReais($v): string

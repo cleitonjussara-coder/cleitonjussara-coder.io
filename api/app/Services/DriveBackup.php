@@ -20,6 +20,12 @@ use RuntimeException;
  * `drive.file` — só arquivos que este app criar, nada mais do Drive dele).
  * O refresh_token fica em storage/app/drive-backup.json, fora do web root.
  * Sem esse arquivo, o backup semanal segue normal, só não sobe.
+ *
+ * Backup diário do banco (03/11/2026): banco-*.zip sobe para a mesma pasta. O
+ * tipo sai do nome do arquivo em enviar(), e a lista e a rotação só enxergam
+ * esse tipo. A situação do envio também é separada (chaves banco_*): o Perfil
+ * avisa "confira o Crontab" olhando o completo, e o envio do dia não pode
+ * esconder um domingo que falhou.
  */
 class DriveBackup
 {
@@ -53,6 +59,7 @@ class DriveBackup
     public function status(): array
     {
         $d = $this->dados();
+        $erroBanco = $d['banco_ultimo_erro'] ?? null;
 
         return [
             'conectado' => ! empty($d['refresh_token']),
@@ -60,7 +67,11 @@ class DriveBackup
             'conectado_em' => $d['conectado_em'] ?? null,
             'ultimo_envio' => $d['ultimo_envio'] ?? null,
             'ultimo_arquivo' => $d['ultimo_arquivo'] ?? null,
-            'ultimo_erro' => $d['ultimo_erro'] ?? null,
+            /* o Perfil só tem este campo de erro: os dois aparecem juntos (03/11/2026), senão
+               um erro do domingo esconderia a semana inteira de falhas do diário */
+            'ultimo_erro' => implode(' · ', array_filter([$d['ultimo_erro'] ?? null, $erroBanco ? 'Backup diário do banco: '.$erroBanco : null])) ?: null,
+            'ultimo_envio_banco' => $d['banco_ultimo_envio'] ?? null,
+            'ultimo_arquivo_banco' => $d['banco_ultimo_arquivo'] ?? null,
             'pasta' => self::PASTA,
         ];
     }
@@ -91,20 +102,25 @@ class DriveBackup
     /**
      * Sobe o zip para a pasta e poda os antigos lá. Devolve
      * ['id' => …, 'nome' => …, 'apagados' => n]. Lança RuntimeException se
-     * falhar (o chamador decide se avisa por e-mail).
+     * falhar (o chamador decide se avisa por e-mail). O tipo vem do nome do
+     * arquivo: a rotação só alcança os do mesmo tipo (03/11/2026).
      */
     public function enviar(string $arquivo, int $manter = 12, int $meses = 12): array
     {
         if (! is_file($arquivo)) {
             throw new RuntimeException('Arquivo de backup não existe: '.$arquivo);
         }
+        $nome = basename($arquivo);
+        $prefixo = BackupCompleto::prefixoDe($nome);
+        if ($prefixo === null) {
+            throw new RuntimeException('Nome de backup desconhecido, não enviei ao Drive: '.$nome);
+        }
         try {
             $tok = $this->accessToken();
             $pasta = $this->pastaId($tok);
-            $nome = basename($arquivo);
 
             /* já existe no Drive (reenvio manual)? substitui em vez de duplicar */
-            foreach ($this->listar($tok, $pasta) as $f) {
+            foreach ($this->listar($tok, $pasta, $prefixo) as $f) {
                 if ($f['nome'] === $nome) {
                     Http::withToken($tok)->timeout(20)->delete(self::API.'/files/'.$f['id']);
                 }
@@ -124,25 +140,34 @@ class DriveBackup
             $idArquivo = $this->enviarEmPedacos($tok, $local, $arquivo, $tam);
 
             $apagados = 0;
-            foreach (BackupCompleto::paraApagar($this->listar($tok, $pasta), $manter, $meses) as $f) {
+            foreach (BackupCompleto::paraApagar($this->listar($tok, $pasta, $prefixo), $manter, $meses, $prefixo) as $f) {
                 if (Http::withToken($tok)->timeout(20)->delete(self::API.'/files/'.$f['id'])->successful()) {
                     $apagados++;
                 }
             }
 
-            $this->salvar(['ultimo_envio' => now(PontoCalculo::TZ)->toIso8601String(), 'ultimo_arquivo' => $nome, 'ultimo_erro' => null] + $this->dados());
+            $c = $this->chaves($prefixo);
+            $this->salvar([$c['envio'] => now(PontoCalculo::TZ)->toIso8601String(), $c['arquivo'] => $nome, $c['erro'] => null] + $this->dados());
 
             return ['id' => $idArquivo, 'nome' => $nome, 'apagados' => $apagados];
         } catch (\Throwable $e) {
-            $this->registrarErro($e->getMessage());
+            $this->registrarErro($e->getMessage(), $prefixo);
             throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
     /** Guarda um aviso para o Perfil mostrar, sem mexer na conexão (refresh_token) que já existe. */
-    public function registrarErro(string $msg): void
+    public function registrarErro(string $msg, string $prefixo = BackupCompleto::PREFIXO_COMPLETO): void
     {
-        $this->salvar(['ultimo_erro' => now(PontoCalculo::TZ)->format('d/m/Y H:i').' — '.mb_substr($msg, 0, 200)] + $this->dados());
+        $this->salvar([$this->chaves($prefixo)['erro'] => now(PontoCalculo::TZ)->format('d/m/Y H:i').' — '.mb_substr($msg, 0, 200)] + $this->dados());
+    }
+
+    /** Onde drive-backup.json guarda a situação de cada tipo. */
+    private function chaves(string $prefixo): array
+    {
+        $p = $prefixo === BackupCompleto::PREFIXO_BANCO ? 'banco_' : '';
+
+        return ['envio' => $p.'ultimo_envio', 'arquivo' => $p.'ultimo_arquivo', 'erro' => $p.'ultimo_erro'];
     }
 
     /** Arquivos petermann-*.zip na pasta do Drive, mais novo primeiro. */
@@ -150,7 +175,7 @@ class DriveBackup
     {
         $tok = $this->accessToken();
 
-        return $this->listar($tok, $this->pastaId($tok));
+        return $this->listar($tok, $this->pastaId($tok), BackupCompleto::PREFIXO_COMPLETO);
     }
 
     /* ── Google ─────────────────────────────────────────────── */
@@ -202,14 +227,16 @@ class DriveBackup
         return $id;
     }
 
-    private function listar(string $tok, string $pasta): array
+    /** Só os arquivos do tipo $prefixo. O "contains" do Google é aproximado: quem garante é o nomeValido. */
+    private function listar(string $tok, string $pasta, string $prefixo): array
     {
-        $q = sprintf("'%s' in parents and trashed = false and name contains 'petermann-'", $pasta);
+        $q = sprintf("'%s' in parents and trashed = false and name contains '%s-'", $pasta, $prefixo);
         $r = Http::withToken($tok)->timeout(20)->get(self::API.'/files', ['q' => $q, 'fields' => 'files(id,name,size,createdTime)', 'pageSize' => 200]);
         if (! $r->ok()) {
             throw new RuntimeException('Drive não listou a pasta: '.($r->json('error.message') ?: $r->status()));
         }
-        $out = array_map(fn ($f) => ['id' => $f['id'], 'nome' => $f['name'], 'bytes' => (int) ($f['size'] ?? 0), 'em' => $f['createdTime'] ?? null], $r->json('files') ?? []);
+        $doTipo = array_filter($r->json('files') ?? [], fn ($f) => BackupCompleto::nomeValido((string) $f['name'], $prefixo));
+        $out = array_map(fn ($f) => ['id' => $f['id'], 'nome' => $f['name'], 'bytes' => (int) ($f['size'] ?? 0), 'em' => $f['createdTime'] ?? null], array_values($doTipo));
         usort($out, fn ($a, $b) => strcmp($b['nome'], $a['nome']));
 
         return $out;

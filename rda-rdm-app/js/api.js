@@ -168,6 +168,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     if (!r.ok) {
       const e = new Error((j && j.message) || `Erro ${r.status}`);
       e.status = r.status; e.errors = j?.errors || null;
+      e.corpo = j;      // 03/11/2026: a fila de envio lê conflito/apagada/nota da recusa (409 e 410 do PUT da nota e do anexo)
       throw e;
     }
     return j;

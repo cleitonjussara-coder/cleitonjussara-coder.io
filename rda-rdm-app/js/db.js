@@ -282,9 +282,16 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     const now = new Date().toISOString();
     const fotoLocal = nota.foto_local || null;
     const id = nota.id || crypto.randomUUID();
+    /* 03/11/2026: server_updated_at é a versão do SERVIDOR que este aparelho conhece, e updated_at é carimbado aqui pelo
+       relógio do aparelho. O objeto do formulário pode vir sem o campo ou com valor velho: vale o do registro guardado.
+       base_formulario (04/11/2026) é a exceção: a versão de quando o formulário ABRIU. Se o pull trouxe a correção da
+       gestão com ele aberto, a edição foi feita sem vê-la, e é essa a base que o servidor precisa receber. */
+    const guardado = nota.id ? await _get('notas', id).catch(() => null) : null;
+    const versaoServidor = nota.base_formulario || guardado?.server_updated_at || nota.server_updated_at || null;
     const obj = {
       ...nota,                                        // spread primeiro
       id,
+      server_updated_at: versaoServidor,
       /* Faturamento sem colaborador (28/09/2026): user_id explicitamente
          null (não "ainda não escolhido") tem que continuar null aqui —
          só cai no userId de quem está logado quando a chave nem veio. */
@@ -296,6 +303,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       sync_error : null,
       deleted    : nota.deleted || false,
     };
+    delete obj.base_formulario;
     const localObj = { ...obj, foto_local: fotoLocal };
     await _put('notas', localObj);
     const payload = { ...localObj };
@@ -438,6 +446,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     const restored = {
       ...base,
       id,
+      server_updated_at: current?.server_updated_at || base.server_updated_at || null,   // o arquivo da lixeira pode ter versão velha (03/11/2026)
       deleted: false,
       restored_at: now,
       synced: false,
@@ -594,8 +603,11 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
   async function upsertFromDrive(store, records) {
     const incoming = (records || []).filter(rec => rec && rec.id);
     let repostos = 0;
+    /* 03/11/2026: o servidor respondeu 410 para este id, e o Drive ainda guarda a cópia antiga */
+    const apagadas = new Set(store === 'notas' ? await getMeta(APAGADAS_KEY, []) : []);
     for (const rec of incoming) {
       if (rec.deleted === true || rec.deleted_at || rec._deleted === true) continue;
+      if (apagadas.has(rec.id)) continue;
       const local = await _get(store, rec.id);
       if (local) continue;
       await _put(store, {
@@ -725,6 +737,91 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     return msg;
   }
 
+  /* ── Recusas definitivas do servidor (03/11/2026, correção da gestão vence) ─────────────────────────────────────
+     409 com conflito=true: a gestão corrigiu a nota depois da versão em que esta edição foi feita.
+     410 com apagada=true: aquele id exato foi apagado em definitivo por alguém.
+     Nenhuma das duas é erro de rede nem recusa que mude com o tempo: repetir não adianta, e a nota ficaria presa na fila.
+     Não fogem à regra "nada apaga lançamento sozinho": o aparelho não deduz nada, é o servidor dizendo o que aconteceu
+     com aquele id, e quem perdeu a edição é avisado.
+     Os avisos ficam em DB.meta porque o service worker também passa por aqui e não tem tela: a página mostra depois. */
+  const AVISOS_KEY = 'avisos_conflito';
+  const APAGADAS_KEY = 'ids_apagados_servidor';
+  const MAX_IDS_APAGADOS = 500;
+  let _descartesTotal = 0;     // itens tirados da fila por 409/410 neste contexto: o "Enviar agora" desconta do "N enviado(s)"
+
+  /* Leitura e gravação na MESMA transação: página e service worker podem mexer na lista. fn devolve a nova lista. */
+  const _mudarLista = (k, fn) => _tx(['meta'], 'readwrite', (t, res, rej) => {
+    const s = t.objectStore('meta');
+    const g = s.get(k);
+    g.onerror = e => rej(e.target.error);
+    g.onsuccess = () => {
+      const antes = Array.isArray(g.result?.v) ? g.result.v : [];
+      const p = s.put({ k, v: fn(antes) });
+      p.onsuccess = () => res(antes);
+      p.onerror = e => rej(e.target.error);
+    };
+  });
+  const _guardarAviso = (id, titulo, texto) => _mudarLista(AVISOS_KEY, l =>
+    [...l.filter(a => a.id !== id), { id, titulo, texto, data: new Date().toISOString() }]);
+  const _tituloNota = n => String(n?.razao_social || n?.numero || '').trim() || 'sem nome';
+
+  /* Edição descartada: a versão do servidor passa a valer aqui. O anexo da edição sai junto (04/11/2026): subindo depois,
+     cairia na espera do servidor sem PUT nenhum e a próxima edição aceita o poria sobre o da gestão. Só fica se o servidor
+     não tem anexo nesta nota, porque aí ele é a única cópia. */
+  async function _aplicarConflito(id, nota) {
+    const local = await _get('notas', id).catch(() => null);
+    await _put('notas', {
+      ...nota,
+      synced: true, sync_status: 'synced', sync_error: null,
+      foto_local: local?.foto_local || null,
+      foto_path: nota.foto_path || local?.foto_path || null,     // mesma exceção do _mesclarRemotas
+      server_updated_at: nota.updated_at || null,
+    });
+    let tirados = 0;
+    for (const i of await _getAll('sync_queue')) {
+      if (i.entity_id === id && (i.entity === 'nota' || (i.entity === 'foto' && nota.foto_path))) { await _del('sync_queue', i.id); tirados++; }
+    }
+    if (nota.foto_path) await delFotoLocal(id);      // sem isto _ensureQueueFromExisting recoloca o anexo na fila
+    const titulo = _tituloNota(nota);
+    await _guardarAviso(id, titulo, `A gestão corrigiu a nota ${titulo}. Sua edição anterior foi descartada; confira a nota.`);
+    _descartesTotal += tirados;
+    return tirados;
+  }
+
+  /* Mesmo caminho do _limparApagadas (purgeNotaLocal). Quem já tinha excluído a nota não perdeu nada: sem aviso. */
+  async function _notaApagadaNoServidor(id) {
+    const local = await _get('notas', id).catch(() => null);
+    const tirados = (await _getAll('sync_queue')).filter(i => i.entity_id === id).length;
+    await purgeNotaLocal(id);
+    await _mudarLista(APAGADAS_KEY, l => [...l.filter(x => x !== id), id].slice(-MAX_IDS_APAGADOS));
+    if (local && !local.deleted) {
+      const titulo = _tituloNota(local);
+      await _guardarAviso(id, titulo, `A nota ${titulo} foi apagada pela gestão e saiu deste aparelho.`);
+    }
+    _descartesTotal += tirados;
+    return tirados;
+  }
+
+  /* 04/11/2026: janela com OK, não toast. O toast é um só e "Tudo enviado"/"Sincronizado" saíam por cima, e este aviso é
+     o único sinal de que a edição se perdeu. A lista só é limpa depois do OK; até lá ele volta a cada rodada.
+     Só a página mostra (typeof: este arquivo também roda no service worker). A janela do app tem uma vaga só: abrir com
+     outra aberta cancelaria a pergunta em curso, então espera a próxima rodada. Pelo mesmo motivo, ao fechar com outra
+     janela no lugar, o aviso foi substituído e não lido. */
+  let _mostrandoAvisos = false;
+  async function _mostrarAvisos() {
+    if (_mostrandoAvisos || typeof mostrarAviso !== 'function') return;
+    if (document.hidden || document.getElementById('modal-pedir')) return;
+    _mostrandoAvisos = true;
+    try {
+      const avisos = await getMeta(AVISOS_KEY, []);
+      if (!avisos.length) return;
+      await mostrarAviso({ titulo: 'Confira suas notas', mensagem: avisos.map(a => a.texto).join('\n\n') });
+      if (document.getElementById('modal-pedir')) return;
+      const lidos = new Set(avisos.map(a => a.id + a.data));
+      await _mudarLista(AVISOS_KEY, l => l.filter(a => !lidos.has(a.id + a.data)));
+    } finally { _mostrandoAvisos = false; }
+  }
+
   /* opts (12/10/2026, envio em segundo plano):
        travado — quem chama SEGURA a trava de envio entre página e service worker: nenhum outro contexto está enviando
                  agora, então item "running" é órfão (o contexto que o pegou morreu) e vale já, sem esperar os 30 s;
@@ -761,6 +858,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       String(a.created_at || '').localeCompare(String(b.created_at || '')));
     let ok = 0, fail = 0;
     let fotosOk = 0, fotosFail = 0, erroFoto = null;
+    let descartadas = 0;      // itens que saíram da fila por 409 de conflito ou 410: nem enviados, nem falha
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
 
     for (const item0 of dueItems) {
@@ -847,10 +945,15 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         delete payload.sync_error;
         delete payload.updated_at;       // quem carimba é o servidor
         delete payload.user_nome;        // campo só de tela (notas da equipe)
+        delete payload.server_updated_at;   // campo só do aparelho
         if (item.entity === 'repass') delete payload.email_sent;   // decisão do servidor
+        /* 03/11/2026: a base vem do registro ATUAL (record), não do payload da fila, que é foto de quando a edição entrou.
+           Sem valor (nota nova ou anterior a este build) o campo não vai, e o servidor segue como antes. */
+        if (item.entity === 'nota' && record.server_updated_at) payload.base_updated_at = record.server_updated_at;
 
         /* lança em caso de erro → catch abaixo agenda a nova tentativa */
-        if (item.entity === 'nota') await sb.notas.upsert(payload);
+        let versaoServidor = null;
+        if (item.entity === 'nota') versaoServidor = (await sb.notas.upsert(payload))?.updated_at || null;
         else                        await sb.repasses.upsert(payload);
 
         const store = item.entity === 'nota' ? 'notas' : 'repasses';
@@ -860,13 +963,24 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
              enviado nem apaga o item da fila — a versão nova sobe na próxima rodada, sem sobrescrever a edição. */
           const q = await _get('sync_queue', item.id);
           if (q) await _put('sync_queue', { ...q, status: 'pending', attempts: 0, contada_em: null, next_attempt_at: now, updated_at: now });
+          /* a versão do servidor avançou com este PUT: a edição nova parte dela */
+          if (versaoServidor) await _put(store, { ...atualReg, server_updated_at: versaoServidor });
         } else {
-          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now });
+          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now, ...(versaoServidor ? { server_updated_at: versaoServidor } : {}) });
           await _del('sync_queue', item.id);
         }
         ok++;
       } catch (e) {
         const message = e?.message || 'falha na sincronização';
+        /* antes de tudo: não são falha nem retentativa (ver "Recusas definitivas"). Outro 409 segue como recusa comum. */
+        if (item.entity !== 'repass' && e?.status === 410 && e?.corpo?.apagada === true) {
+          descartadas += await _notaApagadaNoServidor(item.entity_id);
+          continue;
+        }
+        if (item.entity === 'nota' && e?.status === 409 && e?.corpo?.conflito === true && e.corpo.nota?.id === item.entity_id) {
+          descartadas += await _aplicarConflito(item.entity_id, e.corpo.nota);
+          continue;
+        }
         /* Recusa por PAPEL (Contador, 14/10/2026): o servidor nunca vai aceitar esse item — quem virou Contador com
            nota nova ou repasse parado na fila ficava com "N itens pendentes" para sempre. Sai da fila (o aviso some);
            o registro continua guardado no aparelho, só sem tentar subir de novo. */
@@ -916,7 +1030,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
       }
     }
 
-    return { ok, fail, fotosOk, fotosFail, erroFoto };
+    return { ok, fail, fotosOk, fotosFail, erroFoto, descartadas };
   }
 
   /* Grava no aparelho a(s) linha(s) de repasse que o servidor acabou de
@@ -929,8 +1043,17 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
   /* Mescla linhas vindas do servidor no store local. Devolve quantas entraram. */
   async function _mesclarRemotas(table, data) {
     let pulled = 0;
+    /* 03/11/2026: com edição da nota na fila, a base NÃO avança. A correção da gestão que chega aqui é justamente o que
+       essa edição não viu; avançar faria o envio parecer feito sobre ela, e o servidor não acusaria o conflito.
+       04/11/2026: o conteúdo também não muda. Trocar a tela pela versão da gestão com a base velha fazia a pessoa editar
+       em cima dela e tomar 409 por algo que viu. Quem decide é o servidor, no PUT: aceita, ou devolve a versão dele (409).
+       Aqui o aparelho não descarta nada, porque não sabe se a linha nova é mesmo da gestão (pode ser o próprio PUT sem
+       resposta, ou o relógio atrasado). */
+    const comEdicao = new Set(table === 'notas'
+      ? (await _getAll('sync_queue').catch(() => [])).filter(i => i.entity === 'nota').map(i => i.entity_id) : []);
     for (const row of (data || [])) {
           const local = await _get(table, row.id);
+          if (local && comEdicao.has(row.id)) continue;
           /* Remoto vence quando a linha não existe aqui ou quando é mais
              recente. `local.synced` NÃO entra nessa conta: estar sincronizado
              diz apenas que o push já saiu daqui, não que o servidor tenha algo
@@ -949,6 +1072,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
             if (table === 'notas' && !row.foto_path && local?.foto_path) {
               merge.foto_path = local.foto_path;
             }
+            if (table === 'notas') merge.server_updated_at = row.updated_at || local?.server_updated_at || null;
             await _put(table, merge);
             pulled++;
           }
@@ -1148,7 +1272,8 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     const push = env.ocupado ? { ok: 0, fail: 0, fotosOk: 0, fotosFail: 0, erroFoto: null, ocupado: true } : env.valor;
     if (leve) {
       const rl = { ...push, pulled: 0, recuperadas: 0 };
-      if (push.ok || push.fotosOk) window.dispatchEvent(new CustomEvent('db-synced', { detail: rl }));
+      if (push.ok || push.fotosOk || push.descartadas) window.dispatchEvent(new CustomEvent('db-synced', { detail: rl }));
+      _mostrarAvisos().catch(() => {});      // inclusive os que o service worker guardou
       return rl;
     }
     const pulled = await pullIncremental(sb, userId);
@@ -1156,6 +1281,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     try { recuperadas = await repararFotosOrfas(sb, userId); } catch (_) {}
     const result = { ...push, pulled, recuperadas };
     window.dispatchEvent(new CustomEvent('db-synced', { detail: result }));
+    _mostrarAvisos().catch(() => {});        // depois do pull e do db-synced: a nota já aparece corrigida atrás da janela
     return result;
   }
 
@@ -1240,6 +1366,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     _rapidosSeguidos = 0;
     /* a rodada em voo ainda vai gravar os itens que já leu (tentativas e espera antigas): zerar antes disso não vale */
     while (_running) await aguardarSync().catch(() => {});
+    const descartesAntes = _descartesTotal;
     const agora = new Date().toISOString();
     /* conta ANTES de esperar a trava: se o service worker esvaziar a fila enquanto esperamos, o aviso diz
        "tudo enviado" em vez de "nada pendente" (revisão de 14/10/2026) */
@@ -1278,7 +1405,9 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     for (const i of await _getAll('sync_queue')) {
       if (i.last_error && (!meuId || await _itemEhDaSessao(i, meuId))) { motivo = i.last_error; break; }
     }
-    return { tinha: Math.max(tinha, tinhaAntes), restam: resumo.count, falharam: resumo.failedCount, motivo, ocupado };
+    /* o que saiu por conflito ou por 410 não foi enviado: fora do "N enviado(s)" (03/11/2026). Conta pelo total, e não
+       pelo que sync() devolve, que é só a última rodada: o descarte pode ter sido numa anterior (04/11/2026) */
+    return { tinha: Math.max(0, Math.max(tinha, tinhaAntes) - (_descartesTotal - descartesAntes)), restam: resumo.count, falharam: resumo.failedCount, motivo, ocupado };
   }
 
   /* ── ENVIO EM SEGUNDO PLANO (fase 2, 12/10/2026) ──────────────────────────────────────────────────────────────
@@ -1416,7 +1545,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         r.repetir = pend > 0 && (!sum.proximaAtivaAt || sum.proximaAtivaAt - Date.now() <= 120_000);
         if (pend <= 0) { parar = true; return; }                          // nada mais para enviar
         const espera = sum.proximaAtivaAt ? sum.proximaAtivaAt - Date.now() : 0;
-        const fez = p.ok || p.fail || p.fotosOk || p.fotosFail;
+        const fez = p.ok || p.fail || p.fotosOk || p.fotosFail || p.descartadas;
         if (espera > 45_000 || (!fez && espera <= 0)) { parar = true; return; }
         esperar = Math.max(0, espera);
       }, esperaTravaMs);
