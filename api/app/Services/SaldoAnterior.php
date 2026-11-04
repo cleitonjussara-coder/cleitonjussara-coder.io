@@ -37,13 +37,31 @@ class SaldoAnterior
      */
     public function deTodos(int $ano, ?iterable $ids = null): array
     {
+        return $this->somar(fn ($q) => $q->where('ano', '<', $ano), $ids);
+    }
+
+    /**
+     * O mesmo saldo, com corte no FIM do mês (04/11/2026): o PDF mensal da equipe mostra o C.V. até o mês do relatório, e
+     * lançamento posterior não pode entrar. Em dezembro dá o mesmo que deTodos($ano + 1).
+     *
+     * @param  iterable<string>|null  $ids  só estes colaboradores; null = todos
+     * @return array<string, array<string, mixed>> por user_id; quem não tem nada até lá não aparece (ver zerado())
+     */
+    public function ateMes(int $ano, int $mes, ?iterable $ids = null): array
+    {
+        return $this->somar(fn ($q) => $q->whereRaw('(ano * 12 + mes) <= ?', [$ano * 12 + $mes]), $ids);
+    }
+
+    /** @param  callable  $corte  recebe a consulta e limita o período, igual para notas e repasses */
+    private function somar(callable $corte, ?iterable $ids): array
+    {
         $ids = $ids === null ? null : collect($ids)->values()->all();
 
-        $gastos = Nota::query()->where('deleted', false)->whereNotNull('user_id')->where('ano', '<', $ano)
+        $gastos = $corte(Nota::query()->where('deleted', false)->whereNotNull('user_id'))
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->when($ids !== null, fn ($q) => $q->whereIn('user_id', $ids))
             ->selectRaw('user_id, tipo, pagamento, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'pagamento')->get();
-        $repasses = self::recebidos(Repasse::query()->where('deleted', false)->where('ano', '<', $ano))
+        $repasses = self::recebidos($corte(Repasse::query()->where('deleted', false)))
             ->when($ids !== null, fn ($q) => $q->whereIn('user_id', $ids))
             ->selectRaw('user_id, tipo, destino, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'destino')->get();
 
@@ -100,14 +118,6 @@ class SaldoAnterior
         return $c->usaCartao() ? $s['reembolso'] : $s['saldo'];
     }
 
-    /** Tudo que ele traz, somado: no C.V. entra o cartão, que no RDM/RDA não existe. Serve ao RESUMO da equipe. */
-    public function total(Colaborador $c, array $s): float
-    {
-        $tipos = $this->porTipo($c, $s);
-
-        return round($tipos['RDM'] + $tipos['RDA'] + ($c->usaCartao() ? $s['cartao'] : 0.0), 2);
-    }
-
     /**
      * Quem entra num relatório da equipe mesmo sem lançar nada no ano (04/11/2026): tem saldo trazido na conta do regime
      * atual. Olha cada conta sozinha, porque +100 no RDA e −100 no RDM não se anulam.
@@ -121,6 +131,14 @@ class SaldoAnterior
         return Colaborador::query()->whereIn('id', array_keys($anteriores))->get()
             ->filter(fn (Colaborador $c) => array_filter([...array_values($this->porTipo($c, $anteriores[$c->id])), $c->usaCartao() ? $anteriores[$c->id]['cartao'] : 0.0]) !== [])
             ->pluck('id')->all();
+    }
+
+    /** Quem deve, em palavras: mesma frase de Gestor.sentidoSaldo, no sinal daqui (negativo = a empresa deve). */
+    public static function sentido(float $v): string
+    {
+        $x = round($v, 2);
+
+        return $x == 0 ? '' : ($x < 0 ? 'a empresa deve' : 'a favor da empresa');
     }
 
     /** Só o que conta como dinheiro recebido: kind vazio ou received, confirmado, sem pedido pendente. Recarga ainda passa. */

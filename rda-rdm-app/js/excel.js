@@ -283,7 +283,12 @@ window.Excel = (() => {
   }
 
   /* ── Equipe (dashboard gestor) ───────────────────────── */
-  function buildEquipe(notas, repasses, collabs, mes, ano, anterior) {
+  function buildEquipe(notas, repasses, collabs, mes, ano, anterior, cv) {
+    /* C.V. (04/11/2026, decisão do dono): quadro próprio, cartão e reembolso do ano como na planilha. Na tabela de
+       baixo o gasto do cartão entraria como dívida; somar os dois regimes num total daria um número sem sentido. */
+    const cvs = collabs.filter(c => c.regime === 'cv' && c.role !== 'contabilidade');
+    const idsCv = new Set(cvs.map(c => c.id));
+    collabs = collabs.filter(c => !idsCv.has(c.id));
     const ws = {};
     ws['!cols'] = [{wch:16},{wch:24},{wch:14},{wch:14},{wch:14},{wch:16},{wch:14},{wch:14},{wch:14},{wch:16}];
     ws['!merges'] = [];
@@ -333,7 +338,8 @@ window.Excel = (() => {
     r++;
     const sTRDM=cur(tRDMa+tRDMr-tRDMg), sTRDA=cur(tRDAa+tRDAr-tRDAg);
     merge(ws, r, 0, r, 1);
-    ws[XLSX.utils.encode_cell({r,c:0})] = { t:'s', v:'TOTAL GERAL', s:{ font:{...FONT_TOT,color:{rgb:COR.branco}}, fill:FILL_HDR, border:BORDER_THIN, alignment:ALIGN_C } };
+    const celTotal = v => ({ t:'s', v, s:{ font:{...FONT_TOT,color:{rgb:COR.branco}}, fill:FILL_HDR, border:BORDER_THIN, alignment:ALIGN_C } });
+    ws[XLSX.utils.encode_cell({r,c:0})] = celTotal(cvs.length ? 'TOTAL DO REGIME RDM/RDA' : 'TOTAL GERAL');
     ws[XLSX.utils.encode_cell({r,c:2})] = tRDMa<0?totNeg(tRDMa):totCell(tRDMa);
     ws[XLSX.utils.encode_cell({r,c:3})] = totCell(tRDMg);
     ws[XLSX.utils.encode_cell({r,c:4})] = totCell(tRDMr);
@@ -343,7 +349,39 @@ window.Excel = (() => {
     ws[XLSX.utils.encode_cell({r,c:8})] = totCell(tRDAr);
     ws[XLSX.utils.encode_cell({r,c:9})] = sTRDA<0?totNeg(sTRDA):totCell(sTRDA);
 
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:9}});
+    let ultCol = 9;
+    if (cvs.length) {
+      r += 2;
+      merge(ws, r, 0, r, 12);
+      ws[XLSX.utils.encode_cell({r,c:0})] = subCell(`REGIME C.V. — ano de ${ano}, como a planilha: Saldo = Anterior + Recebido − Gasto; negativo = a empresa deve. Cartão e reembolso são contas separadas, não se somam.`);
+      r++;
+      if (!cv) {
+        merge(ws, r, 0, r, 12);
+        ws[XLSX.utils.encode_cell({r,c:0})] = subCell(`Saldo do C.V. não calculado (histórico indisponível): ${cvs.map(c => c.nome||c.email).join(', ')}`);
+      } else {
+        hdrRow(ws, r, ['Núcleo','Colaborador','Cartão Anterior','Cartão Recargas','Cartão Gasto','Cartão Saldo','Reemb. Anterior','Reemb. Gasto','Reemb. Recebido','Reemb. Saldo','Saldo RDM','Saldo RDA',`Gasto em ${MESES[mes-1]}`]);
+        r++;
+        const din = v => v<0?numNeg(v):numCell(v), tot = v => v<0?totNeg(v):totCell(v);
+        const colunas = x => [x.cartao.ant, x.cartao.rec, x.cartao.gasto, x.cartao.saldo, x.reemb.ant, x.reemb.gasto, x.reemb.rec, x.reemb.saldo, x.RDM.saldo, x.RDA.saldo];
+        const zero = { ant:0, rec:0, gasto:0, saldo:0 };
+        const somas = Array(11).fill(0);
+        [...cvs].sort((a,b)=>String(a.nucleo||'').localeCompare(String(b.nucleo||''))||(a.nome||'').localeCompare(b.nome||'')).forEach(c => {
+          const x = cv[c.id] || { cartao:zero, reemb:zero, RDM:zero, RDA:zero };
+          const vals = [...colunas(x), notas.filter(n=>n.user_id===c.id).reduce((s,n)=>s+Number(n.valor||0),0)];
+          ws[XLSX.utils.encode_cell({r,c:0})] = strCell(c.nucleo);
+          ws[XLSX.utils.encode_cell({r,c:1})] = strCell(c.nome||c.email);
+          vals.forEach((v,i) => { somas[i] += v; ws[XLSX.utils.encode_cell({r,c:i+2})] = din(v); });
+          r++;
+        });
+        merge(ws, r, 0, r, 1);
+        ws[XLSX.utils.encode_cell({r,c:0})] = celTotal('TOTAL DO REGIME C.V.');
+        somas.forEach((v,i) => { ws[XLSX.utils.encode_cell({r,c:i+2})] = tot(cur(v)); });
+      }
+      ws['!cols'].push({wch:14},{wch:14},{wch:14});
+      ultCol = 12;
+    }
+
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:ultCol}});
     return ws;
   }
 
@@ -375,11 +413,11 @@ window.Excel = (() => {
   }
 
   /* ── Exportar Equipe (gestor) ─────────────────────────── */
-  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome, anterior) {
+  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome, anterior, cv) {
     notas = _semFaturamento(notas);
     repasses = _soRecebidos(repasses);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano,anterior), 'EQUIPE');
+    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano,anterior,cv), 'EQUIPE');
     const nome = (gestorNome||'equipe').replace(/\s+/g,'_');
     XLSX.writeFile(wb, `Petermann_${nome}_Equipe_${MESES[mes-1]}${ano}.xlsx`);
   }

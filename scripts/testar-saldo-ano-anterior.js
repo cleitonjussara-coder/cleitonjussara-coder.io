@@ -85,9 +85,23 @@ function montarApp(Gestor) {
   ctx.brl = v => (v < 0 ? '-' : '') + 'R$ ' + Math.abs(Number(v) || 0).toFixed(2).replace('.', ',');
   ctx.notas = []; ctx.repasses = [];   // _saldoAcumuladoAte lê as globais do app
   ctx._soma = arr => arr.reduce((a, x) => a + (Number(x.valor) || 0), 0);
+  ctx.LIMITE_DEVEDOR = 1500; ctx.CARTAO_SALDO_MINIMO = 300; ctx.K_DEVEDORA = 'k';
+  ctx.FusoBR = { partes: () => ({ ano: 2026, mes: 11, dia: 4 }) };
   vm.runInContext(['_repasseEhPedido', '_repasseEhRecebido', '_repasseEhCarteira', '_notaDoCartao', '_naoEhFaturamento', '_saldoCartaoDe', '_saldosCvDoAno', '_cartaoPorTipo', '_devedorDe',
-    '_saldoAcumuladoAte', '_parcelasAnteriores', '_comSentido', '_kpiAnteriorHTML', '_heroAnteriorHTML'].map(funcaoDoApp).join('\n'), ctx);
+    '_gastoBolsoPorTipo', '_equipeDevedora', '_equipeCartaoBaixo', '_saldoAcumuladoAte', '_parcelasAnteriores', '_comSentido', '_kpiAnteriorHTML', '_heroAnteriorHTML',
+    '_heroSaldoCvHTML', '_valorInteiroHTML', '_heroAnteriorCvHTML', '_kpiReembCvHTML', '_cardReembCvHTML'].map(funcaoDoApp).join('\n'), ctx);
   return ctx;
+}
+
+/* ── excel.js de verdade, com o XLSX só no que buildEquipe usa ── */
+function montarExcel() {
+  const col = c => String.fromCharCode(65 + c);
+  const ctx = { console, FusoBR: { data: () => '04/11/2026', hojeISO: () => '2026-11-04', partes: () => ({ ano: 2026, mes: 11, dia: 4 }) } };
+  ctx.XLSX = { utils: { encode_cell: ({ r, c }) => col(c) + (r + 1), encode_range: ({ s, e }) => col(s.c) + (s.r + 1) + ':' + col(e.c) + (e.r + 1), decode_range: x => x } };
+  ctx.window = ctx; ctx.document = {};
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(JS, 'excel.js'), 'utf8'), ctx);
+  return ctx.Excel;
 }
 
 const w = montarGestor();
@@ -140,11 +154,141 @@ console.log('Cartões C.V. da aba Saldo');
   igual(s(2026).cartao, 1300, 'saldo do cartão');
   igual(s(2026).cartao, app._cartaoPorTipo(notas3, reps3, 12, 2026).saldo, 'aba Saldo e aviso do gestor dão o mesmo número');
   igual(s(2025).cartao, 1200, 'olhando 2025, o saldo para em 2025 (não soma 2026)');
-  igual(s(2026).aReceberAnterior, (40 + 60) - 25, 'a receber anterior: carteira − repasse RDM, mesmos filtros do cartão');
-  igual(s(2026).aReceber, 75 + (70 + 30) - 50, 'a receber no ano');
-  igual(s(2026).aReceber, s(2026).aReceberAnterior + 100 - 50, 'as linhas do cartão fecham');
-  igual(s(2026).rdaAnterior, 15, 'RDA recebido de anos anteriores');
-  igual(s(2026).rdaRecebido, 15 + 20, 'RDA recebido acumulado');
+  // 04/11/2026: cada cartão é o reembolso do seu tipo; antes o de RDM dava +125 (carteira RDM+RDA menos só repasse RDM)
+  igual(s(2026).RDM.ant, 25 - 40, 'reembolso RDM anterior: repasse RDM − carteira RDM');
+  igual(s(2026).RDM.gasto, 70, 'carteira RDM do ano, sem a de RDA');
+  igual(s(2026).RDM.rec, 50, 'repasse RDM do ano');
+  igual(s(2026).RDM.saldo, -15 + 50 - 70, 'reembolso RDM = anterior + repasse − carteira, como a ficha');
+  igual(s(2026).RDA.ant, 15 - 60, 'reembolso RDA anterior');
+  igual(s(2026).RDA.saldo, -45 + 20 - 30, 'reembolso RDA: desconta repasse RDA, não só soma o recebido');
+  igual(s(2026).reemb.saldo, s(2026).RDM.saldo + s(2026).RDA.saldo, 'reembolso total = RDM + RDA');
+  igual(s(2026).reemb.saldo, -app._devedorDe(notas3, reps3, 12, 2026, true), 'e bate com o a receber de _devedorDe');
+  igual(s(2025).RDM.saldo, G.saldoAnoAnterior(notas3, reps3, 2026).reembRDM, 'o saldo RDM de 2025 é o anterior de 2026');
+  confere(s(2024).temRecarga && !app._saldosCvDoAno([], [rep('2025-01-01', 10, 'RDM')], 2026).temRecarga, 'repasse comum não conta como recarga');
+  confere(!app._saldosCvDoAno([], [rep('2025-01-01', 10, 'RDM', 'recarga', { kind: 'requested' })], 2026).temRecarga, 'pedido de recarga também não');
+  confere(!app._saldosCvDoAno([], [rep('2026-01-01', 10, 'RDM', 'recarga')], 2025).temRecarga, 'recarga de ano futuro não conta');
+  const card = app._cardReembCvHTML('💵 Saldo de RDM Recebido', s(2026).RDM, 2026, 50).replace(/<[^>]+>/g, ' ').replace(/⁠/g, '').replace(/\s+/g, ' ');
+  confere(/-R\$ 35,00/.test(card) && /Saldo do ano anterior -R\$ 15,00 \(a empresa deve\)/.test(card) && /A receber/.test(card), `aba Saldo mostra o número e o sentido (${card})`);
+}
+
+console.log('Painel do C.V.: cartão e reembolso, sem saldo acumulado somado');
+{
+  const semTags = h => h.replace(/<[^>]+>/g, ' ').replace(/⁠/g, '').replace(/\s+/g, ' ').trim();
+  const sc = app._saldosCvDoAno(notas3, reps3, 2026);
+  const hero = semTags(app._heroSaldoCvHTML(sc, 2026));
+  confere(/Saldo do cartão · 2026 R\$ 1\.?300,00/.test(hero) && /Reembolso · 2026 -R\$ 90,00/.test(hero), `topo: os dois números (${hero})`);
+  confere(/RDM -R\$ 35,00/.test(hero) && /RDA -R\$ 55,00/.test(hero), 'topo: reembolso aberto em RDM e RDA');
+  confere(!/1\.?210,00/.test(hero), 'cartão e reembolso não viram uma soma');
+  const ant = semTags(app._heroAnteriorCvHTML(sc));
+  confere(/anterior do cartão R\$ 1\.?200,00 \(a favor da empresa\)/.test(ant) && /anterior do reembolso -R\$ 60,00 \(a empresa deve\)/.test(ant), `sinais diferentes dizem quem deve (${ant})`);
+  const z = app._saldosCvDoAno([], [], 2026);
+  const zt = semTags(app._heroAnteriorCvHTML(z));
+  confere(/do cartão R\$ 0,00/.test(zt) && /do reembolso R\$ 0,00/.test(zt), 'zerado, a linha continua lá');
+  const kpi = semTags(app._kpiReembCvHTML(sc.RDA, 2026));
+  confere(/-R\$ 55,00/.test(kpi) && /Saldo do ano anterior -R\$ 45,00 \(a empresa deve\)/.test(kpi) && /carteira R\$ 30,00 · recebido R\$ 20,00/.test(kpi), `cartão RDA do Painel (${kpi})`);
+  confere(/scPainel \? _heroSaldoCvHTML/.test(fonteApp) && /scPainel \? _kpiReembCvHTML\(scPainel\.RDM/.test(fonteApp), 'o Painel usa os quadros do C.V. quando a pessoa é C.V.');
+}
+
+console.log('Valor do C.V. inteiro numa linha (revisão de 04/11/2026: "-R$ 3.05" numa linha e "0,00" na outra)');
+{
+  const sc = app._saldosCvDoAno(notas3, reps3, 2026);
+  const fig = (h, classe) => (h.match(new RegExp(`class="${classe}[^"]*"[^>]*>(.*?)</(?:span|div)>`)) || [])[0] || '';
+  const inteiro = (h, msg) => {
+    confere(/white-space:nowrap/.test(h) && !/white-space:normal/.test(h) && !/overflow-wrap:anywhere/.test(h), `${msg}: não parte entre os dígitos`);
+    confere(/font-size:min\(1em,/.test(h), `${msg}: a letra encolhe para caber`);
+  };
+  inteiro(fig(app._kpiReembCvHTML(sc.RDM, 2026), 'db-kpi-val'), 'Painel, cartão RDM');
+  inteiro(fig(app._cardReembCvHTML('x', sc.RDM, 2026, 0), 'saldo-val'), 'aba Saldo');
+  const hero = app._heroSaldoCvHTML({ ...sc, cartao: -157901.21, reemb: { ...sc.reemb, saldo: -241975.11 } }, 2026);
+  const vals = [...hero.matchAll(/class="db-hero-val[^"]*"[^>]*>(.*?)<\/div>/g)].map(m => m[0]);
+  confere(vals.length === 2, 'topo do Painel tem os dois valores');
+  vals.forEach(v => { inteiro(v, 'topo do Painel'); confere(v.includes('-⁠R$'), 'topo do Painel: o menos não fica sozinho na linha de cima'); });
+  confere(/<b class="neg">-⁠R\$\s35,00<\/b>/.test(app._heroSaldoCvHTML(sc, 2026)), 'RDM do topo: o menos também gruda no valor');
+  const rot = fonteApp.slice(fonteApp.indexOf('<div class="saldo-label">💳 Saldo do cartão'), fonteApp.indexOf('Recarga em ${MESES[filMes-1]}'));
+  confere(/saldo-val">\$\{_valorInteiroHTML\(saldoCartao/.test(rot), 'aba Saldo: o saldo do cartão usa o mesmo valor inteiro');
+}
+
+console.log('Aviso do gestor: repasse por tipo, como o reembolso');
+{
+  const ctx = { Gestor: G, brl: app.brl, _at: x => x, esc: x => x, filAno: 2026, user: { id: 'g' }, LIMITE_DEVEDOR: 1500, _histEq: { dados: {} } };
+  vm.createContext(ctx);
+  vm.runInContext(['_comSentido', '_avisoEquipeDevedoraHTML', 'lancarRepasseDoAviso'].map(funcaoDoApp).join('\n'), ctx);
+  const cartao = { total: 0, gasto: { RDM: 0, RDA: 0 }, recarga: 0, anterior: 0, saldo: 0 };
+  const cv = (rdm, rda) => ({ id: 'c1', nome: 'Cv', valor: rdm, rda, total: rdm + rda, cv: true, bolso: { RDM: rdm, RDA: 0 }, cartao });
+  const semTags = h => h.replace(/<[^>]+>/g, ' ').replace(/⁠/g, '').replace(/\s+/g, ' ').trim();
+  let abriu = null, lista = [];
+  ctx._equipeDevedora = () => lista;
+  ctx.equipePorId = { c1: { id: 'c1', nome: 'Cv' } };
+  ctx._ehCV = () => lista[0].cv;
+  ctx.abrirFormRepasse = (modo, pre, alvo, destino) => { abriu = { pre, destino }; };
+
+  lista = [cv(1625, 25)];
+  let h = ctx._avisoEquipeDevedoraHTML();
+  confere(/lancarRepasseDoAviso\(this\.dataset\.uid,'RDM'\)/.test(h) && /lancarRepasseDoAviso\(this\.dataset\.uid,'RDA'\)/.test(h) && !/lancarRepasseDoAviso\(this\.dataset\.uid,''\)/.test(h), 'C.V.: um botão de repasse para cada tipo, nenhum sem tipo');
+  confere(/Repasse RDM/.test(h) && /Repasse RDA/.test(h) && /Recarga/.test(h), 'C.V.: recarga continua no aviso');
+  ctx.lancarRepasseDoAviso('c1', 'RDM');
+  confere(abriu.pre.tipo === 'RDM' && abriu.pre.valor === '1625.00' && abriu.destino === 'carteira', `botão RDM preenche só o RDM (${JSON.stringify(abriu)})`);
+  ctx.lancarRepasseDoAviso('c1', 'RDA');
+  confere(abriu.pre.tipo === 'RDA' && abriu.pre.valor === '25.00' && abriu.destino === 'carteira', 'botão RDA preenche só o RDA: pagos os dois, zera os dois');
+  confere(/RDM R\$ 1625,00 · RDA R\$ 25,00 a receber/.test(semTags(h)), 'dois a receber: frase de sempre');
+
+  lista = [cv(2000, -300)];
+  h = ctx._avisoEquipeDevedoraHTML();
+  const t = semTags(h);
+  confere(/RDM R\$ 2000,00 \(a empresa deve\) · RDA -R\$ 300,00 \(a favor da empresa\)/.test(t), `sinais diferentes dizem quem deve (${t.slice(0, 90)})`);
+  confere(!/-R\$ 300,00 a receber/.test(t), 'negativo não vira "a receber"');
+  confere(!/lancarRepasseDoAviso\(this\.dataset\.uid,'RDA'\)/.test(h), 'sem RDA a receber, sem botão de RDA');
+  ctx.lancarRepasseDoAviso('c1', 'RDM');
+  confere(abriu.pre.valor === '2000.00', 'botão RDM sugere o RDM, não o total de 1.700');
+
+  // regime RDM/RDA não muda
+  lista = [{ id: 'c1', nome: 'Rd', valor: 1625, rda: 25, total: 1650, cv: false }];
+  h = ctx._avisoEquipeDevedoraHTML();
+  confere(/RDM R\$ 1625,00 · RDA R\$ 25,00 a receber/.test(semTags(h)) && /Repasse RDM/.test(h) && /Repasse RDA/.test(h) && !/Recarga/.test(h), 'RDM/RDA: mesma frase e mesmos botões');
+  ctx.lancarRepasseDoAviso('c1', 'RDA');
+  confere(abriu.pre.tipo === 'RDA' && abriu.pre.valor === '25.00' && abriu.destino === null, 'RDM/RDA: mesmo preenchimento');
+}
+
+console.log('Ajuda e dica do Excel falam do C.V.');
+{
+  const raiz = path.join(__dirname, '..');
+  const copias = ['svelte-ajuda/src/ajuda-conteudo.html', 'api/resources/ajuda/ajuda-conteudo.html', 'rda-rdm-app/js/svelte-ajuda.js'].map(f => [f, fs.readFileSync(path.join(raiz, f), 'utf8')]);
+  copias.forEach(([f, txt]) => {
+    confere(/Em cada cartão de RDM\/RDA o saldo é sempre o acumulado/.test(txt) && !/Em cada cartão o saldo é sempre o acumulado/.test(txt), `${f}: a regra do acumulado ficou só para RDM/RDA`);
+    confere(/Quem é do C\.V\. mostra <b>Cartão<\/b> e <b>Reembolso<\/b> do ano/.test(txt), `${f}: diz o que o cartão do C.V. mostra`);
+  });
+  confere(/quadro próprio de cartão e reembolso/.test(fonteGestor), 'dica do Excel cita o quadro do C.V.');
+}
+
+console.log('Aviso de devedor e sino');
+{
+  const cvUser = { id: 'u1', nome: 'Cv', regime: 'cv', role: 'colaborador' };
+  const g = (ns, rs, quem = cvUser) => {
+    Object.assign(app, { _ehGestorOuAdmin: () => true, _veEquipe: () => true, sb: {}, DEMO_MODE: false, navigator: { onLine: true }, user: { id: 'gestor', regime: 'rdm_rda' }, notas: [], repasses: [], equipePorId: { [quem.id]: quem },
+      notasEquipe: [], repassesEquipe: [], filMes: 12, filAno: 2026, _histEq: { dados: null, buscando: false }, _histEquipeServidor: () => ({ notas: ns, repasses: rs }), _ehCV: u => u?.regime === 'cv', _usaCartao: u => u?.regime === 'cv', localStorage: { setItem() {}, getItem() { return null; } }, _devedoraUltima: [] });
+    return { baixo: app._equipeCartaoBaixo(), dev: app._equipeDevedora() };
+  };
+  // C.V. que nunca teve recarga: só nota de carteira e nota sem pagamento gravado
+  const semRecarga = [nota('2026-03-01', 100, 'RDM', 'carteira'), nota('2026-03-02', 50, 'RDM', null)];
+  confere(g(semRecarga, []).baixo.length === 0, 'C.V. sem recarga nunca teve cartão: o sino não avisa');
+  confere(g(semRecarga, [rep('2026-03-01', 500, 'RDA')]).baixo.length === 0, 'repasse comum não vira cartão');
+  const baixo = g([nota('2026-03-01', 900, 'RDM', 'cartao')], [rep('2025-03-01', 1000, 'RDM', 'recarga')]).baixo;
+  confere(baixo.length === 1, 'com recarga antiga e saldo abaixo do mínimo, o sino avisa');
+  igual(baixo[0]?.saldo, 100, 'o saldo do aviso atravessa os anos');
+  confere(g([nota('2026-03-01', 100, 'RDM', 'cartao')], [rep('2026-03-01', 1000, 'RDM', 'recarga')]).baixo.length === 0, 'cartão com saldo não avisa');
+  confere(g([], [], { id: 'u1', nome: 'R', regime: 'rdm_rda', role: 'colaborador' }).baixo.length === 0, 'RDM/RDA não tem aviso de cartão');
+  // a dívida de RDM é só RDM: R$ 1.000 + R$ 800 de carteira não passam de R$ 1.500 em RDM
+  const soma2 = [nota('2026-03-01', 1000, 'RDM', 'carteira'), nota('2026-03-02', 800, 'RDA', 'carteira')];
+  confere(g(soma2, []).dev.length === 0, 'C.V.: aviso de RDM não soma a carteira de RDA');
+  const passa = g([nota('2026-03-01', 1600, 'RDM', 'carteira'), nota('2026-03-02', 200, 'RDA', 'carteira'), nota('2026-03-03', 9000, 'RDM', 'cartao')], [rep('2026-03-01', 100, 'RDA'), rep('2026-03-01', 9000, 'RDM', 'recarga')]).dev;
+  confere(passa.length === 1 && passa[0].cv, 'C.V.: acima do limite em RDM avisa; o gasto do cartão não é dívida');
+  igual(passa[0]?.valor, 1600, 'valor = reembolso RDM a receber');
+  igual(passa[0]?.rda, 100, 'rda = reembolso RDA a receber, com o repasse do tipo certo');
+  igual(passa[0]?.total, 1700, 'total = os dois');
+  const r = { id: 'u1', nome: 'R', regime: 'rdm_rda', role: 'colaborador' };
+  const rdm = g([nota('2026-03-01', 1600, 'RDM', null), nota('2026-03-02', 300, 'RDA', null)], [], r).dev;
+  igual(rdm[0]?.valor, 1600, 'RDM/RDA: aviso igual ao de antes'); igual(rdm[0]?.rda, 300, 'RDM/RDA: RDA igual'); igual(rdm[0]?.total, 1900, 'RDM/RDA: total igual');
+  app.notas = []; app.repasses = [];
 }
 
 console.log('Painel: mesma linha da aba Saldo, separada por tipo, e sempre visível');
@@ -184,7 +328,7 @@ console.log('Sentido do saldo: o mesmo rótulo com sinais opostos diz quem deve'
   const ns = [nota('2025-05-10', 100, 'RDM', 'carteira'), nota('2025-05-11', 100, 'RDM', 'cartao')];
   const s = app._saldosCvDoAno(ns, [], 2026);
   confere(app._comSentido(s.cartaoAnterior) === ' (a empresa deve)', 'cartão -100: a empresa deve');
-  confere(app._comSentido(s.aReceberAnterior, true) === ' (a empresa deve)', 'RDM recebido +100: a empresa deve');
+  confere(app._comSentido(s.RDM.ant) === ' (a empresa deve)', 'reembolso RDM -100: a empresa deve');
   confere(app._comSentido(0) === '', 'sem valor, sem parênteses');
 }
 
@@ -279,6 +423,80 @@ const valor = c => texto(c.querySelector('b'));
     const marcados = [...w.document.querySelectorAll('.sel-chk:checked')].map(c => c.value).sort();
     w.document.querySelector('.modal-overlay.open').remove();
     confere(marcados.join() === 'cv-so-bolso,cv-so-recarga,lancou,rdm-carrega', `marcados: ${marcados.join()}`);
+  }
+
+  /* a lista da Equipe de verdade, com um C.V. e um RDM/RDA */
+  const mudar = (arr, id) => arr.map(x => ({ ...x, user_id: id }));
+  const nsDois = [...mudar(notas3, 'cv1'), ...mudar(notas3, 'rd1')], rsDois = [...mudar(reps3, 'cv1'), ...mudar(reps3, 'rd1')];
+  const colabsDois = [{ id: 'cv1', nome: 'Carla', email: 'c@x.com', role: 'colaborador', regime: 'cv', nucleo: 'A', ativo: true }, { id: 'rd1', nome: 'Rui', email: 'r@x.com', role: 'colaborador', regime: 'rdm_rda', nucleo: 'A', ativo: true }];
+  async function lista(mes, ano, { semHistorico = false } = {}) {
+    const q = (arr, f) => (semHistorico && !f.ano) ? Promise.reject(new Error('sem rede'))
+      : Promise.resolve(arr.filter(x => (!f.ano || x.ano === f.ano) && (!f.mes || x.mes === f.mes) && !(f.deleted === '0' && x.deleted)));
+    const sb = { notas: { list: f => q(nsDois, f) }, repasses: { list: f => q(rsDois, f) }, colaboradores: { listTodos: async () => colabsDois } };
+    G.fechar();
+    const el = w.document.createElement('div');
+    w.document.body.appendChild(el);
+    await G.renderDashboard(el, sb, { id: 'g1', role: 'gestor', nome: 'Gestor' }, () => {}, { mes, ano });
+    return { el, cartao: id => el.querySelector(`.colab-card[data-uid="${id}"]`) };
+  }
+
+  console.log('Lista da Equipe: C.V. com os números da ficha, RDM/RDA como sempre');
+  {
+    const { cartao } = await lista(3, 2026);
+    const [c, r] = cartao('cv1').querySelectorAll('.bal-box');
+    const tc = texto(c), tr = texto(r);
+    confere(/Cartão · 2026/.test(tc) && texto(c.querySelector('.bal-val')) === 'R$ 1.300,00', `cartão igual à ficha (${tc})`);
+    confere(/Saldo do ano anterior R\$ 1\.200,00 \(a favor da empresa\)/.test(tc) && /Gasto R\$ 300,00/.test(tc) && /Recargas R\$ 400,00/.test(tc), 'cartão: anterior, gasto e recargas do ano');
+    confere(/Reembolso · 2026/.test(tr) && texto(r.querySelector('.bal-val')) === '-R$ 90,00', `reembolso igual à ficha (${tr})`);
+    confere(/RDM -R\$ 35,00/.test(tr) && /RDA -R\$ 55,00/.test(tr), 'reembolso aberto em RDM e RDA');
+    confere(/Saldo do ano anterior -R\$ 60,00 \(a empresa deve\)/.test(tr), 'anterior do reembolso com o sentido');
+    confere(!/saldo acumulado/.test(texto(cartao('cv1'))), 'o C.V. não mostra mais o saldo acumulado RDM/RDA');
+    confere(cartao('cv1').querySelector('.bal-box.neg') === r && !c.classList.contains('neg'), 'só o negativo fica vermelho');
+    // a 360 e 390 px o valor partia nos dígitos, como no Painel (medido no Chrome, 04/11/2026)
+    [c, r].forEach(b => confere(/white-space:nowrap/.test(b.querySelector('.bal-val').innerHTML) && /font-size:min\(1em,/.test(b.querySelector('.bal-val').innerHTML), 'lista: o valor fica inteiro e a letra encolhe'));
+
+    const fich = await ficha('cv', 3, 2026);
+    const [abaC, abaR] = fich.querySelectorAll('.cdet-plan-aba');
+    confere(valor(celula(abaC, 'Saldo')) === texto(c.querySelector('.bal-val')) && valor(celula(abaR, 'Saldo')) === texto(r.querySelector('.bal-val')), 'lista e ficha dão o mesmo número');
+    const s = app._saldosCvDoAno(notas3, reps3, 2026);
+    confere(valor(celula(abaC, 'Saldo')) === 'R$ 1.300,00' && s.cartao === 1300 && s.reemb.saldo === -90, 'e o app do colaborador também');
+
+    const [m, a] = cartao('rd1').querySelectorAll('.bal-box');
+    confere(texto(m.querySelector('.bal-type')) === 'RDM · saldo acumulado' && texto(m.querySelector('.bal-val')) === '-R$ 435,00', `RDM/RDA: RDM sem mudança (${texto(m)})`);
+    confere(texto(a.querySelector('.bal-type')) === 'RDA · saldo acumulado', 'RDM/RDA: RDA sem mudança');
+    confere(/Meses anteriores de 2026/.test(texto(m)), 'RDM/RDA: continua abrindo os meses anteriores');
+
+    const sem = await lista(3, 2026, { semHistorico: true });
+    const t = texto(sem.cartao('cv1').querySelector('.bal-box'));
+    confere(/só o ano/.test(t) && /Saldo do ano anterior: indisponível/.test(t), `sem histórico diz, não chuta (${t})`);
+  }
+
+  console.log('Excel da equipe: dois quadros, cada total diz o que soma');
+  {
+    const X = montarExcel();
+    const reg = (id, m, a) => nsDois.filter(n => n.user_id === id && n.mes === m && n.ano === a && !n.deleted && n.pagamento !== 'empresa');
+    const ns = [...reg('cv1', 2, 2026), ...reg('rd1', 2, 2026)];
+    const rs = rsDois.filter(r => r.mes === 2 && r.ano === 2026 && !r.deleted && r.destino !== 'recarga');
+    const anterior = Object.fromEntries(G.saldoAnteriorPorUsuario(nsDois, rsDois, 2, 2026));
+    const cv = { cv1: G.saldoCvDoAno(nsDois.filter(n => n.user_id === 'cv1'), rsDois.filter(r => r.user_id === 'cv1'), 2026) };
+    const ws = X.buildEquipe(ns, rs, colabsDois, 2, 2026, anterior, cv);
+    const celulas = Object.keys(ws).filter(k => /^[A-Z]+\d+$/.test(k));
+    const achar = v => celulas.find(k => ws[k].v === v);
+    const linha = k => celulas.filter(c => c.replace(/\D/g, '') === k.replace(/\D/g, '')).sort((p, q) => p.localeCompare(q)).map(c => ws[c].v);
+    const rui = linha(achar('Rui')), carla = linha(achar('Carla'));
+    confere(rui.length === 10, `RDM/RDA continua na tabela de 10 colunas (${rui.join(' | ')})`);
+    igual(rui[2], -415, 'RDM Anterior sem mudança'); igual(rui[5], -435, 'RDM Saldo Acum. sem mudança');
+    confere(carla.length === 13, `C.V. no quadro próprio (${carla.join(' | ')})`);
+    igual(carla[5], 1300, 'Cartão Saldo'); igual(carla[2], 1200, 'Cartão Anterior'); igual(carla[3], 400, 'Cartão Recargas'); igual(carla[4], 300, 'Cartão Gasto');
+    igual(carla[9], -90, 'Reemb. Saldo'); igual(carla[10], -35, 'Saldo RDM'); igual(carla[11], -55, 'Saldo RDA'); igual(carla[12], 100, 'Gasto do mês');
+    confere(!achar('TOTAL GERAL'), 'não há total geral misturando os dois regimes');
+    confere(!!achar('TOTAL DO REGIME RDM/RDA') && !!achar('TOTAL DO REGIME C.V.'), 'cada total diz o regime');
+    const tot = linha(achar('TOTAL DO REGIME RDM/RDA'));
+    igual(tot[2], 70, 'o total do RDM/RDA soma só quem é do RDM/RDA');
+    const so = X.buildEquipe(reg('rd1', 2, 2026), rs.filter(r => r.user_id === 'rd1'), colabsDois.filter(c => c.id === 'rd1'), 2, 2026, anterior, {});
+    confere(Object.values(so).some(c => c && c.v === 'TOTAL GERAL') && so['!ref'].endsWith(':J' + so['!ref'].match(/(\d+)$/)[1]), 'sem C.V. a planilha fica como sempre foi');
+    const semH = X.buildEquipe(ns, rs, colabsDois, 2, 2026, null, null);
+    confere(Object.values(semH).some(c => c && /Saldo do C\.V\. não calculado.*Carla/.test(String(c.v))), 'sem histórico diz que não calculou o C.V.');
   }
 
   console.log('Ficha sem histórico: diz, não chuta');

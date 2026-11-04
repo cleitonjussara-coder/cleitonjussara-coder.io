@@ -386,7 +386,11 @@ class RelatorioCv
      * gestor não caçar os totais nas abas de cada pessoa. Três quadros:
      * por colaborador, por mês (equipe inteira) e colaborador × mês, cada um
      * com TOTAL GERAL. Valores calculados aqui (não fórmulas), com a mesma
-     * regra de categoria da grade RDM_RDA; "Recebido" = repasse received.
+     * regra de categoria da grade RDM_RDA; "Recebido" = repasse received, sem a recarga do cartão.
+     *
+     * 04/11/2026, decisão do dono: com C.V. na lista não existe um Saldo só. Cartão, reembolso e RDM/RDA saem em colunas
+     * separadas, cada total só com a sua conta, nos números da planilha de cada um (SaldoAnterior). A soma antiga fazia um
+     * crédito de cartão esconder o reembolso que a empresa deve. Sem ninguém do C.V., a aba segue igual.
      */
     public function abaResumo(Spreadsheet $master, iterable $colabs, int $ano): void
     {
@@ -394,23 +398,40 @@ class RelatorioCv
         $ids = $colabs->pluck('id')->all();
         $cats = ['abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'alimentacao' => 'Alimentação (RDA)', 'outros' => 'Outros'];
         $meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        $usaCartao = $colabs->mapWithKeys(fn ($c) => [$c->id => $c->usaCartao()]);
+        $temCv = $usaCartao->contains(true);
 
-        /* ── agrega: [user][cat], [user][mes], [mes][cat], recebido por user e por mes ── */
-        $gCat = $gMes = $mCat = $rec = $recMes = [];
+        /* as contas que esta lista tem: de quem cada uma é e como se lê do SaldoAnterior */
+        $somaTipos = fn (array $t) => round($t['RDM'] + $t['RDA'], 2);
+        $contas = [];
+        if ($temCv) {
+            $contas['cartao'] = ['nome' => 'Cartão C.V.', 'cv' => true, 'saldo' => fn (array $s) => $s['cartao']];
+            $contas['reembolso'] = ['nome' => 'Reembolso C.V.', 'cv' => true, 'saldo' => fn (array $s) => $somaTipos($s['reembolso'])];
+        }
+        if (! $temCv || $usaCartao->contains(false)) {
+            $contas['rdm'] = ['nome' => 'RDM/RDA', 'cv' => false, 'saldo' => fn (array $s) => $somaTipos($s['saldo'])];
+        }
+        $rotulo = fn (array $conta, string $t) => $temCv ? "{$conta['nome']}: {$t}" : ucfirst($t);
+
+        /* ── agrega: [user][cat], [user][mes], [mes][cat], recebido e recarga por user e por mes, movimento de cada conta por mes ── */
+        $gCat = $gMes = $mCat = $rec = $recMes = $recarga = $recargaMes = $movMes = [];
         foreach ($ids as $id) {
             $gCat[$id] = array_fill_keys(array_keys($cats), 0.0);
             $gMes[$id] = array_fill(1, 12, 0.0);
             $rec[$id] = 0.0;
+            $recarga[$id] = 0.0;
         }
         for ($m = 1; $m <= 12; $m++) {
             $mCat[$m] = array_fill_keys(array_keys($cats), 0.0);
             $recMes[$m] = 0.0;
+            $recargaMes[$m] = 0.0;
+            $movMes[$m] = ['cartao' => 0.0, 'reembolso' => 0.0, 'rdm' => 0.0];
         }
         /* 22/10/2026: sem as notas de Faturamento (pagamento=empresa), como nas abas de cada um e nos outros relatórios —
            a empresa pagou direto, não é gasto do colaborador. Antes entravam aqui e o Saldo do RESUMO saía negativo à toa. */
         Nota::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
-            ->select('user_id', 'tipo', 'subtipo', 'valor', 'mes')->cursor()->each(function (Nota $n) use (&$gCat, &$gMes, &$mCat) {
+            ->select('user_id', 'tipo', 'subtipo', 'valor', 'mes', 'pagamento')->cursor()->each(function (Nota $n) use (&$gCat, &$gMes, &$mCat, &$movMes, $usaCartao) {
                 $m = (int) $n->mes;
                 if ($m < 1 || $m > 12) {
                     return;
@@ -420,19 +441,32 @@ class RelatorioCv
                 $gCat[$n->user_id][$c] += $v;
                 $gMes[$n->user_id][$m] += $v;
                 $mCat[$m][$c] += $v;
+                $movMes[$m][! $usaCartao[$n->user_id] ? 'rdm' : ($n->pagamento === 'carteira' ? 'reembolso' : 'cartao')] -= $v;
             });
-        /* 04/11/2026: no C.V. o Recebido daqui junta recarga e reembolso; no RDM/RDA a recarga é do cartão e fica fora, como em
-           gerar(), senão o Saldo não fecha com a planilha da pessoa nem com Arquivos */
-        $usaCartao = $colabs->mapWithKeys(fn ($c) => [$c->id => $c->usaCartao()]);
+        /* 04/11/2026: recarga não é dinheiro recebido. No C.V. tem coluna própria e entra no cartão; no RDM/RDA fica fora, como
+           em gerar(), senão o Saldo não fecha com a planilha da pessoa nem com Arquivos */
         SaldoAnterior::recebidos(Repasse::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano))
-            ->select('user_id', 'valor', 'mes', 'destino')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes, $usaCartao) {
-                if ($r->destino === 'recarga' && ! $usaCartao[$r->user_id]) {
+            ->select('user_id', 'valor', 'mes', 'destino')->cursor()->each(function (Repasse $r) use (&$rec, &$recMes, &$recarga, &$recargaMes, &$movMes, $usaCartao) {
+                $cv = $usaCartao[$r->user_id];
+                if ($r->destino === 'recarga' && ! $cv) {
                     return;
                 }
                 $m = (int) $r->mes;
-                $rec[$r->user_id] += (float) $r->valor;
-                if ($m >= 1 && $m <= 12) {
-                    $recMes[$m] += (float) $r->valor;
+                $noAno = $m >= 1 && $m <= 12;
+                $v = (float) $r->valor;
+                if ($r->destino === 'recarga') {
+                    $recarga[$r->user_id] += $v;
+                    if ($noAno) {
+                        $recargaMes[$m] += $v;
+                        $movMes[$m]['cartao'] += $v;
+                    }
+
+                    return;
+                }
+                $rec[$r->user_id] += $v;
+                if ($noAno) {
+                    $recMes[$m] += $v;
+                    $movMes[$m][$cv ? 'reembolso' : 'rdm'] += $v;
                 }
             });
 
@@ -441,6 +475,8 @@ class RelatorioCv
         $ws->setTitle('RESUMO');
         $verde = '2D6A4F';
         $brl = 'R$ #,##0.00;[Red]-R$ #,##0.00';
+        /* mesma frase de SaldoAnterior::sentido; a célula continua número, então o filtro e as somas do Excel funcionam */
+        $brlSentido = 'R$ #,##0.00" a favor da empresa";[Red]-R$ #,##0.00" a empresa deve";R$ 0.00';
         $hdr = ['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => $verde]],
             'alignment' => ['horizontal' => 'center', 'vertical' => 'center', 'wrapText' => true], 'borders' => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'BBBBBB']]]];
         $cel = ['borders' => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'DDDDDD']]]];
@@ -456,7 +492,10 @@ class RelatorioCv
         $ws->getStyle([1, $r])->applyFromArray(['font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => $verde]]]);
         $r++;
         $ws->mergeCells([1, $r, 14, $r]);
-        $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · Saldo = Saldo do ano anterior + Recebido − Total gasto (negativo = a reembolsar)', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i')));
+        $legenda = $temCv
+            ? 'Contas separadas, que não se somam: '.implode(', ', array_column($contas, 'nome')).'. Cada total soma só a sua conta. Saldo = saldo do ano anterior + o que entrou − o que saiu'
+            : 'Saldo = Saldo do ano anterior + Recebido − Total gasto (negativo = a reembolsar)';
+        $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · %s', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i'), $legenda));
         $ws->getStyle([1, $r])->getFont()->setItalic(true)->setSize(10)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF666666'));
         $r += 2;
 
@@ -465,9 +504,11 @@ class RelatorioCv
         $ws->setCellValue([1, $r], '1 · POR COLABORADOR');
         $ws->getStyle([1, $r])->applyFromArray($titulo);
         $r++;
-        /* 04/11/2026: a coluna do saldo trazido entra antes do Saldo, que passa a somá-la. Aqui o Recebido junta recarga e
-           reembolso, então o anterior é o total da pessoa: cartão + reembolso no C.V. */
-        $cab = array_merge(['Colaborador'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo do ano anterior', 'Saldo']);
+        /* 04/11/2026: cada conta tem o saldo trazido e o saldo; quem não é do regime da conta fica em branco, não em zero */
+        $cab = array_merge(['Colaborador'], array_values($cats), ['Total gasto', 'Recebido'], $temCv ? ['Recargas do cartão'] : []);
+        foreach ($contas as $conta) {
+            array_push($cab, $rotulo($conta, 'saldo do ano anterior'), $rotulo($conta, 'saldo'));
+        }
         foreach ($cab as $i => $h) {
             $ws->setCellValue([$i + 1, $r], $h);
         }
@@ -478,13 +519,15 @@ class RelatorioCv
         $ini1 = $r;
         $totCat = array_fill_keys(array_keys($cats), 0.0);
         $totRec = 0.0;
-        $totAnt = 0.0;
+        $totRecarga = 0.0;
+        $totAnt = array_fill_keys(array_keys($contas), 0.0);
+        $totSaldo = $totAnt;
         $svcSaldo = app(SaldoAnterior::class);
         $anteriores = $svcSaldo->deTodos($ano, $ids);
+        $fins = $svcSaldo->deTodos($ano + 1, $ids);   // pedir o ano seguinte dá o saldo até dezembro, o mesmo da planilha de cada um
         foreach ($colabs as $c) {
             $id = $c->id;
             $gasto = array_sum($gCat[$id]);
-            $ant = $svcSaldo->total($c, $anteriores[$id] ?? SaldoAnterior::zerado());
             $ws->setCellValue([1, $r], $nomeColab($c));
             $i = 2;
             foreach (array_keys($cats) as $k) {
@@ -493,10 +536,22 @@ class RelatorioCv
             }
             $ws->setCellValue([$i++, $r], round($gasto, 2));
             $ws->setCellValue([$i++, $r], round($rec[$id], 2));
-            $ws->setCellValue([$i++, $r], $ant);
-            $ws->setCellValue([$i, $r], round($ant + $rec[$id] - $gasto, 2));
+            if ($temCv) {
+                $ws->setCellValue([$i++, $r], $usaCartao[$id] ? round($recarga[$id], 2) : null);
+            }
+            foreach ($contas as $k => $conta) {
+                if ($conta['cv'] === $usaCartao[$id]) {
+                    $ant = $conta['saldo']($anteriores[$id] ?? SaldoAnterior::zerado());
+                    $saldo = $conta['saldo']($fins[$id] ?? SaldoAnterior::zerado());
+                    $ws->setCellValue([$i, $r], $ant);
+                    $ws->setCellValue([$i + 1, $r], $saldo);
+                    $totAnt[$k] += $ant;
+                    $totSaldo[$k] += $saldo;
+                }
+                $i += 2;
+            }
             $totRec += $rec[$id];
-            $totAnt += $ant;
+            $totRecarga += $recarga[$id];
             $r++;
         }
         $fim1 = $r - 1;
@@ -508,11 +563,20 @@ class RelatorioCv
         $totGasto = array_sum($totCat);
         $ws->setCellValue([$i++, $r], round($totGasto, 2));
         $ws->setCellValue([$i++, $r], round($totRec, 2));
-        $ws->setCellValue([$i++, $r], round($totAnt, 2));
-        $ws->setCellValue([$i, $r], round($totAnt + $totRec - $totGasto, 2));
+        if ($temCv) {
+            $ws->setCellValue([$i++, $r], round($totRecarga, 2));
+        }
+        $iniContas = $i;
+        foreach (array_keys($contas) as $k) {
+            $ws->setCellValue([$i++, $r], round($totAnt[$k], 2));
+            $ws->setCellValue([$i++, $r], round($totSaldo[$k], 2));
+        }
         $ws->getStyle([1, $ini1, count($cab), $fim1])->applyFromArray($cel);
         $ws->getStyle([1, $r, count($cab), $r])->applyFromArray($tot);
         $ws->getStyle([2, $ini1, count($cab), $r])->getNumberFormat()->setFormatCode($brl);
+        if ($temCv) {
+            $ws->getStyle([$iniContas, $ini1, count($cab), $r])->getNumberFormat()->setFormatCode($brlSentido);
+        }
         $ws->setAutoFilter([1, $hdr1, count($cab), $fim1]);
         $r += 3;
 
@@ -521,7 +585,7 @@ class RelatorioCv
         $ws->setCellValue([1, $r], '2 · POR MÊS (EQUIPE INTEIRA)');
         $ws->getStyle([1, $r])->applyFromArray($titulo);
         $r++;
-        $cab2 = array_merge(['Mês'], array_values($cats), ['Total gasto', 'Recebido', 'Saldo']);
+        $cab2 = array_merge(['Mês'], array_values($cats), ['Total gasto', 'Recebido'], $temCv ? ['Recargas do cartão'] : [], array_map(fn ($conta) => $rotulo($conta, 'saldo'), array_values($contas)));
         foreach ($cab2 as $i => $h) {
             $ws->setCellValue([$i + 1, $r], $h);
         }
@@ -538,12 +602,20 @@ class RelatorioCv
             }
             $ws->setCellValue([$i++, $r], round($gasto, 2));
             $ws->setCellValue([$i++, $r], round($recMes[$m], 2));
-            $ws->setCellValue([$i, $r], round($recMes[$m] - $gasto, 2));
+            if ($temCv) {
+                $ws->setCellValue([$i++, $r], round($recargaMes[$m], 2));
+            }
+            foreach (array_keys($contas) as $k) {
+                $ws->setCellValue([$i++, $r], round($movMes[$m][$k], 2));
+            }
             $r++;
         }
-        /* a linha entra na soma do TOTAL GERAL da coluna Saldo, que assim fecha com o quadro 1 */
+        /* a linha entra na soma do TOTAL GERAL de cada conta, que assim fecha com o quadro 1 */
         $ws->setCellValue([1, $r], 'Saldo do ano anterior');
-        $ws->setCellValue([count($cab2), $r], round($totAnt, 2));
+        $iniContas2 = count($cab2) - count($contas) + 1;
+        foreach (array_keys($contas) as $n => $k) {
+            $ws->setCellValue([$iniContas2 + $n, $r], round($totAnt[$k], 2));
+        }
         $r++;
         $ws->setCellValue([1, $r], 'TOTAL GERAL');
         for ($c = 2; $c <= count($cab2); $c++) {
@@ -553,6 +625,9 @@ class RelatorioCv
         $ws->getStyle([1, $ini2, count($cab2), $r - 1])->applyFromArray($cel);
         $ws->getStyle([1, $r, count($cab2), $r])->applyFromArray($tot);
         $ws->getStyle([2, $ini2, count($cab2), $r])->getNumberFormat()->setFormatCode($brl);
+        if ($temCv) {   // nos meses é movimento, não saldo: a frase só no que é saldo mesmo
+            $ws->getStyle([$iniContas2, $r - 1, count($cab2), $r])->getNumberFormat()->setFormatCode($brlSentido);
+        }
         $r += 3;
 
         /* ── Quadro 3: colaborador × mês (gasto total) ── */
@@ -589,6 +664,11 @@ class RelatorioCv
         $ws->getColumnDimension('A')->setWidth(30);
         for ($c = 2; $c <= 14; $c++) {
             $ws->getColumnDimension($colL($c))->setWidth(15);
+        }
+        if ($temCv) {   // com a frase, a largura de 15 viraria ##### no Excel
+            for ($c = $iniContas2; $c <= count($cab); $c++) {
+                $ws->getColumnDimension($colL($c))->setWidth(32);
+            }
         }
         $ws->freezePane('B5');
         $ws->getSheetView()->setZoomScale(90);

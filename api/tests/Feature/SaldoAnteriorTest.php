@@ -145,7 +145,6 @@ class SaldoAnteriorTest extends TestCase
         $s = $this->saldo($c);
         $this->assertSame(SaldoAnterior::zerado(), $s);
         $this->assertSame([], app(SaldoAnterior::class)->deTodos(self::ANO), 'quem só tem o ano em foco não traz nada');
-        $this->assertSame(0.0, app(SaldoAnterior::class)->total($c, $s));
     }
 
     public function test_soma_todos_os_anos_anteriores_e_nunca_os_seguintes(): void
@@ -216,7 +215,6 @@ class SaldoAnteriorTest extends TestCase
         $svc = app(SaldoAnterior::class);
 
         $this->assertEquals(['RDM' => -40, 'RDA' => 0], $svc->porTipo($c, $this->saldo($c)));
-        $this->assertEquals(660, $svc->total($c, $this->saldo($c)), 'cartão 700 + reembolso −40');
 
         $c->forceFill(['regime' => 'rdm_rda'])->save();
         $this->assertEquals(['RDM' => -340, 'RDA' => 0], $svc->porTipo($c->fresh(), $this->saldo($c)), 'a mesma conta da ficha: gasto inteiro, recarga fora');
@@ -607,11 +605,14 @@ class SaldoAnteriorTest extends TestCase
         $linhas = collect($ss->getSheetByName('RESUMO')->toArray(null, true, false));
         $ss->disconnectWorksheets();
 
+        /* colunas: 6 Recebido, 7 Recargas do cartão, 9 Cartão: saldo, 13 RDM/RDA: saldo */
         $this->assertEquals(100, $linhas->firstWhere(0, 'Beto')[6]);
-        $this->assertEquals(50, $linhas->firstWhere(0, 'Beto')[8]);
-        $this->assertEquals(500, $linhas->firstWhere(0, 'Ana')[6], 'no C.V. o Recebido do RESUMO junta a recarga');
-        $this->assertEquals(460, $linhas->firstWhere(0, 'Ana')[8]);
-        $this->assertEquals(600, $linhas->firstWhere(0, 'Mar')[6], 'o quadro por mês usa o mesmo recebido');
+        $this->assertEquals(50, $linhas->firstWhere(0, 'Beto')[13]);
+        $this->assertEquals(0, $linhas->firstWhere(0, 'Ana')[6], 'desde 04/11/2026 a recarga do C.V. tem coluna própria');
+        $this->assertEquals(500, $linhas->firstWhere(0, 'Ana')[7]);
+        $this->assertEquals(460, $linhas->firstWhere(0, 'Ana')[9]);
+        $this->assertEquals(100, $linhas->firstWhere(0, 'Mar')[6], 'o quadro por mês usa o mesmo recebido');
+        $this->assertEquals(500, $linhas->firstWhere(0, 'Mar')[7], 'e a mesma recarga');
 
         $ss = app(RelatorioRdmRda::class)->gerar($beto->fresh(), self::ANO);
         $this->assertEquals(50, $this->valor($ss, 'BANCO DE DADOS', 'B11'), 'fecha com a planilha dele');
@@ -619,7 +620,7 @@ class SaldoAnteriorTest extends TestCase
         $this->assertEquals(-50, $this->resumo($gestor, $beto)['rdm'], 'e com Arquivos');
     }
 
-    public function test_arquivo_da_equipe_mantem_as_contas_e_o_resumo_soma_o_anterior(): void
+    public function test_arquivo_da_equipe_mantem_as_contas_e_o_resumo_soma_o_anterior_conta_por_conta(): void
     {
         $cv = $this->cvDoisAnos();
         $rdm = $this->rdmDoisAnos();
@@ -633,19 +634,21 @@ class SaldoAnteriorTest extends TestCase
         $this->assertEquals(150, $this->valor($ss, 'Beto_BANCO DE DADOS', 'B11'));
         $this->assertEquals(270, $this->valor($ss, 'Beto_BANCO DE DADOS', 'F11'));
 
-        /* Ana: −390 (−300 cartão −90 reembolso) + 530 recebido − 170 gasto; Beto: 50 + 650 − 280 */
+        /* 04/11/2026: cada conta na sua coluna, nos números das abas acima. Quadro 1: 8/9 cartão, 10/11 reembolso, 12/13 RDM/RDA (anterior/saldo) */
         $linhas = $ss->getSheetByName('RESUMO')->toArray(null, true, false);
         $ana = collect($linhas)->firstWhere(0, 'Ana');
         $beto = collect($linhas)->firstWhere(0, 'Beto');
-        $this->assertContains('Saldo do ano anterior', $linhas[4]);
-        $this->assertEquals(-390, $ana[7]);
-        $this->assertEquals(-30, $ana[8]);
-        $this->assertEquals(50, $beto[7]);
-        $this->assertEquals(420, $beto[8]);
+        $this->assertContains('Cartão C.V.: saldo do ano anterior', $linhas[4]);
+        $this->assertEquals(-300, $ana[8]);
+        $this->assertEquals(100, $ana[9]);
+        $this->assertEquals(-90, $ana[10]);
+        $this->assertEquals(-130, $ana[11]);
+        $this->assertEquals(50, $beto[12]);
+        $this->assertEquals(420, $beto[13]);
         $saldoGeral = collect($linhas)->where(0, 'TOTAL GERAL')->values();
-        $this->assertEquals(390, $saldoGeral[0][8], 'quadro 1');
-        $this->assertEquals(-340, collect($linhas)->firstWhere(0, 'Saldo do ano anterior')[7]);
-        $this->assertEquals(390, $saldoGeral[1][7], 'quadro 2 fecha com o quadro 1');
+        $this->assertEquals([100, -130, 420], [$saldoGeral[0][9], $saldoGeral[0][11], $saldoGeral[0][13]], 'quadro 1');
+        $this->assertEquals([-300, -90, 50], array_slice(collect($linhas)->firstWhere(0, 'Saldo do ano anterior'), 8, 3));
+        $this->assertEquals([100, -130, 420], array_slice($saldoGeral[1], 8, 3), 'quadro 2 fecha com o quadro 1');
         $ss->disconnectWorksheets();
     }
 }

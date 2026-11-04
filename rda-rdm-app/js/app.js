@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 525;
+const APP_BUILD = 526;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3256,9 +3256,9 @@ function _devedorDe(ns, rs, mes, ano, ehCv, tipo = null) {
        REEMBOLSO soma na planilha. Dela se abate o que a empresa já
        transferiu (coluna "REEMBOLSO DE:"). A recarga do cartão fica fora:
        aquele dinheiro foi para o cartão, não para a conta da pessoa.
-       O filtro por categoria também não vale aqui: o repasse é um valor
-       só, sem separar RDA de RDM. */
-    const ateData = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k;
+       04/11/2026: o filtro por tipo vale aqui também (reembolso RDM e RDA, como a ficha e a planilha);
+       antes ignorava e o aviso "RDM a receber" do C.V. mostrava a soma dos dois. */
+    const ateData = o => !o.deleted && (Number(o.ano) * 12 + Number(o.mes)) <= k && (!tipo || o.tipo === tipo);
     const doBolso = _soma(ns.filter(n => ateData(n) && n.pagamento === 'carteira'));
     const repassado = _soma(rs.filter(r => ateData(r) && _repasseEhRecebido(r) && _repasseEhCarteira(r)));
 
@@ -3447,8 +3447,7 @@ function _resumoHub() {
       ${linhas.length > mostra.length ? `<div class="res-tab-mais">+ ${linhas.length - mostra.length} mês(es) em ${filAno} — veja tudo em RDM/RDA e Planilhas.</div>` : ''}`;
   };
 
-  /* No cartão o repasse é UM valor só (o próprio _devedorDe ignora o
-     filtro por aba) — mostrar duas caixas repetia o mesmo número. */
+  /* No cartão o quadro mostra o reembolso numa caixa só (RDM + RDA); aberto por tipo fica no Painel e em C.V. e Planilha. */
   const tabelaCarteira = () => {
     const linhas = [];
     for (let m = 12; m >= 1; m--) {
@@ -3534,19 +3533,23 @@ function _avisoEquipeDevedoraHTML() {
   /* Cartão interativo (19/10/2026, pedido do Cleiton): uma linha por
      colaborador. Quem usa a carteira/RDA-RDM vê o a receber de RDM e de RDA
      separados, com um botão de repasse para cada aba (já com aba e valor
-     preenchidos; o valor continua editável). No cartão corporativo (C.V.) a
-     dívida é uma só, sem divisão por aba, e há também a recarga. */
+     preenchidos; o valor continua editável). No cartão corporativo (C.V.) é
+     igual, e há também a recarga. 04/11/2026: o C.V. tinha um botão só com o total,
+     mas o formulário pede um tipo e o reembolso é por tipo: pagar a sugestão nunca zerava os dois. */
   const linhas = outros.map(c => {
     const id = _at(c.id);
     const btn = (rot, fn, extra = '') => `<button type="button" class="res-eq-btn" data-uid="${id}" onclick="${fn}(this.dataset.uid${extra})">${rot}</button>`;
+    /* RDA negativo não é "a receber": com sinais diferentes a frase diz quem deve (04/11/2026) */
+    const aReceberCv = c.rda < -0.004
+      ? `RDM <b>${brl(c.valor)}</b>${_comSentido(c.valor, true)} · RDA <b>${Gestor.brlInteiro(c.rda)}</b>${_comSentido(c.rda, true)}`
+      : `RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber`;
     const info = c.cv && !_histEq.dados
       ? `<span>C.V. · carregando os valores do servidor…</span>`
       : c.cv
-      ? `<span>C.V. · <b>${brl(c.valor)}</b> a receber</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do ano anterior: <b>${Gestor.brlInteiro(c.cartao.anterior || 0)}</b>${_comSentido(c.cartao.anterior)}</span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
+      ? `<span>C.V. · ${aReceberCv}</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do ano anterior: <b>${Gestor.brlInteiro(c.cartao.anterior || 0)}</b>${_comSentido(c.cartao.anterior)}</span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
-    const acoes = c.cv
-      ? btn('💵 Repasse', 'lancarRepasseDoAviso', ",''") + btn('💳 Recarga', 'lancarRecargaDoAviso')
-      : btn('💵 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('💵 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '');
+    const acoes = btn('💵 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('💵 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '')
+      + (c.cv ? btn('💳 Recarga', 'lancarRecargaDoAviso') : '');
     return `
       <div class="res-eq-linha">
         <div class="res-eq-quem"><b>${esc(c.nome)}</b>${info}</div>
@@ -3564,7 +3567,7 @@ function lancarRepasseDoAviso(id, tipo) {
   const c = equipePorId[id];
   if (!c) return;
   const dev = _equipeDevedora().find(x => x.id === id);
-  const v = dev ? (dev.cv ? dev.valor : tipo === 'RDA' ? dev.rda : dev.valor) : 0;
+  const v = dev ? (tipo === 'RDA' ? dev.rda : dev.valor) : 0;
   const pre = {};
   if (tipo) pre.tipo = tipo;
   if (v > 0.004) pre.valor = v.toFixed(2);
@@ -3848,14 +3851,14 @@ function renderInicio() {
          cartão e o reembolso a receber — as mesmas contas do Saldo (_saldoCartao e _devedorDe), só leitura. As duas linhas
          aparecem sempre: o saldo do cartão e o que falta reembolsar valem mesmo num mês sem gasto de um dos lados. */
       const _nsCv = notas.filter(n => !n.deleted), _rsCv = repasses.filter(r => !r.deleted);
-      /* 04/11/2026: o saldo do cartão é o do ANO aberto (no ano corrente, igual ao de hoje), para fechar com a linha do
-         ano anterior; "acabando" fala de hoje e não acende em ano passado. Na carteira o anterior vem de `reemb`, que soma
-         os repasses RDM e RDA como _devedorDe; o sinal é o da ficha, por isso a frase diz quem deve. */
+      /* 04/11/2026: cartão e carteira são os do ANO aberto, os números da ficha e da planilha (no ano corrente, iguais
+         aos de hoje), para fechar com a linha do ano anterior; "acabando" fala de hoje, não acende em ano passado nem
+         para quem nunca teve recarga. O sinal é o da ficha, por isso a frase diz quem deve. */
       const _sc = _saldosCvDoAno(_nsCv, _rsCv, filAno);
       const _saldoCart = _sc.cartao;
-      const _acabando = _saldoCart < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
-      const _aReemb = _devedorDe(_nsCv, _rsCv, filMes, filAno, true);
-      const _antReemb = Gestor.saldoAnoAnterior(_nsCv, _rsCv, filAno).reemb;
+      const _acabando = _sc.temRecarga && _saldoCart < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
+      const _aReemb = -_sc.reemb.saldo;
+      const _antReemb = _sc.reemb.ant;
       /* RDM e RDA lançados no cartão e lançados na carteira (pedido do Cleiton): o gasto de cada lado aberto por aba */
       const _gasto = (carteira, tipo) => _soma(A.ns.filter(x => _naoEhFaturamento(x) && x.tipo === tipo
         && (carteira ? x.pagamento === 'carteira' : _notaDoCartao(x))));
@@ -4292,6 +4295,50 @@ function _heroAnteriorHTML(pRdm, pRda, mes, ano) {
     + (mes > 1 ? `<span>Meses anteriores de ${ano} <b>${Gestor.brlInteiro(meses)}</b></span>` : '');
 }
 
+/* Painel do C.V. (04/11/2026, decisão do dono: todo quadro de saldo igual à planilha): cartão e reembolso separados e
+   sem soma entre os dois, com os números do ano, como a ficha. Negativo = a empresa deve. */
+function _heroSaldoCvHTML(sc, ano) {
+  const neg = v => v < -0.004 ? 'neg' : '';
+  return `<div class="db-hero-top"><div>
+      <div class="db-hero-lbl">💳 Saldo do cartão · ${ano}</div>
+      <div class="db-hero-val ${neg(sc.cartao)}">${_valorInteiroHTML(sc.cartao, 1, 72)}</div>
+      <div class="db-hero-lbl" style="margin-top:8px">💵 Reembolso · ${ano}</div>
+      <div class="db-hero-val ${neg(sc.reemb.saldo)}">${_valorInteiroHTML(sc.reemb.saldo, 1, 72)}</div>
+    </div></div>
+    <div class="db-hero-split">
+      <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDM</span><b class="${neg(sc.RDM.saldo)}">${Gestor.brlInteiro(sc.RDM.saldo)}</b></div>
+      <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDA</span><b class="${neg(sc.RDA.saldo)}">${Gestor.brlInteiro(sc.RDA.saldo)}</b></div>
+    </div>`;
+}
+/* Valor grande do C.V. numa linha só (04/11/2026). Quebrar parte o valor: visto "-R$ 3.05" numa linha e "0,00" na outra, que se lê
+   R$ 3,05. Em vez de quebrar, a letra encolhe até caber. colunas e folga = como o quadro divide a tela e o que sobra fora do texto;
+   .58 em = largura média do caractere com folga. Em tela larga o min() fica no tamanho normal do quadro. */
+function _valorInteiroHTML(v, colunas, folga) {
+  const t = Gestor.brlInteiro(v);
+  const largura = (t.replace('⁠', '').length * .58).toFixed(2);
+  return `<span style="white-space:nowrap;font-size:min(1em,calc((${100 / colunas}vw - ${folga}px) / ${largura}))">${t}</span>`;
+}
+function _heroAnteriorCvHTML(sc) {
+  return `<span>Saldo do ano anterior do cartão <b>${Gestor.brlInteiro(sc.cartaoAnterior)}</b>${_comSentido(sc.cartaoAnterior)}</span>`
+    + `<span>Saldo do ano anterior do reembolso <b>${Gestor.brlInteiro(sc.reemb.ant)}</b>${_comSentido(sc.reemb.ant)}</span>`;
+}
+function _kpiReembCvHTML(c, ano) {
+  return `<span class="db-kpi-val ${c.saldo < -0.004 ? 'neg' : ''}">${_valorInteiroHTML(c.saldo, 2, 48)}</span>
+        <span class="db-kpi-sub">Saldo do ano anterior ${Gestor.brlInteiro(c.ant)}${_comSentido(c.ant)}</span>
+        <span class="db-kpi-sub">Em ${ano}: carteira ${brl(c.gasto)} · recebido ${brl(c.rec)}</span>`;
+}
+/* Aba Saldo do C.V.: cartão "Saldo de RDM/RDA Recebido", o reembolso daquele tipo como na ficha */
+function _cardReembCvHTML(rotulo, c, ano, recebidoMes, rodape = '') {
+  const deve = c.saldo < -0.004;
+  return `
+    <div class="saldo-card ${deve ? 'neg' : ''}">
+      <div class="saldo-label">${rotulo} · ${ano} <span class="dl ${deve ? 'dl-ruim' : 'dl-bom'}">${deve ? 'A receber' : 'Em dia'}</span></div>
+      <div class="saldo-val">${_valorInteiroHTML(c.saldo, 2, 48)}</div>
+      <div class="saldo-detail"><span>Saldo do ano anterior <b>${_valorInteiroHTML(c.ant, 2, 48)}</b>${_comSentido(c.ant)}</span><span>Notas Carteira <b>${_valorInteiroHTML(c.gasto, 2, 48)}</b></span><span>Já repassado <b>${_valorInteiroHTML(c.rec, 2, 48)}</b></span><span>Repassado no mês <b>${_valorInteiroHTML(recebidoMes, 2, 48)}</b></span></div>
+      ${rodape}
+    </div>`;
+}
+
 /* ── Nota com data implausível ───────────────────────────────
    O ano da nota sai dos dígitos 3-4 da chave de acesso, então um QR borrado
    ou um OCR que troca um dígito joga a nota para um mês qualquer do passado.
@@ -4554,7 +4601,9 @@ function renderHome() {
   const mediaNota  = totalNotas   ? A.gasto / totalNotas   : 0;
   const mediaAnt   = B.ns.length  ? B.gasto / B.ns.length  : 0;
   const maior      = [...A.ns].sort((a,b) => _n(b.valor) - _n(a.valor))[0] || null;
-  const consumoPct = A.recebido > 0 ? (A.gasto / A.recebido) * 100 : (A.gasto > 0 ? 100 : 0);
+  /* C.V. (04/11/2026): o gasto do cartão sai da recarga, então ela entra na base; senão a barra acusava estouro que não existe */
+  const entrouPeriodo = A.recebido + (_usaCartao() ? A.recargaCartao : 0);
+  const consumoPct = entrouPeriodo > 0 ? (A.gasto / entrouPeriodo) * 100 : (A.gasto > 0 ? 100 : 0);
 
   /* Saldo acumulado (histórico) p/ KPIs — RDM e RDA separados */
   const rdmAcc = _saldoAcumuladoAte(filMes, filAno, 'RDM');
@@ -4562,6 +4611,7 @@ function renderHome() {
   const totalAcumulado = rdmAcc.saldoLiquido + rdaAcc.saldoLiquido;
   const rdmParc = _parcelasAnteriores(notas, repasses, 'RDM', filAno, rdmAcc.pendenciaAnterior);
   const rdaParc = _parcelasAnteriores(notas, repasses, 'RDA', filAno, rdaAcc.pendenciaAnterior);
+  const scPainel = _usaCartao() ? _saldosCvDoAno(notas, repasses, filAno) : null;   // C.V.: os saldos acima não valem, mostra cartão e reembolso
 
   /* ── Série do gráfico: 6 meses ou 5 anos ────────────────── */
   _dashEvo = [];
@@ -4873,7 +4923,7 @@ function renderHome() {
     </div>
 
     <div class="db-hero">
-      <div class="db-hero-top">
+      ${scPainel ? _heroSaldoCvHTML(scPainel, filAno) : `<div class="db-hero-top">
         <div>
           <div class="db-hero-lbl">Saldo Acumulado · ${esc(rotuloAcumulado)}</div>
           <div class="db-hero-val ${totalAcumulado < 0 ? 'neg' : ''}">${brl(totalAcumulado)}</div>
@@ -4883,11 +4933,11 @@ function renderHome() {
       <div class="db-hero-split">
         <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDM</span><b class="${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</b></div>
         <div class="db-hero-tipo"><span class="db-hero-tipo-lbl">RDA</span><b class="${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</b></div>
-      </div>
+      </div>`}
       <div class="db-hero-meta">
         <span>Recebido <b>${brl(A.recebido)}</b></span>
         <span>Gasto <b>${brl(A.gasto)}</b></span>
-        ${_heroAnteriorHTML(rdmParc, rdaParc, filMes, filAno)}
+        ${scPainel ? _heroAnteriorCvHTML(scPainel) : _heroAnteriorHTML(rdmParc, rdaParc, filMes, filAno)}
         ${_usaCartao() ? `<span>💳 C.V. <b>${brl(A.gastoCartao)}</b></span><span>💵 Carteira <b>${brl(A.gastoBolso)}</b></span>` : ''}
       </div>
       <!-- 16/10/2026 (pedido do Cleiton): o recebido aberto em RDM, RDA e recarga do cartão (a recarga não entra no saldo) -->
@@ -4901,9 +4951,9 @@ function renderHome() {
              style="width:${Math.min(100, Math.round(consumoPct))}%"></div>
       </div>
       <div class="db-consumo-txt">${
-        A.recebido > 0
-          ? `${Math.round(consumoPct)}% do repasse utilizado`
-          : (A.gasto > 0 ? 'Gasto sem repasse lançado no período' : 'Nada lançado no período')
+        entrouPeriodo > 0
+          ? `${Math.round(consumoPct)}% do ${scPainel ? 'recebido e recarregado' : 'repasse'} utilizado`
+          : (A.gasto > 0 ? (scPainel ? 'Gasto sem repasse ou recarga no período' : 'Gasto sem repasse lançado no período') : 'Nada lançado no período')
       }</div>
     </div>
 
@@ -4912,18 +4962,18 @@ function renderHome() {
         <div class="db-kpi-top">
           <span class="db-kpi-title">Saldo de RDM Recebido</span>
         </div>
-        <span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
+        ${scPainel ? _kpiReembCvHTML(scPainel.RDM, filAno) : `<span class="db-kpi-val ${rdmAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdmAcc.saldoLiquido)}</span>
         ${_kpiAnteriorHTML(rdmParc, filMes, filAno)}
-        <span class="db-kpi-sub">Gasto ${brl(rdmAcc.gastoMes)} · Recebido ${brl(rdmAcc.repasseMes)}</span>
+        <span class="db-kpi-sub">Gasto ${brl(rdmAcc.gastoMes)} · Recebido ${brl(rdmAcc.repasseMes)}</span>`}
         ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdmAcc.gastoCartaoMes)} · 💵 Carteira ${brl(rdmAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi rda" onclick="switchView('saldo')">
         <div class="db-kpi-top">
           <span class="db-kpi-title">Saldo de RDA Recebido</span>
         </div>
-        <span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
+        ${scPainel ? _kpiReembCvHTML(scPainel.RDA, filAno) : `<span class="db-kpi-val ${rdaAcc.saldoLiquido < 0 ? 'neg' : ''}">${brl(rdaAcc.saldoLiquido)}</span>
         ${_kpiAnteriorHTML(rdaParc, filMes, filAno)}
-        <span class="db-kpi-sub">Gasto ${brl(rdaAcc.gastoMes)} · Recebido ${brl(rdaAcc.repasseMes)}</span>
+        <span class="db-kpi-sub">Gasto ${brl(rdaAcc.gastoMes)} · Recebido ${brl(rdaAcc.repasseMes)}</span>`}
         ${_usaCartao() ? `<span class="db-kpi-sub">💳 C.V. ${brl(rdaAcc.gastoCartaoMes)} · 💵 Carteira ${brl(rdaAcc.gastoBolsoMes)}</span>` : ''}
       </button>
       <button class="db-kpi media" onclick="irParaNotas(null,${escopo})">
@@ -6356,30 +6406,23 @@ function renderSaldo() {
        verdade foi para o cartão.
        28/09/2026: repasse de carteira agora pode ser RDM ou RDA (pedido do
        Cleiton — tem colaborador CV que recebe o RDA à parte, em dinheiro,
-       enquanto o RDM fica todo no cartão). O reembolso deste card é só do
-       que foi pago do bolso (RDM) — o RDA vira o card próprio abaixo, senão
-       o RDA recebido abatia um "a receber" que não tem nada a ver com ele. */
+       enquanto o RDM fica todo no cartão).
+       04/11/2026: cada card é o reembolso do seu tipo, como a ficha e a planilha (CV REEMBOLSO menos
+       "REEMBOLSO DE:"); antes o de RDM somava a carteira RDM + RDA e descontava só o repasse RDM. */
     const soCarteira = r => _repasseEhCarteira(r) && r.tipo !== 'RDA';
-    const recAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && soCarteira(r)));
-    /* O que a empresa deve é o que saiu do bolso menos o que ela já pagou —
-       a mesma conta da planilha (CV REEMBOLSO menos "REEMBOLSO DE:"). */
-    const bolsoAno = soma(nsAno.filter(n => n.pagamento === 'carteira'));
     /* 04/11/2026: o saldo agora é do ANO do filtro, partindo dos anos anteriores. No ano corrente dá o mesmo que
-       _saldoCartao(); o aviso "Acabando" é sobre hoje, então não acende olhando um ano que já passou. */
+       _saldoCartao(); o aviso "Acabando" é sobre hoje, então não acende olhando um ano que já passou nem para quem nunca teve recarga. */
     const sc = _saldosCvDoAno(notas, repasses, filAno);
     const saldoCartao = sc.cartao;
-    const acabando = saldoCartao < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
-    const aReceber = sc.aReceber;
+    const acabando = sc.temRecarga && saldoCartao < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
     const cat = f => soma(ns.filter(n => semCarteira(n) && f(n)));
-    const rdaCarteira = r => _repasseEhCarteira(r) && r.tipo === 'RDA';
-    const rdaRecMes = soma(rs.filter(r => _repasseEhRecebido(r) && rdaCarteira(r)));
-    const rdaRecAno = soma(rsAno.filter(r => _repasseEhRecebido(r) && rdaCarteira(r)));
+    const repMes = t => soma(rs.filter(r => _repasseEhRecebido(r) && _repasseEhCarteira(r) && r.tipo === t));
     cardsCV = `
   <div class="saldo-grid">
     <div class="saldo-card ${acabando ? 'neg' : ''}">
       <div class="saldo-label">💳 Saldo do cartão · ${filAno} ${acabando ? '<span class="dl dl-ruim" style="margin-left:6px">Acabando</span>' : ''}</div>
-      <div class="saldo-val">${brl(saldoCartao)}</div>
-      <div class="saldo-detail"><span>Saldo do ano anterior <b>${Gestor.brlInteiro(sc.cartaoAnterior)}</b>${_comSentido(sc.cartaoAnterior)}</span><span>Recarga em ${MESES[filMes-1]} <b>${brl(recargaMes)}</b></span><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
+      <div class="saldo-val">${_valorInteiroHTML(saldoCartao, 2, 48)}</div>
+      <div class="saldo-detail"><span>Saldo do ano anterior <b>${_valorInteiroHTML(sc.cartaoAnterior, 2, 48)}</b>${_comSentido(sc.cartaoAnterior)}</span><span>Recarga em ${MESES[filMes-1]} <b>${brl(recargaMes)}</b></span><span>Recargas no ano <b>${brl(soma(rsAno.filter(r => r.destino === 'recarga' && _repasseEhRecebido(r))))}</b></span><span>Gasto no cartão <b>${brl(cartaoAno)}</b></span></div>
       ${acabando ? `<div class="sub-breakdown"><div class="sub-row"><span>Quando a recarga cair, registre pelo Início → 💳 Recarga do cartão</span><span></span></div></div>` : ''}
     </div>
     <div class="saldo-card">
@@ -6393,17 +6436,8 @@ function renderSaldo() {
         <div class="sub-row"><span>Outros</span><span>${brl(cat(n => n.tipo === 'RDM' && n.subtipo === 'Outros'))}</span></div>
       </div>
     </div>
-    <div class="saldo-card ${aReceber > 0 ? 'neg' : ''}">
-      <div class="saldo-label">💵 Saldo de RDM Recebido · ${filAno} ${aReceber > 0 ? '<span class="dl dl-ruim" style="margin-left:6px">A receber</span>' : '<span class="dl dl-bom" style="margin-left:6px">Em dia</span>'}</div>
-      <div class="saldo-val">${brl(aReceber)}</div>
-      <div class="saldo-detail"><span>Saldo do ano anterior <b>${Gestor.brlInteiro(sc.aReceberAnterior)}</b>${_comSentido(sc.aReceberAnterior, true)}</span><span>Notas Carteira <b>${brl(bolsoAno)}</b></span><span>Já repassado <b>${brl(recAno)}</b></span></div>
-      <div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>
-    </div>
-    <div class="saldo-card">
-      <div class="saldo-label">🍽️ Saldo de RDA Recebido · ${filAno}</div>
-      <div class="saldo-val">${brl(sc.rdaRecebido)}</div>
-      <div class="saldo-detail"><span>Saldo do ano anterior <b>${brl(sc.rdaAnterior)}</b></span><span>No mês <b>${brl(rdaRecMes)}</b></span><span>No ano <b>${brl(rdaRecAno)}</b></span></div>
-    </div>
+    ${_cardReembCvHTML('💵 Saldo de RDM Recebido', sc.RDM, filAno, repMes('RDM'), `<div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>`)}
+    ${_cardReembCvHTML('🍽️ Saldo de RDA Recebido', sc.RDA, filAno, repMes('RDA'))}
   </div>`;
   }
   $('app-content').innerHTML = `
@@ -10713,27 +10747,11 @@ function _saldoCartao() {
   return _saldoCartaoDe(notas, repasses, true);
 }
 
-/* Cartões do C.V. na aba Saldo (04/11/2026, "acumula para o ano posterior, com especificação de saldo de ano
-   anterior"): cada um parte do que veio dos anos anteriores, com os MESMOS filtros do próprio cartão.
-   "A receber" tem o sinal do cartão (positivo = a empresa deve). */
+/* Quadros do C.V. no app (04/11/2026, decisão do dono): a conta é a de Gestor.saldoCvDoAno, a mesma da ficha e da planilha.
+   RDM, RDA e reemb são { ant, gasto, rec, saldo }, negativo = a empresa deve. */
 function _saldosCvDoAno(ns, rs, ano) {
-  const soma = arr => arr.reduce((a, x) => a + (Number(x.valor) || 0), 0);
-  const cent = v => Math.round(v * 100) / 100 || 0;
-  const antes = o => !o.deleted && Number(o.ano) < ano;
-  const noAno = o => !o.deleted && Number(o.ano) === ano;
-  const recarga = r => r.destino === 'recarga' && _repasseEhRecebido(r);
-  const repRDM = r => _repasseEhRecebido(r) && _repasseEhCarteira(r) && r.tipo !== 'RDA';
-  const repRDA = r => _repasseEhRecebido(r) && _repasseEhCarteira(r) && r.tipo === 'RDA';
-  const bolso = n => n.pagamento === 'carteira';
-  const cartaoAnterior = cent(soma(rs.filter(r => antes(r) && recarga(r))) - soma(ns.filter(n => antes(n) && _notaDoCartao(n))));
-  const aReceberAnterior = cent(soma(ns.filter(n => antes(n) && bolso(n))) - soma(rs.filter(r => antes(r) && repRDM(r))));
-  const rdaAnterior = cent(soma(rs.filter(r => antes(r) && repRDA(r))));
-  return {
-    cartaoAnterior, aReceberAnterior, rdaAnterior,
-    cartao: cent(cartaoAnterior + soma(rs.filter(r => noAno(r) && recarga(r))) - soma(ns.filter(n => noAno(n) && _notaDoCartao(n)))),
-    aReceber: cent(aReceberAnterior + soma(ns.filter(n => noAno(n) && bolso(n))) - soma(rs.filter(r => noAno(r) && repRDM(r)))),
-    rdaRecebido: cent(rdaAnterior + soma(rs.filter(r => noAno(r) && repRDA(r)))),
-  };
+  const c = Gestor.saldoCvDoAno(ns, rs, ano);
+  return { cartaoAnterior: c.cartao.ant, cartao: c.cartao.saldo, temRecarga: c.temRecarga, reemb: c.reemb, RDM: c.RDM, RDA: c.RDA };
 }
 
 /* Colaboradores CV com o cartão acabando — é o gestor quem faz a recarga. */
@@ -10756,8 +10774,10 @@ function _equipeCartaoBaixo() {
     .map(([id, d]) => {
       const quem = id === user?.id ? user : equipePorId[id];
       if (!quem || !_ehCV(quem)) return null;
-      const saldo = _saldoCartaoDe(d.ns, d.rs, true);
-      return { id, nome: (quem?.nome || quem?.email || 'Colaborador'), saldo };
+      /* 04/11/2026: sem nenhuma recarga ele nunca teve cartão; o aviso seria alarme falso, como em cartoes:verificar */
+      const sc = _saldosCvDoAno(d.ns, d.rs, FusoBR.partes().ano);
+      if (!sc.temRecarga) return null;
+      return { id, nome: (quem?.nome || quem?.email || 'Colaborador'), saldo: sc.cartao };
     })
     .filter(c => c && c.saldo < CARTAO_SALDO_MINIMO)
     .sort((a, b) => a.saldo - b.saldo);

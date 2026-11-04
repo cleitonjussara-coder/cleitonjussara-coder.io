@@ -283,6 +283,41 @@ window.Gestor = (() => {
     return s;
   }
 
+  /* Quadros de saldo do C.V. no ANO (04/11/2026, decisão do dono: todo quadro igual à planilha, cartão e reembolso
+     separados; substitui a conta de 01/10, recebido − gasto sem a recarga, que mostrava dívida que não existe).
+     É a conta da faixa da ficha e de SaldoAnterior no servidor. Cada conta = { ant, gasto, rec, saldo }, negativo = a
+     empresa deve: cartao (recargas × notas fora de carteira/empresa), RDM e RDA (repasse do tipo × carteira do tipo) e
+     reemb (RDM + RDA). temRecarga: sem nenhuma recarga até `ano` ele nunca teve cartão (cartoes:verificar faz igual). */
+  function saldoCvDoAno(notas, repasses, ano) {
+    const a = saldoAnoAnterior(notas, repasses, ano);
+    const conta = ant => ({ ant, gasto: 0, rec: 0, saldo: 0 });
+    const c = { cartao: conta(a.cartao), reemb: conta(a.reemb), RDM: conta(a.reembRDM), RDA: conta(a.reembRDA), temRecarga: false };
+    const noAno = o => Number(o.ano) === Number(ano);
+    for (const r of repasses || []) {
+      if (r.deleted || (r.kind && r.kind !== 'received')) continue;
+      const v = Number(r.valor || 0);
+      if (r.destino === 'recarga') {
+        if (v > 0 && Number(r.ano) <= Number(ano)) c.temRecarga = true;
+        if (noAno(r)) c.cartao.rec += v;
+      } else if (noAno(r)) {
+        c.reemb.rec += v;
+        if (r.tipo === 'RDM' || r.tipo === 'RDA') c[r.tipo].rec += v;
+      }
+    }
+    for (const n of notas || []) {
+      if (!noAno(n) || !_contaGasto(n)) continue;
+      const v = Number(n.valor || 0);
+      if (n.pagamento !== 'carteira') { c.cartao.gasto += v; continue; }
+      c.reemb.gasto += v;
+      if (n.tipo === 'RDM' || n.tipo === 'RDA') c[n.tipo].gasto += v;
+    }
+    for (const k of ['cartao', 'reemb', 'RDM', 'RDA']) {
+      const x = c[k];
+      x.gasto = _r2(x.gasto); x.rec = _r2(x.rec); x.saldo = _r2(x.ant + x.rec - x.gasto);
+    }
+    return c;
+  }
+
   /* Quem deve, em palavras (04/11/2026): o cartão e a ficha usam negativo = a empresa deve; o "a receber" do C.V. usa
      positivo = a empresa deve (devePositivo). O número fica como a conta do quadro pede; a frase tira a dúvida do sinal. */
   /* Em tela estreita o navegador quebrava a linha logo depois do menos e o valor parecia positivo (visto a 320 px, 04/11/2026). */
@@ -291,6 +326,32 @@ window.Gestor = (() => {
     const x = _r2(Number(v) || 0);
     if (!x) return '';
     return (devePositivo ? x > 0 : x < 0) ? 'a empresa deve' : 'a favor da empresa';
+  }
+
+  /* Prévia do colaborador C.V. na lista da Equipe: os dois quadros da ficha, sem somar um no outro. */
+  function _balCvHTML(c, ano, acumOk) {
+    /* 04/11/2026: a 360 e 390 px o valor partia nos dígitos; inteiro e com a letra menor ele cabe. 118 px = o menor miolo do quadro
+       (base de 140 menos as margens); .58 em = largura média do caractere com folga, a mesma de _valorInteiroHTML no app.js. */
+    const inteiro = v => {
+      const t = brlInteiro(v);
+      return `<span style="white-space:nowrap;font-size:min(1em,calc(118px / ${(t.replace('⁠', '').length * .58).toFixed(2)}))">${t}</span>`;
+    };
+    const box = (rot, x, recRot, extra = '') => {
+      const s = sentidoSaldo(x.ant);
+      return `<div class="bal-box ${x.saldo < -0.004 ? 'neg' : 'pos'}" style="flex:1 1 140px;min-width:0;overflow-wrap:anywhere">
+                <span class="bal-type">${rot} · ${acumOk ? ano : 'só o ano'}</span>
+                <span class="bal-val">${inteiro(x.saldo)}</span>
+                ${extra}
+                <span class="bal-detail">${acumOk ? `Saldo do ano anterior ${inteiro(x.ant)}${s ? ` (${s})` : ''}` : 'Saldo do ano anterior: indisponível'}</span>
+                <span class="bal-detail">Gasto ${inteiro(x.gasto)}</span>
+                <span class="bal-detail">${recRot} ${inteiro(x.rec)}</span>
+              </div>`;
+    };
+    /* flex-wrap: a 320 px os dois lado a lado cortavam o segundo (visto no teste, 04/11/2026); aqui um fica embaixo do outro */
+    return `<div class="colab-bal" style="flex-wrap:wrap">
+              ${box('💳 Cartão', c.cartao, 'Recargas')}
+              ${box('💵 Reembolso', c.reemb, 'Recebido', `<span class="bal-detail">RDM <b>${inteiro(c.RDM.saldo)}</b></span><span class="bal-detail">RDA <b>${inteiro(c.RDA.saldo)}</b></span>`)}
+            </div>`;
   }
 
   /* O que um colaborador trazia ao abrir o ANO (saldo até dezembro do ano anterior);
@@ -539,8 +600,19 @@ window.Gestor = (() => {
       const rsAno = (repAno   || []).filter(r => !r.deleted && (!r.kind || r.kind === 'received'));
       const ns = nsAno.filter(n => n.mes === mes);
       const rs = rsAno.filter(r => r.mes === mes);
-      /* quem carrega saldo de meses anteriores entra nos relatórios do mês mesmo sem lançar nada nele */
-      const comSaldoAnterior = [...antPorUser].filter(([, v]) => Math.abs(v.RDM) > 0.004 || Math.abs(v.RDA) > 0.004).map(([id]) => id);
+      /* C.V. na lista (04/11/2026, decisão do dono): cartão e reembolso do ANO, os números da ficha e da planilha.
+         Sem histórico sai só o movimento do ano, e o cartão de cada um diz isso. */
+      const fonteN = acumOk ? hist.notas : nsAno, fonteR = acumOk ? hist.repasses : rsAno;
+      const cvPorUser = new Map(collabs.filter(c => c.regime === 'cv').map(c => [c.id, saldoCvDoAno(fonteN.filter(n => n.user_id === c.id), fonteR.filter(r => r.user_id === c.id), ano)]));
+      /* quem carrega saldo de meses anteriores entra nos relatórios do mês mesmo sem lançar nada nele; no C.V. a conta é a do regime dele */
+      /* 04/11/2026: o PDF do mês corta no fim do mês, então a marcação olha esse corte: quem tinha saldo no mês e zerou depois não pode vir desmarcado */
+      const ateMes = o => Number(o.ano) < ano || (Number(o.ano) === ano && Number(o.mes) <= mes);
+      const carregaNoMes = id => {
+        const v = saldoCvDoAno(fonteN.filter(n => n.user_id === id && ateMes(n)), fonteR.filter(r => r.user_id === id && ateMes(r)), ano);
+        return [v.cartao, v.RDM, v.RDA].some(x => Math.abs(x.saldo) > 0.004);
+      };
+      const comSaldoAnterior = [...antPorUser].filter(([id, v]) => !cvPorUser.has(id) && (Math.abs(v.RDM) > 0.004 || Math.abs(v.RDA) > 0.004)).map(([id]) => id)
+        .concat(acumOk ? [...cvPorUser.keys()].filter(carregaNoMes) : []);
       /* 04/11/2026: o modal manda `ids`, então quem só carrega saldo de ano anterior precisa vir marcado, senão fica fora do
          arquivo e do RESUMO. Olha cada conta do regime dele, como SaldoAnterior::quemCarrega no servidor. */
       const carregaSaldoAno = !acumOk ? [] : collabs.filter(c => {
@@ -694,6 +766,7 @@ window.Gestor = (() => {
           const antAno = antAnoPorUser.get(m.id) || { RDM: 0, RDA: 0 };
           const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
           const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
+          const cvM = cvPorUser.get(m.id);
 
           /* o Contador só visualiza e baixa relatórios: não lança nota nem tem saldo (14/10/2026) */
           const ehContador = m.role === 'contabilidade';
@@ -721,7 +794,7 @@ window.Gestor = (() => {
               <span class="colab-seta">›</span>
             </div>
             <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
-            ${ehContador ? '' : `<div class="colab-bal">
+            ${ehContador ? '' : cvM ? _balCvHTML(cvM, ano, acumOk) : `<div class="colab-bal">
               <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
                 <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
                 <span class="bal-val">${brl(rdmAcum)}</span>
@@ -737,7 +810,7 @@ window.Gestor = (() => {
                 <span class="bal-detail">Recebido ${brl(rdaR)}</span>
               </div>
             </div>`}
-            ${recargaM && !ehContador ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(vai para o cartão, não entra no saldo)</span></div>` : ''}
+            ${recargaM && !ehContador ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(${cvM ? 'já está no saldo do cartão' : 'vai para o cartão, não entra no saldo'})</span></div>` : ''}
             ${mns.length && !ehContador ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
             ${pagoEmpresaM && !ehContador ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
             ${ehContador ? '' : `<div class="colab-resumo">${resumo}</div>`}
@@ -863,8 +936,8 @@ window.Gestor = (() => {
       const saldo = rec - gasto;
 
       /* Regime CV (16/10/2026, pedido do Cleiton): o gasto do mês se divide por QUEM PAGOU — o cartão da empresa
-         ou a carteira do colaborador (a reembolsar). Só leitura: o saldo acima continua com a conta de sempre
-         (decisão de 01/10/2026). "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
+         ou a carteira do colaborador (a reembolsar). O saldo do C.V. é o da faixa abaixo (04/11/2026, decisão do dono);
+         o `saldo` acima só aparece sem histórico. "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
          igual a _devedorDe() do app do colaborador (a recarga do cartão fica fora). */
       const ehCVcolab = colab.regime === 'cv' && colab.role !== 'contabilidade';
       const acaoRec = ehCVcolab ? "Gestor.filtrarRepasses('repasse')" : 'Gestor.irParaRepasses()';
@@ -1076,7 +1149,7 @@ window.Gestor = (() => {
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
         </div>
 
-        ${acumOk && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
+        ${acumOk && !planilhaCV && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
         ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(planAbaHTML).join('')}</div>`
         : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM, 'RDM')}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA, 'RDA')}</div>
           ${acumOk ? `<div class="cdet-bals-det">${regSaldo('RDM', g('RDM'), r('RDM'), antRDM)}${regSaldo('RDA', g('RDA'), r('RDA'), antRDA)}</div>` : ''}`}
@@ -1235,19 +1308,21 @@ window.Gestor = (() => {
       ]);
     }
     const anterior = hist ? Object.fromEntries(saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano)) : null;
+    /* C.V. no Excel (04/11/2026): cartão e reembolso do ano, os números da ficha; null sem histórico */
+    const cv = hist ? Object.fromEntries((collabs||[]).filter(c => c.regime === 'cv').map(c => [c.id, saldoCvDoAno(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), ano)])) : null;
     /* "Repasse" na planilha = só o que conta no saldo: sem pedido pendente e sem recarga do cartão */
-    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior };
+    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior, cv };
   }
 
   async function exportEquipeExcel(sb, currentUser, mes, ano, ids = []) {
     setLoading(true, 'Gerando a planilha da equipe…');
     try {
-      let { collabs, notas, repasses, mes: m, ano: a, anterior } = await renderForExcel(sb, currentUser, mes, ano);
+      let { collabs, notas, repasses, mes: m, ano: a, anterior, cv } = await renderForExcel(sb, currentUser, mes, ano);
       if (ids.length) {   // só os marcados no seletor (21/09/2026)
         const sel = new Set(ids);
         collabs = collabs.filter(c => sel.has(c.id)); notas = notas.filter(n => sel.has(n.user_id)); repasses = repasses.filter(r => sel.has(r.user_id));
       }
-      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome, anterior);
+      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome, anterior, cv);
       toast(anterior ? 'Planilha gerada 📗' : 'Planilha gerada 📗 — sem o saldo dos meses anteriores (histórico indisponível)');
     } catch (e) { toast('Erro ao exportar: ' + e.message, 'err'); }
     finally { setLoading(false); }
@@ -1332,7 +1407,7 @@ window.Gestor = (() => {
     const { mes, ano, comLancMes } = _cvEquipe;
     abrirSelecaoColabs({
       titulo: `Excel da equipe · ${MESES[mes - 1]} ${ano}`,
-      dica: `Resumo do mês (saldo anterior, gasto, repasse e saldo acumulado RDM/RDA por pessoa). Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
+      dica: `Resumo do mês (saldo anterior, gasto, repasse e saldo acumulado RDM/RDA por pessoa; quem é do C.V. sai num quadro próprio de cartão e reembolso). Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
       comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
       botoes: [{ label: '📗 Gerar Excel', modo: 'xlsx', primario: true }],
       onGerar: ids => window.exportExcelEquipe(ids),
@@ -1600,5 +1675,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { saldoAnoAnterior, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
