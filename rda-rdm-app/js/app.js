@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 516;
+const APP_BUILD = 517;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1206,6 +1206,8 @@ async function onLogin(authUser) {
     switchView(_abrirPerfilAoEntrar ? 'perfil' : 'inicio');   // voltou da autorização do Drive → direto no Perfil
     _abrirPerfilAoEntrar = false;
     setLoading(false);
+    /* a página recarregou no meio de um registro de KM: volta ao formulário em vez de ficar no Início */
+    if (_veFrota()) window.Frota?.restaurarRascunho?.().catch(() => {});
 
     // perfil oficial em background (não bloqueia a tela)
     if (!DEMO_MODE && sb) {
@@ -3025,6 +3027,7 @@ let _navArmada = false;
 
 function _fecharJanelaAberta() {
   if ($('menu-drawer-overlay')?.classList.contains('open')) { fecharMenu(); return true; }
+  if (!$('modal-pedir') && $('cam-nota-overlay')?.style.display === 'flex') { fecharCameraNota(true); return true; }   // "voltar" do celular com a câmera do app aberta
   const visiveis = [...document.querySelectorAll('.modal-overlay, [id$="-overlay"]')]
     .filter(o => o.id !== 'menu-drawer-overlay' && getComputedStyle(o).display !== 'none' && getComputedStyle(o).visibility !== 'hidden' && o.offsetWidth > 0);
   const topo = visiveis[visiveis.length - 1];
@@ -8439,6 +8442,11 @@ let _camNotaDicaScanner = false;   // a dica atual é do scanner (pode ser troca
 try { if (localStorage.getItem('cam_scanner') === 'off') _camNotaScannerOn = false; } catch (_) {}
 const _DICA_CAMERA_NOTA = 'Enquadre a nota inteira e toque no botão';
 let _fotoAntesDoScanner = null;    // a foto como a câmera tirou, quando o scanner a endireitou (recurso do "Foto inteira")
+/* Outra tela usando esta câmera (KM, 03/11/2026). Opções de cada abertura: aoFoto(file) recebe a foto no lugar do fluxo da
+   nota (sem contorno de documento, sem medir papel em branco nem borrão de texto); dica; ladoMax, teto da foto em pixels
+   (o odômetro não precisa de 12 MP e cada megapixel é memória num celular fraco); inputReserva, id do input da câmera do sistema. */
+let _camNotaOpts = {};
+const _dicaCamera = () => _camNotaOpts.dica || _DICA_CAMERA_NOTA;
 /* `automatico`: aberta SEM toque da pessoa (logo depois do QR). O celular bloqueia o clique do seletor de câmera do
    sistema fora de um gesto, então aqui, se a câmera do app não abrir, o formulário aparece com o PASSO 2 destacado. */
 function _semCameraNoAutomatico() {
@@ -8449,6 +8457,7 @@ function _semCameraNoAutomatico() {
 }
 async function abrirCameraNota(aoCancelar, opts = {}) {
   _camNotaAoCancelar = typeof aoCancelar === 'function' ? aoCancelar : null;
+  _camNotaOpts = opts;
   const automatico = !!opts.automatico;
   if (!navigator.mediaDevices?.getUserMedia) { if (automatico) _semCameraNoAutomatico(); else cameraNotaDoSistema(); return; }
   const ov = $('cam-nota-overlay');
@@ -8456,11 +8465,16 @@ async function abrirCameraNota(aoCancelar, opts = {}) {
   const btn = $('cam-nota-disparo');
   const seq = ++_camNotaSeq;
   ov.style.display = 'flex';
+  document.body.classList.add('camera-aberta');   // as faixas "Instalar o app" e "Versão nova" cobriam o botão de tirar a foto
+  _armarNav();                                    // o "voltar" do celular fecha a câmera mesmo aberta a partir do Início
   if (btn) btn.disabled = true;
   { const bf = $('cam-nota-flash'); if (bf) bf.style.display = 'none'; }   // só reaparece quando a câmera disser que tem lanterna
+  { const ba = $('cam-nota-anexar'); if (ba) ba.style.display = opts.aoFoto ? 'none' : ''; }   // anexar arquivo é só da nota
+  { const bs = $('cam-nota-auto'); if (bs) bs.style.display = 'none'; }    // só reaparece na nota, quando a câmera abrir
+  { const d = $('cam-nota-dica'); if (d) d.textContent = _dicaCamera(); }
   try {
     const pedir = () => navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+      video: { facingMode: { ideal: 'environment' }, ...(opts.ladoMax ? { width: { ideal: 1920 }, height: { ideal: 1080 } } : { width: { ideal: 3840 }, height: { ideal: 2160 } }) },
     }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }));
     let aberta;
     try { aberta = await pedir(); }
@@ -8503,9 +8517,9 @@ async function _iniciarFlashNota() {
   const track = _camNotaStream?.getVideoTracks()[0];
   const btn = $('cam-nota-flash');
   const dica = $('cam-nota-dica');
-  if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';   // aviso de "escuro" de uma sessão anterior não fica
+  if (dica) dica.textContent = _dicaCamera();   // aviso de "escuro" de uma sessão anterior não fica
   if (!track) return;
-  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado' });
+  await _aplicarCamera(track, { torch: _camNotaFlash === 'ligado', semResolucao: !!_camNotaOpts.ladoMax });
   if (vez !== _camNotaFlashSeq || _camNotaStream?.getVideoTracks()[0] !== track) return;   // fechou/trocou durante a espera
   const temLanterna = _temLanterna(track);
   if (btn) { btn.style.display = temLanterna ? '' : 'none'; btn.textContent = _rotuloFlashNota(); }
@@ -8520,7 +8534,7 @@ async function _iniciarFlashNota() {
     if (medidas < 2) return;                                   // 1ª medida: a exposição ainda está se ajustando
     const b = _brilhoDoVideo($('cam-nota-video'));
     if (b !== null && b < 55) {
-      if (temLanterna) { _aplicarCamera(track, { torch: true }); if (dica) dica.textContent = 'Está escuro: flash ligado. Enquadre a nota inteira e toque no botão'; }
+      if (temLanterna) { _aplicarCamera(track, { torch: true }); if (dica) dica.textContent = 'Está escuro: flash ligado. ' + _dicaCamera(); }
       else if (dica) dica.textContent = 'Pouca luz: procure um lugar mais claro ou use a câmera do celular (com flash)';
     }
     if (temLanterna ? (_camEstado.get(track)?.torch || medidas >= 8) : medidas >= 8) clearInterval(timer);
@@ -8530,14 +8544,14 @@ async function _iniciarFlashNota() {
 async function alternarFlashNota() {
   _camNotaFlash = _camNotaFlash === 'auto' ? 'ligado' : _camNotaFlash === 'ligado' ? 'desligado' : 'auto';
   try { localStorage.setItem('cam_flash', _camNotaFlash); } catch (_) {}
-  const dica = $('cam-nota-dica'); if (dica) dica.textContent = 'Enquadre a nota inteira e toque no botão';
+  const dica = $('cam-nota-dica'); if (dica) dica.textContent = _dicaCamera();
   await _iniciarFlashNota();
 }
 /* Scanner de documento: contorno azul sobre a nota, verde quando firme; parada a nota, a foto é tirada sozinha. */
 function _iniciarScannerNota() {
   _pararScannerNota();
   const bt = $('cam-nota-auto');
-  if (typeof Scanner === 'undefined') { if (bt) bt.style.display = 'none'; return; }
+  if (typeof Scanner === 'undefined' || _camNotaOpts.aoFoto) { if (bt) bt.style.display = 'none'; return; }
   if (bt) { bt.style.display = ''; bt.textContent = '📐 Contorno automático: ' + (_camNotaScannerOn ? 'ligado' : 'desligado'); }
   if (!_camNotaScannerOn) return;
   const video = $('cam-nota-video'), guia = $('cam-nota-guia'), stream = _camNotaStream;
@@ -8581,6 +8595,7 @@ function _pararCameraNota() {
   if (video) video.srcObject = null;
   const ov = $('cam-nota-overlay');
   if (ov) ov.style.display = 'none';
+  document.body.classList.remove('camera-aberta');
 }
 function fecharCameraNota(cancelou) {
   _pararCameraNota();
@@ -8593,7 +8608,7 @@ function cameraNotaDoSistema() {
   const cb = _camNotaAoCancelar;
   _camNotaAoCancelar = null;
   _pararCameraNota();
-  const inp = $('f-foto-nota');
+  const inp = $(_camNotaOpts.inputReserva || 'f-foto-nota');
   if (cb) inp?.addEventListener('cancel', cb, { once: true });
   inp?.click();
 }
@@ -8616,7 +8631,7 @@ async function dispararCameraNota() {
       try {
         const pc = await Promise.race([ic.getPhotoCapabilities(), new Promise(r => setTimeout(() => r(null), 1500))]);
         if (pc?.imageWidth?.max && pc?.imageHeight?.max) {
-          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, 4096 / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
+          const mw = pc.imageWidth.max, mh = pc.imageHeight.max, k = Math.min(1, (_camNotaOpts.ladoMax || 4096) / Math.max(mw, mh));   // texto de nota ganha pouco acima de ~12 MP
           opcoes.imageWidth = Math.round(mw * k); opcoes.imageHeight = Math.round(mh * k);
         }
         const luz = pc?.fillLightMode;
@@ -8651,6 +8666,12 @@ async function dispararCameraNota() {
     blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
   if (!blob) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
+  if (_camNotaOpts.aoFoto) {                   // foto de outra tela (KM): as conferências abaixo são de nota em papel
+    _camNotaAoCancelar = null;
+    _pararCameraNota();
+    await _camNotaOpts.aoFoto(new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    return;
+  }
   /* foto EM BRANCO (21/10/2026)? Papel liso, sem nenhum dado de nota: não segue (nem com "usar assim mesmo"). Vem ANTES do
      aviso de borrão — papel liso também mede "sem nitidez", e a mensagem do borrão estaria errada. Com a câmera ainda aberta. */
   if (await _fotoEmBrancoBarrada(blob, null, 'camera')) {
@@ -10959,7 +10980,8 @@ async function _buildPublicado() {
 /* Recarregar no meio de um lançamento apagaria o que a pessoa digitou. */
 function _momentoBomParaRecarregar() {
   if (_salvandoRepasse || window._salvandoNota) return false;
-  const abertos = [...document.querySelectorAll('.full-overlay, .modal-overlay')]
+  /* câmera e recorte contam: com o formulário escondido atrás deles, a foto em andamento se perderia */
+  const abertos = [...document.querySelectorAll('.full-overlay, .modal-overlay, #cam-nota-overlay, #crop-overlay')]
     .filter(e => getComputedStyle(e).display !== 'none' && !e.classList.contains('fechado'));
   return abertos.length === 0;
 }
