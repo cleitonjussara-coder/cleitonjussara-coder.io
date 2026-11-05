@@ -29,6 +29,8 @@ let lista = null;
 let listaAno = null;
 let filtroMes = null;
 let filtroAno = null;
+/* Categorias abertas no mês do Faturamento: guardadas aqui para não fecharem quando uma ação remonta a tela */
+let abertasMes = {};
 /* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
    ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
    cima da pasta já aberta (22/10/2026). */
@@ -61,6 +63,7 @@ function mostrar(nivel, dados) {
       onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
       onFiltro: guardarFiltro, onCarregarAno: carregarAno, brl: dep.brl,
+      onAbertas: a => { abertasMes = a; }, onBaixarRelatorio: baixarRelatorioFat,
     },
   });
   dep.carregarAvatares?.();
@@ -231,15 +234,31 @@ async function renderMes(s) {
 
   const mm = String(mes).padStart(2, '0');
   const padrao = { ...FILTRO_VAZIO, de: `${ano}-${mm}-01`, ate: `${ano}-${mm}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}` };
+  const grupos = agrupar(ns);
+  /* Faturamento (pedido do Paulo, 05/11/2026): resumo no topo e categorias recolhidas; as outras pastas seguem em lista aberta */
+  const recolher = !!colab.faturamento && !!ns.length;
+  const somaDe = g => g.itens.reduce((s, n) => s + n.valor, 0);
+  const maior = recolher ? grupos.reduce((a, g) => (somaDe(g) > somaDe(a) ? g : a)) : null;
+  const semAnexo = ns.length - comAnexo;
   mostrar('mes', {
     cabecalhoTitulo: `📁 ${esc(colab.nome || colab.email)} · ${dep.MESES_LONGO[mes]}`,
-    cabecalhoSub: `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
+    cabecalhoSub: recolher ? '' : `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
+    recolher,
+    abertas: abertasMes,
+    resumo: recolher ? {
+      totalTxt: brl(total),
+      qtd: ns.length,
+      anexoTxt: semAnexo ? `${semAnexo} sem anexo` : 'todas com anexo',
+      temAlerta: !!semAnexo,
+      maiorPct: total > 0 ? (somaDe(maior) / total * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '—',
+      maiorNome: maior.nome.replace('RDM · ', ''),
+    } : null,
     temNotas: !!ns.length,
     comAnexo,
     acoes: !!colab.faturamento,   // 30/10/2026: na pasta Faturamento cada nota ganha Categoria / Excluir
     podeExcluir: !!dep.podeExcluir?.(),
     mes,   // sem isto o botão do mês baixava o ano inteiro (22/10/2026)
-    grupos: agrupar(ns),
+    grupos,
     filtro: filtroMes || padrao,
     filtroPadrao: padrao,
     dataMin: padrao.de,
@@ -247,12 +266,12 @@ async function renderMes(s) {
   });
 }
 
-function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; }
+function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; abertasMes = {}; }
 function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; limparBuscas(); render(); }
 function abrirFaturamento() { colab = FAT; mes = null; limparBuscas(); render(); }
 function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; limparBuscas(); render(); }
-function abrirMes(m) { mes = m; filtroMes = null; render(); }
-function voltarMeses() { mes = null; lista = null; filtroMes = null; render(); }
+function abrirMes(m) { mes = m; filtroMes = null; abertasMes = {}; render(); }
+function voltarMeses() { mes = null; lista = null; filtroMes = null; abertasMes = {}; render(); }
 function voltarColabs() { colab = null; mes = null; lista = null; limparBuscas(); render(); }
 
 /* A nota pode vir do mês aberto ou da busca do ano, abaixo dos meses */
@@ -327,6 +346,19 @@ async function baixarPlanilhaFat() {
     dep.toast(`Planilha pronta (${(blob.size / 1024 / 1024).toFixed(1)} MB) ✅`);
   } catch (e) {
     dep.toast('Não foi possível gerar a planilha: ' + (e.message || 'erro'), 'err');
+  } finally { dep.setLoading(false); }
+}
+
+/* Relatório do mês aberto (05/11/2026): sempre o mês inteiro, mesmo com filtro ligado, como o ZIP. */
+async function baixarRelatorioFat(formato) {
+  if (!navigator.onLine) { dep.toast('Precisa de internet', 'err'); return; }
+  dep.setLoading(true, `Gerando o relatório de ${dep.MESES_LONGO[mes]}…`);
+  try {
+    const blob = await dep.sb.relatorio.faturamento(ano, mes, formato);
+    _salvarBlob(blob, `Relatorio_Faturamento_${ano}-${String(mes).padStart(2, '0')}.${formato}`);
+    dep.toast('Relatório pronto ✅');
+  } catch (e) {
+    dep.toast('Não foi possível gerar o relatório: ' + (e.message || 'erro'), 'err');
   } finally { dep.setLoading(false); }
 }
 

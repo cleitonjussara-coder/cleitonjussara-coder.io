@@ -259,6 +259,33 @@ class PlanilhaFaturamentoTest extends TestCase
         $ss->disconnectWorksheets();
     }
 
+    public function test_relatorio_do_mes_traz_so_o_mes_com_as_categorias_da_maior_para_a_menor(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora Ana');
+        $this->nota(null, ['razao_social' => 'HOTEL MARCO', 'valor' => 100, 'subtipo' => 'Hospedagem'], $gestor);
+        $this->nota(null, ['razao_social' => 'POSTO MARCO', 'valor' => 300, 'subtipo' => 'Abastecimento'], $gestor);
+        $this->nota(null, ['razao_social' => 'POSTO ABRIL', 'valor' => 999, 'subtipo' => 'Abastecimento', 'mes' => 4], $gestor);
+
+        $ss = app(RelatorioFaturamentoXlsx::class)->gerar(self::ANO, $gestor, 3);
+
+        $this->assertSame(['CATEGORIAS', 'Mar'], $ss->getSheetNames());
+        $cat = $this->linhas($ss, 'CATEGORIAS');
+        $this->assertSame('Abastecimento', $cat[4][0]);
+        $this->assertSame(1, (int) $cat[4][1]);
+        $this->assertEqualsWithDelta(300, $cat[4][2], 0.001);
+        $this->assertEqualsWithDelta(0.75, $cat[4][3], 0.001);
+        $this->assertSame('Hospedagem', $cat[5][0]);
+        $this->assertSame('TOTAL GERAL', $cat[6][0]);
+        $this->assertEqualsWithDelta(400, $cat[6][2], 0.001);
+        $this->assertStringNotContainsString('POSTO ABRIL', json_encode($this->linhas($ss, 'Mar'), JSON_UNESCAPED_UNICODE));
+        $ss->disconnectWorksheets();
+
+        Sanctum::actingAs($gestor);
+        $resp = $this->get('/api/relatorio/faturamento?formato=xlsx&ano='.self::ANO.'&mes=3');
+        $resp->assertOk();
+        $this->assertStringContainsString('Relatorio_Faturamento_2026-03.xlsx', (string) $resp->headers->get('content-disposition'));
+    }
+
     public function test_endpoint_entrega_o_xlsx_para_quem_ve_tudo_e_barra_colaborador(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora Ana');

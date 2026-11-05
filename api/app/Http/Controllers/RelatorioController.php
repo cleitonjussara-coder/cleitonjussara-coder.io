@@ -303,11 +303,13 @@ class RelatorioController extends Controller
         if (($d['formato'] ?? 'pdf') === 'xlsx') {
             $arquivo = $this->temporario('fat_', 'xlsx');
             $svc = app(\App\Services\RelatorioFaturamentoXlsx::class);
-            $ss = $svc->gerar($ano, $u);
+            /* com mes: relatório só daquele mês, do botão da pasta Faturamento; sem mes: a planilha do ano inteiro */
+            $doMes = ! empty($d['mes']) ? (int) $d['mes'] : null;
+            $ss = $svc->gerar($ano, $u, $doMes);
             $svc->xlsx($ss, $arquivo);
             $ss->disconnectWorksheets();
 
-            return response()->download($arquivo, "Planilha_Faturamento_{$ano}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+            return response()->download($arquivo, $doMes ? sprintf('Relatorio_Faturamento_%d-%02d.xlsx', $ano, $doMes) : "Planilha_Faturamento_{$ano}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
                 ->deleteFileAfterSend(true);
         }
         $arquivo = $this->temporario('fat_', 'pdf');

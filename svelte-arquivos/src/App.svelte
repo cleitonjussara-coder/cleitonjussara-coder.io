@@ -8,7 +8,7 @@
     nivel, dados, ano,
     onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
     onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
-    onFiltro = () => {}, onCarregarAno = null, brl = v => v,
+    onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {},
   } = $props();
   let mesEquipe = $state('');
   let busca = $state('');
@@ -30,16 +30,31 @@
   const filtrando = $derived(!!fTermo || !!filtro.cat || filtro.de !== padrao.de || filtro.ate !== padrao.ate);
   const fonte = $derived(nivel === 'mes' ? dados?.grupos || [] : gruposAno || []);
   const passa = n => (!fTermo || n.busca.includes(fTermo)) && (!filtro.de || n.dataIso >= filtro.de) && (!filtro.ate || n.dataIso <= filtro.ate);
-  const gruposVis = $derived(fonte
-    .filter(g => !filtro.cat || g.nome === filtro.cat)
-    .map(g => {
-      const itens = g.itens.filter(passa);
-      return { nome: g.nome, itens, resumoTxt: `${qtdTxt(itens.length)} · ${brl(soma(itens))}` };
-    })
-    .filter(g => g.itens.length));
+  const gruposVis = $derived.by(() => {
+    const gs = fonte
+      .filter(g => !filtro.cat || g.nome === filtro.cat)
+      .map(g => {
+        const itens = g.itens.filter(passa);
+        return { nome: g.nome, itens, soma: soma(itens), resumoTxt: `${qtdTxt(itens.length)} · ${brl(soma(itens))}` };
+      })
+      .filter(g => g.itens.length);
+    return nivel === 'mes' && dados?.recolher ? gs.sort((a, b) => b.soma - a.soma) : gs;
+  });
   const achadas = $derived(gruposVis.flatMap(g => g.itens));
+  const somaVis = $derived(soma(achadas));
+  const pctDe = g => (somaVis > 0 ? g.soma / somaVis * 100 : 0);
+  const pctTxt = g => pctDe(g).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  /* A categoria abre pelo clique; com filtro ligado, abre sozinha para a nota não ficar escondida */
+  let abertas = $state({ ...(dados?.abertas || {}) });
+  let fechadasNoFiltro = $state({});   // separado: fechar antes de buscar não pode esconder a nota achada
+  const estaAberta = g => (filtrando ? !fechadasNoFiltro[g.nome] : !!abertas[g.nome]);
+  const alternar = g => {
+    if (filtrando) { fechadasNoFiltro = { ...fechadasNoFiltro, [g.nome]: !fechadasNoFiltro[g.nome] }; return; }
+    abertas = { ...abertas, [g.nome]: !abertas[g.nome] };
+    onAbertas({ ...abertas });
+  };
   const totalFonte = $derived(fonte.reduce((s, g) => s + g.itens.length, 0));
-  const limparFiltro = () => { filtro = { ...padrao }; };
+  const limparFiltro = () => { filtro = { ...padrao }; fechadasNoFiltro = {}; };
 
   $effect(() => { if (dados?.filtro) onFiltro({ busca: filtro.busca, cat: filtro.cat, de: filtro.de, ate: filtro.ate }); });
   $effect(() => {
@@ -79,10 +94,7 @@
   <span class="arq-lin-tipo">{n.tipoTxt}</span>
 {/snippet}
 
-{#snippet lista(grupos)}
-  {#each grupos as g}
-    <div class="arq-grupo">
-      <div class="arq-grupo-hd"><span>{g.nome}</span><span>{g.resumoTxt}</span></div>
+{#snippet linhas(g)}
       {#each g.itens as n}
         <div class="arq-lin">
           {#if n.temAnexo}
@@ -98,6 +110,27 @@
           {/if}
         </div>
       {/each}
+{/snippet}
+
+{#snippet lista(grupos)}
+  {#each grupos as g}
+    <div class="arq-grupo">
+      <div class="arq-grupo-hd"><span>{g.nome}</span><span>{g.resumoTxt}</span></div>
+      {@render linhas(g)}
+    </div>
+  {/each}
+{/snippet}
+
+{#snippet categorias(grupos)}
+  {#each grupos as g}
+    <div class="arq-grupo arq-cat">
+      <button type="button" class="arq-cat-hd" aria-expanded={estaAberta(g)} onclick={() => alternar(g)}>
+        <span class="arq-cat-nome">{g.nome}<span class="arq-cat-qtd">{qtdTxt(g.itens.length)}</span></span>
+        <span class="arq-cat-val">{brl(g.soma)}</span>
+        <span class="arq-abrir">{estaAberta(g) ? 'Fechar ▲' : 'Abrir ▼'}</span>
+        <span class="arq-medida"><span class="arq-trilho"><span class="arq-barra" style="width:{Math.max(pctDe(g), 1)}%"></span></span><span class="arq-pct">{pctTxt(g)}</span></span>
+      </button>
+      {#if estaAberta(g)}{@render linhas(g)}{/if}
     </div>
   {/each}
 {/snippet}
@@ -231,12 +264,25 @@
   <div class="db-container">
     {@render cabecalho(dados.cabecalhoTitulo, dados.cabecalhoSub)}
     {#if dados.temNotas}
+      {#if dados.resumo}
+        <div class="arq-kpis">
+          <div class="arq-kpi arq-kpi-total"><small>Total do mês</small><b>{dados.resumo.totalTxt}</b></div>
+          <div class="arq-kpi"><small>Notas</small><b>{dados.resumo.qtd}</b><span class={dados.resumo.temAlerta ? 'arq-kpi-alerta' : ''}>{dados.resumo.anexoTxt}</span></div>
+          <div class="arq-kpi"><small>Maior gasto</small><b>{dados.resumo.maiorPct}</b><span>{dados.resumo.maiorNome}</span></div>
+        </div>
+      {/if}
       {@render filtros('Buscar nas notas do mês')}
-      <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
+      <div class="arq-bts">
+        <button class="btn btn-primary btn-full arq-bt-zip" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
+        {#if dados.recolher}
+          <button class="btn btn-outline btn-full" style="min-height:50px" onclick={() => onBaixarRelatorio('pdf')}>📄 Relatório PDF</button>
+          <button class="btn btn-outline btn-full" style="min-height:50px" onclick={() => onBaixarRelatorio('xlsx')}>📊 Relatório Excel</button>
+        {/if}
+      </div>
     {:else}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhuma nota neste mês.</div>
     {/if}
     {#if filtrando}{@render achados()}{/if}
-    {@render lista(gruposVis)}
+    {#if dados.recolher}{@render categorias(gruposVis)}{:else}{@render lista(gruposVis)}{/if}
   </div>
 {/if}

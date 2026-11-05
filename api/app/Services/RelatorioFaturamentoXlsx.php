@@ -47,9 +47,11 @@ class RelatorioFaturamentoXlsx
 
     public function __construct(private FotoStorage $fotos) {}
 
-    public function gerar(int $ano, ?Colaborador $gerador = null): Spreadsheet
+    /** Sem $mes: o ano inteiro (RESUMO + Jan–Dez). Com $mes: relatório só daquele mês (CATEGORIAS + a aba do mês). */
+    public function gerar(int $ano, ?Colaborador $gerador = null, ?int $mes = null): Spreadsheet
     {
         $notas = Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano)
+            ->when($mes, fn ($q) => $q->where('mes', $mes))
             ->orderBy('data')->orderBy('created_at')->get();
 
         $ids = $notas->pluck('user_id')->merge($notas->pluck('created_by'))->filter()->unique();
@@ -83,9 +85,14 @@ class RelatorioFaturamentoXlsx
         $ss->removeSheetByIndex(0);
         $ss->getProperties()->setCreator('Petermann — Notas PM')->setTitle("Faturamento {$ano}");
 
-        $this->abaResumo($ss, $ano, $porMes, $donoDe, $gerador);
-        foreach ($porMes as $m => $doMes) {
-            $this->abaMes($ss, $ano, $m, $doMes, $donoDe, $nomeDe);
+        if ($mes) {
+            $this->abaCategorias($ss, $ano, $mes, $porMes[$mes], $gerador);
+            $this->abaMes($ss, $ano, $mes, $porMes[$mes], $donoDe, $nomeDe);
+        } else {
+            $this->abaResumo($ss, $ano, $porMes, $donoDe, $gerador);
+            foreach ($porMes as $m => $doMes) {
+                $this->abaMes($ss, $ano, $m, $doMes, $donoDe, $nomeDe);
+            }
         }
         $ss->setActiveSheetIndex(0);
 
@@ -235,6 +242,53 @@ class RelatorioFaturamentoXlsx
         }
         $ws->getSheetView()->setZoomScale(90);
         $ws->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setPaperSize(PageSetup::PAPERSIZE_A4)->setFitToWidth(1)->setFitToHeight(0);
+    }
+
+    /** Primeira aba do relatório do mês: o que a tela de Faturamento mostra, da categoria de maior gasto para a menor. */
+    private function abaCategorias(Spreadsheet $ss, int $ano, int $m, array $notas, ?Colaborador $gerador): void
+    {
+        $ws = $ss->createSheet();
+        $ws->setTitle('CATEGORIAS');
+        [$hdr, $cel, $tot] = $this->estilos();
+
+        $soma = $qtd = [];
+        foreach ($notas as $n) {
+            $c = self::categoria($n);
+            $soma[$c] = ($soma[$c] ?? 0.0) + (float) $n->valor;
+            $qtd[$c] = ($qtd[$c] ?? 0) + 1;
+        }
+        arsort($soma);
+        $total = array_sum($soma);
+
+        $ws->mergeCells([1, 1, 4, 1]);
+        $ws->setCellValue([1, 1], 'FATURAMENTO — '.mb_strtoupper(self::MESES_LONGO[$m]).' / '.$ano);
+        $ws->getStyle([1, 1])->applyFromArray(['font' => ['bold' => true, 'size' => 13, 'color' => ['rgb' => self::VERDE]]]);
+        $ws->mergeCells([1, 2, 4, 2]);
+        $ws->setCellValue([1, 2], 'Gerado em '.now(PontoCalculo::TZ)->format('d/m/Y H:i').($gerador ? ' por '.($gerador->nome ?: $gerador->email) : ''));
+        $ws->getStyle([1, 2])->getFont()->setItalic(true)->setSize(10)->setColor(new Color('FF666666'));
+
+        $cab = ['Categoria', 'Notas', 'Valor (R$)', '% do mês'];
+        $this->cabecalho($ws, 4, $cab, $hdr);
+        $r = 5;
+        $ini = $r;
+        foreach ($soma as $c => $v) {
+            $ws->setCellValueExplicit([1, $r], self::CATS[$c], DataType::TYPE_STRING);
+            $ws->fromArray([$qtd[$c], round($v, 2), $total > 0 ? $v / $total : 0], null, 'B'.$r, true);
+            $r++;
+        }
+        if (! $soma) {
+            $ws->setCellValue([1, $r], 'Nenhuma nota de Faturamento em '.self::MESES_LONGO[$m].' de '.$ano.'.');
+            $ws->getStyle([1, $r])->getFont()->setItalic(true)->setColor(new Color('FF777777'));
+            $r++;
+        }
+        $this->linhaTotal($ws, $r, $ini, count($cab), $cel, $tot);
+        $ws->getStyle([3, $ini, 3, $r])->getNumberFormat()->setFormatCode(self::BRL);
+        $ws->getStyle([4, $ini, 4, $r])->getNumberFormat()->setFormatCode('0.0%');
+
+        foreach ([34, 10, 18, 12] as $i => $w) {
+            $ws->getColumnDimension(Coordinate::stringFromColumnIndex($i + 1))->setWidth($w);
+        }
+        $ws->getPageSetup()->setOrientation(PageSetup::ORIENTATION_PORTRAIT)->setPaperSize(PageSetup::PAPERSIZE_A4)->setFitToWidth(1)->setFitToHeight(0);
     }
 
     private function abaMes(Spreadsheet $ss, int $ano, int $m, array $notas, \Closure $donoDe, \Closure $nomeDe): void
