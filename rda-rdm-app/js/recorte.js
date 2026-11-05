@@ -155,9 +155,19 @@ window.Recorte = (() => {
 
   /* Estende [ay, by] para cima/baixo enquanto houver texto de contraste
      RELATIVO ao brilho local dentro das colunas [ax, bx]. Devolve [ay, by]. */
-  function _estenderLinhas(mapa, ax, bx, ay, by) {
+  function _estenderLinhas(mapa, ax, bx, ay, by, pisoClaro = 0) {
     const { W, H, cinza } = mapa;
     const R = 4;
+    /* pisoClaro (05/11/2026, print do iPhone): a estampa do tecido em volta da nota tem contraste de texto, e a caixa ia até
+       as bordas da foto. Papel na sombra escurece, mas segue bem mais claro que tecido escuro: mediana da linha abaixo do
+       piso não é papel. A mediana ignora as letras. */
+    const ehPapel = y => {
+      if (!pisoClaro) return true;
+      const v = [], passo = Math.max(1, Math.floor((bx - ax) / 48));
+      for (let x = ax; x <= bx; x += passo) v.push(cinza[y * W + x]);
+      v.sort((p, q) => p - q);
+      return v[v.length >> 1] >= pisoClaro;
+    };
     /* 2ª camada: contraste RELATIVO ao brilho local (borda ÷ brilho médio).
        Texto na sombra tem borda fraca em valor absoluto, mas proporcional ao
        fundo dele igual ao texto iluminado — era o rodapé do cupom, em sombra,
@@ -197,11 +207,11 @@ window.Recorte = (() => {
     const by0 = by, ay0 = ay;
     let gap = 0;
     for (let y = by0 + 1; y < H - R && y - by0 <= maxExt; y++) {
-      if (massa(y) >= minMassa) { by = y; gap = 0; } else if (++gap > folgaLinhas) break;
+      if (massa(y) >= minMassa && ehPapel(y)) { by = y; gap = 0; } else if (++gap > folgaLinhas) break;
     }
     gap = 0;
     for (let y = ay0 - 1; y >= R && ay0 - y <= maxExt; y--) {
-      if (massa(y) >= minMassa) { ay = y; gap = 0; } else if (++gap > folgaLinhas) break;
+      if (massa(y) >= minMassa && ehPapel(y)) { ay = y; gap = 0; } else if (++gap > folgaLinhas) break;
     }
     return [ay, by];
   }
@@ -502,7 +512,7 @@ window.Recorte = (() => {
     }
     if (pc) {
       // texto na sombra do pé (ou do topo) da nota: papel escuro demais para o limiar de brilho
-      const [ay, by] = _estenderLinhas(mapa, pc.x0, pc.x1 - 1, pc.y0, pc.y1 - 1);
+      const [ay, by] = _estenderLinhas(mapa, pc.x0, pc.x1 - 1, pc.y0, pc.y1 - 1, _brilhoPapel(mapa, pc) * 0.4);
       // se o texto passou do papel claro (sombra), as últimas linhas costumam ser fracas: folga extra
       const extra = Math.round(H * 0.03);
       const alvo = respiro({ x0: pc.x0, y0: ay < pc.y0 ? Math.max(0, ay - extra) : ay,
@@ -735,6 +745,16 @@ window.Recorte = (() => {
     };
   }
 
+  /* A foto mudou de lugar ou de tamanho na tela: a caixa acompanha, mantendo o mesmo pedaço da foto. Foi a causa da caixa
+     deslocada no iPhone (05/11/2026): o texto de ajuda quebra em mais linhas, o cabeçalho cresce, o palco desce e encolhe. */
+  function _remedir() {
+    if (!_rect || !_caixaImg || $('crop-overlay').style.display !== 'flex') return;
+    const f = _fracoes();
+    _medirImagem();
+    _rect = _limitar(_deFracoes(f));
+    _aplicarRect();
+  }
+
   function _aplicarRect() {
     const el = $('crop-rect');
     el.style.left   = _rect.x + 'px';
@@ -768,11 +788,12 @@ window.Recorte = (() => {
     }
   }
   function _avisarCorte(msg, corte) {
-    _marcarTracos(corte);
     const rect = $('crop-rect'), dica = $('crop-dica');
     rect.style.borderColor = '#ff5252';
     dica.textContent = '⚠️ ' + msg;
     dica.style.opacity = '1'; dica.style.color = '#ffb4b4';
+    _remedir();                  // o aviso é longo e empurra a foto: as marcas vermelhas usam a posição nova
+    _marcarTracos(corte);
   }
   function _limparAviso() {
     const mc = $('crop-marcas'); if (mc) mc.remove();
@@ -780,6 +801,7 @@ window.Recorte = (() => {
     const dica = $('crop-dica');
     if (_dicaPadrao && dica.textContent !== _dicaPadrao) dica.textContent = _dicaPadrao;
     dica.style.opacity = ''; dica.style.color = '';
+    _remedir();
   }
 
   function _aoPressionar(e) {
@@ -943,10 +965,9 @@ window.Recorte = (() => {
     /* opcional (`?.`): um index.html em cache, de antes do botão existir, dava TypeError aqui, o recorte nem abria e a nota
        era salva sem recortar (relatado em 16/10/2026) */
     $('crop-cancelar')?.addEventListener('click', () => { if (!_ocupado) _fechar(false); });
-    window.addEventListener('resize', () => {
-      if ($('crop-overlay').style.display !== 'flex') return;
-      _medirImagem(); _rect = _limitar(_rect); _aplicarRect();
-    });
+    window.addEventListener('resize', _remedir);
+    /* cobre o que não dispara resize: fonte que chega depois, área segura do iPhone */
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(_remedir).observe($('crop-palco'));
   }
 
   /* ── API ─────────────────────────────────────────────────
@@ -977,15 +998,9 @@ window.Recorte = (() => {
 
     /* A detecção é ajuda, não condição: sem memória para ela, a tela de recorte abre mesmo assim e a pessoa enquadra.
        Antes o erro subia e a foto era salva inteira. */
-    _trabalho = null; _mapa = null;
+    _trabalho = null; _mapa = null; _rect = null;
     try { _trabalho = _prepararTrabalho(img); _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
-
-    /* Medir direto: getBoundingClientRect força o layout, então logo após
-       trocar o display o tamanho já é o real. NÃO usar requestAnimationFrame
-       aqui — ele não dispara com a aba em segundo plano, e a tela de recorte
-       ficaria travada se o usuário trocasse de app no meio. */
-    _medirImagem();
 
     /* A sugestão já nasce crescida até a borda do papel: a projeção corta
        onde o papel fica estreito (sombra, canto enrolado), e o texto do
@@ -1009,8 +1024,6 @@ window.Recorte = (() => {
     /* odômetro (09/10/2026): caixa larga e baixa no meio da foto — o número é
        uma faixa estreita, e o colaborador só ajusta em volta dele */
     const f = sugestao || (opts.odometro ? { x: 0.12, y: 0.36, w: 0.76, h: 0.28 } : { x: 0.05, y: 0.05, w: 0.90, h: 0.90 });
-    _rect = _limitar(_deFracoes(f));
-    _aplicarRect();
     /* o texto diz QUAL detector enquadrou — facilita conferir em campo se o
        aparelho está com a versão nova e o que ele fez com a foto */
     $('crop-dica').textContent = opts.odometro ? 'Ajuste a caixa só em volta do número do odômetro'
@@ -1024,6 +1037,12 @@ window.Recorte = (() => {
     _dicaPadrao = $('crop-dica').textContent;
     _bloqueio = null;
     _limparAviso();                       // aviso de texto cortado de uma foto anterior não pode sobrar na próxima
+    /* Só agora, com o texto final no cabeçalho: ele decide onde a foto fica. Medir direto: getBoundingClientRect força o
+       layout. NÃO usar requestAnimationFrame aqui — ele não dispara com a aba em segundo plano, e a tela de recorte
+       ficaria travada se o usuário trocasse de app no meio. */
+    _medirImagem();
+    _rect = _limitar(_deFracoes(f));
+    _aplicarRect();
     window.__recorteDiag = { metodo: _origem || (sugestao ? 'simples' : 'nenhum'), mapa: _mapa && [_mapa.W, _mapa.H],
                              alvo: _alvo, caixa: f, foto: [img.naturalWidth, img.naturalHeight] };
 
