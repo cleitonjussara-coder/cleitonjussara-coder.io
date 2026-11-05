@@ -25,7 +25,7 @@ class PastaModelo
     /* subtipo gravado na nota → categoria da pasta (a planilha diz
        "Hospedagem", a pasta diz "HOSPEDAGENS") */
     public const CATEGORIA_RDM = ['abastecimento' => 'ABASTECIMENTO', 'hospedagem' => 'HOSPEDAGENS',
-        'locação de veículos' => 'LOCAÇÃO DE VEÍCULOS', 'pedágio' => 'PEDÁGIO', 'manutenção de veículos' => 'MANUTENÇÃO DE VEÍCULOS'];
+        'locação de veículos' => 'LOCAÇÃO DE VEÍCULOS', 'pedágio' => 'PEDÁGIO', 'manutenção de veículos' => 'MANUTENÇÃO DE VEÍCULOS', 'exames' => 'EXAMES'];
 
     public static function mesPasta(?int $mes): string
     {

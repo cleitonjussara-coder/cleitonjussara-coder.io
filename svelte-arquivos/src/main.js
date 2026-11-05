@@ -185,7 +185,7 @@ const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').
 /* Blocos da pasta modelo, na ordem oficial. Cada nota vira uma linha da lista: data, nome inteiro e valor. */
 function agrupar(ns) {
   const { esc, fmtData } = dep;
-  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · PEDÁGIO', 'RDM · MANUTENÇÃO DE VEÍCULOS', 'RDM · OUTROS'];
+  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · PEDÁGIO', 'RDM · MANUTENÇÃO DE VEÍCULOS', 'RDM · EXAMES', 'RDM · OUTROS'];
   const gruposMap = {};
   ns.forEach(n => { (gruposMap[n.grupo] = gruposMap[n.grupo] || []).push(n); });
   const chaves = Object.keys(gruposMap).sort((a, b) => (ordem.indexOf(a) + 100) % 100 - (ordem.indexOf(b) + 100) % 100);
