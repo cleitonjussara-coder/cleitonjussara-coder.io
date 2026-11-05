@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 527;
+const APP_BUILD = 528;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -530,7 +530,7 @@ function _prazoNfsePedagioHTML(n) {
   return `<div class="nota-obs" ${p.falta <= 2 ? estilo : ''}>⏳ Emitir a NFS-e do pedágio até ~${p.limite} (${quando}).</div>`;
 }
 function _ehReciboPedagio(n) {
-  return docDaNota(n) === 'outro' && (!!n.placa
+  return docDaNota(n) === 'outro' && (!!n.placa || n.subtipo === 'Pedágio'
     || /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`));
 }
 function emitirNfsePedagio(id) {
@@ -3217,8 +3217,14 @@ const CATEGORIA_LOCACAO = { chave: 'locacao', ico: '🚗', nome: 'Locação de V
   sub: 'Aluguel de carro, pago pela empresa.' };
 const _ehLocacao = subtipo => String(subtipo || '').toLowerCase().startsWith('loca');
 
+/* Pedágio (05/11/2026): entra no lançamento de todos, mas fica fora de CATEGORIAS_CV pelo mesmo motivo da locação: as planilhas
+   da empresa não têm coluna de pedágio, então nos painéis ele soma em Outros. Só o Faturamento o mostra separado. */
+const CATEGORIA_PEDAGIO = { chave: 'pedagio', ico: '🛣️', nome: 'Pedágio', tipo: 'RDM', subtipo: 'Pedágio',
+  sub: 'Praças e recibos de pedágio.' };
+const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIAS_CV.at(-1)];
+
 function _categoriaCV(chave) {
-  return [...CATEGORIAS_CV, CATEGORIA_LOCACAO].find(c => c.chave === chave) || null;
+  return [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO].find(c => c.chave === chave) || null;
 }
 
 /* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
@@ -6316,7 +6322,8 @@ function renderSaldo() {
     { key:'Outros',        lbl:'Outros (Borracharia/Oficina/EPIs)' },
   ];
   const subHtml = subs.map(s => {
-    const v = ns.filter(n=>n.tipo==='RDM'&&n.subtipo===s.key).reduce((a,n)=>a+Number(n.valor||0),0);
+    /* Outros fecha a conta como a planilha: leva também Pedágio e o que não tem coluna própria */
+    const v = ns.filter(n=>n.tipo==='RDM'&&(s.key==='Outros' ? !['Abastecimento','Hospedagem'].includes(n.subtipo) : n.subtipo===s.key)).reduce((a,n)=>a+Number(n.valor||0),0);
     return v>0 ? `<div class="sub-row"><span>${s.lbl}</span><span>${brl(v)}</span></div>` : '';
   }).join('');
 
@@ -6433,7 +6440,7 @@ function renderSaldo() {
         <div class="sub-row"><span>Alimentação (RDA)</span><span>${brl(cat(n => n.tipo === 'RDA'))}</span></div>
         <div class="sub-row"><span>Abastecimento</span><span>${brl(cat(n => n.subtipo === 'Abastecimento'))}</span></div>
         <div class="sub-row"><span>Hospedagens</span><span>${brl(cat(n => n.subtipo === 'Hospedagem'))}</span></div>
-        <div class="sub-row"><span>Outros</span><span>${brl(cat(n => n.tipo === 'RDM' && n.subtipo === 'Outros'))}</span></div>
+        <div class="sub-row"><span>Outros</span><span>${brl(cat(n => n.tipo === 'RDM' && !['Abastecimento', 'Hospedagem'].includes(n.subtipo)))}</span></div>
       </div>
     </div>
     ${_cardReembCvHTML('💵 Saldo de RDM Recebido', sc.RDM, filAno, repMes('RDM'), `<div class="sub-breakdown"><div class="sub-row"><span>Pedidos registrados no ano</span><span>${brl(soma(rsAno.filter(r => _repasseEhPedido(r) && soCarteira(r))))}</span></div></div>`)}
@@ -8358,7 +8365,7 @@ function _montarGradeDoSeletor() {
   }
   if (!ehCv) return;
   /* refeita a cada abertura: o cartão da locação depende de a nota ser de Faturamento */
-  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_CV, CATEGORIA_LOCACAO] : CATEGORIAS_CV;
+  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO] : CATEGORIAS_LANCAMENTO;
   cv.innerHTML = cats.map(c => `
     <button class="tipo-lancamento-card tipo-lancamento-card-${c.tipo.toLowerCase()}"
             onclick="selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})">
@@ -9075,9 +9082,11 @@ function _ajustarCamposDeCategoria() {
   linha.style.display = ehCv ? 'none' : '';
   if (!ehCv) return;
   const sel = $('nf-cat-cv');
-  /* a locação tem de voltar como locação: pela chave ela seria "outros" e o aplicar abaixo gravaria Outros sem avisar */
-  sel.value = _ehLocacao($('nf-subtipo').value) && $('nf-tipo').value === 'RDM' ? CATEGORIA_LOCACAO.chave
-    : _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: $('nf-subtipo').value });
+  /* locação e pedágio têm de voltar como são: pela chave seriam "outros" e o aplicar abaixo gravaria Outros sem avisar */
+  const rdm = $('nf-tipo').value === 'RDM', sub = $('nf-subtipo').value;
+  sel.value = rdm && _ehLocacao(sub) ? CATEGORIA_LOCACAO.chave
+    : rdm && sub === CATEGORIA_PEDAGIO.subtipo ? CATEGORIA_PEDAGIO.chave
+    : _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: sub });
   aplicarCategoriaCV();
 }
 
@@ -9090,6 +9099,7 @@ function toggleSubtipo() {
     $('nf-subtipo').value = 'Abastecimento';
   }
   atualizarBannerTipoLancamento(tipo);
+  _ajustarCamposDeCategoria();   // regime C.V.: a Categoria na tela tem de ser a que será gravada
 }
 
 let _cnpjTimer;
@@ -10057,6 +10067,7 @@ const _GRUPOS = [
   { tipo: 'RDA', subtipo: null, rotulo: 'RDA', nota: 'alimentação' },
   { tipo: 'RDM', subtipo: 'Abastecimento', rotulo: 'RDM · Abastecimento', nota: 'combustível' },
   { tipo: 'RDM', subtipo: 'Hospedagem', rotulo: 'RDM · Hospedagem', nota: 'pousada, hotel' },
+  { tipo: 'RDM', subtipo: 'Pedágio', rotulo: 'RDM · Pedágio', nota: 'praça de pedágio' },
   { tipo: 'RDM', subtipo: 'Outros', rotulo: 'RDM · Outros', nota: 'demais gastos' },
 ];
 

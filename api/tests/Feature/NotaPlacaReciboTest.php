@@ -53,6 +53,17 @@ class NotaPlacaReciboTest extends TestCase
         $this->assertSame('13E47631-C253-4255-A77E-50FBEBA7105F', $n->numero);
     }
 
+    public function test_colaborador_lanca_nota_na_categoria_pedagio(): void
+    {
+        $ana = $this->colaborador();
+        Sanctum::actingAs($ana);
+        $id = (string) Str::uuid();
+
+        $this->putJson("/api/notas/$id", $this->corpo($ana, ['subtipo' => 'Pedágio']))->assertOk();
+
+        $this->assertSame('Pedágio', Nota::find($id)->subtipo);
+    }
+
     public function test_placa_vazia_ou_ausente_fica_nula_e_placa_invalida_e_recusada(): void
     {
         $ana = $this->colaborador();

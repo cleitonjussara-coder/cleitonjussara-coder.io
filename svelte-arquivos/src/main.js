@@ -183,7 +183,7 @@ async function renderMes(s) {
   const total = ns.reduce((s, n) => s + (n.valor || 0), 0);
   const comAnexo = ns.filter(n => n.foto_path).length;
 
-  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · OUTROS'];
+  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · PEDÁGIO', 'RDM · OUTROS'];
   const gruposMap = {};
   ns.forEach(n => { (gruposMap[n.grupo] = gruposMap[n.grupo] || []).push(n); });
   const chaves = Object.keys(gruposMap).sort((a, b) => (ordem.indexOf(a) + 100) % 100 - (ordem.indexOf(b) + 100) % 100);

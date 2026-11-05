@@ -149,6 +149,19 @@ class ArquivosFaturamentoTest extends TestCase
         $this->assertStringContainsString('LOCAÇÃO DE VEÍCULOS', $r->json('notas.0.pasta'));
     }
 
+    public function test_pedagio_vira_categoria_propria_na_pasta(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora');
+        $n = $this->nota(null, 'CONCESSIONARIA Y', 14, 'empresa');
+        Sanctum::actingAs($gestor);
+
+        $this->patchJson("/api/notas/{$n->id}/tipo", ['tipo' => 'RDM', 'subtipo' => 'Pedágio'])->assertOk();
+
+        $r = $this->getJson('/api/arquivos/notas?faturamento=1&ano='.self::ANO.'&mes=3')->assertOk();
+        $this->assertSame('RDM · PEDÁGIO', $r->json('notas.0.grupo'));
+        $this->assertStringContainsString('PEDÁGIO', $r->json('notas.0.pasta'));
+    }
+
     public function test_gestor_manda_nota_faturada_para_a_lixeira_e_contador_nao(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora');
