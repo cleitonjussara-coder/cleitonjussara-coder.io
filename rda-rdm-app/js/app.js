@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 528;
+const APP_BUILD = 529;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -973,6 +973,42 @@ function _ensureJsQR() {
       'Falha ao carregar leitor QR');
   }
   return _jsqrPromise;
+}
+
+/* ZXing em WebAssembly (05/11/2026): o iPhone não tem BarcodeDetector e ficava só com o jsQR, que gasta ~300 ms por quadro
+   em 1080p e erra com qualquer desfoque, então a câmera abria e o QR não era lido. Medido com NFC-e simulada: ZXing ~17 ms
+   por quadro e 12/12 leituras onde o jsQR fez 3/12. Só é carregado onde não há leitor nativo; se falhar, segue o jsQR.
+   Os arquivos ficam em js/vendor (funciona offline pelo service worker). Trocou a versão? Troque o nome dos arquivos. */
+const _ZXING_JS = 'js/vendor/zxing-reader-2.2.4.js';
+const _ZXING_WASM = 'js/vendor/zxing_reader-2.2.4.wasm';
+let _zxing = null, _zxingPromise = null;
+function _ensureZXing() {
+  if (_zxing) return Promise.resolve(_zxing);
+  if (!_zxingPromise) {
+    _zxingPromise = (async () => {
+      await _loadScript(_ZXING_JS, 'Falha ao carregar leitor ZXing');
+      /* o .wasm vai em bytes, e não pela URL: não depende do tipo que o servidor declara para o arquivo */
+      const r = await fetch(_ZXING_WASM);
+      if (!r.ok) throw new Error('Falha ao baixar leitor ZXing');
+      await window.ZXingWASM.prepareZXingModule({ overrides: { wasmBinary: await r.arrayBuffer() }, fireImmediately: true });
+      _zxing = window.ZXingWASM;
+      return _zxing;
+    })().catch(e => { _zxingPromise = null; throw e; });   // sem rede agora: a próxima abertura do leitor tenta de novo
+  }
+  return _zxingPromise;
+}
+/* Devolve os textos lidos na imagem. Sem o ZXing pronto, devolve lista vazia. */
+async function _zxingLer(imageData, formatos = ['QRCode'], limite = 1) {
+  if (!_zxing) return [];
+  const lidos = await _zxing.readBarcodes(imageData, { formats: formatos, tryHarder: true, maxNumberOfSymbols: limite });
+  return (lidos || []).map(b => b.text).filter(Boolean);
+}
+/* Deixa os arquivos no cache para o primeiro QR funcionar sem sinal. Só baixa: não monta o leitor, que gasta memória. */
+if (!('BarcodeDetector' in window)) {
+  window.addEventListener('load', () => setTimeout(() => {
+    if (navigator.onLine === false) return;
+    [_ZXING_JS, _ZXING_WASM].forEach(u => fetch(u).catch(() => {}));
+  }, 5000));
 }
 
 /* Homologação (21/09/2026): em teste.pmservicosagronomicos.com.br o app fala
@@ -7384,7 +7420,12 @@ async function iniciarQR() {
         zoomEl.parentElement.style.display = 'flex';
       } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
       /* 30/09/2026: só o texto "Leitor nativo do Android ativo" saiu (aparecia até no iOS); "Leitor: jsQR" continua. */
-      _detectorNativo().then(d => { const st = $('qr-motor'); if (st) st.textContent = d ? '' : 'Leitor: jsQR'; });
+      _detectorNativo().then(async d => {
+        const st = $('qr-motor');
+        if (d) { if (st) st.textContent = ''; return; }
+        if (st) st.textContent = _zxing ? 'Leitor: ZXing' : 'Leitor: jsQR';
+        try { await _ensureZXing(); if (st) st.textContent = 'Leitor: ZXing'; } catch (e) { console.warn('ZXing:', e); }
+      });
     } catch (_) {}
 
     const start = () => {
@@ -7468,8 +7509,8 @@ async function loopQR(ctx, video, canvas) {
 
 /* Leitor nativo do Android/Chrome (BarcodeDetector = o mesmo motor do leitor
    de QR do sistema/Google Lens). Pedido em 19/09/2026: lê muito melhor que o
-   jsQR em cupom amassado/desbotado. Onde não existe (iPhone antigo, PC),
-   fica o jsQR. */
+   jsQR em cupom amassado/desbotado. Onde não existe (iPhone, PC), entra o
+   ZXing (ver _ensureZXing), com o jsQR de reserva. */
 let _qrNativo = null, _qrNativoTentado = false;
 async function _detectorNativo() {
   if (_qrNativoTentado) return _qrNativo;
@@ -7501,8 +7542,14 @@ async function _lerFrameQR(ctx, video, canvas) {
     }
     if (!code) {
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
-      code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+      if (!det && _zxing) {
+        /* sem jsQR depois: ele travaria a tela ~300 ms em todo quadro sem QR, e é isso que faz perder o quadro nítido */
+        const [texto] = await _zxingLer(img);
+        if (texto) code = { data: texto };
+      } else {
+        // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
+        code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+      }
     }
     if (code?.data) {
       // aceita pela chave/cnpj OU por qualquer sequência de 44 dígitos no conteúdo
@@ -7985,7 +8032,7 @@ async function _comprimirImagem(blob, ext) {
 /* LEITOR DE QR ROBUSTO — extrai o texto do QR de uma imagem.
    Estratégia que resolve "QR pequeno na foto da nota inteira":
    1) BarcodeDetector nativo (Android Chrome) — muito superior p/ QR denso
-   2) jsQR como reserva
+   2) ZXing onde não há nativo (iPhone); jsQR como reserva, se o ZXing não carregar
    3) TILING: divide a foto em pedaços com sobreposição e AMPLIA cada um,
       procurando o QR em cada parte — um QR minúsculo vira grande o bastante. */
 /* Várias leituras na mesma imagem (QR + código de barras de produto/DANFE): prefere a que carrega a nota (link ou chave de 44/50 dígitos). */
@@ -8015,6 +8062,7 @@ async function _qrStringFromBlob(blob) {
 
   let img = null;
   try { await _ensureJsQR(); } catch (_) {}
+  if (!detector) { try { await _ensureZXing(); } catch (_) {} }
   try { img = await _blobToImg(blob); } catch (_) {}
   if (!img) {
     // sem <img> não dá p/ recortar; tenta o detector direto no blob
@@ -8047,6 +8095,10 @@ async function _qrStringFromBlob(blob) {
             const v = g > 128 ? 255 : 0; a[i]=a[i+1]=a[i+2]=v;
           }
           cx.putImageData(d, 0, 0);
+        }
+        if (!detector && _zxing) {   // iPhone: mesmo leitor da câmera, com o código de barras da DANFE junto
+          const textos = await _zxingLer(d, ['QRCode', 'Code128'], 4);
+          return _melhorCodigo(textos.map(rawValue => ({ rawValue })));
         }
         const code = jsQR(d.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
         if (code?.data) return code.data;
