@@ -455,6 +455,54 @@ async function notaEnviada(a, id, x) {
     confere(a.ler('notas', 'n21')?.valor === 99 && (await a.DB.getMeta('avisos_conflito', [])).length === 1, 'a correção vence e a pessoa é avisada');
   }
 
+  /* 04/11/2026: o PUT que troca o dono move o anexo no servidor. A fila regravava o registro com o caminho velho e carimbava
+     a hora do aparelho, mais nova que a do servidor (segundos inteiros): o pull não corrigia e o gestor via "Anexo não encontrado". */
+  console.log('Caminho do anexo devolvido pelo PUT');
+  {
+    const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const emSegundos = () => new Date(Math.floor(Date.now() / 1000) * 1000).toISOString().replace('.000Z', '.000000Z');
+    const notaDeA = async (a, id) => {
+      await a.DB.open();
+      const velho = new Date(Date.now() - 86400e3).toISOString();
+      a.rede.lista = [{ ...notaBase(id), user_id: A, foto_path: `${A}/${id}.jpg`, updated_at: velho, created_at: velho }];
+      await a.DB.sync(a.API, UID);
+      return a.ler('notas', id);
+    };
+
+    const a = aparelho();
+    await a.DB.saveNota({ ...await notaDeA(a, 'n30'), user_id: B }, UID);
+    let linha = null;
+    a.rede.put = c => { linha = { ...c, foto_path: `${B}/n30.jpg`, updated_at: emSegundos() }; return resposta(200, linha); };
+    await a.DB.sync(a.API, UID, true);
+    confere(a.ler('notas', 'n30')?.foto_path === `${B}/n30.jpg`, 'PUT aceito grava o caminho novo no aparelho');
+    confere(a.ler('notas', 'n30')?.server_updated_at === linha.updated_at && a.fila().length === 0, 'a versão do servidor e a fila seguem como antes');
+    confere(!('foto_path' in (a.puts()[0]?.corpo || {})) || a.puts()[0].corpo.foto_path === `${A}/n30.jpg`, 'o aparelho não inventa caminho no PUT');
+    a.rede.put = null;
+    a.rede.lista = [linha];
+    await a.DB.sync(a.API, UID);
+    confere(a.ler('notas', 'n30')?.foto_path === `${B}/n30.jpg`, 'o pull seguinte não volta o caminho velho');
+
+    const b = aparelho();
+    await b.DB.saveNota({ ...await notaDeA(b, 'n31'), valor: 20 }, UID);
+    b.rede.put = c => resposta(200, { ...c, foto_path: null, updated_at: emSegundos() });
+    await b.DB.sync(b.API, UID, true);
+    confere(b.ler('notas', 'n31')?.foto_path === `${A}/n31.jpg`, 'null do servidor não apaga a referência (mesma exceção do pull)');
+
+    const c = aparelho();
+    await c.DB.saveNota({ ...await notaDeA(c, 'n32'), user_id: B }, UID);
+    let puts = 0;
+    c.rede.put = async corpo => {
+      /* a espera garante outro milissegundo: é pelo updated_at que a fila percebe a edição */
+      if (++puts === 1) { await espera(5); await c.DB.saveNota({ ...c.ler('notas', 'n32'), valor: 77 }, UID); }
+      return resposta(200, { ...corpo, foto_path: `${B}/n32.jpg`, updated_at: emSegundos() });
+    };
+    await c.DB.sync(c.API, UID, true);
+    await espera(5);
+    await c.DB.sync(c.API, UID, true);
+    const n32 = c.ler('notas', 'n32');
+    confere(n32?.valor === 77 && n32?.foto_path === `${B}/n32.jpg` && c.fila().length === 0, 'edição feita com o PUT no ar sobe e o caminho novo entra no envio dela');
+  }
+
   console.log('Service worker (sem window, document nem toast)');
   {
     const a = aparelho({ pagina: false });

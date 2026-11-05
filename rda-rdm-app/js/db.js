@@ -953,8 +953,14 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
 
         /* lança em caso de erro → catch abaixo agenda a nova tentativa */
         let versaoServidor = null;
-        if (item.entity === 'nota') versaoServidor = (await sb.notas.upsert(payload))?.updated_at || null;
-        else                        await sb.repasses.upsert(payload);
+        let anexoServidor = null;
+        if (item.entity === 'nota') {
+          const aceita = await sb.notas.upsert(payload);
+          versaoServidor = aceita?.updated_at || null;
+          anexoServidor = aceita?.foto_path || null;
+        } else {
+          await sb.repasses.upsert(payload);
+        }
 
         const store = item.entity === 'nota' ? 'notas' : 'repasses';
         const atualReg = await _get(store, item.entity_id);
@@ -966,7 +972,10 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
           /* a versão do servidor avançou com este PUT: a edição nova parte dela */
           if (versaoServidor) await _put(store, { ...atualReg, server_updated_at: versaoServidor });
         } else {
-          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now, ...(versaoServidor ? { server_updated_at: versaoServidor } : {}) });
+          /* 04/11/2026: a troca de dono move o anexo no servidor, e o caminho velho não abre mais. Tem de entrar aqui: o updated_at
+             abaixo é a hora do aparelho, mais nova que a do servidor, e o pull não corrigiria. Null não entra, como em
+             _mesclarRemotas: o app nunca remove anexo. */
+          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now, ...(versaoServidor ? { server_updated_at: versaoServidor } : {}), ...(anexoServidor ? { foto_path: anexoServidor } : {}) });
           await _del('sync_queue', item.id);
         }
         ok++;

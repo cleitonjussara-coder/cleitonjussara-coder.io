@@ -6,7 +6,7 @@
 
   const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
   const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'excluiu o colaborador': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
 
   let estado = $state('carregando'); // 'carregando' | 'offline' | 'erro' | 'ok'
   let erroMsg = $state('');
@@ -71,14 +71,19 @@
       dono: nome(r.user_id),
       resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
     }));
-    (apagadasDet || []).forEach(a => lista.push({
-      quando: instante(a.apagada_em),
-      acao: 'apagou em definitivo',
-      tipoItem: 'nota',
-      quem: nome(a.apagada_por),
-      dono: nomeDono(a.user_id),
-      resumo: 'nota apagada em definitivo — sem volta, não passou pela lixeira',
-    }));
+    /* 04/11/2026: o servidor agrupa as lápides, e uma exclusão de colaborador vira uma linha só. "Não passou pela lixeira" saiu:
+       era falso para as que estavam nela. Quem foi excluído já não está na equipe, então o nome costuma não existir. */
+    (apagadasDet || []).forEach(a => {
+      const qtd = Number(a.quantidade) || 1;
+      const notas = `${qtd} ${qtd === 1 ? 'nota' : 'notas'}`;
+      const base = { quando: instante(a.apagada_em), quem: nome(a.apagada_por) };
+      if (a.colaborador_excluido) {
+        const alvo = equipePorId[a.user_id]?.nome;
+        lista.push({ ...base, acao: 'excluiu o colaborador', frase: `excluiu o colaborador${alvo ? ' ' + alvo : ''}: ${notas}`, resumo: `${notas} apagada${qtd === 1 ? '' : 's'} em definitivo com a exclusão — sem volta` });
+      } else {
+        lista.push({ ...base, acao: 'apagou em definitivo', tipoItem: qtd === 1 ? 'nota' : notas, dono: nomeDono(a.user_id), resumo: `${notas} apagada${qtd === 1 ? '' : 's'} em definitivo — sem volta` });
+      }
+    });
     (papelRegime || []).forEach(h => {
       const ehPapel = h.campo === 'role';
       const rot = ehPapel ? PAPEL_NOME : REGIME_NOME;
@@ -140,7 +145,7 @@
         <div class="db-pend-item item">
           <span class="ico">{ICO[e.acao] || '•'}</span>
           <div class="corpo">
-            <div class="db-pend-txt"><b>{e.quem}</b> {e.acao} {e.tipoItem} {e.prep || 'de'} <b>{e.dono}</b></div>
+            <div class="db-pend-txt"><b>{e.quem}</b> {#if e.frase}{e.frase}{:else}{e.acao} {e.tipoItem} {e.prep || 'de'} <b>{e.dono}</b>{/if}</div>
             <div class="resumo">{@html e.resumo}</div>
           </div>
           <span class="hora">{fmtHora(e.quando)}</span>

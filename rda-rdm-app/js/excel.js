@@ -284,7 +284,7 @@ window.Excel = (() => {
 
   /* ── Equipe (dashboard gestor) ───────────────────────── */
   function buildEquipe(notas, repasses, collabs, mes, ano, anterior, cv) {
-    /* C.V. (04/11/2026, decisão do dono): quadro próprio, cartão e reembolso do ano como na planilha. Na tabela de
+    /* C.V. (04/11/2026, decisão do dono): quadro próprio, cartão e reembolso até o fim do mês, igual ao PDF da equipe. Na tabela de
        baixo o gasto do cartão entraria como dívida; somar os dois regimes num total daria um número sem sentido. */
     const cvs = collabs.filter(c => c.regime === 'cv' && c.role !== 'contabilidade');
     const idsCv = new Set(cvs.map(c => c.id));
@@ -351,15 +351,20 @@ window.Excel = (() => {
 
     let ultCol = 9;
     if (cvs.length) {
+      ws['!cols'].push({wch:14},{wch:14},{wch:14});
       r += 2;
       merge(ws, r, 0, r, 12);
-      ws[XLSX.utils.encode_cell({r,c:0})] = subCell(`REGIME C.V. — ano de ${ano}, como a planilha: Saldo = Anterior + Recebido − Gasto; negativo = a empresa deve. Cartão e reembolso são contas separadas, não se somam.`);
+      ws[XLSX.utils.encode_cell({r,c:0})] = subCell(`REGIME C.V. — até o fim de ${MESES[mes-1]}/${ano}, como o PDF da equipe: Saldo = Saldo do ano anterior + Recebido − Gasto, de janeiro até o mês do relatório; negativo = a empresa deve. Cartão e reembolso são contas separadas, não se somam.`);
       r++;
       if (!cv) {
         merge(ws, r, 0, r, 12);
         ws[XLSX.utils.encode_cell({r,c:0})] = subCell(`Saldo do C.V. não calculado (histórico indisponível): ${cvs.map(c => c.nome||c.email).join(', ')}`);
       } else {
-        hdrRow(ws, r, ['Núcleo','Colaborador','Cartão Anterior','Cartão Recargas','Cartão Gasto','Cartão Saldo','Reemb. Anterior','Reemb. Gasto','Reemb. Recebido','Reemb. Saldo','Saldo RDM','Saldo RDA',`Gasto em ${MESES[mes-1]}`]);
+        const m = MESES[mes-1];
+        const titulos = ['Núcleo','Colaborador','Cartão Ano Anterior',`Cartão Recargas até ${m}`,`Cartão Gasto até ${m}`,`Cartão Saldo fim ${m}`,'Reemb. Ano Anterior',`Reemb. Gasto até ${m}`,`Reemb. Recebido até ${m}`,`Reemb. Saldo fim ${m}`,`Saldo RDM fim ${m}`,`Saldo RDA fim ${m}`,`Gasto em ${m}`];
+        hdrRow(ws, r, titulos);
+        /* 04/11/2026: com o período o título passa da coluna e cortaria; alarga, porque o SheetJS gratuito ignora a quebra de linha do estilo */
+        titulos.forEach((t,i) => { ws['!cols'][i].wch = Math.max(ws['!cols'][i].wch, t.length + 1); });
         r++;
         const din = v => v<0?numNeg(v):numCell(v), tot = v => v<0?totNeg(v):totCell(v);
         const colunas = x => [x.cartao.ant, x.cartao.rec, x.cartao.gasto, x.cartao.saldo, x.reemb.ant, x.reemb.gasto, x.reemb.rec, x.reemb.saldo, x.RDM.saldo, x.RDA.saldo];
@@ -377,7 +382,6 @@ window.Excel = (() => {
         ws[XLSX.utils.encode_cell({r,c:0})] = celTotal('TOTAL DO REGIME C.V.');
         somas.forEach((v,i) => { ws[XLSX.utils.encode_cell({r,c:i+2})] = tot(cur(v)); });
       }
-      ws['!cols'].push({wch:14},{wch:14},{wch:14});
       ultCol = 12;
     }
 

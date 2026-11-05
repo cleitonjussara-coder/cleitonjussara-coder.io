@@ -243,16 +243,31 @@ class NotaController extends Controller
         $anexoTrocado = false;
         if ($nota) {
             unset($d['created_at']);
+            $donoAntes = $nota->user_id;
             $nota->fill($d);
             $nota->updated_by = $u->id;
+            /* 04/11/2026: a pasta decide quem abre o anexo, então ele acompanha a nota. Só gestor/admin chega aqui com dono
+               diferente (podeGravar e a trava do Contador acima); o caminho sai do banco e do disco, nunca do corpo do PUT. */
+            $mudanca = $nota->user_id !== $donoAntes ? $this->levarAnexo($nota, $donoAntes, $u) : null;
             /* 03/11/2026: edição aceita traz junto o anexo que esperava por ela (ver foto()). Só quem não é da gestão guarda
-               anexo em espera, então um PUT da gestão não pode fazer entrar o arquivo do colaborador. */
+               anexo em espera, então um PUT da gestão não pode fazer entrar o arquivo do colaborador. A espera de um dono
+               anterior não passa por aqui: a troca a guarda em outra pasta (04/11/2026). */
             $emEspera = $u->veTudo() ? null : $this->fotos->promoverEspera($this->fotos->pastaDe($nota), $id);
             if ($emEspera !== null) {
                 $nota->foto_path = $emEspera;
                 $anexoTrocado = true;
             }
-            $nota->save();
+            try {
+                $nota->save();
+            } catch (\Throwable $e) {
+                if ($mudanca) {
+                    $this->fotos->desfazerMudanca($mudanca);   // a nota ficou como estava: a origem segue valendo
+                }
+                throw $e;
+            }
+            if ($mudanca) {
+                $this->fotos->concluirMudanca($mudanca);
+            }
         } else {
             /* ANEXO OBRIGATÓRIO também aqui, não só na tela: nota nova só entra
                se o arquivo dela já estiver no disco (o app sobe a foto ANTES
@@ -277,6 +292,25 @@ class NotaController extends Controller
         $this->fotoBranca->avaliar($nota, $u, refazer: $anexoTrocado);
 
         return response()->json($nota->fresh());
+    }
+
+    /* 04/11/2026: se o arquivo não chega ao destino, nada da edição é gravado: dono e anexo novos pela metade deixariam o
+       comprovante numa pasta que o dono não abre. 503 é o que a fila do app trata como falha passageira e tenta de novo. */
+    private function levarAnexo(Nota $nota, ?string $donoAntes, Colaborador $u): array
+    {
+        try {
+            $mudanca = $this->fotos->levarParaPasta(
+                $nota->id, $nota->foto_path, $donoAntes ?? Nota::PASTA_GERAL, $this->fotos->pastaDe($nota),
+            );
+        } catch (\Throwable $e) {
+            Log::warning('troca de dono recusada: anexo não foi movido', [
+                'nota' => $nota->id, 'de' => $donoAntes, 'para' => $nota->user_id, 'por' => $u->email, 'erro' => $e->getMessage(),
+            ]);
+            abort(503, 'Não deu para mover o anexo para a pasta do novo dono. Nada foi alterado: a nota segue com o dono e o comprovante de antes. Tente de novo.');
+        }
+        $nota->foto_path = $mudanca['foto_path'];
+
+        return $mudanca;
     }
 
     /** DELETE /notas/{id} — definitivo: arquivo + linha. */
@@ -369,18 +403,40 @@ class NotaController extends Controller
         if ($r->boolean('detalhe')) {
             /* 16/10/2026: DB::table devolve a data crua ("2026-10-17 00:57:00", em UTC e SEM fuso), diferente dos models, que
                saem em ISO com "Z". O Histórico lia essa data como horário local — mostrava 00:57 de 17/10 para um apagamento
-               das 21:57 de 16/10 — e a ordenava como texto, fora de lugar. Agora sai em ISO UTC, como o resto. */
-            return response()->json(
-                $q->orderByDesc('apagada_em')->limit(500)->get(['id', 'user_id', 'apagada_por', 'apagada_em'])
-                    ->map(function ($l) {
-                        $l->apagada_em = $l->apagada_em ? \Carbon\Carbon::parse($l->apagada_em, 'UTC')->toISOString() : null;
+               das 21:57 de 16/10 — e a ordenava como texto, fora de lugar. Agora sai em ISO UTC, como o resto.
+               04/11/2026: excluir um colaborador grava uma lápide por nota com o mesmo carimbo, e 500 linhas de uma só exclusão
+               escondiam os apagamentos antigos. O limite agora conta GRUPOS (dono, quem apagou, instante). Lápide única sai como
+               antes, com o id dela; no grupo o id é só um representante, para app antigo seguir lendo a mesma forma. */
+            $grupos = $q->selectRaw('MIN(id) AS id, user_id, apagada_por, apagada_em, COUNT(*) AS quantidade')
+                ->groupBy('user_id', 'apagada_por', 'apagada_em')
+                ->orderByDesc('apagada_em')->limit(500)->get();
+            $exclusoes = $this->exclusoesDeColaborador($grupos);
 
-                        return $l;
-                    })->values()
+            return response()->json(
+                $grupos->map(function ($l) use ($exclusoes) {
+                    $l->quantidade = (int) $l->quantidade;
+                    $l->colaborador_excluido = $l->user_id !== null && ($exclusoes[$l->user_id] ?? null) === $l->apagada_em;
+                    $l->apagada_em = $l->apagada_em ? \Carbon\Carbon::parse($l->apagada_em, 'UTC')->toISOString() : null;
+
+                    return $l;
+                })->values()
             );
         }
 
         return response()->json($q->orderBy('apagada_em')->limit(5000)->pluck('id'));
+    }
+
+    /* 04/11/2026: a lápide não diz por que a nota foi apagada, e vários apagamentos no mesmo segundo também formam grupo. Mas
+       quem foi excluído não tem mais nota nenhuma: a última lápide de um dono que sumiu é a da exclusão. Falha só se ele
+       foi excluído sem nota nenhuma e já tinha apagamento antes, e aí a última lápide leva o rótulo. Devolve dono => carimbo. */
+    private function exclusoesDeColaborador(\Illuminate\Support\Collection $grupos): array
+    {
+        $donos = $grupos->pluck('user_id')->filter()->unique();
+        $sumiram = $donos->diff(Colaborador::whereIn('id', $donos->all())->pluck('id'));
+
+        return DB::table('notas_apagadas')->whereIn('user_id', $sumiram->all())
+            ->selectRaw('user_id, MAX(apagada_em) AS ultima')->groupBy('user_id')
+            ->pluck('ultima', 'user_id')->all();
     }
 
     public function destroy(Request $r, string $id): JsonResponse

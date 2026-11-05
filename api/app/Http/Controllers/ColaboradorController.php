@@ -254,7 +254,7 @@ class ColaboradorController extends Controller
         });
         /* Pasta do colaborador: anexos das notas, perfil, km-*.jpg, miniaturas e espera. 04/11/2026: os arquivos só saem depois
            do commit; dentro da transação, uma falha voltava o banco com os comprovantes já perdidos. Nota que mudou de dono
-           segue com o anexo nesta pasta (o PUT não move o arquivo): esse fica, senão ela perde o comprovante sem volta. */
+           antes de o PUT mover o arquivo (04/11/2026) segue com o anexo nesta pasta: esse fica, senão ela perde o comprovante. */
         try {
             $disco = $this->fotos->disk();
             $deOutros = Nota::where('foto_path', 'like', $alvo->id.'/%')->pluck('foto_path')->all();

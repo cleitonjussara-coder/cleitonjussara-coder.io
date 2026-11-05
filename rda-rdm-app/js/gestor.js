@@ -318,6 +318,12 @@ window.Gestor = (() => {
     return c;
   }
 
+  /* A mesma conta cortada no fim de `mes` (04/11/2026): o que veio depois não entra; é o número do PDF da equipe. */
+  function saldoCvAteMes(notas, repasses, mes, ano) {
+    const ate = o => Number(o.ano) < Number(ano) || (Number(o.ano) === Number(ano) && Number(o.mes) <= Number(mes));
+    return saldoCvDoAno((notas || []).filter(ate), (repasses || []).filter(ate), ano);
+  }
+
   /* Quem deve, em palavras (04/11/2026): o cartão e a ficha usam negativo = a empresa deve; o "a receber" do C.V. usa
      positivo = a empresa deve (devePositivo). O número fica como a conta do quadro pede; a frase tira a dúvida do sinal. */
   /* Em tela estreita o navegador quebrava a linha logo depois do menos e o valor parecia positivo (visto a 320 px, 04/11/2026). */
@@ -606,9 +612,8 @@ window.Gestor = (() => {
       const cvPorUser = new Map(collabs.filter(c => c.regime === 'cv').map(c => [c.id, saldoCvDoAno(fonteN.filter(n => n.user_id === c.id), fonteR.filter(r => r.user_id === c.id), ano)]));
       /* quem carrega saldo de meses anteriores entra nos relatórios do mês mesmo sem lançar nada nele; no C.V. a conta é a do regime dele */
       /* 04/11/2026: o PDF do mês corta no fim do mês, então a marcação olha esse corte: quem tinha saldo no mês e zerou depois não pode vir desmarcado */
-      const ateMes = o => Number(o.ano) < ano || (Number(o.ano) === ano && Number(o.mes) <= mes);
       const carregaNoMes = id => {
-        const v = saldoCvDoAno(fonteN.filter(n => n.user_id === id && ateMes(n)), fonteR.filter(r => r.user_id === id && ateMes(r)), ano);
+        const v = saldoCvAteMes(fonteN.filter(n => n.user_id === id), fonteR.filter(r => r.user_id === id), mes, ano);
         return [v.cartao, v.RDM, v.RDA].some(x => Math.abs(x.saldo) > 0.004);
       };
       const comSaldoAnterior = [...antPorUser].filter(([id, v]) => !cvPorUser.has(id) && (Math.abs(v.RDM) > 0.004 || Math.abs(v.RDA) > 0.004)).map(([id]) => id)
@@ -1308,8 +1313,8 @@ window.Gestor = (() => {
       ]);
     }
     const anterior = hist ? Object.fromEntries(saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano)) : null;
-    /* C.V. no Excel (04/11/2026): cartão e reembolso do ano, os números da ficha; null sem histórico */
-    const cv = hist ? Object.fromEntries((collabs||[]).filter(c => c.regime === 'cv').map(c => [c.id, saldoCvDoAno(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), ano)])) : null;
+    /* C.V. no Excel (04/11/2026, decisão do dono): cartão e reembolso até o fim do mês, os números do PDF da equipe; null sem histórico */
+    const cv = hist ? Object.fromEntries((collabs||[]).filter(c => c.regime === 'cv').map(c => [c.id, saldoCvAteMes(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), mes, ano)])) : null;
     /* "Repasse" na planilha = só o que conta no saldo: sem pedido pendente e sem recarga do cartão */
     return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior, cv };
   }
@@ -1407,7 +1412,7 @@ window.Gestor = (() => {
     const { mes, ano, comLancMes } = _cvEquipe;
     abrirSelecaoColabs({
       titulo: `Excel da equipe · ${MESES[mes - 1]} ${ano}`,
-      dica: `Resumo do mês (saldo anterior, gasto, repasse e saldo acumulado RDM/RDA por pessoa; quem é do C.V. sai num quadro próprio de cartão e reembolso). Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
+      dica: `Resumo do mês (saldo anterior, gasto, repasse e saldo acumulado RDM/RDA por pessoa; quem é do C.V. sai num quadro próprio de cartão e reembolso, até o fim do mês). Quem não lançou nada em ${MESES[mes - 1]} e não tem saldo de meses anteriores começa desmarcado.`,
       comLanc: comLancMes, etiqueta: 'sem lançamento no mês',
       botoes: [{ label: '📗 Gerar Excel', modo: 'xlsx', primario: true }],
       onGerar: ids => window.exportExcelEquipe(ids),

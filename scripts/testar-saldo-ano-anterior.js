@@ -98,10 +98,14 @@ function montarExcel() {
   const col = c => String.fromCharCode(65 + c);
   const ctx = { console, FusoBR: { data: () => '04/11/2026', hojeISO: () => '2026-11-04', partes: () => ({ ano: 2026, mes: 11, dia: 4 }) } };
   ctx.XLSX = { utils: { encode_cell: ({ r, c }) => col(c) + (r + 1), encode_range: ({ s, e }) => col(s.c) + (s.r + 1) + ':' + col(e.c) + (e.r + 1), decode_range: x => x } };
+  /* 04/11/2026: para rodar exportarEquipe de verdade; a folha fica em ultimaFolha em vez de virar arquivo */
+  ctx.XLSX.utils.book_new = () => ({});
+  ctx.XLSX.utils.book_append_sheet = (_, ws) => { ctx.ultimaFolha = ws; };
+  ctx.XLSX.writeFile = () => {};
   ctx.window = ctx; ctx.document = {};
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(JS, 'excel.js'), 'utf8'), ctx);
-  return ctx.Excel;
+  return Object.assign(Object.create(ctx.Excel), { folhaGerada: () => ctx.ultimaFolha });
 }
 
 const w = montarGestor();
@@ -497,6 +501,65 @@ const valor = c => texto(c.querySelector('b'));
     confere(Object.values(so).some(c => c && c.v === 'TOTAL GERAL') && so['!ref'].endsWith(':J' + so['!ref'].match(/(\d+)$/)[1]), 'sem C.V. a planilha fica como sempre foi');
     const semH = X.buildEquipe(ns, rs, colabsDois, 2, 2026, null, null);
     confere(Object.values(semH).some(c => c && /Saldo do C\.V\. não calculado.*Carla/.test(String(c.v))), 'sem histórico diz que não calculou o C.V.');
+  }
+
+  /* Decisão do dono (04/11/2026): o quadro C.V. do Excel de um mês corta no fim do mês, igual ao PDF da equipe. Passa pelo
+     caminho real (renderForExcel + exportarEquipe); os números vêm escritos à mão, não da mesma conta que o código usa. */
+  console.log('Excel da equipe: o quadro C.V. corta no fim do mês');
+  {
+    const notasDepois = [nota('2026-05-10', 40, 'RDM', 'cartao'), nota('2026-07-10', 15, 'RDA', 'carteira')];
+    const repsDepois = [rep('2026-05-01', 100, 'RDA', 'recarga'), rep('2026-07-02', 5, 'RDM')];
+    const nsC = [...nsDois, ...mudar(notasDepois, 'cv1'), ...mudar(notasDepois, 'rd1')];
+    const rsC = [...rsDois, ...mudar(repsDepois, 'cv1'), ...mudar(repsDepois, 'rd1')];
+    const fonte = semHistorico => {
+      const q = (arr, f) => (semHistorico && !f.ano) ? Promise.reject(new Error('sem rede'))
+        : Promise.resolve(arr.filter(x => (!f.ano || x.ano === f.ano) && (!f.mes || x.mes === f.mes) && !(f.deleted === '0' && x.deleted)));
+      return { notas: { list: f => q(nsC, f) }, repasses: { list: f => q(rsC, f) }, colaboradores: { list: async () => colabsDois, listTodos: async () => colabsDois } };
+    };
+    const X = montarExcel();
+    const folha = async (mes, semHistorico = false) => {
+      const d = await G.renderForExcel(fonte(semHistorico), { id: 'g1', role: 'gestor', nome: 'Gestor' }, mes, 2026);
+      await X.exportarEquipe(d.notas, d.repasses, d.collabs, d.mes, d.ano, 'Gestor', d.anterior, d.cv);
+      const ws = X.folhaGerada();
+      const celulas = Object.keys(ws).filter(k => /^[A-Z]+[0-9]+$/.test(k));
+      const num = k => k.replace(/[A-Z]/g, '');
+      const linhaDe = v => { const k = celulas.find(c => ws[c].v === v); return celulas.filter(c => num(c) === num(k)).sort((p, q) => p.localeCompare(q)).map(c => ws[c].v); };
+      return { linhaDe, textos: celulas.map(k => String(ws[k].v)), ws };
+    };
+    const bate = (lido, nums) => lido.length === nums.length && nums.every((v, i) => Math.abs(lido[i] - v) < 0.005);
+    /* cartão: ano anterior, recargas, gasto, saldo | reembolso: ano anterior, gasto, recebido, saldo | saldo RDM, saldo RDA | gasto do mês */
+    const esperado = {
+      1: [1200, 400, 300, 1300, -60, 0, 0, -60, -15, -45, 300],
+      2: [1200, 400, 300, 1300, -60, 100, 70, -90, -35, -55, 100],
+      4: [1200, 400, 300, 1300, -60, 100, 70, -90, -35, -55, 0],
+      5: [1200, 500, 340, 1360, -60, 100, 70, -90, -35, -55, 40],
+      7: [1200, 500, 340, 1360, -60, 115, 75, -100, -30, -70, 15],
+      12: [1200, 500, 340, 1360, -60, 115, 75, -100, -30, -70, 0],
+    };
+    for (const [mes, nums] of Object.entries(esperado)) {
+      const f = await folha(+mes);
+      const carla = f.linhaDe('Carla').slice(2), tot = f.linhaDe('TOTAL DO REGIME C.V.').slice(1);
+      confere(bate(carla, nums), `mês ${mes}: Carla ${carla.join(' | ')} (esperado ${nums.join(' | ')})`);
+      confere(bate(tot, nums), `mês ${mes}: o total do C.V. segue o corte (${tot.join(' | ')})`);
+    }
+    const f5 = await folha(5);
+    confere(f5.textos.some(t => t.startsWith('REGIME C.V. — até o fim de Mai/2026')) && !f5.textos.some(t => t.includes('ano de 2026')), 'o rótulo diz até quando vai a conta');
+    confere(['Cartão Ano Anterior', 'Cartão Recargas até Mai', 'Cartão Gasto até Mai', 'Cartão Saldo fim Mai', 'Reemb. Ano Anterior', 'Reemb. Gasto até Mai', 'Reemb. Recebido até Mai', 'Reemb. Saldo fim Mai', 'Saldo RDM fim Mai', 'Saldo RDA fim Mai', 'Gasto em Mai'].every(h => f5.textos.includes(h)), 'o cabeçalho diz o período de cada coluna');
+    const larguras = f5.ws['!cols'].map(c => c.wch);
+    confere(larguras.length === 13 && larguras[8] >= 'Reemb. Recebido até Mai'.length, `o título cabe na coluna, sem depender de quebra de linha (${larguras.join(', ')})`);
+    /* RDM/RDA não muda: Anterior, Gasto, Repasse e Saldo Acum. do mês, nos dois tipos */
+    const ruiEsperado = {
+      2: [-415, 70, 50, -435, -245, 30, 20, -255],
+      5: [-435, 40, 0, -475, -255, 0, 0, -255],
+      7: [-475, 0, 5, -470, -255, 15, 0, -270],
+    };
+    for (const [mes, nums] of Object.entries(ruiEsperado)) {
+      const rui = (await folha(+mes)).linhaDe('Rui').slice(2);
+      confere(bate(rui, nums), `mês ${mes}: Rui do RDM/RDA sem mudança (${rui.join(' | ')})`);
+    }
+    const semH = await folha(5, true);
+    confere(semH.textos.some(t => /Saldo do C\.V\. não calculado.*Carla/.test(t)), 'sem histórico continua dizendo que não calculou');
+    confere(!semH.textos.includes('Cartão Saldo fim Mai'), 'sem histórico não mostra coluna de saldo');
   }
 
   console.log('Ficha sem histórico: diz, não chuta');

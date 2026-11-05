@@ -160,10 +160,11 @@ class PenteFinoP3Test extends TestCase
         $disco->put("{$alvo->id}/{$doExcluido->id}.jpg", 'x');
         $disco->put("{$alvo->id}/mini/{$doExcluido->id}.jpg", 'x');
 
-        /* o PUT troca o dono, mas o arquivo fica na pasta do dono antigo */
+        /* 04/11/2026: o PUT agora leva o arquivo junto. Este teste segue valendo para a nota que trocou de dono ANTES disso,
+           com o anexo ainda na pasta do dono antigo: é esse estado que a linha abaixo recria. */
         Sanctum::actingAs($gestor);
         $this->putJson("/api/notas/{$id}", ['user_id' => $alvo->id] + $dados)->assertSuccessful();
-        $this->putJson("/api/notas/{$id}", ['user_id' => $novo->id] + $dados)->assertSuccessful();
+        DB::table('notas')->where('id', $id)->update(['user_id' => $novo->id]);
         $this->assertSame("{$alvo->id}/{$id}.jpg", Nota::find($id)->foto_path);
 
         $this->excluir($gestor, $alvo)->assertOk();

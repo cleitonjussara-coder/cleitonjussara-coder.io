@@ -169,6 +169,141 @@ class FotoStorage
     {
         $this->apagarVersoesDe($this->pastaDe($nota), $nota->id);
         $this->descartarEspera($this->pastaDe($nota), $nota->id);
+        $this->disk()->delete($this->esperasHerdadas($this->pastaDe($nota), $nota->id));
+        /* 04/11/2026: nota que trocou de dono antes de o anexo passar a mudar junto ainda aponta para a pasta antiga */
+        $declarado = $this->anexoDeclarado($nota->foto_path, $nota->id);
+        if ($declarado !== null) {
+            $this->apagarVersoesDe(dirname($declarado), $nota->id);
+        }
+    }
+
+    /* ── Troca de dono (04/11/2026) ─────────────────────────────────
+       O acesso ao anexo vale pela pasta (FotoController::podeVer), então a nota que muda de dono tem de levar o arquivo. Em
+       duas fases, porque nenhum comprovante pode sumir: levarParaPasta só COPIA; a origem sai em concluirMudanca, depois de
+       a nota gravada. Se a cópia falhar a exceção sobe sem sobrar nada; se a gravação falhar, desfazerMudanca tira as cópias. */
+
+    /** @return array{foto_path: ?string, origens: list<string>, copias: list<string>} */
+    public function levarParaPasta(string $notaId, ?string $fotoPath, string $de, string $para): array
+    {
+        $m = ['foto_path' => $fotoPath, 'origens' => [], 'copias' => []];
+        try {
+            /* o caminho vem do banco, e só vale se for desta nota: linha antiga pode apontar para o arquivo de outra */
+            $origem = $this->anexoDeclarado($fotoPath, $notaId) ?? $this->arquivoDaNota($de, $notaId);
+            if ($origem === null) {
+                if ($fotoPath) {
+                    \Illuminate\Support\Facades\Log::warning('troca de dono: anexo da nota não encontrado no disco', ['nota' => $notaId, 'foto_path' => $fotoPath]);
+                }
+            } elseif (dirname($origem) === $para) {
+                $m['foto_path'] = $origem;   // nota legada voltando ao dono da pasta: o arquivo já está no lugar
+            } else {
+                $destino = "{$para}/".basename($origem);
+                $this->copiarConferindo($origem, $destino, $m);
+                $this->apagarVersoesDe($para, $notaId, $destino);   // sobra de outro formato viraria órfã
+                $m['foto_path'] = $destino;
+                $this->levarMiniatura($origem, $destino, $m);
+            }
+
+            if ($de !== $para) {
+                $this->guardarEsperasDoDonoAnterior($notaId, $de, $para, $m);
+            }
+        } catch (\Throwable $e) {
+            $this->desfazerMudanca($m);
+            throw $e;
+        }
+
+        return $m;
+    }
+
+    /* 04/11/2026: a espera aguardava um PUT do dono antigo, que agora toma 403 e nunca a resolve. Na espera do novo dono, o
+       primeiro PUT dele a promoveria e apagaria o comprovante, sem ninguém pedir. Mas o aparelho de quem enviou já soltou a
+       cópia dele, então também não se apaga: fica guardada em ESPERA_HERDADA_DIR, sem virar anexo, até a nota ser apagada.
+       O nome leva sufixo porque duas esperas do mesmo formato podem se encontrar em trocas seguidas. */
+    private function guardarEsperasDoDonoAnterior(string $notaId, string $de, string $para, array &$m): void
+    {
+        $esperas = $this->esperasHerdadas($de, $notaId);
+        $pendente = $this->arquivoDaNota("{$de}/".self::ESPERA_DIR, $notaId);
+        if ($pendente !== null) {
+            $esperas[] = $pendente;
+        }
+        foreach ($esperas as $e) {
+            $this->copiarConferindo($e, "{$para}/".self::ESPERA_HERDADA_DIR."/{$notaId}.".Str::random(8).'.'.pathinfo($e, PATHINFO_EXTENSION), $m);
+        }
+        if ($esperas !== []) {
+            \Illuminate\Support\Facades\Log::warning('troca de dono: anexo em espera guardado sem virar anexo da nota', ['nota' => $notaId, 'de' => $de, 'para' => $para, 'arquivos' => $esperas]);
+        }
+    }
+
+    /** @return list<string> */
+    private function esperasHerdadas(string $pasta, string $notaId): array
+    {
+        return array_values(array_filter(
+            $this->disk()->files("{$pasta}/".self::ESPERA_HERDADA_DIR),
+            fn ($f) => str_starts_with(basename($f), "{$notaId}."),
+        ));
+    }
+
+    /** A nota já aponta para o destino: sobra na origem é só lixo, então falha aqui avisa e não derruba o envio. */
+    public function concluirMudanca(array $m): void
+    {
+        $this->apagarSemDerrubar($m['origens'], 'origem');
+    }
+
+    public function desfazerMudanca(array $m): void
+    {
+        $this->apagarSemDerrubar($m['copias'], 'cópia');
+    }
+
+    private function apagarSemDerrubar(array $caminhos, string $oQue): void
+    {
+        foreach ($caminhos as $c) {
+            try {
+                $this->apagar($c);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("troca de dono: {$oQue} não apagada", ['caminho' => $c, 'erro' => $e->getMessage()]);
+            }
+        }
+    }
+
+    /* Copia para um temporário e só dá o nome final depois de conferir o tamanho: disco cheio não deixa arquivo pela metade. */
+    private function copiarConferindo(string $origem, string $destino, array &$m): void
+    {
+        $temp = dirname($destino).'/'.self::TMP_PREFIXO.pathinfo($destino, PATHINFO_FILENAME).'-'.Str::random(8).'.'.pathinfo($destino, PATHINFO_EXTENSION);
+        try {
+            $this->disk()->copy($origem, $temp);
+            if ($this->disk()->size($temp) !== $this->disk()->size($origem)) {
+                throw new \RuntimeException("cópia incompleta de {$origem}");
+            }
+            $this->disk()->move($temp, $destino);
+        } finally {
+            $this->apagar($temp);
+        }
+        $m['copias'][] = $destino;
+        $m['origens'][] = $origem;
+    }
+
+    /* Miniatura se refaz sozinha na primeira vez que alguém pede: falhar aqui não pode segurar a troca de dono. */
+    private function levarMiniatura(string $origem, string $destino, array &$m): void
+    {
+        $mini = $this->caminhoMini($origem);
+        try {
+            if ($this->existe($mini)) {
+                $this->copiarConferindo($mini, $this->caminhoMini($destino), $m);
+            }
+        } catch (\Throwable) {
+            $m['origens'][] = $mini;
+        }
+    }
+
+    /* foto_path só conta como anexo da nota se for <pasta>/<nota_id>.<ext> e o arquivo existir. */
+    private function anexoDeclarado(?string $path, string $notaId): ?string
+    {
+        try {
+            $p = $this->validarCaminho((string) $path);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+
+        return substr_count($p, '/') === 1 && pathinfo($p, PATHINFO_FILENAME) === $notaId && $this->existe($p) ? $p : null;
     }
 
     /* 04/11/2026: temporário de quem morreu no meio da gravação. Com $manter (troca de anexo) só sai o velho, porque o recente
@@ -198,6 +333,9 @@ class FotoStorage
        último, o arquivo fica em <pasta>/espera/ sem encostar no atual: o PUT aceito o promove, o 409 o descarta. Fora de
        arquivoDaNota() e de validarCaminho() de propósito: não vira anexo de nota nem sai por URL. */
     public const ESPERA_DIR = 'espera';
+
+    /** Espera do dono anterior (ver guardarEsperasDoDonoAnterior). Nada a promove, e também fica fora de validarCaminho(). */
+    public const ESPERA_HERDADA_DIR = 'espera-herdada';
 
     /** Devolve o caminho que o anexo terá quando for promovido. */
     public function guardarEmEspera(string $pasta, string $notaId, UploadedFile $file, ?string $extHint = null): string
