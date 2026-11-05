@@ -34,7 +34,7 @@ class LeitorNota
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "..."} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "..."} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -44,7 +44,8 @@ class LeitorNota
         .'data = data de EMISSÃO no formato AAAA-MM-DD. '
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
-        .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
+        .'dfe = somente em recibo de pedágio que traga "DFE N:" (ex.: "DFE N: JLEE546J82JK"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
+        .'placa =placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
         .'Use null em todo campo que não esteja legível com segurança. Não invente, corte nem complete dígitos. '
@@ -168,6 +169,11 @@ class LeitorNota
         $out['numero'] = preg_match('/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/', $seq)
             ? $seq
             : $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
+        /* recibo da WAY 153: o "DFE N:" vem em campo próprio, para o numero seguir recusando letras nas outras notas */
+        $dfe = is_string($j['dfe'] ?? null) ? strtoupper(trim($j['dfe'])) : '';
+        if ($out['numero'] === null && preg_match('/^[0-9A-Z]{6,20}$/', $dfe)) {
+            $out['numero'] = $dfe;
+        }
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
         $out['placa'] = $this->placa($j['placa'] ?? null);
 

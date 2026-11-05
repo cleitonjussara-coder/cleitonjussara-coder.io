@@ -129,6 +129,12 @@ window.OCR = (() => {
       const seq = oneLine.match(/SEQ\.?\s*N[º°oO]?\.?\s*[:.]?\s*([0-9A-Z]{8}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{12})/i);
       if (seq) r.numero = seq[1].toUpperCase().replace(/O/g, '0');
     }
+    /* Recibo da WAY 153 (05/11/2026): o número é o "DFE N: JLEE546J82JK", letras e números sem padrão fixo.
+       Aqui O e 0 não são corrigidos: o código não é hexadecimal, então não há como saber qual dos dois é. */
+    if (!r.numero) {
+      const dfe = oneLine.match(/\bDFE\s*N[º°oO]?\.?\s*[:.]?\s*([0-9A-Z]{6,20})\b/i);
+      if (dfe) r.numero = dfe[1].toUpperCase();
+    }
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
     const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
     if (mp) r.placa = (mp[1] + mp[2]).toUpperCase();

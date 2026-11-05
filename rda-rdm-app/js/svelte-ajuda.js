@@ -157,7 +157,7 @@
       <ul>
         <li><b>Tipo</b>: RDA (alimentação) ou RDM (despesas: Abastecimento, Hospedagem, Pedágio, Outros). Define a aba da planilha e a pasta nos arquivos. <b>Pedágio</b> (05/11/2026) tem pasta própria nos arquivos; nas planilhas RDM/RDA e C.V., que não têm coluna de pedágio, ele soma em <b>Outros</b>.</li>
         <li><b>Documento</b>: 🧾 NFC-e (cupom com QR) · 📄 NF-e (XML/PDF) · 🖨️ DANFE (NF-e em papel) · 🧰 NFS-e (serviço) · 🗒️ Outro (recibo, comprovante). Com chave, o app escolhe sozinho; sem chave e sem QR, vira Outro (27/10/2026).</li>
-        <li><b>Placa</b> (só em recibo de pedágio, 27/10/2026): lida da foto ("Placa: ABC1D23"); você pode digitar ou corrigir. O número do recibo é o <b>SEQ No</b> impresso nele.</li>
+        <li><b>Placa</b> (só em recibo de pedágio, 27/10/2026): lida da foto ("Placa: ABC1D23"); você pode digitar ou corrigir. O número do recibo é o <b>SEQ No</b> ou o <b>DFE N</b> impresso nele.</li>
         <li><b>Número e série</b>: vêm da chave ou da leitura da foto. Quando a chave/QR já identificou a nota, Documento, Número e Série ficam escondidos (08/10/2026); só aparecem quando o app não conseguiu identificar, para você escolher o tipo ou digitar o número.</li>
         <li><b>Valor</b> e <b>data</b>: sempre confira antes de salvar.</li>
       </ul>

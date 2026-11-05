@@ -213,6 +213,15 @@ class LeitorNotaTest extends TestCase
         $this->assertNull($this->leitor()->validar(json_encode(["numero" => "ZZZZZZZZ-C253-4255-A77E-50FBEBA7105F"]))["numero"]);
     }
 
+    /** Recibo da WAY 153: o DFE vira o número, mas letras no campo numero continuam recusadas. */
+    public function test_dfe_do_recibo_de_pedagio_vira_o_numero(): void
+    {
+        $this->assertSame("JLEE546J82JK", $this->leitor()->validar(json_encode(["dfe" => "jlee546j82jk"]))["numero"]);
+        $this->assertSame("123456", $this->leitor()->validar(json_encode(["numero" => "123456", "dfe" => "JLEE546J82JK"]))["numero"]);
+        $this->assertNull($this->leitor()->validar(json_encode(["dfe" => "AB-12"]))["numero"]);
+        $this->assertNull($this->leitor()->validar(json_encode(["numero" => "JLEE546J82JK"]))["numero"]);
+    }
+
     public function test_chave_de_nfse_de_50_digitos_so_com_estrutura_valida(): void
     {
         $ano = (int) now("America/Sao_Paulo")->format("y");
