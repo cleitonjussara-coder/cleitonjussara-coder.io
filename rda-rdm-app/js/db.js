@@ -954,10 +954,12 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         /* lança em caso de erro → catch abaixo agenda a nova tentativa */
         let versaoServidor = null;
         let anexoServidor = null;
+        let portalServidor = null;   // link da NFS-e que o servidor achou pelo CNPJ; sem isto o pull perde para o updated_at local
         if (item.entity === 'nota') {
           const aceita = await sb.notas.upsert(payload);
           versaoServidor = aceita?.updated_at || null;
           anexoServidor = aceita?.foto_path || null;
+          portalServidor = aceita?.portal_nfse || null;
         } else {
           await sb.repasses.upsert(payload);
         }
@@ -970,12 +972,12 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
           const q = await _get('sync_queue', item.id);
           if (q) await _put('sync_queue', { ...q, status: 'pending', attempts: 0, contada_em: null, next_attempt_at: now, updated_at: now });
           /* a versão do servidor avançou com este PUT: a edição nova parte dela */
-          if (versaoServidor) await _put(store, { ...atualReg, server_updated_at: versaoServidor });
+          if (versaoServidor) await _put(store, { ...atualReg, server_updated_at: versaoServidor, ...(portalServidor && !atualReg.portal_nfse ? { portal_nfse: portalServidor } : {}) });
         } else {
           /* 04/11/2026: a troca de dono move o anexo no servidor, e o caminho velho não abre mais. Tem de entrar aqui: o updated_at
              abaixo é a hora do aparelho, mais nova que a do servidor, e o pull não corrigiria. Null não entra, como em
              _mesclarRemotas: o app nunca remove anexo. */
-          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now, ...(versaoServidor ? { server_updated_at: versaoServidor } : {}), ...(anexoServidor ? { foto_path: anexoServidor } : {}) });
+          await _put(store, { ...record, synced: true, sync_status: 'synced', sync_error: null, updated_at: now, ...(versaoServidor ? { server_updated_at: versaoServidor } : {}), ...(anexoServidor ? { foto_path: anexoServidor } : {}), ...(portalServidor ? { portal_nfse: portalServidor } : {}) });
           await _del('sync_queue', item.id);
         }
         ok++;

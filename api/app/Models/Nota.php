@@ -48,7 +48,7 @@ class Nota extends Model
        pelo controller (auditoria), nunca pelo cliente. */
     protected $fillable = [
         'id', 'user_id', 'tipo', 'subtipo', 'pagamento', 'cnpj', 'consumidor', 'razao_social', 'valor',
-        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'placa',
+        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'placa', 'portal_nfse',
         'foto_path', 'qr_url', 'observacao', 'deleted', 'created_at',
     ];
 
@@ -93,6 +93,33 @@ class Nota extends Model
         }
 
         return $tem;
+    }
+
+    /* Mesma proteção para o link da NFS-e do pedágio (05/11/2026). */
+    public static function temPortalNfse(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('notas', 'portal_nfse');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
+    /** Link impresso no recibo, como https://site.com.br. Só site .br que não seja do governo; o resto vira null, sem recusar a nota. */
+    public static function portalNormalizado(mixed $v): ?string
+    {
+        if (! is_string($v) || ! preg_match('#^(?:https?://)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.br)(/[a-z0-9._~/-]*)?$#i', trim($v), $m)) {
+            return null;
+        }
+        $host = strtolower($m[1]);
+        $url = 'https://'.$host.rtrim($m[2] ?? '', '/');
+
+        return ($host === 'gov.br' || str_ends_with($host, '.gov.br') || strlen($url) > 120) ? null : $url;
     }
 
     public function dono(): BelongsTo

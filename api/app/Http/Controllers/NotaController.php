@@ -134,6 +134,7 @@ class NotaController extends Controller
             // 24/09/2026: séries com mais de 6 dígitos existem (NFS-e); o limite era 5.
             'serie' => ['nullable', 'string', 'max:20'],
             'placa' => ['nullable', 'string', 'max:10', 'regex:/^[A-Za-z0-9]+$/'],   // recibo de pedágio (27/10/2026)
+            'portal_nfse' => ['nullable', 'string', 'max:300'],   // normalizado em upsert(); link ruim vira null, sem travar a fila
             'foto_path' => ['nullable', 'string', 'max:255'],
             'qr_url' => ['nullable', 'string'],
             'observacao' => ['nullable', 'string'],
@@ -237,6 +238,26 @@ class NotaController extends Controller
             $d['placa'] = $d['placa'] === null ? null : strtoupper($d['placa']);
             if (! Nota::temPlaca()) {
                 unset($d['placa']);
+            }
+        }
+
+        /* link da NFS-e do pedágio: se o recibo não trouxe, usa o último já lido dessa concessionária (mesmo CNPJ) */
+        if (! Nota::temPortalNfse()) {
+            unset($d['portal_nfse']);
+        } else {
+            if (array_key_exists('portal_nfse', $d)) {
+                $d['portal_nfse'] = Nota::portalNormalizado($d['portal_nfse']);
+            }
+            /* null enviado é campo apagado: não pode cair no valor antigo */
+            $cnpj = (string) (array_key_exists('cnpj', $d) ? $d['cnpj'] : $nota?->cnpj);
+            $documento = array_key_exists('documento', $d) ? $d['documento'] : $nota?->documento;
+            if (($d['portal_nfse'] ?? $nota?->portal_nfse) === null && $documento === 'outro'
+                && strlen($cnpj) === 14 && trim($cnpj, '0') !== '') {
+                $jaLido = Nota::where('cnpj', $cnpj)->where('id', '!=', $id)->where('deleted', false)
+                    ->whereNotNull('portal_nfse')->orderByDesc('updated_at')->value('portal_nfse');
+                if ($jaLido !== null) {
+                    $d['portal_nfse'] = $jaLido;
+                }
             }
         }
 

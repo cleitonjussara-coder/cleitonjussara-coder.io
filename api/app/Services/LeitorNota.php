@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Nota;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Facades\Log;
@@ -27,14 +28,14 @@ use Illuminate\Support\Facades\Log;
  */
 class LeitorNota
 {
-    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa'];
+    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'portal_nfse'];
 
     private const UFS = ['11', '12', '13', '14', '15', '16', '17', '21', '22', '23', '24', '25', '26', '27', '28', '29',
         '31', '32', '33', '35', '41', '42', '43', '50', '51', '52', '53'];
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "..."} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "...", "portal": "..."} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -45,7 +46,8 @@ class LeitorNota
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
         .'dfe = somente em recibo de pedágio que traga "DFE N:" (ex.: "DFE N: JLEE546J82JK"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
-        .'placa =placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
+        .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
+        .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
         .'Use null em todo campo que não esteja legível com segurança. Não invente, corte nem complete dígitos. '
@@ -176,6 +178,7 @@ class LeitorNota
         }
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
         $out['placa'] = $this->placa($j['placa'] ?? null);
+        $out['portal_nfse'] = Nota::portalNormalizado($j['portal'] ?? null);
 
         return $out;
     }

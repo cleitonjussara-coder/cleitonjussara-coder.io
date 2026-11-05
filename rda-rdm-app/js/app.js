@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 536;
+const APP_BUILD = 537;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -471,15 +471,33 @@ function _ajustarRotulosDoDocumento() {
   const ehRecibo = String($('nf-documento')?.value || '') === 'outro';
   const num = $('nf-numero-lbl'), ser = $('nf-serie-lbl'), campoNum = $('nf-numero');
   if (num) num.innerHTML = ehRecibo
-    ? 'Número do recibo <span style="font-weight:400;color:var(--text2)">— o SEQ No do recibo, se houver</span>'
+    ? 'Número do recibo <span style="font-weight:400;color:var(--text2)">— o SEQ No ou DFE do recibo, se houver</span>'
     : 'Número da nota';
   if (ser) ser.textContent = 'Série';
-  if (campoNum) campoNum.placeholder = ehRecibo ? 'SEQ do recibo (deixe em branco se não houver)' : 'Automático pela chave';
+  if (campoNum) campoNum.placeholder = ehRecibo ? 'SEQ ou DFE do recibo (deixe em branco se não houver)' : 'Automático pela chave';
   const campoPlaca = $('nf-placa-campo');   // placa só no recibo (pedágio); o valor é gravado só quando Documento = Outro
   if (campoPlaca) campoPlaca.style.display = ehRecibo ? '' : 'none';
+  const campoPortal = $('nf-portal-campo');   // mesma regra da placa
+  if (campoPortal) campoPortal.style.display = ehRecibo ? '' : 'none';
 }
 /* Placa do veículo: só letras e números, maiúscula; vazia vira null. */
 function _placaLimpa(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null; }
+/* Link da NFS-e do pedágio: a mesma regra de Nota::portalNormalizado. Só site .br que não seja do governo; o resto vira null. */
+function _portalLimpo(v) {
+  const m = String(v || '').trim().match(/^(?:https?:\/\/)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.br)(\/[a-z0-9._~\/-]*)?$/i);
+  if (!m) return null;
+  const host = m[1].toLowerCase();
+  const url = 'https://' + host + (m[2] || '').replace(/\/+$/, '');
+  return host === 'gov.br' || host.endsWith('.gov.br') || url.length > 120 ? null : url;
+}
+/* Último link já lido dessa concessionária (mesmo CNPJ), para quando a foto do recibo não deixou ler. */
+function _portalDoCnpj(cnpj, semId = null) {
+  const c = _digitos(cnpj);
+  if (c.length !== 14 || /^0+$/.test(c)) return null;
+  const achada = notas.find(x => x.id !== semId && !x.deleted && _digitos(x.cnpj) === c && _portalLimpo(x.portal_nfse));
+  return achada ? _portalLimpo(achada.portal_nfse) : null;
+}
+function _portalDaNota(n) { return _portalLimpo(n?.portal_nfse) || _portalDoCnpj(n?.cnpj, n?.id); }
 
 function _atualizarDocumentoAuto() {
   _ajustarBlocoDocumento();
@@ -530,23 +548,28 @@ function _prazoNfsePedagioHTML(n) {
   return `<div class="nota-obs" ${p.falta <= 2 ? estilo : ''}>⏳ Emitir a NFS-e do pedágio até ~${p.limite} (${quando}).</div>`;
 }
 function _ehReciboPedagio(n) {
-  return docDaNota(n) === 'outro' && (!!n.placa || n.subtipo === 'Pedágio'
+  return docDaNota(n) === 'outro' && (!!n.placa || !!n.portal_nfse || n.subtipo === 'Pedágio'
     || /ped[áa]gio|ecorodovias|ecovias|eco\s?minas|concession|rodovia|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`));
 }
 function emitirNfsePedagio(id) {
   const n = _notaPorId(id);
   if (!n) return;
-  const texto = [n.placa ? `Placa ${n.placa}` : '', n.numero ? `SEQ ${n.numero}` : '', `Data ${fmtDataBR(n.data)}`,
+  const seq = String(n.numero || '').trim();
+  const texto = [n.placa ? `Placa ${n.placa}` : '', seq ? `${_SEQ_UUID.test(seq) ? 'SEQ' : 'DFE'} ${seq}` : '', `Data ${fmtDataBR(n.data)}`,
     Number(n.valor) > 0 ? `Valor ${brl(n.valor)}` : '', n.observacao || ''].filter(Boolean).join(' · ');
   navigator.clipboard?.writeText(texto).catch(() => {});
+  /* 05/11/2026: cada concessionária tem o seu link, impresso no recibo. A EcoRodovias segue na página que o favorito conhece. */
+  const portal = _portalDaNota(n);
+  const eco = portal ? /(^|[./])ecorodovias\.com\.br/.test(portal) : /ecorodovias|ecovias|eco\s?minas|nfsevia/i.test(`${n.razao_social || ''} ${n.observacao || ''}`);
+  if (!portal && !eco) { toast('Dados copiados. Falta o link impresso no recibo: edite a nota e preencha Link da NFS-e', 'err', 6000); return; }
   /* o favorito "Preencher DFE" (preencher-dfe.html) lê o SEQ e a data do endereço; se o login apagar o #, lê da área de transferência */
-  const seq = String(n.numero || '').trim();
   const dia = String(n.data || '').slice(0, 10);
-  const alvo = _SEQ_UUID.test(seq) ? `${PORTAL_NFSE_PEDAGIO}#dfe=${encodeURIComponent(seq)}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `&data=${dia}` : ''}` : PORTAL_NFSE_PEDAGIO;
-  window.open(alvo, '_blank');
+  const alvo = !eco ? portal
+    : _SEQ_UUID.test(seq) ? `${PORTAL_NFSE_PEDAGIO}#dfe=${encodeURIComponent(seq)}${/^\d{4}-\d{2}-\d{2}$/.test(dia) ? `&data=${dia}` : ''}` : PORTAL_NFSE_PEDAGIO;
+  window.open(alvo, '_blank', 'noopener');   // o link pode ter sido digitado por outra pessoa: o site aberto não mexe na aba do app
   const p = _prazoNfsePedagio(n);
   toast(p && p.falta < 0 ? 'Dados copiados, mas o prazo de 7 dias venceu — o portal pode recusar ⚠️'
-    : 'Dados copiados 🧾 — entre no portal e use o favorito Preencher DFE');
+    : eco ? 'Dados copiados 🧾 — entre no portal e use o favorito Preencher DFE' : 'Dados copiados 🧾 — cole no site da concessionária');
 }
 function consultarNota(id) {
   const n = _notaPorId(id);
@@ -6199,6 +6222,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           ${n.cnpj&&!n.razao_social ? `<div class="nota-cnpj">${BrasilAPI.formatar(n.cnpj)}</div>` : ''}
           ${_numeroSerieHTML(n)}
           ${n.placa ? `<div class="nota-cnpj">placa ${esc(n.placa)}</div>` : ''}
+          ${_ehReciboPedagio(n) && _portalDaNota(n) ? `<div class="nota-cnpj" style="overflow-wrap:anywhere">NFS-e em ${esc(_portalDaNota(n).replace('https://', ''))}</div>` : ''}
           ${_prazoNfsePedagioHTML(n)}
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
         </div>
@@ -6206,7 +6230,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="consultarNota(this.dataset.nota)" title="Consultar a nota no portal">🔗</button>` : ''}
-            ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="emitirNfsePedagio(this.dataset.nota)" title="Emitir a NFS-e do pedágio no portal da EcoRodovias">🧾</button>` : ''}
+            ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="emitirNfsePedagio(this.dataset.nota)" title="Emitir a NFS-e do pedágio no site da concessionária">🧾</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="corrigirGrupoNota(this.dataset.nota)" title="Corrigir a categoria">🔀</button>` : ''}
             <button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="editarNota(this.dataset.nota)" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
@@ -8256,7 +8280,7 @@ async function _lerNotaPorIa(blob) {
     if (!d || !(d.valor || d.cnpj || d.chave)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
-             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '',
+             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', portal_nfse: d.portal_nfse || '',
              uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', _ia: true };
   } catch (_) { return null; }
 }
@@ -8957,6 +8981,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento
     : (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '');
   $('nf-placa').value = dados.placa || '';
+  $('nf-portal').value = dados.portal_nfse || '';
   _ajustarRotulosDoDocumento();
   $('nf-numero').value   = dados.numero   || '';
   $('nf-serie').value    = dados.serie    || '';
@@ -9520,6 +9545,8 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (ocr.razao_social && !$('nf-razao').value) { $('nf-razao').value = ocr.razao_social; }
       if (ocr.numero && !$('nf-numero').value) { _preencherNumeroSerie(ocr.numero, ocr.serie); preencheu.push('número'); }
       if (ocr.placa && !$('nf-placa').value) { $('nf-placa').value = _placaLimpa(ocr.placa) || ''; preencheu.push('placa'); }
+      { const link = _portalLimpo(ocr.portal_nfse) || (ocr.placa ? _portalDoCnpj(ocr.cnpj || $('nf-cnpj').value) : null);
+        if (link && !$('nf-portal').value) { $('nf-portal').value = link; preencheu.push('link da NFS-e'); } }
       if (ocr.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
         $('nf-data').value = ocr.data; preencheu.push('data');
       }
@@ -10024,6 +10051,8 @@ async function _salvarNotaInterno() {
     /* documento efetivo: select vazio sem chave nem QR também vira 'outro' mais abaixo */
     placa          : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
       ? _placaLimpa($('nf-placa').value) : null,
+    portal_nfse    : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
+      ? _portalLimpo($('nf-portal').value) : null,
     qr_url         : $('nf-qr-url').value       || null,
     consumidor     : $('nf-consumidor').value   || null,
     uf             : $('nf-uf').value           || null,

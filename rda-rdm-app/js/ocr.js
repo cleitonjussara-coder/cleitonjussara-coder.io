@@ -100,7 +100,7 @@ window.OCR = (() => {
     const oneLine = raw.replace(/\r?\n/g, ' ');
     const lines   = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
 
-    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null, placa:null };
+    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null, placa:null, portal_nfse:null };
 
     /* 0. Número e série impressos — cupom ("Nº 123456 Série 1", "NFC-e nº"),
        DANFE ("Nº 000.001.234  SÉRIE 001") e NFS-e ("Número da NFS-e: 2026123").
@@ -138,6 +138,14 @@ window.OCR = (() => {
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
     const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
     if (mp) r.placa = (mp[1] + mp[2]).toUpperCase();
+    /* Link para gerar a NFS-e, impresso no recibo de pedágio (05/11/2026): cada concessionária tem o seu.
+       Só em recibo de pedágio: cupom comum imprime site da SEFAZ e da loja. Pode vir partido em duas linhas. */
+    if (/ped[áa]gio|\bDFE\b|SEQ\.?\s*N|Registro\s+de\s+Passagem|Pra[çc]a\s*:/i.test(oneLine)) {
+      const site = /(?:h?t+ps?:\/+|www\.)(?:[a-z0-9-]+\.)+?(?:com|net|org)\.br(?:\/[a-z0-9._~\/-]*)?/i;
+      /* só junta espaço depois de ponto quando vem outro pedaço de domínio: o ponto final da frase não pode colar na palavra seguinte */
+      const achado = oneLine.replace(/\s*\.\s+(?=[a-z0-9-]+\.)/gi, '.').match(site) || raw.replace(/\r?\n\s*/g, '').match(site);
+      if (achado) r.portal_nfse = 'https://' + achado[0].replace(/^h?t+ps?:\/+/i, '').replace(/[./]+$/, '');
+    }
     for (const p of r.numero ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }
