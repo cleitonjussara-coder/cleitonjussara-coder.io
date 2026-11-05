@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 533;
+const APP_BUILD = 534;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -981,7 +981,7 @@ function _ensureJsQR() {
    Os arquivos ficam em js/vendor (funciona offline pelo service worker). Trocou a versão? Troque o nome dos arquivos. */
 const _ZXING_JS = 'js/vendor/zxing-reader-2.2.4.js';
 const _ZXING_WASM = 'js/vendor/zxing_reader-2.2.4.wasm';
-let _zxing = null, _zxingPromise = null;
+let _zxing = null, _zxingPromise = null, _zxingFalhas = 0;
 function _ensureZXing() {
   if (_zxing) return Promise.resolve(_zxing);
   if (!_zxingPromise) {
@@ -7282,14 +7282,23 @@ function fecharCaptura() {
 }
 
 /* ── QR Code ─────────────────────────────────────────────── */
+/* Dica (05/11/2026): de perto a câmera perde o foco, mais nos modelos Pro. Afastar e deixar o zoom aproximar lê melhor. */
+const _DICA_QR = 'Mantenha uns 20 cm, o zoom aproxima';
+const _ROTULO_RETRY_QR = '🔄 Já liberei — tentar de novo';
+const _QR_SEM_IMAGEM_CICLOS = 10;   // ciclos de 400 ms do medidor: 4 s sem imagem da câmera
+let _qrSeq = 0;                     // cada abrir/fechar do leitor: câmera que chega atrasada de uma abertura antiga é solta
+let _qrCameraPreta = false;         // a câmera abriu e não mandou imagem: "Ler por foto" no iPhone vai à câmera do sistema
 async function iniciarQR() {
+  if (qrStream) fecharQR();         // "Tentar de novo" com a câmera aberta e preta: solta a anterior antes de pedir outra
+  const seq = ++_qrSeq;
+  _qrCameraPreta = false;
   fecharCaptura();
   setLoading(true);
   try { await _ensureJsQR(); } catch (e) { setLoading(false); toast(e.message, 'err'); return; }
   setLoading(false);
   const ov = $('qr-overlay');
   ov.style.display = 'flex';
-  const _h = $('qr-hint'); if (_h) _h.textContent = 'Aponte para o QR Code da NFCe  ·  ' + APP_VERSION;
+  const _h = $('qr-hint'); if (_h) _h.textContent = _DICA_QR + '  ·  ' + APP_VERSION;
   const _s = $('qr-status-txt'); if (_s) _s.textContent = '';
   _qrSeen = 0;
   const video  = $('qr-video');
@@ -7322,7 +7331,7 @@ async function iniciarQR() {
   const btnOcr   = $('qr-btn-ocr');
   const btnRetry = $('qr-btn-retry');
   if (btnOcr)   btnOcr.style.display = '';   // "Tirar foto" sempre visível (30/09/2026)
-  if (btnRetry) btnRetry.style.display = 'none';
+  if (btnRetry) { btnRetry.textContent = _ROTULO_RETRY_QR; btnRetry.style.display = 'none'; }
 
   // checa suporte do navegador
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -7332,7 +7341,26 @@ async function iniciarQR() {
   }
 
   const onStream = stream => {
+    /* fechou enquanto a câmera abria: sem isto ela ficava ligada e o laço lia QR com o leitor escondido */
+    if (seq !== _qrSeq) { stream.getTracks().forEach(t => t.stop()); return; }
     qrStream = stream;
+    /* Linha do leitor (05/11/2026): resolução, zoom e foco mínimo reais. Um print de cada iPhone mostra o que a câmera
+       entrega de verdade, e o que o aparelho não informa não aparece. Onde o leitor é o nativo, a linha fica vazia. */
+    let semNativo = false;
+    const _mostrarMotor = () => {
+      const st = $('qr-motor');
+      if (!st) return;
+      if (!semNativo) { st.textContent = ''; return; }
+      const tr = stream.getVideoTracks()[0];
+      const s = tr?.getSettings ? tr.getSettings() : {};
+      const foco = _capsDaCamera(tr).focusDistance?.min;
+      const partes = ['Leitor: ' + (_zxing ? 'ZXing' : 'jsQR')];
+      if (video.videoWidth) partes.push(`${video.videoWidth}x${video.videoHeight}`);
+      if (typeof s.zoom === 'number') partes.push('zoom ' + s.zoom.toFixed(1));
+      if (typeof foco === 'number' && foco > 0) partes.push('foco ' + foco.toFixed(2) + ' m');
+      const texto = partes.join(' · ');
+      if (st.textContent !== texto) st.textContent = texto;
+    };
     // atributos ANTES do srcObject (exigência do iOS p/ não ficar preto)
     video.setAttribute('playsinline', '');
     video.setAttribute('autoplay', '');
@@ -7375,15 +7403,15 @@ async function iniciarQR() {
         zoomEl.parentElement.style.display = 'flex';
       } else if (zoomEl) { zoomEl.parentElement.style.display = 'none'; }
       /* 30/09/2026: só o texto "Leitor nativo do Android ativo" saiu (aparecia até no iOS); "Leitor: jsQR" continua. */
-      _detectorNativo().then(async d => {
-        const st = $('qr-motor');
-        if (d) { if (st) st.textContent = ''; return; }
-        if (st) st.textContent = _zxing ? 'Leitor: ZXing' : 'Leitor: jsQR';
-        try { await _ensureZXing(); if (st) st.textContent = 'Leitor: ZXing'; } catch (e) { console.warn('ZXing:', e); }
+      _detectorNativo().then(d => {
+        semNativo = !d;
+        _mostrarMotor();
+        if (!d) _ensureZXing().then(_mostrarMotor).catch(e => console.warn('ZXing:', e));
       });
     } catch (_) {}
 
     const start = () => {
+      if (qrStream !== stream) return;     // "Tentar de novo" trocou a câmera: sem isto, dois laços de leitura ao mesmo tempo
       canvas.width  = video.videoWidth  || 1280;
       canvas.height = video.videoHeight || 720;
       loopQR(ctx, video, canvas);
@@ -7393,21 +7421,38 @@ async function iniciarQR() {
 
     // toque na tela sempre re-tenta o play (contorna bloqueio de autoplay)
     const ov2 = $('qr-overlay');
-    const onTap = () => tentarPlay();
-    ov2.addEventListener('click', onTap);
+    ov2.onclick = () => tentarPlay();    // onclick, e não addEventListener: cada abertura somava mais um
 
     // MEDIDOR AO VIVO (diagnóstico) — mostra o estado real do vídeo/câmera
     clearInterval(window._qrDiag);
+    let ciclosSemImagem = 0;
     window._qrDiag = setInterval(() => {
       if (!qrStream) { clearInterval(window._qrDiag); return; }
       const tr = stream.getVideoTracks()[0] || {};
       const preto = !video.videoWidth;
+      _mostrarMotor();
+      /* Câmera preta (05/11/2026): bug intermitente do iOS no app instalado, a luz da câmera acende e não vem imagem. A
+         pessoa ficava olhando a tela preta sem aviso. Não pega vídeo que chega preto com tamanho: só câmera sem imagem. */
+      ciclosSemImagem = preto ? ciclosSemImagem + 1 : 0;
+      if (ciclosSemImagem >= _QR_SEM_IMAGEM_CICLOS) {
+        if (!_qrCameraPreta) {
+          _qrCameraPreta = true;
+          setDiag('A câmera não mandou imagem. Toque em Tentar de novo ou use a foto da nota.');
+          if (btnRetry) { btnRetry.textContent = '🔄 Tentar de novo'; btnRetry.style.display = ''; }
+        }
+        return;
+      }
+      if (_qrCameraPreta) {             // a imagem voltou sozinha
+        _qrCameraPreta = false;
+        if (btnRetry) { btnRetry.textContent = _ROTULO_RETRY_QR; btnRetry.style.display = 'none'; }
+      }
       setDiag(`${video.videoWidth||0}x${video.videoHeight||0} · play=${!video.paused} · rs=${video.readyState} · cam=${tr.readyState||'?'}/${tr.enabled?'on':'off'}${tr.muted?'/MUTED':''}`
         + (preto ? '  ⟵ sem imagem (toque na tela)' : ''), false);
     }, 400);
   };
 
   const onErro = e => {
+    if (seq !== _qrSeq) return;
     const nome = e?.name || e?.message || 'erro';
     /* NotAllowedError = permissão de câmera negada no iOS/Safari. Nenhum
        site consegue abrir os Ajustes do iPhone sozinho (bloqueio de
@@ -7499,8 +7544,15 @@ async function _lerFrameQR(ctx, video, canvas) {
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
       if (!det && _zxing) {
         /* sem jsQR depois: ele travaria a tela ~300 ms em todo quadro sem QR, e é isso que faz perder o quadro nítido */
-        const [texto] = await _zxingLer(img);
-        if (texto) code = { data: texto };
+        try {
+          const [texto] = await _zxingLer(img);
+          if (texto) code = { data: texto };
+          _zxingFalhas = 0;
+        } catch (e) {
+          /* erro repetido: o jsQR assume, em vez de o mesmo erro se repetir em todo quadro. Abrir o leitor de novo recarrega. */
+          console.warn('ZXing:', e);
+          if (++_zxingFalhas >= 3) { _zxing = null; _zxingPromise = null; _zxingFalhas = 0; }
+        }
       } else {
         // attemptBoth = lê QR normal E invertido (cupons desbotados/claros)
         code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
@@ -7545,6 +7597,7 @@ async function _lerFrameQR(ctx, video, canvas) {
 }
 
 function fecharQR() {
+  _qrSeq++;
   cancelAnimationFrame(qrFrame);
   clearInterval(window._qrDiag);
   document.getElementById('qr-diag')?.remove();
@@ -7704,7 +7757,7 @@ function fecharBarcode() {
   qrStream?.getTracks().forEach(t => t.stop());
   qrStream = null;
   $('qr-overlay').style.display = 'none';
-  { const h=$('qr-hint'); if(h) h.textContent='Aponte para o QR Code da NFCe'; }
+  { const h=$('qr-hint'); if(h) h.textContent=_DICA_QR; }
 }
 
 /* ── Chave NFCe (digitar 44 dígitos) ──────────────────── */
@@ -7754,6 +7807,9 @@ async function onChaveNFCe(raw) {
    roda OCR p/ valor/data/CNPJ/razão. Junta tudo num formulário. */
 function lerFotoNota() {
   fecharCaptura();
+  /* a câmera acabou de abrir preta no iPhone: a do app ficaria preta de novo. Só no iPhone: no Android a câmera do sistema
+     pode matar a página (ver km-foto). Sem câmera do app não há recorte, mas a nota sai. */
+  if (_qrCameraPreta && _ehIOS()) { _qrCameraPreta = false; $('f-foto-ocr')?.click(); return; }
   /* 04/11/2026: abria a câmera do sistema e anexava a foto INTEIRA, sem recorte. Quem não consegue ler o QR ao vivo (o
      iPhone, mais que o Android) caía aqui: era o "às vezes salva a imagem inteira". */
   abrirCameraNota(null, { aoFoto: f => onFotoNota({ target: { files: [f], value: '' } }), scanner: true, inputReserva: 'f-foto-ocr' });

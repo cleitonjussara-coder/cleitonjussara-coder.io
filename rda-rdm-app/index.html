@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=533">
+  <link rel="manifest" href="manifest.json?v=534">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1215,7 +1215,7 @@ body{font-size:18.5px}
 .qr-hint{color:#fff;font-size:15.5px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 #qr-status-txt{color:var(--secondary);font-size:15.5px;min-height:20px}
 .btn-overlay-close{
-  position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;z-index:3;
+  position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;z-index:6;
   background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;
   width:44px;height:44px;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;
 }
@@ -2059,7 +2059,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=533" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=534" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2758,39 +2758,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=533"></script>
-<script defer src="js/db.js?v=533"></script>
-<script defer src="js/nfce.js?v=533"></script>
-<script defer src="js/sefaz.js?v=533"></script>
-<script defer src="js/brasilapi.js?v=533"></script>
-<script defer src="js/ocr.js?v=533"></script>
-<script defer src="js/scanner.js?v=533"></script>
-<script defer src="js/foto-branca.js?v=533"></script>
-<script defer src="js/recorte.js?v=533"></script>
-<script defer src="js/excel.js?v=533"></script>
-<script defer src="js/gestor.js?v=533"></script>
-<script defer src="js/frota.js?v=533"></script>
-<script defer src="js/frota-painel.js?v=533"></script>
-<script defer src="js/frota-planilha.js?v=533"></script>
-<script defer src="js/ponto.js?v=533"></script>
-<script defer src="js/rastreio.js?v=533"></script>
-<script defer src="js/repasses-equipe.js?v=533"></script>
-<script defer src="js/gdrive.js?v=533"></script>
+<script defer src="js/api.js?v=534"></script>
+<script defer src="js/db.js?v=534"></script>
+<script defer src="js/nfce.js?v=534"></script>
+<script defer src="js/sefaz.js?v=534"></script>
+<script defer src="js/brasilapi.js?v=534"></script>
+<script defer src="js/ocr.js?v=534"></script>
+<script defer src="js/scanner.js?v=534"></script>
+<script defer src="js/foto-branca.js?v=534"></script>
+<script defer src="js/recorte.js?v=534"></script>
+<script defer src="js/excel.js?v=534"></script>
+<script defer src="js/gestor.js?v=534"></script>
+<script defer src="js/frota.js?v=534"></script>
+<script defer src="js/frota-painel.js?v=534"></script>
+<script defer src="js/frota-planilha.js?v=534"></script>
+<script defer src="js/ponto.js?v=534"></script>
+<script defer src="js/rastreio.js?v=534"></script>
+<script defer src="js/repasses-equipe.js?v=534"></script>
+<script defer src="js/gdrive.js?v=534"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=533"></script>
+<script defer src="js/svelte-ajuda.js?v=534"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=533"></script>
+<script defer src="js/svelte-historico.js?v=534"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=533"></script>
+<script defer src="js/svelte-arquivos.js?v=534"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=533"></script>
-<script defer src="js/app.js?v=533"></script>
-<script defer src="js/instalar.js?v=533"></script>
+<script defer src="js/svelte-perfil.js?v=534"></script>
+<script defer src="js/app.js?v=534"></script>
+<script defer src="js/instalar.js?v=534"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=533').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=534').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
