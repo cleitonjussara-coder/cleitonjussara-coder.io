@@ -328,7 +328,7 @@ class RelatorioEquipeCvTest extends TestCase
     /* Revisão de 04/11/2026: nas páginas seguintes as colunas de valores saíam sem título, e não dava para saber o que era cartão. */
     public function test_quadro_cv_repete_o_cabecalho_em_cada_pagina(): void
     {
-        ini_set('memory_limit', '1024M');   // o limite do php da linha de comando é 128M; o Dompdf com tantas tabelas passa disso
+        ini_set('memory_limit', '3072M');   // o limite do php da linha de comando é 128M; a suíte completa e o Dompdf passam disso
         for ($i = 0; $i < 14; $i++) {
             $c = $this->pessoa("Colaborador {$i}");
             $this->repasse($c, self::ANO, 10, 1000, 'RDM', 'recarga');

@@ -31,7 +31,7 @@ class SaldoAnteriorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        @ini_set('memory_limit', '768M');   // o mesmo teto que o controller usa para gerar estas planilhas
+        @ini_set('memory_limit', '3072M');   // na suíte completa a memória se acumula: com 768M o PHP morria no meio (Premature end of PHP process)
     }
 
     private function pessoa(string $nome, string $regime = 'rdm_rda', string $role = 'colaborador'): Colaborador

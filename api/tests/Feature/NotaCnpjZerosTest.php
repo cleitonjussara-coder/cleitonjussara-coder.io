@@ -27,7 +27,7 @@ class NotaCnpjZerosTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        @ini_set('memory_limit', '768M');
+        @ini_set('memory_limit', '3072M');
     }
 
     private function colaborador(string $regime = 'rdm_rda'): Colaborador

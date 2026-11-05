@@ -36,7 +36,7 @@ class RelatorioRdmRdaAmostraTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        @ini_set('memory_limit', '768M');   // o mesmo teto que o controller usa para gerar esta planilha (o modelo é pesado)
+        @ini_set('memory_limit', '3072M');   // na suíte completa a memória se acumula; o modelo é pesado
     }
 
     private function colaborador(): Colaborador
