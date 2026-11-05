@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 539;
+const APP_BUILD = 540;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3290,6 +3290,11 @@ const CATEGORIAS_CV = [
 const CATEGORIA_LOCACAO = { chave: 'locacao', ico: '🚗', nome: 'Locação de Veículos', tipo: 'RDM', subtipo: 'Locação de Veículos',
   sub: 'Aluguel de carro, pago pela empresa.' };
 const _ehLocacao = subtipo => String(subtipo || '').toLowerCase().startsWith('loca');
+/* Contabilidade (05/11/2026): também só do Faturamento, pelo mesmo caminho da locação. */
+const CATEGORIA_CONTABILIDADE = { chave: 'contabilidade', ico: '🧮', nome: 'Contabilidade', tipo: 'RDM', subtipo: 'Contabilidade',
+  sub: 'Serviços de contabilidade, pagos pela empresa.' };
+const CATEGORIAS_SO_FATURAMENTO = [CATEGORIA_LOCACAO, CATEGORIA_CONTABILIDADE];
+const _ehSoFaturamento = subtipo => _ehLocacao(subtipo) || subtipo === CATEGORIA_CONTABILIDADE.subtipo;
 
 /* Pedágio (05/11/2026): entra no lançamento de todos, mas fica fora de CATEGORIAS_CV pelo mesmo motivo da locação: as planilhas
    da empresa não têm coluna de pedágio, então nos painéis ele soma em Outros. Só o Faturamento o mostra separado. */
@@ -3304,7 +3309,7 @@ const CATEGORIA_EXAMES = { chave: 'exames', ico: '🩺', nome: 'Exames', tipo: '
 const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIA_MANUTENCAO, CATEGORIA_EXAMES, CATEGORIAS_CV.at(-1)];
 
 function _categoriaCV(chave) {
-  return [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO].find(c => c.chave === chave) || null;
+  return [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO].find(c => c.chave === chave) || null;
 }
 
 /* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
@@ -8473,7 +8478,7 @@ function _montarGradeDoSeletor() {
   }
   if (!ehCv) return;
   /* refeita a cada abertura: o cartão da locação depende de a nota ser de Faturamento */
-  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO] : CATEGORIAS_LANCAMENTO;
+  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO] : CATEGORIAS_LANCAMENTO;
   cv.innerHTML = cats.map(c => `
     <button class="tipo-lancamento-card tipo-lancamento-card-${c.tipo.toLowerCase()}"
             onclick="selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})">
@@ -8999,7 +9004,7 @@ async function abrirFormNota(dados = {}) {
      Pagamento (que é só cartão x carteira) — fica gravado à parte e prevalece
      na hora de salvar, não importa o regime de quem é a nota. */
   _pagamentoForcado = dados.pagamento === 'empresa' ? 'empresa' : null;
-  _oferecerLocacao(!!_pagamentoForcado || _ehLocacao(dados.subtipo));   // Locação de Veículos: só Faturamento
+  _oferecerSoFaturamento(!!_pagamentoForcado || _ehSoFaturamento(dados.subtipo));   // Locação de Veículos e Contabilidade: só Faturamento
   $('nf-subtipo').value = dados.subtipo || 'Abastecimento';
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
   { const donoCV = _usaCartaoDe(dados.user_id);
@@ -9168,17 +9173,19 @@ function aplicarCategoriaCV() {
   atualizarBannerTipoLancamento(c.tipo);
 }
 
-/* Põe ou tira a Locação de Veículos das duas listas de categoria. Tira de verdade: o Safari do iPhone ignora `hidden` em
+/* Põe ou tira as categorias só do Faturamento das duas listas. Tira de verdade: o Safari do iPhone ignora `hidden` em
    <option> e mostraria a opção para quem não pode usá-la. */
-function _oferecerLocacao(sim) {
-  for (const [lista, valor] of [['nf-subtipo', CATEGORIA_LOCACAO.subtipo], ['nf-cat-cv', CATEGORIA_LOCACAO.chave]]) {
-    const sel = $(lista);
-    if (!sel) continue;
-    const opt = [...sel.options].find(o => o.value === valor);
-    if (!sim) { opt?.remove(); continue; }
-    if (opt) continue;
-    const novo = new Option(lista === 'nf-cat-cv' ? `${CATEGORIA_LOCACAO.ico} ${CATEGORIA_LOCACAO.nome}` : CATEGORIA_LOCACAO.nome, valor);
-    sel.add(novo, [...sel.options].find(o => o.value.toLowerCase().startsWith('outros')) || null);
+function _oferecerSoFaturamento(sim) {
+  for (const cat of CATEGORIAS_SO_FATURAMENTO) {
+    for (const [lista, valor] of [['nf-subtipo', cat.subtipo], ['nf-cat-cv', cat.chave]]) {
+      const sel = $(lista);
+      if (!sel) continue;
+      const opt = [...sel.options].find(o => o.value === valor);
+      if (!sim) { opt?.remove(); continue; }
+      if (opt) continue;
+      const novo = new Option(lista === 'nf-cat-cv' ? `${cat.ico} ${cat.nome}` : cat.nome, valor);
+      sel.add(novo, [...sel.options].find(o => o.value.toLowerCase().startsWith('outros')) || null);
+    }
   }
 }
 
@@ -9191,9 +9198,10 @@ function _ajustarCamposDeCategoria() {
   linha.style.display = ehCv ? 'none' : '';
   if (!ehCv) return;
   const sel = $('nf-cat-cv');
-  /* locação, pedágio, manutenção e exames têm de voltar como são: pela chave seriam "outros" e o aplicar abaixo gravaria Outros sem avisar */
+  /* locação, contabilidade, pedágio, manutenção e exames têm de voltar como são: pela chave seriam "outros" e o aplicar abaixo gravaria Outros sem avisar */
   const rdm = $('nf-tipo').value === 'RDM', sub = $('nf-subtipo').value;
   sel.value = rdm && _ehLocacao(sub) ? CATEGORIA_LOCACAO.chave
+    : rdm && sub === CATEGORIA_CONTABILIDADE.subtipo ? CATEGORIA_CONTABILIDADE.chave
     : rdm && sub === CATEGORIA_PEDAGIO.subtipo ? CATEGORIA_PEDAGIO.chave
     : rdm && sub === CATEGORIA_MANUTENCAO.subtipo ? CATEGORIA_MANUTENCAO.chave
     : rdm && sub === CATEGORIA_EXAMES.subtipo ? CATEGORIA_EXAMES.chave
@@ -10189,7 +10197,8 @@ const _GRUPOS = [
 ];
 
 /* Locação de Veículos (30/10/2026): categoria só da pasta Faturamento — é a que o gestor pode escolher ao mover uma nota faturada. */
-const _GRUPOS_FAT = [..._GRUPOS, { tipo: 'RDM', subtipo: 'Locação de Veículos', rotulo: 'RDM · Locação de Veículos', nota: 'aluguel de carro' }];
+const _GRUPOS_FAT = [..._GRUPOS, { tipo: 'RDM', subtipo: 'Locação de Veículos', rotulo: 'RDM · Locação de Veículos', nota: 'aluguel de carro' },
+  { tipo: 'RDM', subtipo: 'Contabilidade', rotulo: 'RDM · Contabilidade', nota: 'serviços de contabilidade' }];
 
 function corrigirGrupoNota(id) {
   const n = _notaPorId(id);

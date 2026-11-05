@@ -149,6 +149,19 @@ class ArquivosFaturamentoTest extends TestCase
         $this->assertStringContainsString('LOCAÇÃO DE VEÍCULOS', $r->json('notas.0.pasta'));
     }
 
+    public function test_contabilidade_vira_categoria_propria_na_pasta(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora Ana');
+        $n = $this->nota(null, 'ESCRITORIO X', 900, 'empresa');
+        Sanctum::actingAs($gestor);
+
+        $this->patchJson("/api/notas/{$n->id}/tipo", ['tipo' => 'RDM', 'subtipo' => 'Contabilidade'])->assertOk();
+
+        $r = $this->getJson('/api/arquivos/notas?faturamento=1&ano='.self::ANO.'&mes=3')->assertOk();
+        $this->assertSame('RDM · CONTABILIDADE', $r->json('notas.0.grupo'));
+        $this->assertStringContainsString('CONTABILIDADE', $r->json('notas.0.pasta'));
+    }
+
     public function test_exames_vira_categoria_propria_na_pasta(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora Ana');

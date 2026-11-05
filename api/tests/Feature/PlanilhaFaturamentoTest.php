@@ -119,25 +119,25 @@ class PlanilhaFaturamentoTest extends TestCase
         $res = $this->linhas($ss, 'RESUMO');
         $marco = $this->linhaQueComeca($res, 'Março');
         $this->assertEqualsWithDelta(300, $marco[3], 0.001);   // Hospedagem
-        $this->assertEqualsWithDelta(300, $marco[9], 0.001);   // Total
-        $this->assertSame(1, (int) $marco[10]);
+        $this->assertEqualsWithDelta(300, $marco[10], 0.001);   // Total
+        $this->assertSame(1, (int) $marco[11]);
         $abril = $this->linhaQueComeca($res, 'Abril');
         $this->assertEqualsWithDelta(50.5, $abril[1], 0.001);  // Alimentação (RDA)
         $this->assertEqualsWithDelta(200, $abril[2], 0.001);   // Abastecimento
-        $this->assertEqualsWithDelta(250.5, $abril[9], 0.001);
-        $this->assertSame(2, (int) $abril[10]);
+        $this->assertEqualsWithDelta(250.5, $abril[10], 0.001);
+        $this->assertSame(2, (int) $abril[11]);
         $paulo = $this->linhaQueComeca($res, 'Paulo Silva');
-        $this->assertEqualsWithDelta(350.5, $paulo[9], 0.001);
-        $this->assertSame(2, (int) $paulo[10]);
+        $this->assertEqualsWithDelta(350.5, $paulo[10], 0.001);
+        $this->assertSame(2, (int) $paulo[11]);
         $semDono = $this->linhaQueComeca($res, 'Sem colaborador específico');
-        $this->assertEqualsWithDelta(200, $semDono[9], 0.001);
-        /* três quadros, três TOTAL GERAL: por mês e por colaborador (Total na coluna J, Notas na K); colaborador × mês (Total na N) */
+        $this->assertEqualsWithDelta(200, $semDono[10], 0.001);
+        /* três quadros, três TOTAL GERAL: por mês e por colaborador (Total na coluna K, Notas na L); colaborador × mês (Total na N) */
         $totais = array_values(array_filter($res, fn ($l) => $l[0] === 'TOTAL GERAL'));
         $this->assertCount(3, $totais);
-        $this->assertEqualsWithDelta(550.5, $totais[0][9], 0.001);
-        $this->assertSame(3, (int) $totais[0][10]);
-        $this->assertEqualsWithDelta(550.5, $totais[1][9], 0.001);
-        $this->assertSame(3, (int) $totais[1][10]);
+        $this->assertEqualsWithDelta(550.5, $totais[0][10], 0.001);
+        $this->assertSame(3, (int) $totais[0][11]);
+        $this->assertEqualsWithDelta(550.5, $totais[1][10], 0.001);
+        $this->assertSame(3, (int) $totais[1][11]);
         $this->assertEqualsWithDelta(550.5, $totais[2][13], 0.001);
         $ss->disconnectWorksheets();
     }
@@ -187,6 +187,21 @@ class PlanilhaFaturamentoTest extends TestCase
         $ss->disconnectWorksheets();
     }
 
+    public function test_contabilidade_tem_coluna_propria_no_resumo_e_categoria_na_aba_do_mes(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora Ana');
+        $this->nota(null, ['razao_social' => 'ESCRITORIO', 'valor' => 900.5, 'subtipo' => 'Contabilidade'], $gestor);
+
+        $ss = app(RelatorioFaturamentoXlsx::class)->gerar(self::ANO, $gestor);
+
+        $res = $this->linhas($ss, 'RESUMO');
+        $cab = array_values(array_filter($res, fn ($l) => ($l[0] ?? null) === 'Mês'))[0];
+        $this->assertSame('Contabilidade', $cab[8]);
+        $this->assertEqualsWithDelta(900.5, $this->linhaQueComeca($res, 'Março')[8], 0.001);
+        $this->assertSame('Contabilidade', $this->linhas($ss, 'Mar')[4][3]);
+        $ss->disconnectWorksheets();
+    }
+
     public function test_homonimos_nao_se_fundem_no_resumo(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora Ana');
@@ -207,9 +222,9 @@ class PlanilhaFaturamentoTest extends TestCase
         $linhaB = $this->linhaQueComeca($res, 'João Silva (joao.outro@teste.local)');
         $this->assertNotNull($linhaA, 'cada cadastro com a sua linha');
         $this->assertNotNull($linhaB);
-        $this->assertEqualsWithDelta(15, $linhaA[9], 0.001);
-        $this->assertSame(2, (int) $linhaA[10]);
-        $this->assertEqualsWithDelta(20, $linhaB[9], 0.001);
+        $this->assertEqualsWithDelta(15, $linhaA[10], 0.001);
+        $this->assertSame(2, (int) $linhaA[11]);
+        $this->assertEqualsWithDelta(20, $linhaB[10], 0.001);
         $this->assertNull($this->linhaQueComeca($res, 'João Silva'), 'nenhuma linha com os dois somados');
         /* nas abas de mês também dá para saber de quem é cada nota */
         $this->assertContains('João Silva (joao.outro@teste.local)', array_column($this->linhas($ss, 'Mar'), 1));

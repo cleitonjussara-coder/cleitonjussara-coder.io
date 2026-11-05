@@ -26,7 +26,7 @@ window.GDrive = (() => {
   const GRUPO_RDA = 'RDA ALIMENTAÇÃO';
   /* subtipo gravado na nota → nome da categoria na pasta modelo
      (a planilha usa "Hospedagem", a pasta usa "HOSPEDAGENS") */
-  const CATEGORIA_RDM = { abastecimento: 'ABASTECIMENTO', hospedagem: 'HOSPEDAGENS', 'pedágio': 'PEDÁGIO', 'manutenção de veículos': 'MANUTENÇÃO DE VEÍCULOS', exames: 'EXAMES' };
+  const CATEGORIA_RDM = { abastecimento: 'ABASTECIMENTO', hospedagem: 'HOSPEDAGENS', 'pedágio': 'PEDÁGIO', 'manutenção de veículos': 'MANUTENÇÃO DE VEÍCULOS', exames: 'EXAMES', contabilidade: 'CONTABILIDADE' };
 
   let tokenClient  = null;
   let accessToken  = null;
