@@ -26,6 +26,8 @@ use RuntimeException;
  * esse tipo. A situação do envio também é separada (chaves banco_*): o Perfil
  * avisa "confira o Crontab" olhando o completo, e o envio do dia não pode
  * esconder um domingo que falhou.
+ *
+ * Fotos novas do dia (05/11/2026): fotos-*.zip segue a mesma regra, com chaves fotos_*.
  */
 class DriveBackup
 {
@@ -60,6 +62,7 @@ class DriveBackup
     {
         $d = $this->dados();
         $erroBanco = $d['banco_ultimo_erro'] ?? null;
+        $erroFotos = $d['fotos_ultimo_erro'] ?? null;
 
         return [
             'conectado' => ! empty($d['refresh_token']),
@@ -67,11 +70,17 @@ class DriveBackup
             'conectado_em' => $d['conectado_em'] ?? null,
             'ultimo_envio' => $d['ultimo_envio'] ?? null,
             'ultimo_arquivo' => $d['ultimo_arquivo'] ?? null,
-            /* o Perfil só tem este campo de erro: os dois aparecem juntos (03/11/2026), senão
+            /* o Perfil só tem este campo de erro: todos aparecem juntos (03/11/2026), senão
                um erro do domingo esconderia a semana inteira de falhas do diário */
-            'ultimo_erro' => implode(' · ', array_filter([$d['ultimo_erro'] ?? null, $erroBanco ? 'Backup diário do banco: '.$erroBanco : null])) ?: null,
+            'ultimo_erro' => implode(' · ', array_filter([
+                $d['ultimo_erro'] ?? null,
+                $erroBanco ? 'Backup diário do banco: '.$erroBanco : null,
+                $erroFotos ? 'Backup diário das fotos: '.$erroFotos : null,
+            ])) ?: null,
             'ultimo_envio_banco' => $d['banco_ultimo_envio'] ?? null,
             'ultimo_arquivo_banco' => $d['banco_ultimo_arquivo'] ?? null,
+            'ultimo_envio_fotos' => $d['fotos_ultimo_envio'] ?? null,
+            'ultimo_arquivo_fotos' => $d['fotos_ultimo_arquivo'] ?? null,
             'pasta' => self::PASTA,
         ];
     }
@@ -165,7 +174,11 @@ class DriveBackup
     /** Onde drive-backup.json guarda a situação de cada tipo. */
     private function chaves(string $prefixo): array
     {
-        $p = $prefixo === BackupCompleto::PREFIXO_BANCO ? 'banco_' : '';
+        $p = match ($prefixo) {
+            BackupCompleto::PREFIXO_BANCO => 'banco_',
+            BackupCompleto::PREFIXO_FOTOS => 'fotos_',
+            default => '',
+        };
 
         return ['envio' => $p.'ultimo_envio', 'arquivo' => $p.'ultimo_arquivo', 'erro' => $p.'ultimo_erro'];
     }

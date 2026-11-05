@@ -26,6 +26,12 @@ use Illuminate\Support\Facades\Log;
  * própria: 14 no servidor e 30 no Drive, sem mensal, salvo opção explícita.
  * Cada tipo só apaga cópias do próprio tipo.
  *
+ * Com --fotos-novas (05/11/2026, todo dia): gera fotos-AAAA-MM-DD-HHMM.zip com os
+ * anexos novos ou alterados desde o último completo, porque nota nova ficava até
+ * 7 dias sem cópia do anexo. Restaurar = último completo + último fotos. Rotação
+ * própria: 7 no servidor e 14 no Drive, sem mensal. Sem foto nova não cria zip nem
+ * gira nada; sem completo na pasta é erro.
+ *
  * Quem para de rodar não falha, então não avisa: a rodada do completo confere se
  * o diário está em dia e manda um e-mail se não estiver (só avisa, não apaga nada).
  */
@@ -34,26 +40,62 @@ class BackupGerar extends Command
     /** Sem banco-*.zip mais novo que isto, o diário parou (2 madrugadas seguidas sem cópia). */
     private const DIARIO_ATRASO_DIAS = 2;
 
+    /**
+     * O que muda de um modo para o outro (05/11/2026): prefixo, padrões da rotação e
+     * os textos do aviso. A chave de cada aviso é própria porque o freio de 1 hora do
+     * AlertaErro não pode engolir o aviso de outro modo.
+     */
+    private const MODOS = [
+        'completo' => [
+            'prefixo' => BackupCompleto::PREFIXO_COMPLETO, 'manter' => 2, 'drive_manter' => 12, 'drive_meses' => 12,
+            'titulo' => 'Backup semanal completo', 'opcao' => '', 'zip' => 'O zip completo da semana', 'chave' => 'backup',
+        ],
+        'banco' => [
+            'prefixo' => BackupCompleto::PREFIXO_BANCO, 'manter' => 14, 'drive_manter' => 30, 'drive_meses' => 0,
+            'titulo' => 'Backup diário do banco', 'opcao' => ' --so-banco', 'zip' => 'O zip do dia (só o banco)', 'chave' => 'backup-banco',
+        ],
+        'fotos' => [
+            'prefixo' => BackupCompleto::PREFIXO_FOTOS, 'manter' => 7, 'drive_manter' => 14, 'drive_meses' => 0,
+            'titulo' => 'Backup diário das fotos', 'opcao' => ' --fotos-novas', 'zip' => 'O zip do dia (só as fotos novas)', 'chave' => 'backup-fotos',
+        ],
+    ];
+
     protected $signature = 'backup:gerar
         {--so-banco : só o banco, sem fotos (backup diário, banco-*.zip)}
-        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 14)}
+        {--fotos-novas : só os anexos novos desde o último completo (backup diário, fotos-*.zip)}
+        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 14; com --fotos-novas, 7)}
         {--meses= : meses com uma cópia mensal no servidor (padrão 0 = nenhuma)}
-        {--drive-manter= : cópias guardadas no Google Drive (padrão 12; com --so-banco, 30)}
-        {--drive-meses= : meses com uma cópia mensal no Drive (padrão 12; com --so-banco, 0)}
+        {--drive-manter= : cópias guardadas no Google Drive (padrão 12; com --so-banco, 30; com --fotos-novas, 14)}
+        {--drive-meses= : meses com uma cópia mensal no Drive (padrão 12; com --so-banco ou --fotos-novas, 0)}
         {--sem-drive : não enviar ao Drive}';
 
-    protected $description = 'Backup em storage/app/backups (completo, ou só o banco com --so-banco), com rotação e cópia no Google Drive';
+    protected $description = 'Backup em storage/app/backups (completo, só o banco com --so-banco, ou só as fotos novas com --fotos-novas), com rotação e cópia no Google Drive';
 
     public function handle(BackupCompleto $b, DriveBackup $drive): int
     {
         $t = microtime(true);
         $soBanco = (bool) $this->option('so-banco');
+        $soFotos = (bool) $this->option('fotos-novas');
+        if ($soBanco && $soFotos) {
+            $this->error('--fotos-novas e --so-banco não andam juntos: são duas linhas no Agendador, uma para cada.');
+
+            return self::FAILURE;
+        }
+        $modo = self::MODOS[$soBanco ? 'banco' : ($soFotos ? 'fotos' : 'completo')];
         /* os padrões dependem do modo, por isso não ficam na assinatura */
-        $manter = max(1, $this->numero('manter', $soBanco ? 14 : 2));   // nunca apaga a cópia que acabou de sair
+        $manter = max(1, $this->numero('manter', $modo['manter']));   // nunca apaga a cópia que acabou de sair
         $meses = $this->numero('meses', 0);
         try {
-            $r = $soBanco ? $b->gerarBanco() : $b->gerar();
-            $apagados = $b->podar($manter, $meses, $soBanco ? BackupCompleto::PREFIXO_BANCO : BackupCompleto::PREFIXO_COMPLETO);
+            $r = $soBanco ? $b->gerarBanco() : ($soFotos ? $b->gerarFotos() : $b->gerar());
+            if ($r['arquivo'] === null) {
+                /* sem zip novo a rotação não anda: os diários antigos ainda são a única cópia do que eles trazem */
+                $msg = 'backup ok: nenhuma foto nova desde '.$r['base'].', nenhum zip criado';
+                $this->info($msg);
+                Log::info($msg);
+
+                return self::SUCCESS;
+            }
+            $apagados = $b->podar($manter, $meses, $modo['prefixo']);
             $msg = sprintf('backup ok: %s (%.1f MB, %s, %.1fs; %d antigo(s) apagado(s))',
                 basename($r['arquivo']), $r['bytes'] / 1048576, $soBanco ? 'só banco' : $r['fotos'].' fotos', microtime(true) - $t, $apagados);
             $this->info($msg);
@@ -62,11 +104,10 @@ class BackupGerar extends Command
             $this->error('backup falhou: '.$e->getMessage());
             Log::error('backup falhou: '.$e->getMessage());
             try {
-                /* chaves separadas: o freio de 1 hora do AlertaErro não pode engolir o aviso do outro modo */
                 app(AlertaErro::class)->avisar(
-                    $soBanco ? 'Backup diário do banco FALHOU' : 'Backup semanal completo FALHOU',
-                    'O crontab backup:gerar'.($soBanco ? ' --so-banco' : '').' falhou: '.$e->getMessage()."\n\nOs backups anteriores continuam em storage/app/backups.",
-                    $soBanco ? 'backup-banco-falhou' : 'backup-falhou',
+                    $modo['titulo'].' FALHOU',
+                    'O crontab backup:gerar'.$modo['opcao'].' falhou: '.$e->getMessage()."\n\nOs backups anteriores continuam em storage/app/backups.",
+                    $modo['chave'].'-falhou',
                 );
             } catch (\Throwable) {
             }
@@ -74,7 +115,7 @@ class BackupGerar extends Command
             return self::FAILURE;
         }
 
-        if (! $soBanco) {
+        if (! $soBanco && ! $soFotos) {
             $this->conferirDiario($b);
         }
 
@@ -88,8 +129,8 @@ class BackupGerar extends Command
         try {
             $d = $drive->enviar(
                 $r['arquivo'],
-                max(1, $this->numero('drive-manter', $soBanco ? 30 : 12)),
-                $this->numero('drive-meses', $soBanco ? 0 : 12),
+                max(1, $this->numero('drive-manter', $modo['drive_manter'])),
+                $this->numero('drive-meses', $modo['drive_meses']),
             );
             $msg = sprintf('drive ok: %s enviado em %.0fs (%d antigo(s) apagado(s) no Drive)', $d['nome'], microtime(true) - $t2, $d['apagados']);
             $this->info($msg);
@@ -99,10 +140,10 @@ class BackupGerar extends Command
             Log::error('drive falhou: '.$e->getMessage());
             try {
                 app(AlertaErro::class)->avisar(
-                    $soBanco ? 'Backup diário do banco não subiu para o Google Drive' : 'Backup semanal completo não subiu para o Google Drive',
-                    ($soBanco ? 'O zip do dia (só o banco)' : 'O zip completo da semana').' foi gerado e está na Locaweb, mas a cópia no Drive falhou: '
+                    $modo['titulo'].' não subiu para o Google Drive',
+                    $modo['zip'].' foi gerado e está na Locaweb, mas a cópia no Drive falhou: '
                         .$e->getMessage()."\n\nSe a autorização expirou: Perfil → Backup → Conectar Google Drive de novo.",
-                    $soBanco ? 'backup-banco-drive-falhou' : 'backup-drive-falhou',
+                    $modo['chave'].'-drive-falhou',
                 );
             } catch (\Throwable) {
             }
