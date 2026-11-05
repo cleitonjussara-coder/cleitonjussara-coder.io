@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=534">
+  <link rel="manifest" href="manifest.json?v=536">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1354,6 +1354,25 @@ button.cdet-bal:hover,button.cdet-bal.on{border-color:#c9ea62}
 .cdet-rep-ico{font-size:27px;line-height:1}
 .cdet-rep-sub{font-size:15px;color:var(--text2);margin-top:2px}
 .cdet-rep-val{font-size:19px;font-weight:900}
+/* Editor da aba Repasses e recargas (05/11/2026) */
+.repc-ed{display:flex;flex-direction:column;gap:10px;margin-top:8px;padding-top:10px;border-top:1px solid rgba(185,226,74,.3)}
+.repc-grupos{display:flex;flex-wrap:wrap;gap:6px}
+.repc-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.repc-campo{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:14px;font-weight:700;color:#eef9f0}
+.repc-campo .inp{margin:0;width:100%;min-width:0;box-sizing:border-box}
+.repc-efeito{padding:10px 12px;border-radius:var(--radius-sm);background:rgba(0,0,0,.28);color:#eef9f0}
+.repc-tit{font-size:14px;font-weight:800;color:#d9f5a0;margin-bottom:4px}
+.repc-saldo{display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:2px 0}
+.repc-saldo b{text-align:right;overflow-wrap:anywhere}
+.repc-saldo .pos{color:#b9e24a}
+.repc-saldo .neg{color:#ffb4a8}
+.repc-nota{font-size:13.5px;color:#cfe3d4}
+.repc-notas{max-height:200px;overflow-y:auto;margin-top:4px}
+.repc-linha{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;font-size:14px;padding:4px 0;border-top:1px solid rgba(255,255,255,.1)}
+.repc-emit{overflow-wrap:anywhere}
+.repc-erro{font-size:14px;font-weight:700;color:#ffb4a8}
+.repc-erro:empty{display:none}
+.repc-acoes{display:flex;justify-content:flex-end;gap:8px}
 .nota-card{position:relative}
 .nota-chk{display:none;position:absolute;top:10px;right:12px;z-index:2;width:26px;height:26px;accent-color:#8fcf2e}
 .nota-sel-on .nota-chk{display:block}
@@ -2059,7 +2078,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=534" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=536" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2758,39 +2777,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=534"></script>
-<script defer src="js/db.js?v=534"></script>
-<script defer src="js/nfce.js?v=534"></script>
-<script defer src="js/sefaz.js?v=534"></script>
-<script defer src="js/brasilapi.js?v=534"></script>
-<script defer src="js/ocr.js?v=534"></script>
-<script defer src="js/scanner.js?v=534"></script>
-<script defer src="js/foto-branca.js?v=534"></script>
-<script defer src="js/recorte.js?v=534"></script>
-<script defer src="js/excel.js?v=534"></script>
-<script defer src="js/gestor.js?v=534"></script>
-<script defer src="js/frota.js?v=534"></script>
-<script defer src="js/frota-painel.js?v=534"></script>
-<script defer src="js/frota-planilha.js?v=534"></script>
-<script defer src="js/ponto.js?v=534"></script>
-<script defer src="js/rastreio.js?v=534"></script>
-<script defer src="js/repasses-equipe.js?v=534"></script>
-<script defer src="js/gdrive.js?v=534"></script>
+<script defer src="js/api.js?v=536"></script>
+<script defer src="js/db.js?v=536"></script>
+<script defer src="js/nfce.js?v=536"></script>
+<script defer src="js/sefaz.js?v=536"></script>
+<script defer src="js/brasilapi.js?v=536"></script>
+<script defer src="js/ocr.js?v=536"></script>
+<script defer src="js/scanner.js?v=536"></script>
+<script defer src="js/foto-branca.js?v=536"></script>
+<script defer src="js/recorte.js?v=536"></script>
+<script defer src="js/excel.js?v=536"></script>
+<script defer src="js/gestor.js?v=536"></script>
+<script defer src="js/frota.js?v=536"></script>
+<script defer src="js/frota-painel.js?v=536"></script>
+<script defer src="js/frota-planilha.js?v=536"></script>
+<script defer src="js/ponto.js?v=536"></script>
+<script defer src="js/rastreio.js?v=536"></script>
+<script defer src="js/repasses-equipe.js?v=536"></script>
+<script defer src="js/gdrive.js?v=536"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=534"></script>
+<script defer src="js/svelte-ajuda.js?v=536"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=534"></script>
+<script defer src="js/svelte-historico.js?v=536"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=534"></script>
+<script defer src="js/svelte-arquivos.js?v=536"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=534"></script>
-<script defer src="js/app.js?v=534"></script>
-<script defer src="js/instalar.js?v=534"></script>
+<script defer src="js/svelte-perfil.js?v=536"></script>
+<script defer src="js/app.js?v=536"></script>
+<script defer src="js/instalar.js?v=536"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=534').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=536').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

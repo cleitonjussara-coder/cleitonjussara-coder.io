@@ -641,7 +641,6 @@ window.Gestor = (() => {
           <button class="btn btn-sm btn-primary" onclick="Gestor.abrirPdfEquipe()" title="Relatório do mês em PDF: escolha os colaboradores">📕 PDF</button>
           <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um)">📗 Planilhas ${ano}</button>
 
-          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="switchView('repasses')" title="Ver e corrigir repasses e recargas da equipe">💸 Repasses e recargas</button>` : ''}
           ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
           ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contador, colaborador…)">✉️ Convidar</button>` : ''}
         </div>

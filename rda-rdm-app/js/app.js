@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 534;
+const APP_BUILD = 536;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1076,6 +1076,7 @@ function _itensMenu() {
     itens.push({ view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
   }
   if (_ehGestorOuAdmin()) {
+    itens.push({ view:'repasses', ico:'💸', lbl:'Repasses e recargas', sub:'corrigir, vendo saldo e lançamentos' });
     itens.push({ view:'dashequipe', ico:'📈', lbl:'Dashboard Equipe', sub:'gastos de todos, com filtros' });
     itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
     itens.push({ view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
@@ -2687,6 +2688,49 @@ function _repasseDaEquipe(id) {
   return null;
 }
 
+/* Grupos em que este repasse pode ficar (03/11/2026): cartão só para quem usa cartão; recarga antiga de quem mudou de regime
+   continua podendo ser corrigida. Usado pela janela da ficha e pela aba Repasses e recargas. */
+function _gruposDoRepasse(r, dono) {
+  const comCartao = r.destino === 'recarga' || (!!dono && _usaCartao(dono));   // sem o dono, _usaCartao() olharia o regime de quem está usando
+  return [
+    { valor: 'RDM', rotulo: 'RDM' }, { valor: 'RDA', rotulo: 'RDA' },
+    ...(comCartao ? [{ valor: 'CARTAO_RDM', rotulo: '💳 Cartão RDM' }, { valor: 'CARTAO_RDA', rotulo: '💳 Cartão RDA' }] : []),
+  ];
+}
+const _grupoDoRepasse = r => (r.destino === 'recarga' ? 'CARTAO_' : '') + (r.tipo === 'RDA' ? 'RDA' : 'RDM');
+
+/* tipo e destino que o grupo escolhido dá ao repasse. Saiu do cartão: no C.V. vira carteira; quem é RDM/RDA não tem destino. */
+function _repasseNoGrupo(r, grupo, dono) {
+  const usaCartaoDono = !!dono && _usaCartao(dono);
+  const destino = grupo.startsWith('CARTAO_') ? 'recarga' : r.destino === 'recarga' ? (usaCartaoDono ? 'carteira' : null) : r.destino;
+  return { tipo: grupo.endsWith('RDA') ? 'RDA' : 'RDM', destino };
+}
+
+/* Grava a correção. c = { grupo, valor, data (ISO), mes, ano, descricao, dono }. Devolve true se salvou. */
+async function salvarCorrecaoRepasse(r, c) {
+  setLoading(true);
+  try {
+    const salvo = await sb.repasses.upsert({
+      ...r,
+      ..._repasseNoGrupo(r, c.grupo, c.dono),
+      valor: c.valor,
+      data: c.data,
+      mes: c.mes,
+      ano: c.ano,
+      descricao: c.descricao,
+    });
+    try { if (salvo?.id) await DB.mesclarRepassesRemotos(salvo); } catch (_) {}
+    _histEq.em = 0;   // o aviso do Início refaz a conta com o valor novo
+    /* a data manda no mês: dizer para onde foi, senão parece que sumiu da lista */
+    toast(c.mes !== r.mes || c.ano !== r.ano ? `Corrigido ✅ — agora em ${MESES[c.mes - 1]}/${c.ano}` : 'Corrigido ✅');
+    await _recarregarEquipe();
+    return true;
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+    return false;
+  } finally { setLoading(false); }
+}
+
 async function editarRepasseDeOutro(id) {
   if (!_ehGestorOuAdmin()) { toast('Só gestor ou admin corrige o repasse de outra pessoa', 'err'); return; }
   if (!sb || !navigator.onLine) { toast('Precisa de internet para corrigir', 'err'); return; }
@@ -2695,20 +2739,14 @@ async function editarRepasseDeOutro(id) {
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
   const ehRecarga = r.destino === 'recarga';
   const dono = r.user_id === user?.id ? user : equipePorId[r.user_id];
-  /* Grupo (03/11/2026): cartão só para quem usa cartão; recarga antiga de quem mudou de regime continua podendo ser corrigida */
-  const usaCartaoDono = !!dono && _usaCartao(dono);   // sem o dono, _usaCartao() olharia o regime de quem está usando
-  const comCartao = ehRecarga || usaCartaoDono;
-  const grupos = [
-    { valor: 'RDM', rotulo: 'RDM' }, { valor: 'RDA', rotulo: 'RDA' },
-    ...(comCartao ? [{ valor: 'CARTAO_RDM', rotulo: '💳 Cartão RDM' }, { valor: 'CARTAO_RDA', rotulo: '💳 Cartão RDA' }] : []),
-  ];
+  const grupos = _gruposDoRepasse(r, dono);
 
   const campos = await pedirCampos({
     titulo: ehRecarga ? 'Corrigir recarga' : 'Corrigir repasse',
     dica: equipePorId[r.user_id]?.nome ? `${ehRecarga ? 'Recarga' : 'Repasse'} de ${quem}.` : 'Corrija os dados deste lançamento.',
     confirmar: 'Salvar',
     campos: [
-      { id: 'grupo', rotulo: 'Grupo', opcoes: grupos, valor: (ehRecarga ? 'CARTAO_' : '') + (r.tipo === 'RDA' ? 'RDA' : 'RDM') },
+      { id: 'grupo', rotulo: 'Grupo', opcoes: grupos, valor: _grupoDoRepasse(r) },
       { id: 'valor', rotulo: 'Valor (R$)', valor: String(Number(r.valor) || 0), inputmode: 'decimal',
         validar: t => (parseFloat(t.replace(',', '.')) > 0 ? '' : 'Valor inválido.') },
       { id: 'data', rotulo: 'Data (dd/mm/aaaa)', valor: fmtDataBR(r.data),
@@ -2719,30 +2757,7 @@ async function editarRepasseDeOutro(id) {
   if (!campos) return;
   const v = parseFloat(campos.valor.replace(',', '.'));
   const dt = _parseDataBR(campos.data);
-  const paraCartao = campos.grupo.startsWith('CARTAO_');
-  /* saiu do cartão: no C.V. vira carteira; quem é RDM/RDA não tem destino */
-  const destino = paraCartao ? 'recarga' : ehRecarga ? (usaCartaoDono ? 'carteira' : null) : r.destino;
-
-  setLoading(true);
-  try {
-    const salvo = await sb.repasses.upsert({
-      ...r,
-      tipo: campos.grupo.endsWith('RDA') ? 'RDA' : 'RDM',
-      destino,
-      valor: v,
-      data: dt.iso,
-      mes: dt.mes,
-      ano: dt.ano,
-      descricao: campos.desc.trim() || null,
-    });
-    try { if (salvo?.id) await DB.mesclarRepassesRemotos(salvo); } catch (_) {}
-    _histEq.em = 0;   // o aviso do Início refaz a conta com o valor novo
-    /* a data manda no mês: dizer para onde foi, senão parece que sumiu da lista */
-    toast(dt.mes !== r.mes || dt.ano !== r.ano ? `Corrigido ✅ — agora em ${MESES[dt.mes - 1]}/${dt.ano}` : 'Corrigido ✅');
-    await _recarregarEquipe();
-  } catch (e) {
-    toast('Não deu: ' + (e.message || 'erro'), 'err');
-  } finally { setLoading(false); }
+  await salvarCorrecaoRepasse(r, { grupo: campos.grupo, valor: v, data: dt.iso, mes: dt.mes, ano: dt.ano, descricao: campos.desc.trim() || null, dono });
 }
 
 async function excluirRepasseDeOutro(id) {
