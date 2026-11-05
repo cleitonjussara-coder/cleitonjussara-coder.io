@@ -8,6 +8,7 @@
     nivel, dados, ano,
     onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
     onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
+    onFiltro = () => {}, onCarregarAno = null, brl = v => v,
   } = $props();
   let mesEquipe = $state('');
   let busca = $state('');
@@ -16,7 +17,90 @@
   const termo = $derived(norm(busca));
   const visiveis = $derived(dados?.colaboradores ? dados.colaboradores.filter(c => !termo || c.busca.includes(termo)) : []);
   const mostraFat = $derived(!termo || 'faturamento'.includes(termo));
+
+  /* Lista de notas com busca, categoria e período (05/11/2026). O filtro roda aqui, sem ir ao servidor. O componente
+     remonta a cada ação, então o filtro nasce do que o main.js guardou e devolve cada mudança para ele. */
+  const padrao = dados?.filtroPadrao || { busca: '', cat: '', de: '', ate: '' };
+  let filtro = $state({ ...padrao, ...(dados?.filtro || {}) });
+  let gruposAno = $state(null);
+  let erroAno = $state(false);
+  const qtdTxt = q => `${q} nota${q === 1 ? '' : 's'}`;
+  const soma = itens => itens.reduce((s, n) => s + n.valor, 0);
+  const fTermo = $derived(norm(filtro.busca));
+  const filtrando = $derived(!!fTermo || !!filtro.cat || filtro.de !== padrao.de || filtro.ate !== padrao.ate);
+  const fonte = $derived(nivel === 'mes' ? dados?.grupos || [] : gruposAno || []);
+  const passa = n => (!fTermo || n.busca.includes(fTermo)) && (!filtro.de || n.dataIso >= filtro.de) && (!filtro.ate || n.dataIso <= filtro.ate);
+  const gruposVis = $derived(fonte
+    .filter(g => !filtro.cat || g.nome === filtro.cat)
+    .map(g => {
+      const itens = g.itens.filter(passa);
+      return { nome: g.nome, itens, resumoTxt: `${qtdTxt(itens.length)} · ${brl(soma(itens))}` };
+    })
+    .filter(g => g.itens.length));
+  const achadas = $derived(gruposVis.flatMap(g => g.itens));
+  const totalFonte = $derived(fonte.reduce((s, g) => s + g.itens.length, 0));
+  const limparFiltro = () => { filtro = { ...padrao }; };
+
+  $effect(() => { if (dados?.filtro) onFiltro({ busca: filtro.busca, cat: filtro.cat, de: filtro.de, ate: filtro.ate }); });
+  $effect(() => {
+    if (nivel !== 'meses' || !dados?.filtro || !dados.temNotas || !onCarregarAno) return;
+    onCarregarAno().then(r => { gruposAno = r.grupos; }).catch(() => { erroAno = true; });
+  });
 </script>
+
+{#snippet filtros(rotulo)}
+  <div class="arq-busca">
+    <input type="search" bind:value={filtro.busca} placeholder="🔍 Buscar por nome do comércio" autocomplete="off" aria-label={rotulo}>
+    {#if filtro.busca}<button type="button" class="arq-busca-x" onclick={() => (filtro.busca = '')} aria-label="Limpar busca">✕</button>{/if}
+  </div>
+  <div class="arq-filtros">
+    <label class="arq-f arq-f-cat"><small>Categoria</small>
+      <select bind:value={filtro.cat}>
+        <option value="">Todas</option>
+        {#each fonte as g}<option value={g.nome}>{g.nome}</option>{/each}
+      </select>
+    </label>
+    <label class="arq-f"><small>De</small><input type="date" bind:value={filtro.de} min={dados.dataMin} max={dados.dataMax}></label>
+    <label class="arq-f"><small>Até</small><input type="date" bind:value={filtro.ate} min={dados.dataMin} max={dados.dataMax}></label>
+  </div>
+{/snippet}
+
+{#snippet achados()}
+  <div class="arq-achados">
+    <span>{achadas.length} de {qtdTxt(totalFonte)} · {brl(soma(achadas))}</span>
+    <button type="button" class="arq-limpar" onclick={limparFiltro}>Limpar filtros</button>
+  </div>
+{/snippet}
+
+{#snippet celulas(n)}
+  <span class="arq-lin-data">{n.dataTxt}</span>
+  <span class="arq-lin-nome">{n.nome}</span>
+  <span class="arq-lin-valor">{brl(n.valor)}</span>
+  <span class="arq-lin-tipo">{n.tipoTxt}</span>
+{/snippet}
+
+{#snippet lista(grupos)}
+  {#each grupos as g}
+    <div class="arq-grupo">
+      <div class="arq-grupo-hd"><span>{g.nome}</span><span>{g.resumoTxt}</span></div>
+      {#each g.itens as n}
+        <div class="arq-lin">
+          {#if n.temAnexo}
+            <button class="arq-lin-abrir" onclick={() => onVer(n.id)} title={n.titulo}>{@render celulas(n)}</button>
+          {:else}
+            <div class="arq-lin-abrir arq-lin-sem" title="Sem anexo no servidor">{@render celulas(n)}</div>
+          {/if}
+          {#if dados.acoes}
+            <div class="arq-acoes">
+              <button class="arq-acao" onclick={() => onMoverNota(n.id)} title="Mudar a categoria desta nota" aria-label="Mudar a categoria desta nota">🔀<span class="arq-acao-txt"> Categoria</span></button>
+              {#if dados.podeExcluir}<button class="arq-acao arq-acao-del" onclick={() => onExcluirNota(n.id)} title="Mandar para a lixeira" aria-label="Mandar para a lixeira">🗑</button>{/if}
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/each}
+{/snippet}
 
 {#snippet cabecalho(titulo, sub)}
   <div class="arq-hd">
@@ -127,51 +211,32 @@
         </button>
       {/each}
     </div>
+    {#if dados.filtro && dados.temNotas}
+      <div class="arq-ano">
+        <div class="arq-ano-tit">🔎 Buscar no ano todo</div>
+        {@render filtros(`Buscar nas notas de ${ano}`)}
+      </div>
+      {#if erroAno}
+        <div class="db-card" style="text-align:center;color:var(--danger)">Não consegui carregar as notas do ano.</div>
+      {:else if filtrando && gruposAno === null}
+        <div class="db-card" style="text-align:center;color:var(--text2)">Carregando as notas do ano…</div>
+      {:else if filtrando}
+        {@render achados()}
+        {@render lista(gruposVis)}
+      {/if}
+    {/if}
   </div>
 
 {:else if nivel === 'mes'}
   <div class="db-container">
     {@render cabecalho(dados.cabecalhoTitulo, dados.cabecalhoSub)}
     {#if dados.temNotas}
+      {@render filtros('Buscar nas notas do mês')}
       <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
     {:else}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhuma nota neste mês.</div>
     {/if}
-    {#each dados.grupos as g}
-      <div class="arq-grupo">
-        <div class="arq-grupo-hd"><span>{g.nome}</span><span>{g.resumoTxt}</span></div>
-        <div class="arq-grade">
-          {#each g.itens as n}
-            <div class="arq-cel">
-            {#if n.temMini}
-              <button class="arq-item" onclick={() => onVer(n.id)} title={n.titulo}>
-                <img src={n.miniUrl} alt="" decoding="async">
-                <span class="arq-leg">{@html n.legendaHtml}</span>
-                {#if n.fornHtml}<span class="arq-forn">{@html n.fornHtml}</span>{/if}
-              </button>
-            {:else if n.temAnexo}
-              <button class="arq-item" onclick={() => onVer(n.id)} title={n.titulo}>
-                <span class="arq-ico">{n.icoTxt}</span>
-                <span class="arq-leg">{@html n.legendaHtml}</span>
-                {#if n.fornHtml}<span class="arq-forn">{@html n.fornHtml}</span>{/if}
-              </button>
-            {:else}
-              <div class="arq-item arq-sem" title="Sem anexo no servidor">
-                <span class="arq-ico">⚠️<br><small>sem anexo</small></span>
-                <span class="arq-leg">{@html n.legendaHtml}</span>
-                {#if n.fornHtml}<span class="arq-forn">{@html n.fornHtml}</span>{/if}
-              </div>
-            {/if}
-            {#if dados.acoes}
-              <div class="arq-acoes">
-                <button class="arq-acao" onclick={() => onMoverNota(n.id)} title="Mudar a categoria desta nota">🔀 Categoria</button>
-                {#if dados.podeExcluir}<button class="arq-acao arq-acao-del" onclick={() => onExcluirNota(n.id)} title="Mandar para a lixeira">🗑</button>{/if}
-              </div>
-            {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/each}
+    {#if filtrando}{@render achados()}{/if}
+    {@render lista(gruposVis)}
   </div>
 {/if}

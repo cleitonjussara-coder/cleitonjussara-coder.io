@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 537;
+const APP_BUILD = 538;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3282,7 +3282,7 @@ const CATEGORIAS_CV = [
   { chave: 'hospedagem',    ico: '🏨', nome: 'Hospedagem',    tipo: 'RDM', subtipo: 'Hospedagem',
     sub: 'Pousada, hotel e diárias.' },
   { chave: 'outros',        ico: '📦', nome: 'Outros',        tipo: 'RDM', subtipo: 'Outros',
-    sub: 'Borracharia, oficina, EPIs e demais gastos.' },
+    sub: 'EPIs e demais gastos.' },
 ];
 
 /* Locação de Veículos: só em nota de Faturamento. Fica fora de CATEGORIAS_CV porque aquela lista também monta os cartões e
@@ -3295,7 +3295,10 @@ const _ehLocacao = subtipo => String(subtipo || '').toLowerCase().startsWith('lo
    da empresa não têm coluna de pedágio, então nos painéis ele soma em Outros. Só o Faturamento o mostra separado. */
 const CATEGORIA_PEDAGIO = { chave: 'pedagio', ico: '🛣️', nome: 'Pedágio', tipo: 'RDM', subtipo: 'Pedágio',
   sub: 'Praças e recibos de pedágio.' };
-const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIAS_CV.at(-1)];
+/* Manutenção de Veículos (05/11/2026): mesmo caminho do Pedágio. Tira a oficina e a revisão de Outros, onde se perdiam na gestão. */
+const CATEGORIA_MANUTENCAO = { chave: 'manutencao', ico: '🔧', nome: 'Manutenção de Veículos', tipo: 'RDM', subtipo: 'Manutenção de Veículos',
+  sub: 'Oficina, borracharia, peças e revisão.' };
+const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIA_MANUTENCAO, CATEGORIAS_CV.at(-1)];
 
 function _categoriaCV(chave) {
   return [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO].find(c => c.chave === chave) || null;
@@ -9185,10 +9188,11 @@ function _ajustarCamposDeCategoria() {
   linha.style.display = ehCv ? 'none' : '';
   if (!ehCv) return;
   const sel = $('nf-cat-cv');
-  /* locação e pedágio têm de voltar como são: pela chave seriam "outros" e o aplicar abaixo gravaria Outros sem avisar */
+  /* locação, pedágio e manutenção têm de voltar como são: pela chave seriam "outros" e o aplicar abaixo gravaria Outros sem avisar */
   const rdm = $('nf-tipo').value === 'RDM', sub = $('nf-subtipo').value;
   sel.value = rdm && _ehLocacao(sub) ? CATEGORIA_LOCACAO.chave
     : rdm && sub === CATEGORIA_PEDAGIO.subtipo ? CATEGORIA_PEDAGIO.chave
+    : rdm && sub === CATEGORIA_MANUTENCAO.subtipo ? CATEGORIA_MANUTENCAO.chave
     : _chaveCategoriaDaNota({ tipo: $('nf-tipo').value, subtipo: sub });
   aplicarCategoriaCV();
 }
@@ -10175,6 +10179,7 @@ const _GRUPOS = [
   { tipo: 'RDM', subtipo: 'Abastecimento', rotulo: 'RDM · Abastecimento', nota: 'combustível' },
   { tipo: 'RDM', subtipo: 'Hospedagem', rotulo: 'RDM · Hospedagem', nota: 'pousada, hotel' },
   { tipo: 'RDM', subtipo: 'Pedágio', rotulo: 'RDM · Pedágio', nota: 'praça de pedágio' },
+  { tipo: 'RDM', subtipo: 'Manutenção de Veículos', rotulo: 'RDM · Manutenção de Veículos', nota: 'oficina, peças, revisão' },
   { tipo: 'RDM', subtipo: 'Outros', rotulo: 'RDM · Outros', nota: 'demais gastos' },
 ];
 

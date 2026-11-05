@@ -24,6 +24,11 @@ const FAT = { faturamento: true, nome: 'Faturamento' };   // "colaborador" de me
 let mes = null;
 let resumo = null;
 let lista = null;
+/* Busca do ano inteiro, abaixo dos meses do Faturamento (05/11/2026): notas do ano e os filtros de cada tela. Os filtros
+   ficam aqui porque toda ação remonta o componente; sem isso, mudar a categoria de uma nota limparia a busca. */
+let listaAno = null;
+let filtroMes = null;
+let filtroAno = null;
 /* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
    ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
    cima da pasta já aberta (22/10/2026). */
@@ -55,6 +60,7 @@ function mostrar(nivel, dados) {
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
       onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
+      onFiltro: guardarFiltro, onCarregarAno: carregarAno, brl: dep.brl,
     },
   });
   dep.carregarAvatares?.();
@@ -169,8 +175,48 @@ async function renderMeses(s) {
     comAnexo: c.com_anexo,
     ehFaturamento: !!c.faturamento,
     meses,
+    ...(c.faturamento ? { filtro: filtroAno || FILTRO_VAZIO, filtroPadrao: FILTRO_VAZIO, acoes: true, podeExcluir: !!dep.podeExcluir?.(), dataMin: `${ano}-01-01`, dataMax: `${ano}-12-31` } : {}),
   });
 }
+
+const FILTRO_VAZIO = { busca: '', cat: '', de: '', ate: '' };
+const semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/* Blocos da pasta modelo, na ordem oficial. Cada nota vira uma linha da lista: data, nome inteiro e valor. */
+function agrupar(ns) {
+  const { esc, fmtData } = dep;
+  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · PEDÁGIO', 'RDM · MANUTENÇÃO DE VEÍCULOS', 'RDM · OUTROS'];
+  const gruposMap = {};
+  ns.forEach(n => { (gruposMap[n.grupo] = gruposMap[n.grupo] || []).push(n); });
+  const chaves = Object.keys(gruposMap).sort((a, b) => (ordem.indexOf(a) + 100) % 100 - (ordem.indexOf(b) + 100) % 100);
+  return chaves.map(g => ({
+    nome: g,
+    itens: gruposMap[g].map(n => ({
+      id: n.id,
+      temAnexo: !!n.foto_path,
+      titulo: esc(n.arquivo || ''),
+      tipoTxt: !n.foto_path ? '⚠️ sem anexo' : n.ext === 'pdf' ? '📄' : n.ext === 'xml' ? '🧾' : '🖼️',
+      dataTxt: fmtData(n.data),
+      dataIso: n.data || '',
+      nome: n.razao_social || n.arquivo || 'Sem nome',
+      valor: Number(n.valor) || 0,
+      busca: semAcento(`${n.razao_social || ''} ${n.numero || ''} ${n.arquivo || ''}`),
+    })),
+  }));
+}
+
+/* Só a pasta Faturamento pede o ano inteiro. A resposta atrasada de outro ano ou pasta não fica guardada. */
+async function carregarAno() {
+  if (!listaAno) {
+    const a = ano;
+    const l = await dep.sb.arquivos.notas(colab.user_id, a, null, true);
+    if (a !== ano || !colab?.faturamento) return { grupos: [] };
+    listaAno = l;
+  }
+  return { grupos: agrupar(listaAno.notas || []) };
+}
+
+function guardarFiltro(f) { if (mes) filtroMes = f; else filtroAno = f; }
 
 async function renderMes(s) {
   dep.voltarRodape('Arquivos.voltarMeses()');
@@ -179,32 +225,12 @@ async function renderMes(s) {
   if (s !== seq) return;
   lista = l;
   const ns = lista.notas || [];
-  const { brl, esc, fmtData } = dep;
+  const { brl, esc } = dep;
   const total = ns.reduce((s, n) => s + (n.valor || 0), 0);
   const comAnexo = ns.filter(n => n.foto_path).length;
 
-  const ordem = ['RDA ALIMENTAÇÃO', 'RDM · ABASTECIMENTO', 'RDM · HOSPEDAGENS', 'RDM · PEDÁGIO', 'RDM · OUTROS'];
-  const gruposMap = {};
-  ns.forEach(n => { (gruposMap[n.grupo] = gruposMap[n.grupo] || []).push(n); });
-  const chaves = Object.keys(gruposMap).sort((a, b) => (ordem.indexOf(a) + 100) % 100 - (ordem.indexOf(b) + 100) % 100);
-  const grupos = chaves.map(g => {
-    const itens = gruposMap[g];
-    const subtotal = itens.reduce((s, n) => s + (n.valor || 0), 0);
-    return {
-      nome: g,
-      resumoTxt: `${itens.length} · ${brl(subtotal)}`,
-      itens: itens.map(n => ({
-        id: n.id,
-        temMini: !!n.mini_url,
-        miniUrl: n.mini_url || '',
-        temAnexo: !!n.foto_path,
-        titulo: esc(n.arquivo || ''),
-        icoTxt: n.ext === 'pdf' ? '📄 PDF' : n.ext === 'xml' ? '🧾 XML' : '🖼️ ' + (n.ext || '').toUpperCase(),
-        legendaHtml: `${fmtData(n.data)}<br><b>${brl(n.valor)}</b>`,
-        fornHtml: esc((n.razao_social || '').split(' ').slice(0, 3).join(' ')),
-      })),
-    };
-  });
+  const mm = String(mes).padStart(2, '0');
+  const padrao = { ...FILTRO_VAZIO, de: `${ano}-${mm}-01`, ate: `${ano}-${mm}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}` };
   mostrar('mes', {
     cabecalhoTitulo: `📁 ${esc(colab.nome || colab.email)} · ${dep.MESES_LONGO[mes]}`,
     cabecalhoSub: `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
@@ -213,24 +239,30 @@ async function renderMes(s) {
     acoes: !!colab.faturamento,   // 30/10/2026: na pasta Faturamento cada nota ganha Categoria / Excluir
     podeExcluir: !!dep.podeExcluir?.(),
     mes,   // sem isto o botão do mês baixava o ano inteiro (22/10/2026)
-    grupos,
+    grupos: agrupar(ns),
+    filtro: filtroMes || padrao,
+    filtroPadrao: padrao,
+    dataMin: padrao.de,
+    dataMax: padrao.ate,
   });
 }
 
-function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; render(); }
-function abrirFaturamento() { colab = FAT; mes = null; render(); }
-function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; render(); }
-function abrirMes(m) { mes = m; render(); }
-function voltarMeses() { mes = null; lista = null; render(); }
-function voltarColabs() { colab = null; mes = null; lista = null; render(); }
+function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; }
+function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; limparBuscas(); render(); }
+function abrirFaturamento() { colab = FAT; mes = null; limparBuscas(); render(); }
+function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; limparBuscas(); render(); }
+function abrirMes(m) { mes = m; filtroMes = null; render(); }
+function voltarMeses() { mes = null; lista = null; filtroMes = null; render(); }
+function voltarColabs() { colab = null; mes = null; lista = null; limparBuscas(); render(); }
 
-const _notaDaLista = id => (lista?.notas || []).find(x => x.id === id);
+/* A nota pode vir do mês aberto ou da busca do ano, abaixo dos meses */
+const _notaDaLista = id => (lista?.notas || []).find(x => x.id === id) || (listaAno?.notas || []).find(x => x.id === id);
 function moverNota(id) { const n = _notaDaLista(id); if (n) dep.moverNotaFat?.(n); }
 function excluirNota(id) { const n = _notaDaLista(id); if (n) dep.excluirNotaFat?.(n); }
-function recarregar() { lista = null; resumo = null; render(); }
+function recarregar() { lista = null; listaAno = null; resumo = null; render(); }
 
 function ver(id) {
-  const n = (lista?.notas || []).find(x => x.id === id);
+  const n = _notaDaLista(id);
   if (!n || !n.foto_path) return;
   dep.verFotoCompartilhado(n);
 }
@@ -298,7 +330,7 @@ async function baixarPlanilhaFat() {
   } finally { dep.setLoading(false); }
 }
 
-function reset() { colab = null; mes = null; lista = null; }
+function reset() { colab = null; mes = null; lista = null; limparBuscas(); }
 
 /* MESMO NOME do módulo original (window.Arquivos) — substitui o
    arquivos.js de antes, não convive com ele. gestor.js chama
