@@ -19,7 +19,7 @@ class Ponto extends Model
 
     public $incrementing = false;
 
-    protected $fillable = ['id', 'user_id', 'data', 'entrada', 'saida_intervalo', 'volta_intervalo', 'saida', 'tipo_dia', 'observacao', 'lat', 'lng', 'deleted'];
+    protected $fillable = ['id', 'user_id', 'data', 'entrada', 'saida_intervalo', 'volta_intervalo', 'saida', 'tipo_dia', 'observacao', 'deleted'];
 
     protected function casts(): array
     {
