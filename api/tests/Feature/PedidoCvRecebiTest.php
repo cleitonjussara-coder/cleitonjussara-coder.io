@@ -61,14 +61,16 @@ class PedidoCvRecebiTest extends TestCase
         $this->pedir($c)->assertStatus(422);
     }
 
-    public function test_cv_confirma_recebimento_com_valor_diferente_e_libera_novo_pedido(): void
+    public function test_gestor_paga_com_valor_diferente_e_libera_novo_pedido(): void
     {
-        $this->pessoa('gestor');
+        $gestor = $this->pessoa('gestor');
         $cv = $this->pessoa('colaborador', 'cv');
         Sanctum::actingAs($cv);
         $id = $this->pedir($cv, 500)->assertOk()->json('id');
 
-        $this->patchJson("/api/repasses/$id/recebi", ['valor' => 450])->assertOk()->assertJsonPath('ja_estava', false);
+        Sanctum::actingAs($gestor);
+        $this->patchJson("/api/repasses/$id/atendido", ['valor' => 450])->assertOk()->assertJsonPath('ja_estava', false);
+        Sanctum::actingAs($cv);
 
         $pedido = Repasse::findOrFail($id);
         $this->assertNotNull($pedido->atendido_em);
@@ -142,9 +144,9 @@ class PedidoCvRecebiTest extends TestCase
 
     public function test_recebido_identico_em_seguida_e_recusado(): void
     {
-        $this->pessoa('gestor');
+        $gestor = $this->pessoa('gestor');
         $c = $this->pessoa('colaborador');
-        Sanctum::actingAs($c);
+        Sanctum::actingAs($gestor);
         $h = now('America/Sao_Paulo');
         $corpo = fn () => [
             'user_id' => $c->id, 'tipo' => 'RDM', 'valor' => 300, 'data' => $h->format('Y-m-d'),

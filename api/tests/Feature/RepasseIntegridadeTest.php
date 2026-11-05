@@ -411,9 +411,12 @@ class RepasseIntegridadeTest extends TestCase
 
     public function test_o_que_o_colaborador_registrou_segue_editavel_por_ele(): void
     {
-        $this->pessoa('gestor');
+        $gestor = $this->pessoa('gestor');
         $colab = $this->pessoa('colaborador');
-        $rep = $this->lancar($colab, $colab, ['destino' => 'recarga']);
+        /* registro de antes de 05/11/2026, quando o colaborador ainda registrava o recebimento */
+        $rep = $this->lancar($gestor, $colab, ['destino' => 'recarga']);
+        $rep->forceFill(['created_by' => $colab->id])->save();
+        Sanctum::actingAs($colab);
         $outra = \Illuminate\Support\Carbon::parse($this->outraData());
 
         $this->putJson("/api/repasses/{$rep->id}", $this->payload($rep, [
@@ -472,25 +475,6 @@ class RepasseIntegridadeTest extends TestCase
         $push->shouldNotHaveReceived('avisarGestores', ['Recebimento confirmado', Mockery::any(), Mockery::any(), Mockery::any()]);
     }
 
-    public function test_recebi_seguido_de_atendido_cria_um_so_recebido(): void
-    {
-        $push = $this->espiaoDePush();
-        $gestor = $this->pessoa('gestor');
-        $colab = $this->pessoa('colaborador');
-        $pedido = $this->pedido($colab);
-
-        Sanctum::actingAs($colab);
-        $resp = $this->patchJson("/api/repasses/{$pedido->id}/recebi", ['valor' => 450])->assertOk()->assertJsonPath('ja_estava', false);
-        Sanctum::actingAs($gestor);
-        $this->patchJson("/api/repasses/{$pedido->id}/atendido")->assertOk()
-            ->assertJsonPath('ja_estava', true)->assertJsonPath('recebido.id', $resp->json('recebido.id'));
-
-        $recebidos = $this->recebidosDe($pedido);
-        $this->assertCount(1, $recebidos);
-        $this->assertEquals(450, $recebidos->first()->valor);
-        $push->shouldNotHaveReceived('enviar');
-    }
-
     public function test_chamada_repetida_nao_duplica_nem_avisa_de_novo(): void
     {
         $push = $this->espiaoDePush();
@@ -517,10 +501,10 @@ class RepasseIntegridadeTest extends TestCase
         $colab = $this->pessoa('colaborador');
         $pedido = $this->pedido($colab);
 
-        /* o colaborador leu "em aberto" e o gestor pagou nesse meio tempo */
+        /* o app antigo leu "em aberto" e o gestor pagou nesse meio tempo: é recusado e não cria nada */
         $this->armarCorrida($pedido, $gestor);
         Sanctum::actingAs($colab);
-        $this->patchJson("/api/repasses/{$pedido->id}/recebi")->assertOk()->assertJsonPath('ja_estava', true);
+        $this->patchJson("/api/repasses/{$pedido->id}/recebi")->assertForbidden();
         $this->desarmarCorrida();
 
         $this->assertCount(1, $this->recebidosDe($pedido));
@@ -586,23 +570,6 @@ class RepasseIntegridadeTest extends TestCase
             $armar();
             Sanctum::actingAs($gestor);
             $this->patchJson("/api/repasses/{$pedido->id}/atendido")->assertOk()->assertJsonPath('ja_estava', false);
-
-            $this->assertCount(1, $this->recebidosDe($pedido));
-        }, $entrou);
-
-        $this->assertFalse($entrou, 'A outra conexão gravou no meio da transação: a escrita não estava reservada.');
-    }
-
-    public function test_outra_conexao_nao_escreve_no_meio_do_recebi(): void
-    {
-        $this->espiaoDePush();
-        $this->comSegundaConexao(function (\Closure $armar) {
-            $colab = $this->pessoa('colaborador');
-            $pedido = $this->pedido($colab);
-
-            $armar();
-            Sanctum::actingAs($colab);
-            $this->patchJson("/api/repasses/{$pedido->id}/recebi")->assertOk()->assertJsonPath('ja_estava', false);
 
             $this->assertCount(1, $this->recebidosDe($pedido));
         }, $entrou);
@@ -683,17 +650,16 @@ class RepasseIntegridadeTest extends TestCase
         $email->shouldHaveReceived('enviarSePreciso')->once();
     }
 
-    public function test_recebi_antes_do_lancamento_igual_do_gestor_nao_duplica(): void
+    public function test_atendido_antes_do_lancamento_igual_do_gestor_nao_duplica(): void
     {
         $this->espiaoDePush();
         $gestor = $this->pessoa('gestor');
         $colab = $this->pessoa('colaborador');
         $pedido = $this->pedido($colab);
 
-        Sanctum::actingAs($colab);
-        $this->patchJson("/api/repasses/{$pedido->id}/recebi")->assertOk();
-
         Sanctum::actingAs($gestor);
+        $this->patchJson("/api/repasses/{$pedido->id}/atendido")->assertOk();
+
         $this->putJson('/api/repasses/'.Str::uuid(), $this->corpo($colab))->assertStatus(422);
 
         $this->assertCount(1, $this->recebidosDe($pedido));

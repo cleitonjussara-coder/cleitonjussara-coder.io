@@ -40,13 +40,19 @@ class RepasseEPontoIdUuidTest extends TestCase
             'mes' => (int) $hoje->format('n'), 'ano' => (int) $hoje->format('Y'), 'kind' => 'received', 'descricao' => 'teste'];
     }
 
+    /** Desde 05/11/2026 o colaborador só cria pedido; recebido novo dele é 403. */
+    private function semKind(Colaborador $dono): array
+    {
+        return array_diff_key($this->corpoRepasse($dono), ['kind' => true]);
+    }
+
     public function test_repasse_novo_com_id_que_nao_e_uuid_e_recusado(): void
     {
         $ana = $this->colaborador();
         Sanctum::actingAs($ana);
 
         foreach (['x"><img src=1 onerror=alert(1)>', "a'b", 'repasse-1', str_repeat('a', 36)] as $ruim) {
-            $this->putJson('/api/repasses/'.rawurlencode($ruim), $this->corpoRepasse($ana))->assertStatus(422)->assertJsonPath('message', 'Identificador de repasse inválido.');
+            $this->putJson('/api/repasses/'.rawurlencode($ruim), ['kind' => 'requested'] + $this->semKind($ana))->assertStatus(422)->assertJsonPath('message', 'Identificador de repasse inválido.');
         }
         $this->assertSame(0, Repasse::count());
     }
@@ -57,7 +63,7 @@ class RepasseEPontoIdUuidTest extends TestCase
         Sanctum::actingAs($ana);
         $id = (string) Str::uuid();
 
-        $this->putJson("/api/repasses/$id", $this->corpoRepasse($ana))->assertOk();
+        $this->putJson("/api/repasses/$id", ['kind' => 'requested'] + $this->semKind($ana))->assertOk();
         $this->assertNotNull(Repasse::find($id));
 
         $legado = new Repasse(['id' => 'legado-1'] + $this->corpoRepasse($ana));

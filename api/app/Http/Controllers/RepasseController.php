@@ -25,6 +25,8 @@ use Illuminate\Validation\Rule;
  */
 class RepasseController extends Controller
 {
+    private const SO_O_GESTOR_REGISTRA = 'Repasse e recarga quem registra é o gestor. Se o dinheiro caiu e não aparece, fale com ele.';
+
     public function __construct(private RepasseEmailService $email, private PushService $push) {}
 
     public function index(Request $r): JsonResponse
@@ -161,18 +163,6 @@ class RepasseController extends Controller
             );
         }
 
-        /* 07/10/2026: colaborador registrou o próprio recebimento → avisa o gestor. */
-        if ($novo && $rep->kind === 'received' && ! $rep->deleted && ! $rep->pedido_id
-            && $rep->user_id === $u->id && ! $u->gerencia()) {
-            $oque = $rep->destino === 'recarga' ? 'recarga do cartão' : 'repasse';
-            $this->push->avisarGestores(
-                'Recebimento registrado',
-                ($rep->dono?->nome ?: 'Um colaborador') . ' registrou ' . $oque . ' recebido de ' . $this->emReais($rep->valor) . ' (' . $rep->tipo . ').',
-                '/',
-                'recebido-' . $rep->id
-            );
-        }
-
         return response()->json($rep->fresh());
     }
 
@@ -205,13 +195,13 @@ class RepasseController extends Controller
         if ($novo && $d['kind'] === 'requested' && ! $d['deleted'] && ! $u->gerencia()) {
             $aberto = Repasse::where('user_id', $d['user_id'])->where('kind', 'requested')
                 ->where('deleted', false)->whereNull('atendido_em')->exists();
-            abort_if($aberto, 422, 'Já existe um pedido pendente. Confirme o recebimento (ou cancele o pedido) antes de fazer outro.');
+            abort_if($aberto, 422, 'Já existe um pedido pendente. Aguarde o gestor lançar o pagamento (ou cancele o pedido) antes de fazer outro.');
         }
-        /* 07/10/2026: o colaborador volta a registrar o PRÓPRIO recebimento
-           (repasse e recarga do cartão), direto, sem pedido — o gestor só é
-           avisado (push abaixo). A regra de 25/09 que rebaixava para pedido
-           saiu. Lançar para OUTRO continua só de gestor/admin (aborts acima). */
-        $jaEraRecebido = $rep && $rep->kind === 'received';
+        /* 05/11/2026: só gestor/admin registra repasse e recarga. Com o colaborador registrando também, o mesmo
+           dinheiro entrava duas vezes, em dois registros sem vínculo. Vale para aparelho com app antigo e para
+           virar o próprio pedido em recebido. O que ele já tinha registrado segue editável (registroDoDono). */
+        $viraRecebido = $d['kind'] === 'received' && (! $rep || ($rep->kind && $rep->kind !== 'received'));
+        abort_if($viraRecebido && ! $u->gerencia(), 403, self::SO_O_GESTOR_REGISTRA);
         if ($rep) {
             abort_unless($rep->user_id === $u->id || $u->gerencia(), 403, 'Sem permissão para este repasse');
             /* 01/10/2026: o gestor relatou repasse e recarga "sumindo". Causa
@@ -320,13 +310,16 @@ class RepasseController extends Controller
     }
 
     /** PATCH /repasses/{id}/recebi {valor?} — o DONO do pedido confirma que o dinheiro caiu.
-     *  `valor` é o que realmente foi depositado (pode ser maior ou menor que o pedido). Idempotente. */
+     *  `valor` é o que realmente foi depositado (pode ser maior ou menor que o pedido). Idempotente.
+     *  05/11/2026: o botão saiu do app. Aparelho antigo ainda chama: pedido já pago responde ja_estava,
+     *  pedido aberto é recusado, porque quem encerra é o pagamento lançado pelo gestor. */
     public function recebi(Request $r, string $id): JsonResponse
     {
         $u = $r->user();
         $valor = $r->validate(['valor' => ['nullable', 'numeric', 'min:0.01']])['valor'] ?? null;
         $pedido = Repasse::findOrFail($id);
         abort_unless($pedido->user_id === $u->id, 403, 'Só quem fez o pedido confirma o recebimento');
+        abort_unless($pedido->atendido_em || $u->gerencia(), 403, self::SO_O_GESTOR_REGISTRA);
         [$pedido, $recebido, $jaEstava] = $this->encerrarPedido($id, $u, $valor, 'Recebimento do pedido de ');
 
         if ($jaEstava) {
