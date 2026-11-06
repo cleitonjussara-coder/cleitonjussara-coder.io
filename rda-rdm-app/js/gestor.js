@@ -1125,22 +1125,7 @@ window.Gestor = (() => {
           </div>
         </div>` : ''}
 
-        ${ehContador ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_acoesAbertas ? 'on' : ''}" aria-expanded="${_acoesAbertas}" onclick="Gestor.alternarAcoes(this)">⋯ Relatórios e ações</button></div>`}
-        <div class="cdet-acoes" style="display:${ehContador || _acoesAbertas ? 'grid' : 'none'}">
-          ${ehContador ? '' : `${colab.regime === 'cv' ? `
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('xlsx',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('pdf',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome,'pdf')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">PDF ${ano}</span></button>
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" onclick="Gestor.excelAnualColab(this.dataset.uid)"><span class="cdet-acao-ico">📄</span><span class="cdet-acao-lbl">Excel resumo</span><span class="cdet-acao-sub">do app · ${ano}</span></button>`}
-          ${podeEditar ? (colab.regime === 'cv' ? `
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'carteira')"><span class="cdet-acao-ico">💵</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">carteira, entra direto no saldo</span></button>
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'recarga')"><span class="cdet-acao-ico">💳</span><span class="cdet-acao-lbl">Lançar recarga</span><span class="cdet-acao-sub">cartão corporativo, sem esperar pedido</span></button>
-          ` : `<button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>`) : ''}
-          <button class="cdet-acao" data-uid="${_at(colab.id)}" onclick="const u=this.dataset.uid;switchView('arquivos');setTimeout(()=>Arquivos.abrirColab(u),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>`}
-          ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
-        </div>
-
+        <!-- dashboard da ficha (05/11/2026): os indicadores vêm antes dos relatórios e ações -->
         ${ehContador || !ehCVcolab ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_kpisAbertos ? 'on' : ''}" aria-expanded="${_kpisAbertos}" onclick="Gestor.alternarKpis(this)">📊 <span class="txt">${_kpisAbertos ? 'Esconder resumo do mês' : 'Abrir resumo do mês'}</span></button></div>`}
         ${ehContador ? '' : `<div class="cdet-kpis" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>
           ${ehCVcolab ? `
@@ -1151,9 +1136,24 @@ window.Gestor = (() => {
           ${planilhaCV ? '' : `<div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>`}
           <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
+        </div>`}
+
+        ${ehContador ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_acoesAbertas ? 'on' : ''}" aria-expanded="${_acoesAbertas}" onclick="Gestor.alternarAcoes(this)">⋯ Relatórios e ações</button></div>`}
+        <div class="cdet-acoes" style="display:${ehContador || _acoesAbertas ? 'grid' : 'none'}">
+          ${ehContador ? '' : `${colab.regime === 'cv' ? `
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('xlsx',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">Excel ${ano}</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioCv('pdf',this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha CV</span><span class="cdet-acao-sub">PDF ${ano}</span></button>` : `
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome)"><span class="cdet-acao-ico">📗</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">modelo · Excel ${ano}</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at(colab.nome||'')}" onclick="baixarRelatorioRdmRda(this.dataset.uid,this.dataset.nome,'pdf')"><span class="cdet-acao-ico">📕</span><span class="cdet-acao-lbl">Planilha RDM/RDA</span><span class="cdet-acao-sub">PDF ${ano}</span></button>`}
+          ${podeEditar ? (colab.regime === 'cv' ? `
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'carteira')"><span class="cdet-acao-ico">💵</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">carteira, entra direto no saldo</span></button>
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }, 'recarga')"><span class="cdet-acao-ico">💳</span><span class="cdet-acao-lbl">Lançar recarga</span><span class="cdet-acao-sub">cartão corporativo, sem esperar pedido</span></button>
+          ` : `<button class="cdet-acao" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome })"><span class="cdet-acao-ico">💰</span><span class="cdet-acao-lbl">Lançar repasse</span><span class="cdet-acao-sub">entra direto no saldo</span></button>`) : ''}
+          <button class="cdet-acao" data-uid="${_at(colab.id)}" onclick="const u=this.dataset.uid;switchView('arquivos');setTimeout(()=>Arquivos.abrirColab(u),50)"><span class="cdet-acao-ico">📁</span><span class="cdet-acao-lbl">Arquivos</span><span class="cdet-acao-sub">fotos e ZIP</span></button>`}
+          ${podeEditar ? `<button class="cdet-acao" id="cdet-editar"><span class="cdet-acao-ico">✏️</span><span class="cdet-acao-lbl">Editar</span><span class="cdet-acao-sub">papel, situação</span></button>` : ''}
         </div>
 
-        ${acumOk && !planilhaCV && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
+        ${ehContador ? '' : `${acumOk && !planilhaCV && !recebidos0.length && (antRDM > 0.004 || antRDA > 0.004) ? `<div class="colab-resumo" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">ℹ️ Sem repasses em <b>${MESES_LONGO[mes-1]}</b>, mas há saldo acumulado de meses anteriores: <b>RDM ${brl(antRDM)}</b> · <b>RDA ${brl(antRDA)}</b>.</div>` : ''}
         ${planilhaCV ? `<div class="cdet-plan">${planilhaCV.map(planAbaHTML).join('')}</div>`
         : `<div class="cdet-bals">${bal('RDM · Despesas', '🧾', g('RDM'), r('RDM'), antRDM, 'RDM')}${bal('RDA · Alimentação', '🍽️', g('RDA'), r('RDA'), antRDA, 'RDA')}</div>
           ${acumOk ? `<div class="cdet-bals-det">${regSaldo('RDM', g('RDM'), r('RDM'), antRDM)}${regSaldo('RDA', g('RDA'), r('RDA'), antRDA)}</div>` : ''}`}
@@ -1514,24 +1514,6 @@ window.Gestor = (() => {
 
   /* Excel anual RDM/RDA de outro colaborador (21/09/2026): usa as notas/repasses
      da equipe que já estão neste aparelho (notasEquipe / repassesEquipe). */
-  async function excelAnualColab(id) {
-    const colab = _cvEquipe?.collabs.find(c => c.id === id) || (typeof equipePorId !== "undefined" ? equipePorId[id] : null);
-    if (!colab) { toast('Colaborador não encontrado', 'err'); return; }
-    const ano = _anoFicha || _cvEquipe?.ano || FusoBR.partes().ano;
-    const ns = (typeof notasEquipe !== "undefined" ? notasEquipe : []).filter(n => n.user_id === id && !n.deleted);   // let global do app.js: visível aqui, mas não em window.*
-    const rs = (typeof repassesEquipe !== "undefined" ? repassesEquipe : []).filter(r => r.user_id === id && !r.deleted);
-    if (!ns.length && !rs.length) { toast(`Sem lançamentos de ${colab.nome || colab.email} neste aparelho`, 'err'); return; }
-    setLoading(true, 'Gerando o Excel anual…');
-    try {
-      /* saldo que o colaborador trazia de anos anteriores (histórico completo no servidor) */
-      const abertura = _ctx?.sb ? await aberturaAnual(_ctx.sb, id, ano).catch(() => null) : null;
-      await Excel.exportarAnual(ano, ns, rs, colab, abertura);
-      toast(abertura ? 'Planilha gerada 📗' : 'Planilha gerada 📗 — sem o saldo de anos anteriores (histórico indisponível)');
-    }
-    catch (e) { toast('Planilha: ' + e.message, 'err'); }
-    finally { setLoading(false); }
-  }
-
   /* ── Modal edição de colaborador (gestor e admin) ─────── */
   function showEditModal(colab, sb, onSaved, currentUser) {
     const eu = currentUser || window.user || {};
@@ -1679,5 +1661,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, excelAnualColab, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();
