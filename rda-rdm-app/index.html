@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=545">
+  <link rel="manifest" href="manifest.json?v=546">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1482,6 +1482,55 @@ button.cdet-bal:hover,button.cdet-bal.on{border-color:#c9ea62}
 .arq-barra{display:block;height:100%;border-radius:4px;background:#c9ea62}
 .arq-pct{flex:none;width:46px;text-align:right;font-size:13px;color:rgba(234,247,238,.8)}
 .arq-cat .arq-lin:first-of-type{border-top:1px solid rgba(255,255,255,.1)}
+/* Gráficos da pasta (06/11/2026): uma cor só (lima); a barra escolhida fica forte e as outras apagam */
+.arq-graficos{display:flex;flex-direction:column;gap:8px;min-width:0}
+.arq-g-card,.arq-g-selecao{min-width:0;padding:10px 12px;border:4px solid var(--esm-frame);border-radius:14px;background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0}
+.arq-g-selecao{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px}
+.arq-g-dica{font-size:14.5px;color:rgba(234,247,238,.85)}
+.arq-g-sel-txt{min-width:0;flex:1 1 200px}
+.arq-g-sel-txt small{display:block;font-size:14px;font-weight:700;color:#c9ea62;overflow-wrap:anywhere}
+.arq-g-sel-txt b{display:block;font-size:21px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.arq-g-sel-txt span{display:block;font-size:13.5px;color:rgba(234,247,238,.85);overflow-wrap:anywhere}
+.arq-g-sel-bts{display:flex;flex-wrap:wrap;gap:6px}
+.arq-g-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;margin-bottom:6px}
+.arq-g-hd h3{margin:0;font-size:17px;font-weight:800;color:#c9ea62}
+.arq-g-link{min-height:36px;padding:0 10px;border:0;border-radius:8px;background:none;color:#eef9f0;font:inherit;font-size:14px;font-weight:600;text-decoration:underline;cursor:pointer}
+.arq-g-conta{font-size:13px;color:rgba(234,247,238,.8)}
+.arq-g-plot{position:relative;display:flex;align-items:stretch;height:190px;margin:14px 0 28px 46px}
+.arq-g-eixo{position:absolute;left:0;right:0;border-top:1px solid rgba(255,255,255,.14);pointer-events:none}
+.arq-g-eixo span{position:absolute;right:100%;margin-right:6px;top:-9px;font-size:12px;line-height:18px;white-space:nowrap;color:rgba(234,247,238,.75)}
+.arq-g-col{position:relative;flex:1 1 0;min-width:0;display:flex;align-items:flex-end;justify-content:center;padding:0 1px;border:0;background:none;color:inherit;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.arq-g-col:disabled{cursor:default}
+.arq-g-col:focus-visible{outline:2px solid #fff;outline-offset:1px;border-radius:4px}
+.arq-g-coluna{display:block;width:100%;max-width:38px;border-radius:4px 4px 0 0;background:#c9ea62;transition:height .25s ease,background-color .15s}
+.arq-g-col:hover:not(:disabled) .arq-g-coluna{background:#eaf78f}
+.arq-g-col.apagada .arq-g-coluna{background:rgba(201,234,98,.28)}
+.arq-g-rot{position:absolute;top:100%;left:50%;margin-left:-20px;width:40px;padding-top:6px;text-align:center;font-size:12px;line-height:18px;color:rgba(234,247,238,.8)}
+.arq-g-media{position:absolute;left:0;right:0;border-top:2px dashed #fff;opacity:.75;pointer-events:none}
+.arq-g-dica-flut{position:absolute;top:0;left:0;width:160px;margin-left:-80px;padding:7px 10px;border-radius:10px;background:#04200f;border:1px solid rgba(255,255,255,.3);box-shadow:0 6px 14px rgba(0,0,0,.45);pointer-events:none;z-index:2}
+.arq-g-dica-flut b{display:block;font-size:16px;font-weight:800;color:#fff}
+.arq-g-dica-flut span{display:block;font-size:13px;color:rgba(234,247,238,.85)}
+.arq-g-pe{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13.5px;color:rgba(234,247,238,.85)}
+.arq-g-traco{display:inline-block;width:18px;margin-right:6px;vertical-align:middle;border-top:2px dashed #fff}
+.arq-g-tabela{width:100%;border-collapse:collapse;font-size:14.5px}
+.arq-g-tabela th{padding:4px 6px;text-align:right;font-size:13px;font-weight:700;color:rgba(234,247,238,.8)}
+.arq-g-tabela td{padding:6px;text-align:right;border-top:1px solid rgba(255,255,255,.12);font-variant-numeric:tabular-nums}
+.arq-g-tabela th:first-child,.arq-g-tabela td:first-child{text-align:left}
+.arq-g-duplo{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.arq-g-lista{display:flex;flex-direction:column;gap:2px}
+.arq-g-lin{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:center;width:100%;min-height:48px;padding:5px 6px;border:0;border-radius:8px;background:none;color:#eef9f0;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.arq-g-lin:hover{background:rgba(255,255,255,.07)}
+.arq-g-lin.on{background:rgba(255,255,255,.12)}
+.arq-g-lin.apagada{opacity:.55}
+.arq-g-nome{min-width:0;font-size:14.5px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.arq-g-val{font-size:14.5px;font-weight:800;white-space:nowrap}
+.arq-g-trilho{display:block;height:8px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden}
+.arq-g-barra{display:block;height:100%;border-radius:4px;background:#c9ea62;transition:width .25s ease}
+.arq-g-pct{font-size:13px;text-align:right;color:rgba(234,247,238,.8)}
+.arq-alvo-notas{scroll-margin-top:12px}
+@media (min-width:760px){.arq-g-duplo{grid-template-columns:repeat(2,minmax(0,1fr))}.arq-g-duplo>:only-child{grid-column:1/-1}}
+@media (max-width:400px){.arq-g-rot{font-size:11px}}
+@media (prefers-reduced-motion:reduce){.arq-g-coluna,.arq-g-barra{transition:none}}
 @media (min-width:640px){
   .arq-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.arq-kpi-total{grid-column:auto}
   .arq-bts{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr)}.arq-bt-zip{grid-column:auto}
@@ -2126,7 +2175,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=545" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=546" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2834,39 +2883,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=545"></script>
-<script defer src="js/db.js?v=545"></script>
-<script defer src="js/nfce.js?v=545"></script>
-<script defer src="js/sefaz.js?v=545"></script>
-<script defer src="js/brasilapi.js?v=545"></script>
-<script defer src="js/ocr.js?v=545"></script>
-<script defer src="js/scanner.js?v=545"></script>
-<script defer src="js/foto-branca.js?v=545"></script>
-<script defer src="js/recorte.js?v=545"></script>
-<script defer src="js/excel.js?v=545"></script>
-<script defer src="js/gestor.js?v=545"></script>
-<script defer src="js/frota.js?v=545"></script>
-<script defer src="js/frota-painel.js?v=545"></script>
-<script defer src="js/frota-planilha.js?v=545"></script>
-<script defer src="js/ponto.js?v=545"></script>
-<script defer src="js/rastreio.js?v=545"></script>
-<script defer src="js/repasses-equipe.js?v=545"></script>
-<script defer src="js/gdrive.js?v=545"></script>
+<script defer src="js/api.js?v=546"></script>
+<script defer src="js/db.js?v=546"></script>
+<script defer src="js/nfce.js?v=546"></script>
+<script defer src="js/sefaz.js?v=546"></script>
+<script defer src="js/brasilapi.js?v=546"></script>
+<script defer src="js/ocr.js?v=546"></script>
+<script defer src="js/scanner.js?v=546"></script>
+<script defer src="js/foto-branca.js?v=546"></script>
+<script defer src="js/recorte.js?v=546"></script>
+<script defer src="js/excel.js?v=546"></script>
+<script defer src="js/gestor.js?v=546"></script>
+<script defer src="js/frota.js?v=546"></script>
+<script defer src="js/frota-painel.js?v=546"></script>
+<script defer src="js/frota-planilha.js?v=546"></script>
+<script defer src="js/ponto.js?v=546"></script>
+<script defer src="js/rastreio.js?v=546"></script>
+<script defer src="js/repasses-equipe.js?v=546"></script>
+<script defer src="js/gdrive.js?v=546"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=545"></script>
+<script defer src="js/svelte-ajuda.js?v=546"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=545"></script>
+<script defer src="js/svelte-historico.js?v=546"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=545"></script>
+<script defer src="js/svelte-arquivos.js?v=546"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=545"></script>
-<script defer src="js/app.js?v=545"></script>
-<script defer src="js/instalar.js?v=545"></script>
+<script defer src="js/svelte-perfil.js?v=546"></script>
+<script defer src="js/app.js?v=546"></script>
+<script defer src="js/instalar.js?v=546"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=545').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=546').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

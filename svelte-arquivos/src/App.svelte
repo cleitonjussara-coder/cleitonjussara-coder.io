@@ -1,4 +1,6 @@
 <script>
+  import Graficos from './Graficos.svelte';
+
   /* Puramente apresentacional: recebe `nivel` + `dados` já prontos do
      main.js (que faz toda a busca/formatação, igual ao arquivos.js
      original) e só desenha. As strings com HTML embutido (alerta "sem
@@ -9,6 +11,7 @@
     onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
     onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
     onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {}, onMesesAbertos = () => {},
+    mesesCurtos = [], onGraficosAbertos = () => {},
   } = $props();
   let mesEquipe = $state('');
   let busca = $state('');
@@ -69,6 +72,12 @@
   };
   const totalFonte = $derived(fonte.reduce((s, g) => s + g.itens.length, 0));
   const limparFiltro = () => { filtro = { ...padrao }; fechadasNoFiltro = {}; };
+  /* Gráficos: a barra tocada muda o mesmo filtro das caixas de busca */
+  let graficosAbertos = $state(!!dados?.graficosAbertos);
+  const alternarGraficos = () => { graficosAbertos = !graficosAbertos; onGraficosAbertos(graficosAbertos); };
+  const filtrarPeloGrafico = parcial => { Object.assign(filtro, parcial); fechadasNoFiltro = {}; };
+  let alvoNotas = $state(null);
+  const verNotas = () => alvoNotas?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   $effect(() => { if (dados?.filtro) onFiltro({ busca: filtro.busca, cat: filtro.cat, de: filtro.de, ate: filtro.ate }); });
   $effect(() => {
@@ -147,6 +156,23 @@
       {#if estaAberta(g)}{@render linhas(g)}{/if}
     </div>
   {/each}
+{/snippet}
+
+{#snippet graficos(modo, titulo)}
+  <button type="button" class="arq-ver-meses" aria-expanded={graficosAbertos} onclick={alternarGraficos}>
+    <span>📊 Gráficos de {titulo}</span>
+    <span class="arq-abrir">{graficosAbertos ? 'Fechar ▲' : 'Abrir ▼'}</span>
+  </button>
+  {#if graficosAbertos}
+    {#if modo === 'ano' && erroAno}
+      <div class="db-card" style="text-align:center;color:var(--danger)">Não consegui carregar as notas do ano.</div>
+    {:else if modo === 'ano' && gruposAno === null}
+      <div class="db-card" style="text-align:center;color:var(--text2)">Carregando os gráficos…</div>
+    {:else}
+      <Graficos {modo} grupos={fonte} {filtro} {padrao} {ano} mes={dados.mes} nomesCurtos={mesesCurtos} nomesLongos={meses} {brl} {norm}
+        onFiltrar={filtrarPeloGrafico} onVerNotas={verNotas} onAbrirMes={onAbrirMes} />
+    {/if}
+  {/if}
 {/snippet}
 
 {#snippet cabecalho(titulo, sub)}
@@ -249,6 +275,7 @@
         <div class="arq-kpi"><small>Maior gasto</small><b>{maiorAno?.pct || '…'}</b><span>{maiorAno?.nome || ''}</span></div>
       </div>
     {/if}
+    {#if dados.filtro && dados.temNotas}{@render graficos('ano', ano)}{/if}
     {#if dados.temNotas}
       <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(null)}>⬇️ Baixar ZIP do ano {ano} ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
       {#if dados.ehFaturamento}
@@ -283,7 +310,7 @@
       {:else if filtrando && gruposAno === null}
         <div class="db-card" style="text-align:center;color:var(--text2)">Carregando as notas do ano…</div>
       {:else if filtrando}
-        {@render achados()}
+        <div class="arq-alvo-notas" bind:this={alvoNotas}>{@render achados()}</div>
         {@render lista(gruposVis)}
       {/if}
     {/if}
@@ -300,6 +327,7 @@
           <div class="arq-kpi"><small>Maior gasto</small><b>{dados.resumo.maiorPct}</b><span>{dados.resumo.maiorNome}</span></div>
         </div>
       {/if}
+      {@render graficos('mes', meses[dados.mes - 1])}
       {@render filtros('Buscar nas notas do mês')}
       <div class="arq-bts">
         <button class="btn btn-primary btn-full arq-bt-zip" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
@@ -311,7 +339,7 @@
     {:else}
       <div class="db-card" style="text-align:center;color:var(--text2)">Nenhuma nota neste mês.</div>
     {/if}
-    {#if filtrando}{@render achados()}{/if}
+    {#if filtrando}<div class="arq-alvo-notas" bind:this={alvoNotas}>{@render achados()}</div>{/if}
     {#if dados.recolher}{@render categorias(gruposVis)}{:else}{@render lista(gruposVis)}{/if}
   </div>
 {/if}

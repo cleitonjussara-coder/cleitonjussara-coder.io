@@ -33,6 +33,8 @@ let filtroAno = null;
 let abertasMes = {};
 /* Quadro dos meses da pasta: começa oculto e fica como a pessoa deixou enquanto ela anda pelos meses */
 let mesesAbertos = false;
+/* Gráficos da pasta: começam ocultos a cada pasta e ficam como a pessoa deixou enquanto ela anda pelos meses */
+let graficosAbertos = false;
 /* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
    ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
    cima da pasta já aberta (22/10/2026). */
@@ -66,6 +68,7 @@ function mostrar(nivel, dados) {
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
       onFiltro: guardarFiltro, onCarregarAno: carregarAno, brl: dep.brl,
       onAbertas: a => { abertasMes = a; }, onBaixarRelatorio: baixarRelatorioFat, onMesesAbertos: v => { mesesAbertos = v; },
+      mesesCurtos: dep.MESES, onGraficosAbertos: v => { graficosAbertos = v; },
     },
   });
   dep.carregarAvatares?.();
@@ -181,6 +184,7 @@ async function renderMeses(s) {
     ehFaturamento: !!c.faturamento,
     meses,
     mesesAbertos,
+    graficosAbertos,
     filtro: filtroAno || FILTRO_VAZIO,
     filtroPadrao: FILTRO_VAZIO,
     acoes: !!c.faturamento || !!dep.veEquipe(),
@@ -216,6 +220,7 @@ function agrupar(ns) {
       dataTxt: fmtData(n.data),
       dataIso: n.data || '',
       nome: n.razao_social || n.arquivo || 'Sem nome',
+      razao: (n.razao_social || '').trim(),
       valor: Number(n.valor) || 0,
       busca: semAcento(`${n.razao_social || ''} ${n.numero || ''} ${n.arquivo || ''}`),
     })),
@@ -262,6 +267,7 @@ async function renderMes(s) {
     recolher,
     relatorios: !!colab.faturamento && recolher,
     abertas: abertasMes,
+    graficosAbertos,
     resumo: recolher ? {
       totalTxt: brl(total),
       qtd: ns.length,
@@ -287,8 +293,8 @@ async function renderMes(s) {
 
 function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; abertasMes = {}; }
 function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; limparBuscas(); render(); }
-function abrirFaturamento() { colab = FAT; mes = null; mesesAbertos = false; limparBuscas(); render(); }
-function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; mesesAbertos = false; limparBuscas(); render(); }
+function abrirFaturamento() { colab = FAT; mes = null; mesesAbertos = false; graficosAbertos = false; limparBuscas(); render(); }
+function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; mesesAbertos = false; graficosAbertos = false; limparBuscas(); render(); }
 function abrirMes(m) { mes = m; filtroMes = null; abertasMes = {}; render(); }
 function voltarMeses() { mes = null; lista = null; filtroMes = null; abertasMes = {}; render(); }
 function voltarColabs() { colab = null; mes = null; lista = null; limparBuscas(); render(); }
@@ -381,7 +387,7 @@ async function baixarRelatorioFat(formato) {
   } finally { dep.setLoading(false); }
 }
 
-function reset() { colab = null; mes = null; lista = null; mesesAbertos = false; limparBuscas(); }
+function reset() { colab = null; mes = null; lista = null; mesesAbertos = false; graficosAbertos = false; limparBuscas(); }
 
 /* MESMO NOME do módulo original (window.Arquivos) — substitui o
    arquivos.js de antes, não convive com ele. gestor.js chama
