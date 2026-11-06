@@ -447,6 +447,10 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     rdmrda: (ano, userId, formato) => req('GET', '/relatorio/rdmrda', { query: { ano, user_id: userId || undefined, formato: formato || 'xlsx' }, blob: true, timeout: 300_000 }),   // modelo RDM/RDA (21/09/2026)
     equipe: (ano, mes, ids) => req('GET', '/relatorio/equipe', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined }, blob: true, timeout: 300_000 }),
     cvEquipe: (ano, ids, modo) => req('GET', '/relatorio/cv-equipe', { query: { ano, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 600_000 }),
+    /* fila das planilhas da equipe (06/11/2026) */
+    pedirCvEquipe: (ano, ids, modo) => req('POST', '/relatorio/cv-equipe/pedido', { body: { ano, ids: ids || [], modo: modo || 'unico' } }),
+    pedido: id => req('GET', `/relatorio/pedidos/${id}`),
+    pedidoArquivo: id => req('GET', `/relatorio/pedidos/${id}/arquivo`, { blob: true, timeout: 300_000 }),
     km: (ano, mes, ids, modo) => req('GET', '/relatorio/km', { query: { ano, mes, ids: ids?.length ? ids.join(',') : undefined, modo: modo || 'unico' }, blob: true, timeout: 180_000 }),
     kmControle: ano => req('GET', '/relatorio/km', { query: { ano, tipo: 'controle' }, blob: true, timeout: 180_000 }),   // planilha de controle da frota (31/10/2026)   // Planilha de KM (31/10/2026)
     faturamento: (ano, mes, formato) => req('GET', '/relatorio/faturamento', { query: { ano, mes: mes || undefined, formato: formato || undefined }, blob: true, timeout: 120_000 }),   // pago direto pela empresa (26/09/2026); formato 'xlsx' = Planilha de Faturamento do ano (22/10/2026)

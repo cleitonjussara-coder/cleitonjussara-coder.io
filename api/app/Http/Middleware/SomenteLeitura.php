@@ -37,6 +37,7 @@ class SomenteLeitura
         'POST notas/duplicada',      // idem, com número/fornecedor/valor (só leitura)
         'POST notas/ler-foto',       // leitura do anexo trocado
         'POST assistente/perguntar', // só consulta a ajuda do app (01/11/2026)
+        'POST relatorio/cv-equipe/pedido', // pedir a planilha é só baixar, pela fila (06/11/2026)
     ];
 
     /** Módulos que ele não usa: nem a leitura (ponto, quilometragem, frota). */

@@ -114,73 +114,22 @@ class RelatorioController extends Controller
         $ano = (int) ($d['ano'] ?? now()->year);
         $modo = $d['modo'] ?? 'unico';
 
-        $q = Colaborador::query()->orderBy('nome');
+        /* 06/11/2026: a geração saiu para PlanilhasEquipe. O app usa a fila (RelatorioPedidoController) para muita gente;
+           esta rota segue para poucas pessoas e para aparelho antigo. */
+        $planilhas = app(\App\Services\PlanilhasEquipe::class);
         $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? '')))));
-        if ($ids) {
-            $q->whereIn('id', array_slice($ids, 0, 200));
-        } else {
-            $comNota = \App\Models\Nota::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-            $comRep = \App\Models\Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
-            $carregam = app(\App\Services\SaldoAnterior::class)->quemCarrega($ano);
-            $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->merge($carregam)->unique());   // cada um sai no modelo do seu regime (21/09/2026)
-        }
-        $colabs = $q->get();
+        $colabs = $planilhas->colaboradores($ano, $ids);
         abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");
 
         @ini_set('memory_limit', '1024M');
         @set_time_limit(900);   // modelo RDM/RDA leva ~20 s por pessoa
 
-        if ($modo === 'unico') {
-            $arquivo = $this->temporario('cveq_', 'xlsx');
-            $ss = $this->cv->gerarUnico($colabs, $ano);
-            $this->cv->xlsxSemCalculo($ss, $arquivo);
-            $ss->disconnectWorksheets();
+        $arquivo = $this->temporario('cveq_', $modo === 'zip' ? 'zip' : 'xlsx');
+        $planilhas->gerar($colabs, $ano, $modo, $arquivo);
 
-            return response()->download($arquivo, "Planilha_CV_Equipe_{$ano}.xlsx", [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ])->deleteFileAfterSend(true);
-        }
-
-        $zipPath = $this->temporario('cveq_', 'zip');
-        $zip = new \ZipArchive();
-        abort_unless($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true, 500, 'Não consegui criar o ZIP');
-        $temps = [];
-        try {
-            /* o mesmo RESUMO do Excel único, como arquivo próprio no ZIP */
-            $tmp = $this->temporario('cv_', 'xlsx');
-            $temps[] = $tmp;
-            $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            $ss->removeSheetByIndex(0);
-            $this->cv->abaResumo($ss, $colabs, $ano);
-            $this->cv->xlsxSemCalculo($ss, $tmp);
-            $ss->disconnectWorksheets();
-            $zip->addFile($tmp, "Resumo_Geral_{$ano}.xlsx");
-
-            foreach ($colabs as $c) {
-                $nome = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($c->nome ?: 'colaborador'));
-                $tmp = $this->temporario('cv_', 'xlsx');
-                $temps[] = $tmp;
-                if ($c->usaCartao()) {
-                    $ss = $this->cv->gerar($c, $ano);
-                    $this->cv->xlsx($ss, $tmp);
-                    $rotulo = 'CV';
-                } else {
-                    $svc = app(RelatorioRdmRda::class);
-                    $ss = $svc->gerar($c, $ano);
-                    $svc->xlsx($ss, $tmp);
-                    $rotulo = 'RDM_RDA';
-                }
-                $ss->disconnectWorksheets();
-                unset($ss);
-                $zip->addFile($tmp, "Planilha_{$rotulo}_{$nome}_{$ano}.xlsx");
-            }
-            $zip->close();   // é aqui que os arquivos são lidos e gravados no zip
-        } finally {
-            foreach ($temps as $t) { @unlink($t); }
-        }
-
-        return response()->download($zipPath, "Planilhas_CV_Equipe_{$ano}.zip", ['Content-Type' => 'application/zip'])
-            ->deleteFileAfterSend(true);
+        return response()->download($arquivo, $planilhas->nome($modo, $ano), [
+            'Content-Type' => $modo === 'zip' ? 'application/zip' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 
     /**

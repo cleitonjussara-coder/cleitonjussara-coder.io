@@ -111,6 +111,10 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/relatorio/cv', [RelatorioController::class, 'cv']);
     Route::get('/relatorio/equipe', [RelatorioController::class, 'equipe']);
     Route::get('/relatorio/cv-equipe', [RelatorioController::class, 'cvEquipe']);
+    /* fila das planilhas da equipe (06/11/2026): pede, acompanha e baixa; relatorios:processar gera */
+    Route::post('/relatorio/cv-equipe/pedido', [\App\Http\Controllers\RelatorioPedidoController::class, 'pedir'])->middleware('throttle:10,1');
+    Route::get('/relatorio/pedidos/{id}', [\App\Http\Controllers\RelatorioPedidoController::class, 'ver']);
+    Route::get('/relatorio/pedidos/{id}/arquivo', [\App\Http\Controllers\RelatorioPedidoController::class, 'arquivo']);
     Route::get('/relatorio/km', [RelatorioController::class, 'km']);   // Planilha de KM montada no servidor (31/10/2026)
     Route::get('/relatorio/rdmrda',[RelatorioController::class, 'rdmrda']);   // modelo RDM/RDA da empresa (21/09/2026)
     Route::get('/relatorio/faturamento', [RelatorioController::class, 'faturamento']);   // pago direto pela empresa (26/09/2026)

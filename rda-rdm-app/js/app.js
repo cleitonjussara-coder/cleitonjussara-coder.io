@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 553;
+const APP_BUILD = 554;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1224,6 +1224,7 @@ async function init() {
   _instalarPuxarParaAtualizar();
   window.addEventListener('db-synced', async e => {
     syncBadge(false);
+    if (!_pedidoEquipeTimer) _acompanharPedidoEquipe();   // pedido feito antes de fechar o app
     if (driveOk) await pullFromDrive().catch(() => {});
     await carregarDadosLocais();
     if (viewAtual==='home')   renderHome();
@@ -7374,11 +7375,64 @@ function baixarPlanilhaFaturamento() {
 /* Planilha de C.V. de vários colaboradores (21/09/2026), escolhidos no modal
    da Equipe (Gestor.abrirCvEquipe). modo 'unico' = um Excel com as abas de
    cada um; 'zip' = um arquivo completo por pessoa. */
-function baixarCvEquipe(ids = [], modo = 'unico') {
+async function baixarCvEquipe(ids = [], modo = 'unico') {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para gerar as planilhas', 'err'); return; }
   const n = ids.length || 'todos os';
   const nome = modo === 'zip' ? `Planilhas_Equipe_${filAno}.zip` : `Planilhas_Equipe_${filAno}.xlsx`;
-  return _baixarBlob(sb.relatorio.cvEquipe(filAno, ids, modo), nome, `Gerando as planilhas de ${n} colaborador(es) · ${filAno}… CV uns 5 s, RDM/RDA uns 20 s por pessoa`);
+  const direto = () => _baixarBlob(sb.relatorio.cvEquipe(filAno, ids, modo), nome, `Gerando as planilhas de ${n} colaborador(es) · ${filAno}… CV uns 5 s, RDM/RDA uns 20 s por pessoa`);
+  /* 06/11/2026: com muita gente, a geração passa do tempo de uma requisição. Até duas pessoas segue direto, sem espera de fila. */
+  if (ids.length > 0 && ids.length <= 2) return direto();
+  try {
+    const p = await sb.relatorio.pedirCvEquipe(filAno, ids, modo);
+    _guardarPedidoEquipe({ id: p.id, em: Date.now(), uid: user?.id });
+    toast(`Preparando as planilhas de ${p.pessoas} pessoa(s). Pode continuar usando o app: avisamos quando ficar pronto.`);
+    _acompanharPedidoEquipe();
+  } catch (e) {
+    /* API ainda sem a fila */
+    if (e?.status === 503 || e?.status === 405) return direto();
+    toast('Não foi possível pedir as planilhas: ' + (e?.message || 'erro'), 'err');
+  }
+}
+
+/* O pedido sobrevive a fechar o app: fica guardado e o acompanhamento volta no próximo sync. */
+const _CHAVE_PEDIDO_EQUIPE = 'pedido_planilhas_equipe';
+let _pedidoEquipeTimer = null;
+let _pedidoEquipeAvisado = false;
+function _lerPedidoEquipe() { try { return JSON.parse(localStorage.getItem(_CHAVE_PEDIDO_EQUIPE) || 'null'); } catch (_) { return null; } }
+function _guardarPedidoEquipe(p) {
+  _pedidoEquipeAvisado = false;
+  try { p ? localStorage.setItem(_CHAVE_PEDIDO_EQUIPE, JSON.stringify(p)) : localStorage.removeItem(_CHAVE_PEDIDO_EQUIPE); } catch (_) {}
+}
+async function _acompanharPedidoEquipe() {
+  clearTimeout(_pedidoEquipeTimer);
+  _pedidoEquipeTimer = null;
+  const guardado = _lerPedidoEquipe();
+  if (!guardado || !sb || !user || guardado.uid !== user.id) return;
+  const denovo = ms => { _pedidoEquipeTimer = setTimeout(_acompanharPedidoEquipe, ms); };
+  if (!navigator.onLine) return denovo(30_000);
+  let p;
+  try { p = await sb.relatorio.pedido(guardado.id); }
+  catch (e) {
+    if (e?.status === 404 || e?.status === 403) { _guardarPedidoEquipe(null); return; }
+    return denovo(30_000);
+  }
+  if (p.estado === 'pronto') {
+    _guardarPedidoEquipe(null);
+    const baixar = await pedirConfirmacao({ mensagem: 'As planilhas da equipe estão prontas.', confirmar: 'Baixar' });
+    if (baixar) _baixarBlob(sb.relatorio.pedidoArquivo(p.id), p.nome, 'Baixando as planilhas…');
+    return;
+  }
+  if (p.estado === 'erro') {
+    _guardarPedidoEquipe(null);
+    mostrarAviso(p.erro || 'Não foi possível gerar as planilhas. Tente de novo.');
+    return;
+  }
+  /* nada começou em 3 minutos: o agendamento do servidor pode estar parado, e é melhor dizer do que deixar esperando */
+  if (p.estado === 'fila' && !_pedidoEquipeAvisado && Date.now() - guardado.em > 180_000) {
+    _pedidoEquipeAvisado = true;
+    toast('As planilhas ainda não começaram. Se demorar, confira a Saúde do sistema no Perfil.', 'err');
+  }
+  denovo(10_000);
 }
 
 /* Cópia íntegra do SQLite de produção (GET /backup/banco, só admin). O

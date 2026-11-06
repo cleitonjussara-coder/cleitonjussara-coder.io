@@ -49,6 +49,7 @@ class SaudeSistema
             'erros_hoje' => $this->parte('log', fn () => ['quantidade' => $this->errosDeHoje()]),
             'migracoes' => $this->parte('migrações', fn () => ['pendentes' => $this->migracoesPendentes()]),
             'movimento' => $this->parte('movimento', fn () => $this->lerMovimento()),
+            'fila_planilhas' => $this->parte('fila de planilhas', fn () => ['paradas' => $this->planilhasParadas()]),
         ];
 
         $olhar = $this->oQueOlhar($partes);
@@ -338,6 +339,20 @@ class SaudeSistema
             $olhar[] = 'Não consegui ler o movimento de notas.';
         }
 
+        if (($p['fila_planilhas']['paradas'] ?? 0) > 0) {
+            $olhar[] = 'Planilhas da equipe paradas na fila. Confira o Agendador de tarefas da Locaweb.';
+        }
+
         return $olhar;
+    }
+
+    /* 06/11/2026: pedido na fila há mais de 5 minutos quer dizer que relatorios:processar não está rodando */
+    private function planilhasParadas(): int
+    {
+        if (! \App\Models\RelatorioPedido::tabelaExiste()) {
+            return 0;
+        }
+
+        return \App\Models\RelatorioPedido::where('estado', 'fila')->where('created_at', '<', now()->subMinutes(5))->count();
     }
 }
