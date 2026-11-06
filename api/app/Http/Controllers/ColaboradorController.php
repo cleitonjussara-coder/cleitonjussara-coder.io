@@ -236,7 +236,20 @@ class ColaboradorController extends Controller
                     $avisosDasNotas += \App\Models\AvisoCorrecao::whereIn('nota_id', $lote->all())->delete();
                 }
             }
+            /* 06/11/2026: histórico das notas dele, para não deixar dado pessoal órfão. Lê das lápides, e não das notas: elas
+               já incluem as que ele apagou de vez antes, cujo histórico sobreviveu de propósito (ver NotaController::destroy).
+               Lápide antiga pode ser de nota que renasceu e hoje é de outro dono ou do Faturamento sem colaborador (ver
+               apagadaEmDefinitivo): essa nota está viva e a auditoria dela fica. */
+            $historicoDasNotas = 0;
+            if (\App\Models\NotaHistorico::tabelaExiste()) {
+                foreach (DB::table('notas_apagadas')->where('user_id', $alvo->id)->pluck('id')->chunk(200) as $lote) {
+                    $vivasDeOutro = Nota::whereIn('id', $lote->all())
+                        ->where(fn ($q) => $q->whereNull('user_id')->orWhere('user_id', '!=', $alvo->id))->pluck('id');
+                    $historicoDasNotas += \App\Models\NotaHistorico::whereIn('nota_id', $lote->diff($vivasDeOutro)->all())->delete();
+                }
+            }
             $c = [
+                'historico_notas' => $historicoDasNotas,
                 'notas' => Nota::where('user_id', $alvo->id)->delete(),
                 'repasses' => Repasse::where('user_id', $alvo->id)->delete(),
                 'km' => KmRegistro::where('user_id', $alvo->id)->delete(),

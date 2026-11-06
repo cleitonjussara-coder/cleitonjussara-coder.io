@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Models\Nota;
+use App\Models\NotaHistorico;
 use App\Services\FotoEmBrancoAviso;
 use App\Services\FotoStorage;
+use App\Services\HistoricoNota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -26,7 +28,7 @@ use Illuminate\Validation\ValidationException;
  */
 class NotaController extends Controller
 {
-    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca) {}
+    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca, private HistoricoNota $historico) {}
 
     /**
      * GET /notas?since=…&ano=…&mes=…&user_id=…&deleted=0|1|all&fields=a,b
@@ -265,6 +267,7 @@ class NotaController extends Controller
         if ($nota) {
             unset($d['created_at']);
             $donoAntes = $nota->user_id;
+            $retrato = $this->historico->retrato($nota);   // 06/11/2026: o histórico compara com isto depois de salvar
             $nota->fill($d);
             $nota->updated_by = $u->id;
             /* 04/11/2026: a pasta decide quem abre o anexo, então ele acompanha a nota. Só gestor/admin chega aqui com dono
@@ -273,10 +276,14 @@ class NotaController extends Controller
             /* 03/11/2026: edição aceita traz junto o anexo que esperava por ela (ver foto()). Só quem não é da gestão guarda
                anexo em espera, então um PUT da gestão não pode fazer entrar o arquivo do colaborador. A espera de um dono
                anterior não passa por aqui: a troca a guarda em outra pasta (04/11/2026). */
-            $emEspera = $u->veTudo() ? null : $this->fotos->promoverEspera($this->fotos->pastaDe($nota), $id);
+            $temEspera = ! $u->veTudo() && $this->fotos->temEspera($this->fotos->pastaDe($nota), $id);
+            /* 06/11/2026: lido antes, porque a promoção sobrescreve o atual. O mesmo arquivo reenviado continua sendo promovido,
+               mas não é troca (ver foto()). Só com espera: ler o anexo em todo PUT seria custo à toa. */
+            $conteudoAntes = $temEspera ? $this->conteudoDoAnexo($nota->foto_path) : null;
+            $emEspera = $temEspera ? $this->fotos->promoverEspera($this->fotos->pastaDe($nota), $id) : null;
             if ($emEspera !== null) {
                 $nota->foto_path = $emEspera;
-                $anexoTrocado = true;
+                $anexoTrocado = ! $this->mesmoConteudo($conteudoAntes, $emEspera);
             }
             try {
                 $nota->save();
@@ -286,6 +293,7 @@ class NotaController extends Controller
                 }
                 throw $e;
             }
+            $this->historico->registrarMudanca($retrato, $nota, $u, $anexoTrocado);
             if ($mudanca) {
                 $this->fotos->concluirMudanca($mudanca);
             }
@@ -306,6 +314,7 @@ class NotaController extends Controller
             $nota->created_by = $u->id;
             $nota->updated_by = $u->id;
             $nota->save();
+            $this->historico->registrarCriacao($nota, $u);
         }
 
         /* Foto em branco (21/10/2026): mede o anexo se ainda não foi medido (nota nova, ou antiga que acabou de ser
@@ -366,7 +375,9 @@ class NotaController extends Controller
             return response()->json(['nota' => $nota, 'mudou' => false]);
         }
 
+        $retrato = $this->historico->retrato($nota);
         $nota->forceFill(['tipo' => $tipo, 'subtipo' => $subtipo, 'updated_by' => $u->id])->save();
+        $this->historico->registrarMudanca($retrato, $nota, $u);
         Log::warning('nota corrigida pelo gestor', [
             'nota' => $nota->id, 'de' => $antes,
             'para' => $tipo.($subtipo ? ' · '.$subtipo : ''),
@@ -389,13 +400,36 @@ class NotaController extends Controller
 
         $nota = Nota::findOrFail($id);
         if ((bool) $nota->deleted !== (bool) $d['deleted']) {
+            $retrato = $this->historico->retrato($nota);
             $nota->forceFill(['deleted' => (bool) $d['deleted'], 'updated_by' => $u->id])->save();
+            $this->historico->registrarMudanca($retrato, $nota, $u);
             Log::warning('nota '.($d['deleted'] ? 'enviada para a lixeira' : 'restaurada').' pelo servidor', [
                 'nota' => $nota->id, 'por' => $u->email, 'dono' => $nota->user_id, 'pagamento' => $nota->pagamento,
             ]);
         }
 
         return response()->json(['nota' => $nota->fresh()]);
+    }
+
+    /**
+     * GET /notas/{id}/historico → {disponivel, registros:[…]} (06/11/2026, pedido do dono): quem mudou o quê, do mais novo
+     * para o mais velho, limite de 200. Vê quem vê a nota (dono, gestor, admin, contabilidade). Para os demais a resposta é
+     * sempre o mesmo 404, exista a nota ou não. Nota apagada de vez: só quem tem veTudo(), porque o dono já não a tem.
+     */
+    public function historico(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        $nota = Nota::find($id);
+        abort_unless($u->veTudo() || ($nota && $nota->user_id === $u->id), 404, 'Nota não encontrada');
+
+        /* API publicada antes da migração: a tela diz que o histórico ainda não está ativo, sem erro */
+        if (! NotaHistorico::tabelaExiste()) {
+            return response()->json(['disponivel' => false, 'registros' => []]);
+        }
+        $registros = $this->historico->listar($id);
+        abort_if(! $nota && $registros === [] && ! DB::table('notas_apagadas')->where('id', $id)->exists(), 404, 'Nota não encontrada');
+
+        return response()->json(['disponivel' => true, 'registros' => $registros]);
     }
 
     /* Ids apagados em definitivo desde `since`, para o app limpar o que
@@ -486,7 +520,10 @@ class NotaController extends Controller
         if (\App\Models\AvisoCorrecao::tabelaExiste()) {
             \App\Models\AvisoCorrecao::where('nota_id', $nota->id)->delete();   // 24/10/2026: os avisos da nota vão junto
         }
+        $retrato = $this->historico->retrato($nota);
         $nota->delete();
+        /* 06/11/2026: o histórico da nota fica, sem chave estrangeira: é a prova de quem apagou */
+        $this->historico->registrarExclusao($retrato, $id, $u);
 
         return response()->json(['ok' => true]);
     }
@@ -803,6 +840,8 @@ class NotaController extends Controller
             return response()->json(['foto_path' => $path, 'updated_at' => $nota->updated_at]);
         }
 
+        /* 06/11/2026: precisa ser antes de gravar, porque salvarPara sobrescreve o arquivo que serve de comparação */
+        $conteudoAntes = $nota ? $this->conteudoDoAnexo($nota->foto_path) : null;
         $path = $this->fotos->salvarPara($pasta, $id, $r->file('file'), $r->input('ext'));
         try {
             $this->fotos->miniatura($path);   // pronta para a tela Arquivos; se falhar, gera depois
@@ -812,12 +851,32 @@ class NotaController extends Controller
             $nota->foto_path = $path;
             $nota->updated_by = $u->id;
             $nota->save();
+            if (! $this->mesmoConteudo($conteudoAntes, $path)) {
+                $this->historico->registrarAnexo($id, $u);
+            }
             /* anexo trocado: mede de novo (foto em branco que o colaborador acabou de corrigir deixa de ser pendência).
                Nota que ainda não existe é medida no upsert, quando nasce. */
             $this->fotoBranca->avaliar($nota, $u, refazer: true);
         }
 
         return response()->json(['foto_path' => $path, 'updated_at' => $nota?->updated_at]);
+    }
+
+    /* A fila repete o envio quando a resposta se perde: o mesmo arquivo de novo não é troca de anexo (06/11/2026). A conta é
+       entre o guardado antes e o guardado depois, nunca com os bytes enviados: o servidor regrava o JPEG com rotação no EXIF, e
+       o reenvio dele não bateria com o que já está no disco. Na dúvida (null), conta como troca: é o que o histórico mostra. */
+    private function conteudoDoAnexo(?string $path): ?string
+    {
+        try {
+            return $path !== null && $this->fotos->existe($path) ? sha1((string) $this->fotos->disk()->get($path)) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function mesmoConteudo(?string $antes, string $path): bool
+    {
+        return $antes !== null && $antes === $this->conteudoDoAnexo($path);
     }
 
     /**
@@ -841,6 +900,7 @@ class NotaController extends Controller
             $n->foto_path = $arq;
             $n->timestamps = ! $this->ultimaEdicaoFoiDaGestao($n, $u);   // 03/11/2026: subir a hora sem assinar viraria falso conflito em quem já conhecia a correção
             $n->save();
+            $this->historico->registrarAnexo($n->id, $u, 'anexo religado');   // 06/11/2026: a nota mudou, mas o arquivo é o mesmo de antes
             $recuperadas[] = ['id' => $n->id, 'foto_path' => $arq];
         }
 

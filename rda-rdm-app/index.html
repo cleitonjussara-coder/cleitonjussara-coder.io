@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=548">
+  <link rel="manifest" href="manifest.json?v=549">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -264,6 +264,20 @@ body.tem-banner-sync #app-header{padding-top:2px}   /* o banner de envio já cob
 .notif-tit{font-weight:700;font-size:15.5px;overflow-wrap:anywhere}
 .notif-sub{font-size:14px;color:var(--text2);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}
 .notif-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* Histórico da nota (06/11/2026): antes → depois quebra em qualquer ponto, observação longa não pode estourar a tela */
+.hist-nota-resumo{margin:0;font-size:14.5px;color:var(--text2);overflow-wrap:anywhere}
+.hist-nota-lista{display:flex;flex-direction:column;gap:8px;min-width:0}
+.hist-nota-aviso{margin:0;font-size:15.5px;color:var(--text2)}
+.hist-nota-dia{font-size:13.5px;font-weight:800;color:var(--text2);margin-top:4px}
+.hist-nota-item{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;min-width:0}
+.hist-nota-topo{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.hist-nota-acao{font-weight:700;font-size:15.5px;min-width:0;overflow-wrap:anywhere}
+.hist-nota-hora{flex:0 0 auto;font-size:13.5px;color:var(--text2);font-variant-numeric:tabular-nums}
+.hist-nota-quem{font-size:14px;color:var(--text2);margin-top:2px;overflow-wrap:anywhere}
+.hist-nota-campos{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.hist-nota-campo{font-size:14.5px;line-height:1.4;overflow-wrap:anywhere}
+.hist-nota-antes{color:var(--text2);text-decoration:line-through}
+.hist-nota-vazio{color:var(--text2);font-style:italic}
 .hdr-logo{font-weight:800;font-size:19.5px;letter-spacing:-.3px;white-space:nowrap}
 .hdr-inicio{background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font:inherit;font-size:15.5px;font-weight:800;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent}
 .hdr-inicio:active{background:rgba(255,255,255,.32)}
@@ -450,7 +464,7 @@ select.inp{cursor:pointer}
 .nota-foot{display:flex;align-items:center;justify-content:space-between;
            padding:6px 12px 10px;border-top:1px solid var(--border)}
 .nota-valor{font-size:19px;font-weight:800;color:var(--primary-d)}
-.nota-actions{display:flex;gap:2px}
+.nota-actions{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}   /* 06/11/2026: com 🕘 são até 6 ícones, e a 320 px eles quebram linha em vez de estourar */
 .nota-data{font-size:15px;color:var(--text2);margin-left:auto}
 
 /* miniatura do anexo — some se a nota nao tem foto (card fica igual ao de antes) */
@@ -2175,7 +2189,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=548" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=549" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2434,6 +2448,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
   </div>
   <div class="form-body">
     <div id="captura-badge" class="captura-badge">✏️ Manual</div>
+    <button type="button" class="btn btn-sm btn-outline" id="nf-btn-historico" style="display:none;align-self:flex-start"
+            onclick="abrirHistoricoNota($('nf-id').value)">🕘 Histórico</button>
     <div id="gestor-edit-banner" class="nota-gestor-banner" style="display:none">
       <span class="nota-gestor-icon">🛡️</span>
       <div>
@@ -2883,39 +2899,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=548"></script>
-<script defer src="js/db.js?v=548"></script>
-<script defer src="js/nfce.js?v=548"></script>
-<script defer src="js/sefaz.js?v=548"></script>
-<script defer src="js/brasilapi.js?v=548"></script>
-<script defer src="js/ocr.js?v=548"></script>
-<script defer src="js/scanner.js?v=548"></script>
-<script defer src="js/foto-branca.js?v=548"></script>
-<script defer src="js/recorte.js?v=548"></script>
-<script defer src="js/excel.js?v=548"></script>
-<script defer src="js/gestor.js?v=548"></script>
-<script defer src="js/frota.js?v=548"></script>
-<script defer src="js/frota-painel.js?v=548"></script>
-<script defer src="js/frota-planilha.js?v=548"></script>
-<script defer src="js/ponto.js?v=548"></script>
-<script defer src="js/rastreio.js?v=548"></script>
-<script defer src="js/repasses-equipe.js?v=548"></script>
-<script defer src="js/gdrive.js?v=548"></script>
+<script defer src="js/api.js?v=549"></script>
+<script defer src="js/db.js?v=549"></script>
+<script defer src="js/nfce.js?v=549"></script>
+<script defer src="js/sefaz.js?v=549"></script>
+<script defer src="js/brasilapi.js?v=549"></script>
+<script defer src="js/ocr.js?v=549"></script>
+<script defer src="js/scanner.js?v=549"></script>
+<script defer src="js/foto-branca.js?v=549"></script>
+<script defer src="js/recorte.js?v=549"></script>
+<script defer src="js/excel.js?v=549"></script>
+<script defer src="js/gestor.js?v=549"></script>
+<script defer src="js/frota.js?v=549"></script>
+<script defer src="js/frota-painel.js?v=549"></script>
+<script defer src="js/frota-planilha.js?v=549"></script>
+<script defer src="js/ponto.js?v=549"></script>
+<script defer src="js/rastreio.js?v=549"></script>
+<script defer src="js/repasses-equipe.js?v=549"></script>
+<script defer src="js/gdrive.js?v=549"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=548"></script>
+<script defer src="js/svelte-ajuda.js?v=549"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=548"></script>
+<script defer src="js/svelte-historico.js?v=549"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=548"></script>
+<script defer src="js/svelte-arquivos.js?v=549"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=548"></script>
-<script defer src="js/app.js?v=548"></script>
-<script defer src="js/instalar.js?v=548"></script>
+<script defer src="js/svelte-perfil.js?v=549"></script>
+<script defer src="js/app.js?v=549"></script>
+<script defer src="js/instalar.js?v=549"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=548').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=549').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

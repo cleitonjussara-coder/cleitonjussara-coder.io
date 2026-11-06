@@ -31,6 +31,10 @@ class CargaLimpar extends Command
         foreach ($ids as $id) {
             $fotos->disk()->deleteDirectory($id);
         }
+        /* 06/11/2026: as notas do teste passam pelo PUT e ganham histórico, que não pode sobrar na homologação */
+        if (\App\Models\NotaHistorico::tabelaExiste()) {
+            \App\Models\NotaHistorico::whereIn('nota_id', Nota::whereIn('user_id', $ids)->select('id'))->delete();
+        }
         $notas = Nota::whereIn('user_id', $ids)->delete();
         foreach ($ids as $id) {
             Colaborador::find($id)?->tokens()->delete();

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 548;
+const APP_BUILD = 549;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5408,7 +5408,8 @@ async function renderNotasApagadas() {
           <div class="nota-actions">
             ${n._orfa
               ? `<button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}" onclick="limparDaLixeira(this.dataset.nota)">Limpar daqui</button>`
-              : `<button class="btn btn-sm ${_dupNaLixeira(n) ? 'btn-outline' : 'btn-primary'}" data-nota="${_at(n.id)}" onclick="restaurarNota(this.dataset.nota)">Restaurar</button>
+              : `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="abrirHistoricoNota(this.dataset.nota)" title="Histórico" aria-label="Histórico da nota">🕘</button>
+            <button class="btn btn-sm ${_dupNaLixeira(n) ? 'btn-outline' : 'btn-primary'}" data-nota="${_at(n.id)}" onclick="restaurarNota(this.dataset.nota)">Restaurar</button>
             ${_podeApagarDefinitivo(n) ? `<button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}"
               onclick="apagarDefinitivo(this.dataset.nota)" title="Apagar em definitivo">Apagar definitivo</button>` : ''}`}
           </div>
@@ -5451,6 +5452,7 @@ async function renderNotasApagadas() {
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
+            <button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="abrirHistoricoNota(this.dataset.nota)" title="Histórico" aria-label="Histórico da nota">🕘</button>
             <button class="btn btn-sm btn-primary" data-nota="${_at(n.id)}" onclick="lixeiraEquipeRestaurar(this.dataset.nota)">Restaurar</button>
             <button class="btn btn-sm btn-danger-outline" data-nota="${_at(n.id)}" onclick="lixeiraEquipeApagar(this.dataset.nota)" title="Apagar em definitivo">Apagar definitivo</button>
           </div>
@@ -6244,6 +6246,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
             ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="emitirNfsePedagio(this.dataset.nota)" title="Emitir a NFS-e do pedágio no site da concessionária">🧾</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
               ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="corrigirGrupoNota(this.dataset.nota)" title="Corrigir a categoria">🔀</button>` : ''}
+            <button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="abrirHistoricoNota(this.dataset.nota)" title="Histórico" aria-label="Histórico da nota">🕘</button>
             <button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="editarNota(this.dataset.nota)" title="${_ehContabilidade() ? 'Corrigir esta nota' : 'Editar'}">✏️</button>
             ${_ehContabilidade() ? '' : `<button class="btn-icon-sm danger" data-nota="${_at(n.id)}" onclick="excluirNota(this.dataset.nota)" title="Excluir">🗑</button>`}
           </div>
@@ -9081,6 +9084,7 @@ async function abrirFormNota(dados = {}) {
      nunca undefined — dados aqui é o registro de verdade, já com a chave). */
   _semColaboradorForcado = dados.semColaborador === true || (!!dados.id && dados.user_id === null);
   $('nf-id').value       = dados.id       || '';
+  $('nf-btn-historico').style.display = dados.id ? '' : 'none';   // nota nova ainda não tem o que mostrar
   _baseFormNota          = dados.id ? (dados.server_updated_at || null) : null;
   $('nf-owner-id').value = _semColaboradorForcado ? '' : (dados.user_id || user?.id || '');
   $('nf-metodo').value   = dados.metodo_captura || 'manual';
@@ -10292,6 +10296,66 @@ async function editarNota(id) {
   const n = _notaPorId(id);
   if (!n) return;
   abrirFormNota(n);
+}
+
+/* Histórico da nota (06/11/2026, pedido do dono): quem mudou o quê, com antes e depois. Busca do servidor a cada abertura
+   e não guarda no aparelho, porque traz nomes de outras pessoas. O registro só existe daqui para a frente. */
+function _histNotaCampoHTML(r, c) {
+  const val = v => (v === null || v === undefined || v === '') ? '<span class="hist-nota-vazio">vazio</span>' : esc(v);
+  /* na criação e na exclusão só há um lado da conta; no anexo só há o fato, nunca o arquivo */
+  const unico = r.acao === 'exclusao' ? c.antes : (r.acao === 'criacao' || c.campo === 'anexo') ? c.depois : undefined;
+  return `<li class="hist-nota-campo"><b>${esc(c.rotulo)}:</b> ${unico !== undefined ? val(unico)
+    : `<span class="hist-nota-antes">${val(c.antes)}</span> → ${val(c.depois)}`}</li>`;
+}
+
+function _histNotaHTML(registros) {
+  let dia = '';
+  return registros.map(r => {
+    const d = FusoBR.data(r.alterado_em);
+    const cabecalho = d !== dia ? `<div class="hist-nota-dia">${esc(d)}</div>` : '';
+    dia = d;
+    return `${cabecalho}
+      <div class="hist-nota-item">
+        <div class="hist-nota-topo">
+          <span class="hist-nota-acao">${esc(r.acao_rotulo)}</span>
+          <span class="hist-nota-hora">${esc(FusoBR.hora(r.alterado_em, { hour: '2-digit', minute: '2-digit' }))}</span>
+        </div>
+        <div class="hist-nota-quem">${esc(r.por_nome)}${r.papel_rotulo ? ` · ${esc(r.papel_rotulo)}` : ''}</div>
+        ${(r.campos || []).length ? `<ul class="hist-nota-campos">${r.campos.map(c => _histNotaCampoHTML(r, c)).join('')}</ul>` : ''}
+      </div>`;
+  }).join('');
+}
+
+async function abrirHistoricoNota(id) {
+  const n = _notaPorId(id);
+  document.getElementById('hist-nota-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'hist-nota-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:480px">
+      <div class="modal-hd"><h3>🕘 Histórico da nota</h3>
+        <button class="btn-icon-sm" aria-label="Fechar" onclick="document.getElementById('hist-nota-overlay')?.remove()">✕</button></div>
+      <div class="modal-bd">
+        ${n ? `<p class="hist-nota-resumo">${esc(n.razao_social || 'Sem empresa')} · ${brl(Number(n.valor) || 0)} · ${fmtData(n.data)}</p>` : ''}
+        <div class="hist-nota-lista"><p class="hist-nota-aviso">Buscando…</p></div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+
+  const lista = ov.querySelector('.hist-nota-lista');
+  const aviso = texto => { lista.innerHTML = `<p class="hist-nota-aviso">${esc(texto)}</p>`; };
+  if (!sb || !navigator.onLine) { aviso('O histórico fica no servidor: conecte-se à internet para ver.'); return; }
+  const semRegistro = 'Sem alterações registradas desde 06/11/2026';
+  try {
+    const r = await sb.notas.historico(id);
+    if (r?.disponivel === false) { aviso('O histórico ainda não está ativo no servidor.'); return; }
+    if (r?.registros?.length) lista.innerHTML = _histNotaHTML(r.registros); else aviso(semRegistro);
+  } catch (e) {
+    /* 404: nota que ainda está na fila deste aparelho, ou que não existe mais para quem pergunta */
+    aviso(e?.status === 404 ? semRegistro : 'Não deu para buscar o histórico agora. Confira a internet e tente de novo.');
+  }
 }
 
 /* Correção de grupo pelo gestor (23/09/2026): o colaborador lançou em RDA o

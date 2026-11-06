@@ -311,6 +311,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     /* gestor/admin corrige o grupo do lançamento (23/09/2026) */
     lixeira: (id, deleted = true) => req('PATCH', `/notas/${id}/lixeira`, { body: { deleted } }),
     corrigirTipo: (id, tipo, subtipo = null) => req('PATCH', `/notas/${id}/tipo`, { body: { tipo, subtipo } }),
+    /* quem mudou o quê na nota (06/11/2026): só existe no servidor, nunca entra no IndexedDB */
+    historico: id => req('GET', `/notas/${encodeURIComponent(id)}/historico`),
     /* valor/data/emitente oficiais pela URL do QR (servidor abre o portal do
        SEFAZ). null quando o portal não respondeu — o app fica com o OCR. */
     consultarQr: async (qrUrl, chave) => {

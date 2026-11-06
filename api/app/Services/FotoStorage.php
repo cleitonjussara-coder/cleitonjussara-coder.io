@@ -358,6 +358,12 @@ class FotoStorage
         return $arquivo !== null;
     }
 
+    /** 06/11/2026: quem promove precisa ler o anexo atual antes, e só vale a pena quando há mesmo algo esperando. */
+    public function temEspera(string $pasta, string $notaId): bool
+    {
+        return $this->arquivoDaNota("{$pasta}/".self::ESPERA_DIR, $notaId) !== null;
+    }
+
     /** O anexo em espera vira o anexo da nota. Devolve o caminho novo, ou null se não havia nada esperando. */
     public function promoverEspera(string $pasta, string $notaId): ?string
     {

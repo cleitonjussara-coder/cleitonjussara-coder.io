@@ -82,6 +82,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::patch('/notas/{id}/tipo', [NotaController::class, 'corrigirTipo']);   // gestor corrige RDA⇄RDM (23/09/2026)
     Route::patch('/notas/{id}/lixeira', [NotaController::class, 'lixeira']);   // gestor/admin manda para a lixeira (ou restaura) sem reenviar a nota (30/10/2026)
     Route::get('/notas/apagadas', [NotaController::class, 'apagadas']);   // lápides (25/09/2026)
+    Route::get('/notas/{id}/historico', [NotaController::class, 'historico']);   // quem mudou o quê na nota (06/11/2026)
     Route::delete('/notas/{id}', [NotaController::class, 'destroy']);
     Route::post('/notas/{id}/foto', [NotaController::class, 'foto']);
 
