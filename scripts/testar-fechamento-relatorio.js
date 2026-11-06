@@ -49,6 +49,7 @@ function montar({ aguardando = [], online = true, guardada = [], falhaServidor =
   w.eval('var sb = { fechamento: { aguardando: () => window.sbAguardando(), lista: async () => ({ fechados: [] }) } };');
   w.eval(fonte('fechamento.js'));
   w.eval(fonte('excel.js'));
+  { const app = fonte('app.js'); w.eval(app.slice(app.indexOf('const CATEGORIAS_CV = ['), app.indexOf('/* ─── Resumo de gastos e saldo devedor')).replace(/^const /gm, 'var ')); }   // a ficha usa as categorias do app.js
   w.eval(fonte('gestor.js') + ';window.Gestor = Gestor;');
   return { w, arquivos, meta };
 }

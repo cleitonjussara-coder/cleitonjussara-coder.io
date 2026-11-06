@@ -13,6 +13,8 @@ const { JSDOM } = require(process.env.JSDOM_DIR || path.join(__dirname, '..', 'r
 const JS = path.join(__dirname, '..', 'rda-rdm-app', 'js');
 const fonteGestor = fs.readFileSync(path.join(JS, 'gestor.js'), 'utf8');
 const fonteApp = fs.readFileSync(path.join(JS, 'app.js'), 'utf8');
+const _iniCat = fonteApp.indexOf('const CATEGORIAS_CV = [');
+const fonteCategorias = fonteApp.slice(_iniCat, fonteApp.indexOf('/* ─── Resumo de gastos e saldo devedor')).replace(/^const /gm, 'var ');   // a ficha usa as categorias do app.js
 
 let falhas = 0;
 const confere = (ok, msg) => { console.log((ok ? '  ok  ' : '  FALHOU  ') + msg); if (!ok) falhas++; };
@@ -64,6 +66,7 @@ function montarGestor() {
     var setLoading = () => {};
     var FusoBR = { partes: () => ({ ano: 2026, mes: 11, dia: 4 }), hojeISO: () => '2026-11-04' };
   `);
+  w.eval(fonteCategorias);
   w.eval(fonteGestor + ';window.Gestor = Gestor;');
   return w;
 }
@@ -420,6 +423,7 @@ const valor = c => texto(c.querySelector('b'));
     const q = (arr, f) => Promise.resolve(arr.filter(x => (!f.ano || x.ano === f.ano) && (!f.mes || x.mes === f.mes)));
     const sb = { notas: { list: f => q(ns, f) }, repasses: { list: f => q(rs, f) }, colaboradores: { listTodos: async () => colabs } };
     G.fechar();
+    G.definirAba('pessoas');
     const el = w.document.createElement('div');
     w.document.body.appendChild(el);
     await G.renderDashboard(el, sb, { id: 'g1', role: 'gestor', nome: 'Gestor' }, () => {}, { mes: 3, ano: 2026 });
@@ -438,6 +442,7 @@ const valor = c => texto(c.querySelector('b'));
       : Promise.resolve(arr.filter(x => (!f.ano || x.ano === f.ano) && (!f.mes || x.mes === f.mes) && !(f.deleted === '0' && x.deleted)));
     const sb = { notas: { list: f => q(nsDois, f) }, repasses: { list: f => q(rsDois, f) }, colaboradores: { listTodos: async () => colabsDois } };
     G.fechar();
+    G.definirAba('pessoas');
     const el = w.document.createElement('div');
     w.document.body.appendChild(el);
     await G.renderDashboard(el, sb, { id: 'g1', role: 'gestor', nome: 'Gestor' }, () => {}, { mes, ano });

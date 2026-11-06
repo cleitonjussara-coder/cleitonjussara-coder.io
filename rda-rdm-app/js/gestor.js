@@ -68,15 +68,6 @@ window.Gestor = (() => {
     </div>`;
   }
 
-  function alternarFaturamento(hd) {
-    const card = hd.closest('.fat-card');
-    const det = card.querySelector('.fat-det');
-    const abrindo = det.style.display === 'none';
-    det.style.display = abrindo ? 'block' : 'none';
-    card.querySelector('.fat-seta').textContent = abrindo ? '▴' : '▾';
-    card.querySelector('.fat-dica').style.display = abrindo ? 'none' : '';
-  }
-
   /* Notas do Faturamento (pagamento='empresa') do mês, em lista única — sem nome de colaborador (15/10/2026).
      O painel só traz colunas resumidas, então a lista vem do servidor ao tocar em "Ver notas". */
   async function verNotasFaturamento(btn, ano, mes) {
@@ -109,6 +100,9 @@ window.Gestor = (() => {
     if (!card) return;
     const dados = JSON.parse(decodeURIComponent(card.dataset.evo || '%5B%5D'));
     const mesAberto = Number(card.dataset.mes);
+    const doAno = !_detalheId && _eqF.modo === 'anual';   // na Equipe em modo Ano, a coluna leva àquele mês
+    if (doAno) _eqF.modo = 'mensal';
+    if (doAno && i + 1 === mesAberto) { _pintarEquipe(); return; }
     /* Outro mês: a tela INTEIRA vai para ele — cartão de Faturamento da equipe, cartões e notas dos colaboradores
        (pedido do Paulo, 14/10/2026). Não há mais botão "Abrir": o próprio toque abre. */
     if (i + 1 !== mesAberto && dados[i]) {
@@ -233,7 +227,7 @@ window.Gestor = (() => {
   async function _historico(sb, extra = {}) {
     try {
       const [notas, repasses] = await Promise.all([
-        sb.notas.list({ ...extra, deleted: '0', fields: 'user_id,tipo,valor,mes,ano,deleted,pagamento' }),
+        sb.notas.list({ ...extra, deleted: '0', fields: 'user_id,tipo,subtipo,valor,mes,ano,deleted,pagamento' }),
         sb.repasses.list({ ...extra, deleted: '0' }),
       ]);
       return Array.isArray(notas) && Array.isArray(repasses) ? { notas, repasses } : null;
@@ -531,7 +525,7 @@ window.Gestor = (() => {
   function irParaRepasses() {
     document.getElementById('cdet-repasses')?.scrollIntoView({ block: 'start' });   // direto, como as setas da lista (sem animação: não depende do aparelho)
   }
-  function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); }
+  function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); Object.assign(_eqF, _EQ_FILTROS); _buscaTxt = ''; }
   /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
      não vale mais quando a ficha é fechada antes de ele terminar */
   function _desarmarFicha() { _evoScroll = null; _rolarParaRepasses = false; _rolarParaNotas = false; _evoMantem = null; }
@@ -575,6 +569,389 @@ window.Gestor = (() => {
     if (!ids.length) return;
     const feito = await excluirRepassesDeOutro(ids);
     if (feito) _selRep.clear();   // a ficha foi redesenhada; sem isso a seleção velha voltaria
+  }
+
+  /* ── Equipe unificada (06/11/2026, pedido do Cleiton) ─────
+     A aba Equipe e o antigo Dashboard Equipe viraram uma tela com três abas: Resumo (números e gráficos), Pessoas (lista e
+     fichas) e Relatórios (downloads, Faturamento e Fechamento). Filtro e troca de aba só redesenham: o que veio do servidor
+     fica em _eq; só mudar de mês ou de ano busca de novo. Os três totais antigos continuam aqui: "Todos" é o Faturamento,
+     "Colaboradores" é o Gasto da equipe e "Empresa" é o Pago direto. */
+  const _EQ_FILTROS = { pag: 'todos', reg: 'todos', colab: 'todos', cat: null, modo: 'mensal', ord: 'gasto', mais: false };
+  const _eqF = { aba: 'resumo', ..._EQ_FILTROS };
+  let _eq = null;   // dados do último carregamento da Equipe
+  const _EQ_COR = { alimentacao: '#b9e24a', abastecimento: '#F4A261', hospedagem: '#ffd166', pedagio: '#60a5fa', manutencao: '#c4b5fd', exames: '#5eead4', locacao: '#fdba74', contabilidade: '#f9a8d4', outros: '#cbd5e1' };
+  const _eqSoma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
+  const _eqQtd = (q, um, varios) => `${q} ${q === 1 ? um : varios}`;
+
+  /* null = não entra em nenhum regime: nota sem colaborador, Contador, ou pessoa que já não existe */
+  function _eqRegimeDe(id) {
+    const c = _eq.porId.get(id);
+    if (!c || c.role === 'contabilidade') return null;
+    return c.regime === 'cv' ? 'cv' : 'rdm_rda';
+  }
+  function _eqNome(id) {
+    if (!id) return '🏢 Faturamento geral (sem colaborador)';
+    const c = _eq.porId.get(id);
+    return c?.nome || c?.email || 'Colaborador removido';
+  }
+  const _eqPassaPessoa = n => (_eqF.colab === 'todos' || n.user_id === _eqF.colab) && (_eqF.reg === 'todos' || _eqRegimeDe(n.user_id) === _eqF.reg);
+  const _eqPassaCat = n => !_eqF.cat || _chaveCategoriaDetalhe(n) === _eqF.cat;
+  const _eqPassaPag = n => _eqF.pag === 'todos' || (n.pagamento === 'empresa') === (_eqF.pag === 'empresa');
+  const _eqPassaTudo = n => _eqPassaPessoa(n) && _eqPassaCat(n) && _eqPassaPag(n);
+
+  function _eqRanking(lista) {
+    const mapa = new Map();
+    lista.forEach(n => {
+      const id = n.user_id || null;
+      const c = mapa.get(id) || { id, nome: _eqNome(id), val: 0, qtd: 0 };
+      c.val += Number(n.valor || 0); c.qtd++;
+      mapa.set(id, c);
+    });
+    return [...mapa.values()].sort((a, b) => b.val - a.val);
+  }
+
+  /* Tudo o que o Resumo mostra. Cada gráfico ignora só o próprio filtro: as categorias não somem ao tocar em uma delas. */
+  function _eqCalculos() {
+    const anual = _eqF.modo === 'anual';
+    const { mes, ano, nsAno, ns, hist } = _eq;
+    const periodo = anual ? nsAno : ns;
+    const lista = periodo.filter(_eqPassaTudo);
+    const total = _eqSoma(lista);
+    const semPag = periodo.filter(n => _eqPassaPessoa(n) && _eqPassaCat(n));
+    const empresa = _eqSoma(semPag.filter(n => n.pagamento === 'empresa'));
+    const colaboradores = _eqSoma(semPag.filter(n => n.pagamento !== 'empresa'));
+
+    const alvoAno = anual || mes === 1 ? ano - 1 : ano;
+    const alvoMes = anual ? null : mes === 1 ? 12 : mes - 1;
+    const fonteAnt = alvoAno === ano ? nsAno : hist?.notas;   // sem o histórico não dá para comparar com o ano anterior
+    const anterior = fonteAnt
+      ? _eqSoma(fonteAnt.filter(n => !n.deleted && Number(n.ano) === alvoAno && (alvoMes === null || Number(n.mes) === alvoMes) && _eqPassaTudo(n)))
+      : null;
+
+    const paraCats = periodo.filter(n => _eqPassaPessoa(n) && _eqPassaPag(n));
+    const totalCats = _eqSoma(paraCats);
+    const cats = CATEGORIAS_TODAS.map(c => {
+      const dela = paraCats.filter(n => _chaveCategoriaDetalhe(n) === c.chave);
+      return { ...c, cor: _EQ_COR[c.chave] || _EQ_COR.outros, val: _eqSoma(dela), qtd: dela.length };
+    }).filter(c => c.qtd > 0).sort((a, b) => b.val - a.val);
+
+    const ranking = _eqRanking(lista);
+    const comDono = ranking.filter(p => p.id);
+    const tipos = new Map();
+    lista.forEach(n => { const t = _tipoEvo(n); tipos.set(t, (tipos.get(t) || 0) + Number(n.valor || 0)); });
+    return { lista, total, empresa, colaboradores, anterior, cats, totalCats, ranking, nPessoas: comDono.length,
+      media: comDono.length ? _eqSoma(comDono.map(p => ({ valor: p.val }))) / comDono.length : 0,
+      tipos: [...tipos].sort((a, b) => b[1] - a[1]), evo: nsAno.filter(_eqPassaTudo) };
+  }
+
+  function _eqCabecalho() {
+    const rel = _eqF.aba === 'rel';
+    const anual = _eqF.modo === 'anual' && !rel;   // relatório é sempre do mês: a aba Relatórios anda de mês em mês
+    const { mes, ano, collabs, offline } = _eq;
+    const seg = (m, t) => `<button class="seg-btn ${_eqF.modo === m ? 'active' : ''}" onclick="Gestor.eqFiltro('modo','${m}')">${t}</button>`;
+    const aba = (k, ico, t) => `<button role="tab" aria-selected="${_eqF.aba === k}" class="${_eqF.aba === k ? 'on' : ''}" onclick="Gestor.eqAba('${k}')"><span aria-hidden="true">${ico}</span>${t}</button>`;
+    return `<div class="ini-ola" style="padding:4px 2px 6px"><h2>👥 Equipe</h2><span>${_eqQtd(collabs.length, 'colaborador ativo', 'colaboradores ativos')}</span></div>
+      <div class="db-header eqp-topo">
+        <div class="mes-nav">
+          <button class="btn-mes-nav" onclick="Gestor.mudarPeriodo(-1)" aria-label="Período anterior">‹</button>
+          <span class="mes-label">${anual ? ano : `${MESES_LONGO[mes-1]} ${ano}`}</span>
+          <button class="btn-mes-nav" onclick="Gestor.mudarPeriodo(1)" aria-label="Próximo período">›</button>
+        </div>
+        ${rel ? '' : `<div class="seg">${seg('mensal', 'Mês')}${seg('anual', 'Ano')}</div>`}
+      </div>
+      ${offline ? '<div class="eqp-aviso">Sem internet: estes números são os guardados neste aparelho. Pessoas e Relatórios voltam com a conexão.</div>'
+        : `<div class="eqp-abas" role="tablist">${aba('resumo', '📊', 'Resumo')}${aba('pessoas', '👥', 'Pessoas')}${aba('rel', '📥', 'Relatórios')}</div>`}`;
+  }
+
+  function _eqFiltrosHTML() {
+    const { collabs, inativos, nsAno } = _eq;
+    const pag = (k, t) => `<button class="seg-btn ${_eqF.pag === k ? 'active' : ''}" onclick="Gestor.eqFiltro('pag','${k}')">${t}</button>`;
+    const reg = (k, t) => `<button class="chip ${_eqF.reg === k ? 'active' : ''}" onclick="Gestor.eqFiltro('reg','${k}')">${t}</button>`;
+    const comNota = new Set(nsAno.map(n => n.user_id));
+    const gente = collabs.concat(inativos.filter(c => comNota.has(c.id))).filter(c => c.role !== 'contabilidade')
+      .sort((a, b) => String(a.nome || a.email).localeCompare(String(b.nome || b.email)));
+    const ativos = [];
+    if (_eqF.cat) { const c = CATEGORIAS_TODAS.find(x => x.chave === _eqF.cat); ativos.push([`${c?.ico || ''} ${c?.nome || _eqF.cat}`, `Gestor.eqFiltro('cat',null)`]); }
+    if (_eqF.reg !== 'todos') ativos.push([_eqF.reg === 'cv' ? 'C.V.' : 'RDM/RDA', `Gestor.eqFiltro('reg','todos')`]);
+    if (_eqF.colab !== 'todos') ativos.push([`👤 ${_eqNome(_eqF.colab)}`, `Gestor.eqFiltro('colab','todos')`]);
+    return `<div class="db-card eqp-filtros">
+      <div class="seg eqp-seg">${pag('todos', 'Todos')}${pag('colab', 'Colaboradores')}${pag('empresa', 'Empresa')}</div>
+      <button class="eqp-mais" aria-expanded="${_eqF.mais}" onclick="Gestor.eqFiltro('mais',${!_eqF.mais})">🔍 Regime e colaborador ${_eqF.mais ? '▴' : '▾'}</button>
+      ${_eqF.mais ? `<div class="fil-tipo" style="flex-wrap:wrap">${reg('todos', 'Todos')}${reg('rdm_rda', 'RDM/RDA')}${reg('cv', 'C.V.')}</div>
+      <select class="inp" aria-label="Colaborador" onchange="Gestor.eqFiltro('colab',this.value)">
+        <option value="todos">Todos os colaboradores</option>
+        ${gente.map(c => `<option value="${_at(c.id)}" ${_eqF.colab === c.id ? 'selected' : ''}>${esc(c.nome || c.email)}</option>`).join('')}
+      </select>` : ''}
+      ${ativos.length ? `<div class="eqp-chips">${ativos.map(([t, a]) => `<button class="chip active" onclick="${a}">${esc(t)} ✕</button>`).join('')}<button class="eqp-limpar" onclick="Gestor.eqLimpar()">limpar tudo</button></div>` : ''}
+    </div>`;
+  }
+
+  function _eqResumoHTML() {
+    const { mes, ano, offline } = _eq;
+    const c = _eqCalculos();
+    const anual = _eqF.modo === 'anual';
+    const rotulo = anual ? String(ano) : `${MESES_LONGO[mes-1]} ${ano}`;
+    const catSel = _eqF.cat ? CATEGORIAS_TODAS.find(x => x.chave === _eqF.cat) : null;
+    const quem = _eqF.pag === 'colab' ? 'Gasto dos colaboradores' : _eqF.pag === 'empresa' ? 'Pago direto pela empresa' : 'Total de despesas';
+    const maxCat = c.cats[0]?.val || 1;
+    const top = c.ranking.slice(0, 5);
+    const maxTop = top[0]?.val || 1;
+    const lado = (k, rot, val) => `<button class="${_eqF.pag === k ? 'on' : ''}" onclick="Gestor.eqFiltro('pag','${k}')"><small>${rot}</small><b>${brl(val)}</b></button>`;
+    return `${_eqFiltrosHTML()}
+      <div class="db-hero">
+        <div class="db-hero-top">
+          <div style="min-width:0">
+            <div class="db-hero-lbl">${esc(catSel ? catSel.nome : quem)} · ${esc(rotulo)}</div>
+            <div class="db-hero-val">${brl(c.total)}</div>
+          </div>
+          ${c.anterior === null ? '' : chipDelta(c.total, c.anterior, false)}
+        </div>
+        <div class="eqp-soma">${lado('colab', '👥 Colaboradores', c.colaboradores)}<span aria-hidden="true">+</span>${lado('empresa', '🏢 Empresa pagou', c.empresa)}</div>
+        <div class="db-hero-meta">
+          <span>${_eqQtd(c.lista.length, 'nota', 'notas')}</span>
+          <span>${_eqQtd(c.nPessoas, 'colaborador', 'colaboradores')}</span>
+          <span>média ${brl(c.media)}</span>
+          ${c.tipos.map(([t, v]) => `<span>${esc(t)} ${brl(v)}</span>`).join('')}
+        </div>
+      </div>
+      <div class="db-card">
+        <div class="db-card-title"><span>Por categoria</span><span class="eqp-dica">toque para filtrar</span></div>
+        ${c.cats.length ? c.cats.map(k => `<button class="eqp-cat ${_eqF.cat === k.chave ? 'on' : ''} ${_eqF.cat && _eqF.cat !== k.chave ? 'off' : ''}" aria-pressed="${_eqF.cat === k.chave}" onclick="Gestor.eqFiltro('cat','${k.chave}')">
+            <span class="eqp-cat-l"><span>${k.ico} ${esc(k.nome)}</span><b>${brl(k.val)} <small>${c.totalCats > 0 ? Math.round(k.val / c.totalCats * 100) : 0}%</small></b></span>
+            <span class="eqp-track"><span style="width:${Math.max(3, Math.round(k.val / maxCat * 100))}%;background:${k.cor}"></span></span>
+          </button>`).join('') : '<p class="muted-p">Nenhuma despesa com esses filtros.</p>'}
+      </div>
+      ${_evoCard(`Evolução do gasto · ${ano}`, '', mes, c.evo)}
+      <div class="db-card">
+        <div class="db-card-title"><span>Quem mais gastou</span>${offline ? '' : `<button class="eqp-limpar" onclick="Gestor.eqAba('pessoas')">ver todos ›</button>`}</div>
+        <div class="db-rank">
+          ${top.length ? top.map((p, i) => `
+            <div class="db-rank-item" ${p.id && _eq.porId.has(p.id) && !offline ? `style="cursor:pointer" data-uid="${_at(p.id)}" onclick="Gestor.abrir(this.dataset.uid)"` : ''}>
+              <div class="db-rank-meta">
+                <span class="db-rank-pos">${i + 1}º</span>
+                <span class="db-rank-name">${esc(p.nome)}</span>
+                <span class="db-rank-val">${brl(p.val)}</span>
+              </div>
+              <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(4, Math.round(p.val / maxTop * 100))}%"></div></div>
+            </div>`).join('') : '<p class="muted-p">Nenhum gasto com esses filtros.</p>'}
+        </div>
+      </div>`;
+  }
+
+  function _eqPessoaHTML(m, pessoa, maxVal) {
+    const { ns, rs, mes, ano, acumOk, antPorUser, antAnoPorUser, cvPorUser, currentUser } = _eq;
+    const mns = ns.filter(n => n.user_id === m.id);
+    const mrs = rs.filter(r => r.user_id === m.id);
+    /* Faturamento (pagamento='empresa') não é gasto do bolso do
+       colaborador — fica de fora do Gasto/Saldo RDM/RDA e aparece
+       separado, como valor pago direto pela empresa em nome dele. */
+    const mnsProprias = mns.filter(n => n.pagamento !== 'empresa');
+    const pagoEmpresaM = _eqSoma(mns.filter(n => n.pagamento === 'empresa'));
+    const faturamentoM = _eqSoma(mns);
+    /* Recebido = repasse que conta no saldo: recarga do cartão (CV) fica de fora,
+       como no app do colaborador e na ficha (28/09/2026) */
+    const mrsConta = mrs.filter(_contaRecebido);
+    const recargaM = _eqSoma(mrs.filter(r => r.destino === 'recarga'));
+    const rdmG = _eqSoma(mnsProprias.filter(n => n.tipo === 'RDM'));
+    const rdmR = _eqSoma(mrsConta.filter(r => r.tipo === 'RDM'));
+    const rdaG = _eqSoma(mnsProprias.filter(n => n.tipo === 'RDA'));
+    const rdaR = _eqSoma(mrsConta.filter(r => r.tipo === 'RDA'));
+    /* saldo ACUMULADO: o que sobrou (ou faltou) dos meses anteriores + recebido − gasto do mês */
+    const ant = antPorUser.get(m.id) || { RDM: 0, RDA: 0 };
+    const antAno = antAnoPorUser.get(m.id) || { RDM: 0, RDA: 0 };
+    const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
+    const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
+    const cvM = cvPorUser.get(m.id);
+
+    /* o Contador só visualiza e baixa relatórios: não lança nota nem tem saldo (14/10/2026) */
+    const ehContador = m.role === 'contabilidade';
+    const previaAberta = _previasAbertas.has(m.id);
+    const canEdit = currentUser.role === 'admin' || currentUser.role === 'gestor';
+    const semFoto = pessoa.notas.filter(n => !n.foto_path).length;
+    const semValor = pessoa.notas.filter(n => Number(n.valor || 0) <= 0).length;
+    const notasTxt = pessoa.notas.length
+      ? _eqQtd(pessoa.notas.length, 'nota', 'notas')
+        + (semFoto ? ` · <span class="alerta">${semFoto} sem foto</span>` : '')
+        + (semValor ? ` · <span class="alerta">${semValor} sem valor</span>` : '')
+      : 'Nenhuma nota';
+    return `
+      <div class="colab-card clicavel ${!ehContador && !pessoa.val ? 'eqp-zero' : ''}" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" data-uid="${_at(m.id)}" onclick="Gestor.abrir(this.dataset.uid)" title="Ver notas de ${_at(m.nome||m.email)}">
+        <div class="colab-head">
+          <div class="avatar ${m.foto_path ? 'clicavel' : ''}" data-foto="${_at(m.foto_path||'')}" data-nome="${_at(m.nome||m.email)}" data-sub="${_at(m.email)} · ${_at(m.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(m.nome))}</div>
+          <div class="colab-info">
+            <div class="colab-nome">${esc(m.nome||m.email)}</div>
+            <div class="colab-email">${esc(m.email)}</div>
+          </div>
+          <span class="role-pill role-${_at(m.role)}">${esc(m.role)}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
+          ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
+          ${canEdit ? `<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>` : ''}
+          ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" data-uid="${_at(m.id)}" onclick="event.stopPropagation();Gestor.alternarPrevia(this,this.dataset.uid)">⋯</button>`}
+          <span class="colab-seta">›</span>
+        </div>
+        ${ehContador ? '' : `<div class="eqp-gasto"><span class="colab-resumo">${notasTxt}</span><b>${brl(pessoa.val)}</b></div>
+        <span class="eqp-track"><span style="width:${pessoa.val ? Math.max(3, Math.round(pessoa.val / maxVal * 100)) : 0}%;background:var(--primary-l)"></span></span>`}
+        <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
+        ${_eqF.modo === 'anual' && !ehContador ? `<div class="colab-resumo">Prévia até ${MESES_LONGO[mes-1]} de ${ano}:</div>` : ''}
+        ${ehContador ? '' : cvM ? _balCvHTML(cvM, ano, acumOk) : `<div class="colab-bal">
+          <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
+            <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
+            <span class="bal-val">${brl(rdmAcum)}</span>
+            ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDM)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDM - antAno.RDM))}</span>` : ''}` : ''}
+            <span class="bal-detail">Gasto ${brl(rdmG)}</span>
+            <span class="bal-detail">Recebido ${brl(rdmR)}</span>
+          </div>
+          <div class="bal-box ${rdaAcum<0?'neg':'pos'}">
+            <span class="bal-type">RDA${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
+            <span class="bal-val">${brl(rdaAcum)}</span>
+            ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDA)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDA - antAno.RDA))}</span>` : ''}` : ''}
+            <span class="bal-detail">Gasto ${brl(rdaG)}</span>
+            <span class="bal-detail">Recebido ${brl(rdaR)}</span>
+          </div>
+        </div>`}
+        ${recargaM && !ehContador ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(${cvM ? 'já está no saldo do cartão' : 'vai para o cartão, não entra no saldo'})</span></div>` : ''}
+        ${mns.length && !ehContador ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
+        ${pagoEmpresaM && !ehContador ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function _eqPessoasHTML() {
+    const { collabs, inativos, nsAno, ns, podeConsolidar } = _eq;
+    const lista = (_eqF.modo === 'anual' ? nsAno : ns).filter(_eqPassaTudo);
+    const porPessoa = new Map();
+    lista.forEach(n => { const id = n.user_id || null; if (!porPessoa.has(id)) porPessoa.set(id, []); porPessoa.get(id).push(n); });
+    const dados = id => { const notas = porPessoa.get(id) || []; return { notas, val: _eqSoma(notas) }; };
+    const visivel = m => (_eqF.colab === 'todos' || m.id === _eqF.colab) && (_eqF.reg === 'todos' || _eqRegimeDe(m.id) === _eqF.reg);
+    const pessoas = collabs.filter(visivel).map(m => ({ m, p: dados(m.id) }));
+    const nome = x => String(x.m.nome || x.m.email);
+    pessoas.sort(_eqF.ord === 'nome' ? (a, b) => nome(a).localeCompare(nome(b)) : (a, b) => (b.p.val - a.p.val) || nome(a).localeCompare(nome(b)));
+    const maxVal = Math.max(1, ...pessoas.map(x => x.p.val));
+    const ord = (k, t) => `<button class="seg-btn ${_eqF.ord === k ? 'active' : ''}" onclick="Gestor.eqFiltro('ord','${k}')">${t}</button>`;
+    /* o que não tem cartão de pessoa ativa aparece numa linha própria: a soma da lista precisa fechar com o Resumo */
+    const ativos = new Set(collabs.map(c => c.id)), desativados = new Set(inativos.map(c => c.id));
+    const avulsas = [...porPessoa.keys()].filter(id => !ativos.has(id) && !desativados.has(id) && (_eqF.colab === 'todos' || id === _eqF.colab) && _eqF.reg === 'todos');
+    return `${_eqFiltrosHTML()}
+      <div class="busca-colab">
+        <span class="busca-ico">🔍</span>
+        <input class="inp" id="busca-colab" type="search" placeholder="Buscar pessoa…" autocomplete="off" value="${_at(_buscaTxt)}" oninput="Gestor.filtrar(this.value)">
+      </div>
+      <div class="eqp-ord"><span>${_eqQtd(pessoas.length, 'colaborador', 'colaboradores')}</span><div class="seg">${ord('gasto', 'Maior gasto')}${ord('nome', 'A–Z')}</div></div>
+      <div class="colab-list">
+        ${pessoas.map(x => _eqPessoaHTML(x.m, x.p, maxVal)).join('')}
+        ${avulsas.map(id => `<div class="colab-card">
+          <div class="eqp-gasto"><span class="colab-nome">${esc(_eqNome(id))}</span><b>${brl(dados(id).val)}</b></div>
+          <div class="colab-resumo">${_eqQtd(dados(id).notas.length, 'nota', 'notas')}</div>
+        </div>`).join('')}
+      </div>
+      ${inativos.length ? `<details class="dash-card" style="margin-top:10px"><summary style="cursor:pointer;font-weight:800">🚫 Desativados (${inativos.length})</summary>
+        <div class="colab-list" style="margin-top:8px;opacity:.85">${inativos.map(m => `
+        <div class="colab-card" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}">
+          <div class="colab-head">
+            <div class="avatar" data-foto="${_at(m.foto_path||'')}">${esc(ini(m.nome))}</div>
+            <div class="colab-info">
+              <div class="colab-nome">${esc(m.nome||m.email)}</div>
+              <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + FusoBR.data(m.desativado_em) : ''}</div>
+            </div>
+            ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>` : ''}
+          </div>
+          ${visivel(m) && dados(m.id).val ? `<div class="eqp-gasto"><span class="colab-resumo">${_eqQtd(dados(m.id).notas.length, 'nota', 'notas')}</span><b>${brl(dados(m.id).val)}</b></div>` : ''}
+        </div>`).join('')}</div></details>` : ''}
+      <div class="empty-state" id="busca-vazio" style="display:none">Ninguém com esse nome.</div>
+      ${collabs.length ? '' : '<div class="empty-state">Nenhum colaborador encontrado.</div>'}`;
+  }
+
+  function _eqRelatoriosHTML() {
+    const { ns, mes, ano, todos, podeConsolidar } = _eq;
+    const rotulo = `${MESES_LONGO[mes-1]} ${ano}`;
+    /* Pago direto pela empresa (pagamento='empresa'): recorte do total — não entra no saldo de ninguém, mas é lançado pelo
+       gestor/admin e precisa mostrar quem lançou cada uma. */
+    const pagoEmpresa = ns.filter(n => n.pagamento === 'empresa');
+    const porLancador = new Map();
+    pagoEmpresa.forEach(n => {
+      const lid = n.created_by || '';
+      const cur = porLancador.get(lid) || { nome: todos.find(c => c.id === lid)?.nome || 'Desconhecido', val: 0, qtd: 0 };
+      cur.val += Number(n.valor || 0); cur.qtd++;
+      porLancador.set(lid, cur);
+    });
+    const acoes = [
+      podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contador, colaborador…)">✉️ Convidar</button>` : '',
+      podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️ Fotos ao Drive</button>` : '',
+      podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="switchView('rastreio')">🛰️ Rastreio</button>` : '',
+      podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="switchView('repasses')">💸 Repasses</button>` : '',
+    ].join('');
+    return `<div class="dash-card">
+        <div class="dash-card-title">📥 Relatórios da equipe</div>
+        <div class="eqp-txt">${esc(rotulo)} · você marca quem entra</div>
+        <div class="eqp-btns">
+          <button class="btn btn-sm btn-primary" onclick="Gestor.abrirPdfEquipe()" title="Relatório do mês em PDF: escolha os colaboradores">📕 PDF do mês</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirExcelEquipe()" title="Resumo do mês em Excel: escolha os colaboradores">📗 Excel do mês</button>
+          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um)">📗 Planilhas ${ano}</button>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">🏢 Pago direto pela empresa · ${esc(rotulo)}</div>
+        <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(_eqSoma(pagoEmpresa))}</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${pagoEmpresa.length ? `${_eqQtd(pagoEmpresa.length, 'nota', 'notas')} sem passar pelo colaborador — já incluída no total do Resumo, não entra no saldo de ninguém` : 'Nenhuma nota paga direto neste mês'}</div>
+        ${[...porLancador.values()].sort((a, b) => b.val - a.val).map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;padding:4px 0;border-top:1px solid var(--border)">
+          <span>Lançado por <b>${esc(p.nome)}</b></span>
+          <span style="font-weight:700">${brl(p.val)} · ${_eqQtd(p.qtd, 'nota', 'notas')}</span>
+        </div>`).join('')}
+        <div class="eqp-btns" style="margin-top:10px">
+          ${pagoEmpresa.length ? `<button class="btn btn-sm btn-outline" onclick="Gestor.verNotasFaturamento(this, ${ano}, ${mes})">👁 Ver notas</button>
+          <button class="btn btn-sm btn-outline" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="baixarPlanilhaFaturamento()">📊 Planilha do ano (Excel)</button>
+        </div>
+        <div class="fat-notas" style="display:none;margin-top:8px"></div>
+      </div>
+      <div id="fech-quadro"></div>
+      ${acoes ? `<div class="dash-card"><div class="dash-card-title">Mais ações</div><div class="eqp-btns">${acoes}</div></div>` : ''}`;
+  }
+
+  function _pintarEquipe({ topo = false } = {}) {
+    if (!_eq || _detalheId) return;
+    const { el, todos, sb, onRebuild, currentUser } = _eq;
+    const y = el.scrollTop;
+    if (_eq.offline) _eqF.aba = 'resumo';
+    const conteudo = _eqF.aba === 'pessoas' ? _eqPessoasHTML() : _eqF.aba === 'rel' ? _eqRelatoriosHTML() : _eqResumoHTML();
+    el.innerHTML = `<div class="eqp">${_eqCabecalho()}${conteudo}</div>`;
+    if (_evoScroll !== null) _restaurarRolagem(el); else el.scrollTop = topo ? 0 : y;
+    if (_eqF.aba === 'rel') window.Fechamento?.pintar().catch(() => {});   // não segura a tela: o quadro aparece quando o servidor responder
+    if (_eqF.aba === 'pessoas' && _buscaTxt) filtrar(_buscaTxt);
+    el.querySelectorAll('[data-eid]').forEach(btn =>
+      btn.addEventListener('click', e => {
+        e.stopPropagation();                   // o cartão inteiro abre o detalhe
+        const c = todos.find(x => x.id === btn.dataset.eid);
+        if (c) showEditModal(c, sb, onRebuild, currentUser);
+      })
+    );
+  }
+
+  /* Tocar de novo no mesmo filtro desliga: categoria e quem pagou funcionam como interruptor. */
+  function eqFiltro(campo, valor) {
+    if (!(campo in _EQ_FILTROS)) return;
+    if (campo === 'cat' && _eqF.cat === valor) _eqF.cat = null;
+    else if (campo === 'pag' && _eqF.pag === valor) _eqF.pag = 'todos';
+    else _eqF[campo] = valor;
+    _pintarEquipe();
+  }
+  function eqLimpar() { Object.assign(_eqF, { pag: 'todos', reg: 'todos', colab: 'todos', cat: null }); _pintarEquipe(); }
+  function eqAba(aba) { _eqF.aba = aba; _pintarEquipe({ topo: true }); }
+  function definirAba(aba) { _eqF.aba = aba; }   // quem chega por um link já cai na aba certa (aviso do Fechamento)
+  function mudarPeriodo(delta) {
+    if (_eqF.modo === 'anual' && _eqF.aba !== 'rel') mudarAnoEquipe(delta); else mudarMesEquipe(delta);
+  }
+
+  /* Sem internet o Resumo segue com o que está guardado no aparelho, como o antigo Dashboard. O saldo depende do histórico
+     do servidor, então Pessoas e Relatórios esperam a conexão. Só gestor e admin têm as notas da equipe no aparelho. */
+  function _eqDoAparelho(el, sb, currentUser, onRebuild, mes, ano) {
+    if (navigator.onLine || !['gestor', 'admin'].includes(currentUser.role)) return false;
+    const collabs = Object.values(equipePorId).filter(c => c && c.ativo !== false);
+    const nsAno = notas.concat(notasEquipe).filter(n => !n.deleted && n.ano === ano);
+    _eq = { el, sb, currentUser, onRebuild, todos: collabs, collabs, inativos: [], nsAno, ns: nsAno.filter(n => n.mes === mes), rs: [], hist: null, mes, ano, offline: true,
+      porId: new Map([[currentUser.id, currentUser], ...collabs.map(c => [c.id, c])]) };
+    _pintarEquipe();
+    return true;
   }
 
   /* ── Dashboard principal ──────────────────────────────── */
@@ -628,244 +1005,13 @@ window.Gestor = (() => {
       }).map(c => c.id);
       /* para o modal "CV da equipe": quem entra na lista e quem movimentou no ano */
       _cvEquipe = { collabs, mes, ano, comLancAno: new Set([...nsAno, ...rsAno].map(x => x.user_id).concat(carregaSaldoAno)), comLancMes: new Set([...ns, ...rs].map(x => x.user_id).concat(comSaldoAnterior)) };
-      const soma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
-
-      // ── Cabeçalho ──
-      let html = `<div class="ini-ola" style="padding:4px 2px 6px"><h2>👥 Equipe / Baixar relatórios</h2><span>${collabs.length} colaborador${collabs.length===1?"":"es"} ativo${collabs.length===1?"":"s"}</span></div>
-      <div class="page-hd">
-        <div class="mes-nav">
-          <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
-          <span class="mes-label">${MESES[mes-1]} ${ano}</span>
-          <button class="btn-mes-nav" onclick="mudarMesEquipe(1)">›</button>
-        </div>
-        <div class="export-btns">
-          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirExcelEquipe()" title="Resumo do mês em Excel: escolha os colaboradores">📗 Excel</button>
-          <button class="btn btn-sm btn-primary" onclick="Gestor.abrirPdfEquipe()" title="Relatório do mês em PDF: escolha os colaboradores">📕 PDF</button>
-          <button class="btn btn-sm btn-outline" onclick="Gestor.abrirCvEquipe()" title="Planilhas no modelo da empresa (CV ou RDM/RDA, conforme o regime de cada um)">📗 Planilhas ${ano}</button>
-
-          ${podeConsolidar && window.GDrive?.isConfigured?.() ? `<button class="btn btn-sm btn-outline" onclick="enviarFotosEquipeDrive()" title="Enviar fotos ao Drive">☁️</button>` : ''}
-          ${podeConsolidar ? `<button class="btn btn-sm btn-outline" onclick="Gestor.abrirConvite()" title="Convidar por link (Contador, colaborador…)">✉️ Convidar</button>` : ''}
-        </div>
-      </div>`;
-
-      /* 21/09/2026 (reunião): os 4 KPIs (Gasto no mês, Recebido, Saldo, Notas)
-         saíram daqui — já aparecem no Painel, em RDM/RDA e Planilhas e no
-         cartão de cada colaborador. A Equipe é "Equipe / Baixar relatórios". */
-
-      // ── Evolução (ano) ──
-      html += _evoCard(`Evolução do gasto · ${ano}`, '', mes, nsAno);
-
-      /* Faturamento da equipe (26/09/2026, redefinido a pedido do Cleiton):
-         é a soma de TODAS as despesas do mês, não só o que a empresa paga
-         direto — esse valor menor (pagamento='empresa') vira "Pago direto
-         pela empresa" logo abaixo, um recorte dentro do total. */
-      const faturamentoEquipeMes = soma(ns);
-      if (ns.length) {
-        /* 14/10/2026 (Cleiton): o cartão abre ao toque e mostra de onde vem o total —
-           por tipo, por categoria do RDM e por colaborador (o nome abre a ficha). */
-        const linha = (rot, val, qtd, extra = '') => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;border-top:1px solid var(--border)${extra}">
-            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${rot}</span>
-            <span style="font-weight:700;white-space:nowrap">${brl(val)}${qtd ? ` <span style="font-weight:500;color:var(--text2);font-size:12.5px">· ${qtd}</span>` : ''}</span>
-          </div>`;
-        const pct = v => faturamentoEquipeMes > 0 ? Math.round(v / faturamentoEquipeMes * 100) + '%' : '';
-        const tit = t => `<div style="font-size:12.5px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 2px">${t}</div>`;
-        const nn = q => `${q} nota${q === 1 ? '' : 's'}`;
-
-        const porTipo = new Map();
-        ns.forEach(n => { const t = _tipoEvo(n); const c = porTipo.get(t) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porTipo.set(t, c); });
-        const tiposHtml = [...porTipo].sort((a, b) => b[1].v - a[1].v)
-          .map(([t, c]) => linha(`<b>${esc(t)}</b> <span style="color:var(--text2);font-size:12.5px">${pct(c.v)}</span>`, c.v, nn(c.q))).join('');
-
-        const rdmNs = ns.filter(n => n.tipo === 'RDM');
-        const catDe = n => { const k = String(n.subtipo || '').toLowerCase(); return k === 'abastecimento' ? '⛽ Abastecimento' : k === 'hospedagem' ? '🏨 Hospedagem' : '🧰 Outros'; };
-        const porCatRdm = new Map();
-        rdmNs.forEach(n => { const k = catDe(n); const c = porCatRdm.get(k) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porCatRdm.set(k, c); });
-        const catsHtml = rdmNs.length
-          ? tit('RDM por categoria') + [...porCatRdm].sort((a, b) => b[1].v - a[1].v).map(([k, c]) => linha(k, c.v, nn(c.q))).join('')
-          : '';
-
-        const porPessoa = new Map();
-        ns.forEach(n => { const c = porPessoa.get(n.user_id) || { v: 0, q: 0 }; c.v += Number(n.valor || 0); c.q++; porPessoa.set(n.user_id, c); });
-        const pessoasHtml = [...porPessoa].sort((a, b) => b[1].v - a[1].v).map(([id, c]) => {
-          const col = todos.find(x => x.id === id);
-          const nome = esc(col?.nome || col?.email || 'Desconhecido');
-          return linha(col ? `<a href="#" style="color:var(--primary-d);font-weight:600;text-decoration:none" data-uid="${_at(id)}" onclick="event.preventDefault();Gestor.abrir(this.dataset.uid)">${nome} ›</a>` : nome, c.v, nn(c.q));
-        }).join('');
-
-        html += `<div class="dash-card fat-card">
-          <div class="fat-hd" style="cursor:pointer" onclick="Gestor.alternarFaturamento(this)">
-            <div class="dash-card-title">🧮 Faturamento da equipe · ${MESES[mes-1]} ${ano} <span class="fat-seta" style="float:right">▾</span></div>
-            <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(faturamentoEquipeMes)}</div>
-            <div style="font-size:13px;color:var(--text2)">${ns.length} nota${ns.length===1?'':'s'} no mês · soma de RDM, RDA e CV de toda a equipe</div>
-            <div class="fat-dica" style="font-size:12.5px;color:var(--text2);margin-top:6px">Toque para ver os detalhes dos gastos</div>
-          </div>
-          <div class="fat-det" style="display:none">
-            ${tit('Por tipo')}${tiposHtml}
-            ${catsHtml}
-            ${tit('Por colaborador')}${pessoasHtml}
-          </div>
-        </div>`;
-      }
-
-      /* Pago direto pela empresa (pagamento='empresa'): recorte do total
-         acima — não entra no saldo de ninguém, mas é lançado pelo
-         gestor/admin e precisa mostrar quem lançou cada uma. */
-      const pagoEmpresa = ns.filter(n => n.pagamento === 'empresa');
-      if (pagoEmpresa.length) {
-        const totalPagoEmpresa = soma(pagoEmpresa);
-        const porLancador = new Map();
-        pagoEmpresa.forEach(n => {
-          const lid = n.created_by || '';
-          const cur = porLancador.get(lid) || { nome: todos.find(c => c.id === lid)?.nome || 'Desconhecido', val: 0, qtd: 0 };
-          cur.val += Number(n.valor || 0); cur.qtd++;
-          porLancador.set(lid, cur);
-        });
-        html += `<div class="dash-card">
-          <div class="dash-card-title">🏢 Pago direto pela empresa · ${MESES[mes-1]} ${ano}</div>
-          <div style="font-size:22px;font-weight:800;color:var(--primary-d)">${brl(totalPagoEmpresa)}</div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${pagoEmpresa.length} nota${pagoEmpresa.length===1?'':'s'} sem passar pelo colaborador — já incluída no Faturamento acima, não entra no saldo de ninguém</div>
-          ${[...porLancador.values()].sort((a,b)=>b.val-a.val).map(p => `
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:4px 0;border-top:1px solid var(--border)">
-            <span>Lançado por <b>${esc(p.nome)}</b></span>
-            <span style="font-weight:700">${brl(p.val)} · ${p.qtd} nota${p.qtd===1?'':'s'}</span>
-          </div>`).join('')}
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            <button class="btn btn-sm btn-outline" onclick="Gestor.verNotasFaturamento(this, ${ano}, ${mes})">👁 Ver notas</button>
-            <button class="btn btn-sm btn-outline" onclick="baixarRelatorioFaturamento()">📕 Baixar relatório (PDF)</button>
-            <button class="btn btn-sm btn-outline" onclick="baixarPlanilhaFaturamento()">📊 Planilha do ano (Excel)</button>
-          </div>
-          <div class="fat-notas" style="display:none;margin-top:8px"></div>
-        </div>`;
-      }
-
-      html += '<div id="fech-quadro"></div>';   // fechamento de mês (06/11/2026): preenchido por js/fechamento.js
-
-      html += `<div class="section-hd">Detalhe por colaborador</div>
-      <div class="busca-colab">
-        <span class="busca-ico">🔍</span>
-        <input class="inp" id="busca-colab" type="search" placeholder="Buscar colaborador por nome ou e-mail…" autocomplete="off" oninput="Gestor.filtrar(this.value)">
-      </div>`;
-
-      /* Lista única, sem recorte por núcleo — `collabs` já vem ordenada por
-         nome do `.order('nome')` lá em cima. */
-      {
-        let mHtml = '';
-
-        collabs.forEach(m => {
-          const mns = ns.filter(n=>n.user_id===m.id);
-          const mrs = rs.filter(r=>r.user_id===m.id);
-          /* Faturamento (pagamento='empresa') não é gasto do bolso do
-             colaborador — fica de fora do Gasto/Saldo RDM/RDA e aparece
-             separado, como valor pago direto pela empresa em nome dele. */
-          const mnsProprias = mns.filter(n=>n.pagamento!=='empresa');
-          const mnsPagoEmpresa = mns.filter(n=>n.pagamento==='empresa');
-          const pagoEmpresaM = mnsPagoEmpresa.reduce((a,n)=>a+Number(n.valor||0),0);
-          const faturamentoM = mns.reduce((a,n)=>a+Number(n.valor||0),0);
-          /* Recebido = repasse que conta no saldo: recarga do cartão (CV) fica de fora,
-             como no app do colaborador e na ficha (28/09/2026) */
-          const mrsConta = mrs.filter(_contaRecebido);
-          const recargaM = mrs.filter(r => r.destino === 'recarga').reduce((a,r)=>a+Number(r.valor||0),0);
-          const rdmG = mnsProprias.filter(n=>n.tipo==='RDM').reduce((a,n)=>a+Number(n.valor||0),0);
-          const rdmR = mrsConta.filter(r=>r.tipo==='RDM').reduce((a,r)=>a+Number(r.valor||0),0);
-          const rdaG = mnsProprias.filter(n=>n.tipo==='RDA').reduce((a,n)=>a+Number(n.valor||0),0);
-          const rdaR = mrsConta.filter(r=>r.tipo==='RDA').reduce((a,r)=>a+Number(r.valor||0),0);
-          /* saldo ACUMULADO: o que sobrou (ou faltou) dos meses anteriores + recebido − gasto do mês */
-          const ant = antPorUser.get(m.id) || { RDM: 0, RDA: 0 };
-          const antAno = antAnoPorUser.get(m.id) || { RDM: 0, RDA: 0 };
-          const rdmAcum = _r2(ant.RDM + rdmR - rdmG);
-          const rdaAcum = _r2(ant.RDA + rdaR - rdaG);
-          const cvM = cvPorUser.get(m.id);
-
-          /* o Contador só visualiza e baixa relatórios: não lança nota nem tem saldo (14/10/2026) */
-          const ehContador = m.role === 'contabilidade';
-          const previaAberta = _previasAbertas.has(m.id);
-          const canEdit = currentUser.role==='admin' || currentUser.role==='gestor';
-          const semFotoM  = mns.filter(n => !n.foto_path).length;
-          const semValorM = mns.filter(n => Number(n.valor || 0) <= 0).length;
-          const resumo = mns.length
-            ? `${mns.length} nota${mns.length === 1 ? '' : 's'} no mês`
-              + (semFotoM  ? ` · <span class="alerta">${semFotoM} sem foto</span>` : '')
-              + (semValorM ? ` · <span class="alerta">${semValorM} sem valor</span>` : '')
-            : 'Nenhuma nota no mês';
-          mHtml += `
-          <div class="colab-card clicavel" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" data-uid="${_at(m.id)}" onclick="Gestor.abrir(this.dataset.uid)" title="Ver notas de ${_at(m.nome||m.email)}">
-            <div class="colab-head">
-              <div class="avatar ${m.foto_path ? 'clicavel' : ''}" data-foto="${_at(m.foto_path||'')}" data-nome="${_at(m.nome||m.email)}" data-sub="${_at(m.email)} · ${_at(m.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(m.nome))}</div>
-              <div class="colab-info">
-                <div class="colab-nome">${esc(m.nome||m.email)}</div>
-                <div class="colab-email">${esc(m.email)}</div>
-              </div>
-              <span class="role-pill role-${_at(m.role)}">${esc(m.role)}</span>${m.regime === 'cv' ? '<span class="role-pill" style="background:#0e7c86;color:#fff" title="Cartão corporativo">💳 CV</span>' : ''}
-              ${('confirmado_em' in m) && !m.confirmado_em ? '<span class="role-pill" style="background:#fef3c7;color:#92400e" title="Cadastro novo: confirme a entrada para liberar o app">🙋 aguardando liberação</span>' : ''}
-              ${canEdit?`<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>`:''}
-              ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" data-uid="${_at(m.id)}" onclick="event.stopPropagation();Gestor.alternarPrevia(this,this.dataset.uid)">⋯</button>`}
-              <span class="colab-seta">›</span>
-            </div>
-            <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
-            ${ehContador ? '' : cvM ? _balCvHTML(cvM, ano, acumOk) : `<div class="colab-bal">
-              <div class="bal-box ${rdmAcum<0?'neg':'pos'}">
-                <span class="bal-type">RDM${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
-                <span class="bal-val">${brl(rdmAcum)}</span>
-                ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDM)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDM - antAno.RDM))}</span>` : ''}` : ''}
-                <span class="bal-detail">Gasto ${brl(rdmG)}</span>
-                <span class="bal-detail">Recebido ${brl(rdmR)}</span>
-              </div>
-              <div class="bal-box ${rdaAcum<0?'neg':'pos'}">
-                <span class="bal-type">RDA${acumOk ? ' · saldo acumulado' : ' · só o mês'}</span>
-                <span class="bal-val">${brl(rdaAcum)}</span>
-                ${acumOk ? `<span class="bal-detail">Saldo do ano anterior ${brlInteiro(antAno.RDA)}</span>${mes > 1 ? `<span class="bal-detail">Meses anteriores de ${ano} ${brlInteiro(_r2(ant.RDA - antAno.RDA))}</span>` : ''}` : ''}
-                <span class="bal-detail">Gasto ${brl(rdaG)}</span>
-                <span class="bal-detail">Recebido ${brl(rdaR)}</span>
-              </div>
-            </div>`}
-            ${recargaM && !ehContador ? `<div class="colab-resumo">💳 Recarga do cartão no mês: <b>${brl(recargaM)}</b> <span style="color:var(--text2)">(${cvM ? 'já está no saldo do cartão' : 'vai para o cartão, não entra no saldo'})</span></div>` : ''}
-            ${mns.length && !ehContador ? `<div class="colab-resumo">🧮 Faturamento: <b>${brl(faturamentoM)}</b> <span style="color:var(--text2)">(soma de todas as despesas)</span></div>` : ''}
-            ${pagoEmpresaM && !ehContador ? `<div class="colab-resumo">🏢 Pago direto pela empresa: <b>${brl(pagoEmpresaM)}</b> <span style="color:var(--text2)">(não entra no saldo)</span></div>` : ''}
-            ${ehContador ? '' : `<div class="colab-resumo">${resumo}</div>`}
-            </div>
-          </div>`;
-        });
-
-        html += `<div class="colab-list">${mHtml}</div>`;
-
-        /* Desativados (20/09/2026): fora da equipe, mas com histórico.
-           Ficam recolhidos; o admin/gestor abre para reativar ou excluir. */
-        if (inativos.length) {
-          html += `<details class="dash-card" style="margin-top:10px"><summary style="cursor:pointer;font-weight:800">🚫 Desativados (${inativos.length})</summary>
-            <div class="colab-list" style="margin-top:8px;opacity:.85">${inativos.map(m => `
-            <div class="colab-card" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}">
-              <div class="colab-head">
-                <div class="avatar" data-foto="${_at(m.foto_path||'')}">${esc(ini(m.nome))}</div>
-                <div class="colab-info">
-                  <div class="colab-nome">${esc(m.nome||m.email)}</div>
-                  <div class="colab-email">${esc(m.email)} · desativado${m.desativado_em ? ' em ' + FusoBR.data(m.desativado_em) : ''}</div>
-                </div>
-                ${podeConsolidar ? `<button class="btn-icon-sm" data-eid="${_at(m.id)}" title="Editar">✏️</button>` : ''}
-              </div>
-            </div>`).join('')}</div></details>`;
-        }
-      }
-
-      html += '<div class="empty-state" id="busca-vazio" style="display:none">Ninguém com esse nome.</div>';
-      if (!collabs.length) {
-        html += '<div class="empty-state">Nenhum colaborador encontrado.</div>';
-      }
-
-      el.innerHTML = html;
-      _restaurarRolagem(el);
-      window.Fechamento?.pintar().catch(() => {});   // não segura a lista: o quadro aparece quando o servidor responder
-
-      el.querySelectorAll('[data-eid]').forEach(btn =>
-        btn.addEventListener('click', e => {
-          e.stopPropagation();                   // o cartão inteiro abre o detalhe
-          const c = todos.find(x=>x.id===btn.dataset.eid);
-          if (c) showEditModal(c, sb, onRebuild, currentUser);
-        })
-      );
-
+      _eq = { el, sb, currentUser, onRebuild, todos, collabs, inativos, nsAno, ns, rs, hist, acumOk, antPorUser, antAnoPorUser, cvPorUser, mes, ano, podeConsolidar,
+        porId: new Map([[currentUser.id, currentUser], ...todos.map(c => [c.id, c])]) };
       window._equipeCache = { collabs, notas: ns, repasses: rs, mes, ano };
+      _pintarEquipe();
 
     } catch(e) {
+      if (_eqDoAparelho(el, sb, currentUser, onRebuild, mes, ano)) return;
       el.innerHTML = `<div class="error-state">Erro ao carregar: ${esc(e.message)}</div>`;
     }
   }
@@ -979,8 +1125,9 @@ window.Gestor = (() => {
       const pendReps = reps.filter(x => !recebido(x) && !x.atendido_em).length;   // pedido já pago não é pendência (21/09/2026)
 
       /* RDM por categoria (barra proporcional) */
-      const cats = [['abastecimento', '⛽ Abastecimento'], ['hospedagem', '🏨 Hospedagem'], ['outros', '🧰 Outros']];
-      const porCat = cats.map(([k, rot]) => [rot, soma(notasProprias.filter(n => n.tipo === 'RDM' && (String(n.subtipo || '').toLowerCase() === k || (k === 'outros' && !['abastecimento', 'hospedagem'].includes(String(n.subtipo || '').toLowerCase())))))]);
+      const porCat = CATEGORIAS_TODAS.filter(c => c.tipo === 'RDM')
+        .map(c => [`${c.ico} ${c.nome}`, soma(notasProprias.filter(n => n.tipo === 'RDM' && _chaveCategoriaDetalhe(n) === c.chave)), c.chave])
+        .filter(([, v, k]) => v > 0 || ['abastecimento', 'hospedagem', 'outros'].includes(k));
       const maxCat = Math.max(1, ...porCat.map(x => x[1]));
 
       /* evolução do ano (só deste colaborador, sem Faturamento) */
@@ -1681,5 +1828,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, alternarFaturamento, renderDashboard, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

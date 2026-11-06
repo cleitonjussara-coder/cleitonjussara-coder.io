@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 554;
+const APP_BUILD = 555;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1095,12 +1095,11 @@ function _itensMenu() {
     itens.push({ view:'saldo', ico: _usaCartao() ? '💳' : '💰', lbl: _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas', sub: _usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios' });
   }
   if (_veEquipe()) {
-    itens.push({ view:'equipe', ico:'👥', lbl:'Equipe', sub:'baixar relatórios' });
+    itens.push({ view:'equipe', ico:'👥', lbl:'Equipe', sub:'gastos, pessoas e relatórios' });
     itens.push({ view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
   }
   if (_ehGestorOuAdmin()) {
     itens.push({ view:'repasses', ico:'💸', lbl:'Repasses e recargas', sub:'corrigir, vendo saldo e lançamentos' });
-    itens.push({ view:'dashequipe', ico:'📈', lbl:'Dashboard Equipe', sub:'gastos de todos, com filtros' });
     itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
     itens.push({ view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
   }
@@ -2646,7 +2645,7 @@ function _abrirSinoPelaUrl() {
     q.delete('abrir');
     history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
     if (alvo === 'fechamento') {
-      if (user && _ehGestorOuAdmin()) { window.Fechamento?.abrirQuadro(); switchView('equipe'); }
+      if (user && _ehGestorOuAdmin()) { window.Fechamento?.abrirQuadro(); window.Gestor?.definirAba('rel'); switchView('equipe'); }
       return;
     }
     if (user && !_ehContabilidade()) abrirNotificacoes();
@@ -3083,7 +3082,7 @@ const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
   perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
-  dashequipe: 'Dashboard Equipe', repasses: 'Repasses e recargas',
+  repasses: 'Repasses e recargas',
 };
 let _histViews = [];
 
@@ -3226,7 +3225,6 @@ function switchView(v, voltando = false, avancando = false) {
   else if (v==='historico') renderHistorico();
   else if (v==='rastreio') { if (_ehGestorOuAdmin()) window.Rastreio?.render(); else switchView('inicio'); }
   else if (v==='repasses') { if (_ehGestorOuAdmin()) window.RepassesEquipe?.render(); else switchView('inicio'); }
-  else if (v==='dashequipe') renderDashEquipe();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3315,8 +3313,10 @@ const CATEGORIA_EXAMES = { chave: 'exames', ico: '🩺', nome: 'Exames', tipo: '
   sub: 'Exames médicos: admissional, periódico e demissional.' };
 const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIA_MANUTENCAO, CATEGORIA_EXAMES, CATEGORIAS_CV.at(-1)];
 
+const CATEGORIAS_TODAS = [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO];
+
 function _categoriaCV(chave) {
-  return [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO].find(c => c.chave === chave) || null;
+  return CATEGORIAS_TODAS.find(c => c.chave === chave) || null;
 }
 
 /* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
@@ -3327,6 +3327,16 @@ function _chaveCategoriaDaNota(n) {
   if (s.startsWith('abast')) return 'abastecimento';
   if (s.startsWith('hosp')) return 'hospedagem';
   return 'outros';
+}
+
+/* A mesma nota na categoria que foi lançada (06/11/2026): é o que a Equipe mostra. As planilhas e os painéis pessoais seguem com
+   _chaveCategoriaDaNota, onde Pedágio, Manutenção e as demais somam em Outros. Categoria nova entra sozinha pela lista. */
+function _chaveCategoriaDetalhe(n) {
+  const chave = _chaveCategoriaDaNota(n);
+  if (chave !== 'outros' || !n) return chave;
+  if (_ehLocacao(n.subtipo)) return 'locacao';
+  const s = String(n.subtipo || '').toLowerCase();
+  return CATEGORIAS_TODAS.find(c => c.subtipo && c.subtipo.toLowerCase() === s)?.chave || 'outros';
 }
 
 /* ─── Resumo de gastos e saldo devedor (22/09/2026) ──────────────
@@ -5690,216 +5700,6 @@ async function _verArquivoCompartilhado(n) {
   finally { setLoading(false); }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DASHBOARD DA EQUIPE (26/09/2026, pedido do Cleiton) — "dashboard de
-   toda equipe visível para o papel do gestor, com resumo de gastos de
-   todos, específicos, com filtros (categorias, tipos de regimes,
-   colaboradores, tipos de gasto)". Só gestor/admin. Mesmo estilo visual
-   do Painel (hero, KPIs, donut, ranking), mas somando todo mundo — os
-   filtros afunilam pra um colaborador/regime/categoria só.
-   _chaveCategoriaDaNota já traduz RDA/RDM em 4 categorias únicas que
-   valem pros dois regimes (CV e RDM/RDA), então um filtro só cobre os
-   dois — não precisa de eixos separados por regime. */
-let _deColab = 'todos', _deRegime = 'todos', _deCategoria = 'todos';
-
-function _dashEquipeSetFiltro(campo, valor) {
-  if (campo === 'colab') _deColab = valor;
-  if (campo === 'regime') _deRegime = valor;
-  if (campo === 'categoria') _deCategoria = valor;
-  renderDashEquipe();
-}
-
-function mudarMesDashEquipe(delta) {
-  if (filtroPeriodo === 'anual') { filAno += delta; }
-  else {
-    filMes += delta;
-    if (filMes > 12) { filMes = 1; filAno++; }
-    if (filMes < 1)  { filMes = 12; filAno--; }
-  }
-  renderDashEquipe();
-  _garantirAnoEmFoco();
-}
-
-function _dashEquipeRegimeDoUser(uid) {
-  const quem = uid === user?.id ? user : equipePorId[uid];
-  return _ehCV(quem) ? 'cv' : 'rdm_rda';
-}
-
-const _CAT_COR = { alimentacao:'var(--primary)', abastecimento:'var(--accent-d)', hospedagem:'var(--accent)', outros:'#94a3b8' };
-
-function renderDashEquipe() {
-  const el = $('app-content');
-  if (!_ehGestorOuAdmin()) { switchView('inicio'); return; }
-  const modo = filtroPeriodo;
-  const rotulo = modo === 'mensal' ? `${MESES[filMes-1]} ${filAno}` : String(filAno);
-  const pAnt = _periodoAnterior(filMes, filAno, modo);
-
-  const doPeriodo = (o, mes, ano) => !o.deleted && o.ano === ano && (modo === 'anual' || o.mes === mes);
-  const todasBase    = notas.concat(notasEquipe);
-  const todas    = todasBase.filter(n => doPeriodo(n, filMes, filAno) && _naoEhFaturamento(n));
-  const todasAnt = todasBase.filter(n => doPeriodo(n, pAnt.mes, pAnt.ano) && _naoEhFaturamento(n));
-  /* Faturamento (26/09/2026, pedido do Cleiton): é a soma de TODAS as
-     despesas do período, pago por quem for — inclui o que a empresa paga
-     direto (pagamento='empresa'), que fica fora de `todas`/`totalGasto`
-     porque esse não é dívida de ninguém. */
-  const todasComFat    = todasBase.filter(n => doPeriodo(n, filMes, filAno));
-
-  const passaFiltro = n => {
-    if (_deColab !== 'todos' && n.user_id !== _deColab) return false;
-    if (_deRegime !== 'todos' && _dashEquipeRegimeDoUser(n.user_id) !== _deRegime) return false;
-    if (_deCategoria !== 'todos' && _chaveCategoriaDaNota(n) !== _deCategoria) return false;
-    return true;
-  };
-  const filtradas    = todas.filter(passaFiltro);
-  const filtradasAnt = todasAnt.filter(passaFiltro);
-  const totalGasto = _soma(filtradas);
-  const totalAnt   = _soma(filtradasAnt);
-  const totalFaturamento = _soma(todasComFat.filter(passaFiltro));
-
-  /* ranking por colaborador, já dentro do filtro escolhido */
-  const pessoas = new Map();
-  filtradas.forEach(n => {
-    const uid = n.user_id;
-    /* Faturamento sem colaborador (28/09/2026): só chega aqui com uid null
-       quando a nota foi lançada de propósito sem apontar ninguém. */
-    const nome = !uid ? 'Faturamento geral (sem colaborador)'
-      : uid === user?.id ? (user?.nome || 'Você') : (equipePorId[uid]?.nome || n.user_nome || 'Colaborador');
-    const cur = pessoas.get(uid) || { nome, val: 0, qtd: 0 };
-    cur.val += _n(n.valor); cur.qtd++;
-    pessoas.set(uid, cur);
-  });
-  const ranking = [...pessoas.entries()].map(([uid, v]) => ({ uid, ...v })).sort((a, b) => b.val - a.val);
-  const maxRank = ranking.length ? ranking[0].val : 1;
-  const nColab  = ranking.length;
-  const media   = nColab ? totalGasto / nColab : 0;
-  const maior   = ranking[0] || null;
-
-  /* donut: as 4 categorias unificadas, sempre — funciona com qualquer combinação de filtros */
-  const cats = CATEGORIAS_CV.map(c => ({
-    key: c.chave, name: c.nome, curto: c.nome, cor: _CAT_COR[c.chave],
-    val: _soma(filtradas.filter(n => _chaveCategoriaDaNota(n) === c.chave)),
-  })).filter(c => c.val > 0).sort((a, b) => b.val - a.val);
-
-  /* lista de gente pro seletor — toda a equipe visível, dono incluso */
-  const pessoasTodas = [{ id: user?.id, nome: user?.nome || 'Você' }]
-    .concat(Object.values(equipePorId).filter(c => c && c.ativo !== false).map(c => ({ id: c.id, nome: c.nome || c.email })))
-    .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
-
-  const filtrosAtivos = _deColab !== 'todos' || _deRegime !== 'todos' || _deCategoria !== 'todos';
-
-  el.innerHTML = `
-  <div class="db-container">
-    <div class="db-header">
-      <div class="mes-nav">
-        <button class="btn-mes-nav" onclick="mudarMesDashEquipe(-1)" aria-label="Período anterior">‹</button>
-        <span class="mes-label">${esc(rotulo)}</span>
-        <button class="btn-mes-nav" onclick="mudarMesDashEquipe(1)" aria-label="Próximo período">›</button>
-      </div>
-      <div class="seg">
-        <button class="seg-btn ${modo === 'mensal' ? 'active' : ''}" onclick="filtroPeriodo='mensal';renderDashEquipe()">Mês</button>
-        <button class="seg-btn ${modo === 'anual' ? 'active' : ''}" onclick="filtroPeriodo='anual';renderDashEquipe()">Ano</button>
-      </div>
-    </div>
-
-    <div class="db-card">
-      <div class="db-card-title">
-        <span>Filtros</span>
-        ${filtrosAtivos ? `<a class="link" onclick="_deColab='todos';_deRegime='todos';_deCategoria='todos';renderDashEquipe()">limpar</a>` : ''}
-      </div>
-      <div class="field">
-        <label class="lbl">Colaborador</label>
-        <select class="inp" onchange="_dashEquipeSetFiltro('colab', this.value)">
-          <option value="todos" ${_deColab === 'todos' ? 'selected' : ''}>Todos (${pessoasTodas.length})</option>
-          ${pessoasTodas.map(p => `<option value="${_at(p.id)}" ${_deColab === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label class="lbl">Regime</label>
-        <div class="fil-tipo">
-          <button class="chip ${_deRegime === 'todos' ? 'active' : ''}" onclick="_dashEquipeSetFiltro('regime','todos')">Todos</button>
-          <button class="chip ${_deRegime === 'rdm_rda' ? 'active' : ''}" onclick="_dashEquipeSetFiltro('regime','rdm_rda')">RDM/RDA</button>
-          <button class="chip ${_deRegime === 'cv' ? 'active' : ''}" onclick="_dashEquipeSetFiltro('regime','cv')">C.V.</button>
-        </div>
-      </div>
-      <div class="field" style="margin-bottom:0">
-        <label class="lbl">Categoria</label>
-        <div class="fil-tipo" style="flex-wrap:wrap">
-          <button class="chip ${_deCategoria === 'todos' ? 'active' : ''}" onclick="_dashEquipeSetFiltro('categoria','todos')">Todas</button>
-          ${CATEGORIAS_CV.map(c => `<button class="chip ${_deCategoria === c.chave ? 'active' : ''}" onclick="_dashEquipeSetFiltro('categoria','${c.chave}')">${c.ico} ${esc(c.nome)}</button>`).join('')}
-        </div>
-      </div>
-    </div>
-
-    <div class="db-hero">
-      <div class="db-hero-top">
-        <div>
-          <div class="db-hero-lbl">Gasto da equipe · ${esc(rotulo)}</div>
-          <div class="db-hero-val">${brl(totalGasto)}</div>
-        </div>
-        ${chipDelta(totalGasto, totalAnt, false)}
-      </div>
-      <div class="db-hero-meta">
-        <span>${nColab} colaborador${nColab === 1 ? '' : 'es'}</span>
-        <span>${filtradas.length} nota${filtradas.length === 1 ? '' : 's'}</span>
-      </div>
-    </div>
-
-    <div class="db-grid">
-      <div class="db-kpi">
-        <div class="db-kpi-top"><span class="db-kpi-title">🧮 Faturamento</span></div>
-        <span class="db-kpi-val">${brl(totalFaturamento)}</span>
-        <span class="db-kpi-sub">soma de todas as despesas</span>
-      </div>
-      <div class="db-kpi">
-        <div class="db-kpi-top"><span class="db-kpi-title">Média por colaborador</span></div>
-        <span class="db-kpi-val">${brl(media)}</span>
-        <span class="db-kpi-sub">${nColab} no filtro</span>
-      </div>
-      <button class="db-kpi maior" ${maior ? `data-uid="${_at(maior.uid)}" ` : ''}onclick="${maior ? `const u=this.dataset.uid;switchView('equipe');setTimeout(()=>Gestor.abrir(u),400)` : ''}">
-        <div class="db-kpi-top"><span class="db-kpi-title">Maior gasto individual</span></div>
-        <span class="db-kpi-val">${maior ? brl(maior.val) : brl(0)}</span>
-        <span class="db-kpi-sub">${maior ? esc(maior.nome) : 'Sem dados no filtro'}</span>
-      </button>
-    </div>
-
-    <div class="db-card">
-      <div class="db-card-title"><span>Composição dos gastos</span></div>
-      <div class="db-donut-wrap">
-        <div class="db-donut">${gerarDonut(cats, totalGasto)}</div>
-        <div class="db-donut-legend">
-          ${cats.length ? cats.map(c => `
-            <div class="db-dl-item">
-              <span class="db-dl-dot" style="background:${c.cor}"></span>
-              <span class="db-dl-name">${esc(c.name)}</span>
-              <span class="db-dl-val">${brl(c.val)}</span>
-            </div>`).join('')
-          : '<p class="muted-p">Nenhuma despesa no filtro.</p>'}
-        </div>
-      </div>
-    </div>
-
-    <div class="db-card">
-      <div class="db-card-title">
-        <span>Por colaborador</span>
-        <span style="font-size:12.5px;color:var(--text2);font-weight:600">${ranking.length}</span>
-      </div>
-      <div class="db-rank">
-        ${ranking.length ? ranking.map((p, i) => `
-          <div class="db-rank-item" style="cursor:pointer" data-uid="${_at(p.uid)}" onclick="const u=this.dataset.uid;switchView('equipe');setTimeout(()=>Gestor.abrir(u),400)">
-            <div class="db-rank-meta">
-              <span class="db-rank-pos">${i + 1}º</span>
-              <span class="db-rank-name">${esc(p.nome)}</span>
-              <span class="db-rank-val">${brl(p.val)}</span>
-            </div>
-            <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(4, Math.round(p.val / maxRank * 100))}%"></div></div>
-            <div style="font-size:12.5px;color:var(--text2)">${p.qtd} nota${p.qtd === 1 ? '' : 's'} · ${brl(p.val / p.qtd)} em média</div>
-          </div>`).join('')
-        : '<p class="muted-p">Nenhum gasto no período com esses filtros.</p>'}
-      </div>
-    </div>
-  </div>`;
-}
-
 function renderNotas() {
   _recalcularDuplicatas(notas);
   const el = $('app-content');
@@ -6586,6 +6386,12 @@ function mudarMesEquipe(delta) {
   filMes += delta;
   if (filMes > 12) { filMes = 1;  filAno++; }
   if (filMes < 1)  { filMes = 12; filAno--; }
+  renderEquipe();
+  _garantirAnoEmFoco();
+}
+
+function mudarAnoEquipe(delta) {
+  filAno += delta;
   renderEquipe();
   _garantirAnoEmFoco();
 }
