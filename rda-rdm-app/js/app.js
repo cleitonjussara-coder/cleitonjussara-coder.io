@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 546;
+const APP_BUILD = 547;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9718,8 +9718,21 @@ function _motivoDuplicata(a, b) {
   const na = String(a.numero || '').replace(/^0+/, ''), nb = String(b.numero || '').replace(/^0+/, '');
   if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))) return 'numero';
   const va = Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
-  if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo) return 'igual';
+  if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo && !_chavesDiferentes(a, b)) return 'igual';
   return null;
+}
+/* Duas chaves diferentes são dois documentos, mesmo com fornecedor, dia e valor iguais (06/11/2026: NFS-e 214 e 215 de
+   R$ 80 emitidas juntas). Só vale com chave do mesmo tipo nos DOIS lados. 'numero' não passa por aqui: chave lida do
+   texto pode vir com um dígito errado. Mesma regra de chavesDiferentes em NotaController. */
+function _chaveNfseDoLink(url) {
+  const m = String(url || '').match(/(?:^|\D)(\d{50})(?:\D|$)/);
+  return m ? m[1] : '';
+}
+function _chavesDiferentes(a, b) {
+  const ka = _digitos(a.chave_nfce || ''), kb = _digitos(b.chave_nfce || '');
+  if (ka.length === 44 && kb.length === 44 && ka !== kb) return true;
+  const na = _chaveNfseDoLink(a.qr_url), nb = _chaveNfseDoLink(b.qr_url);
+  return !!na && !!nb && na !== nb;
 }
 const _MOTIVO_DUP = { chave: 'mesma chave de acesso', nfse: 'mesma chave da NFS-e', numero: 'mesmo número de nota e fornecedor', igual: 'mesmo fornecedor, dia e valor' };
 
@@ -9831,7 +9844,7 @@ function _recalcularDuplicatas(lista) {
     for (let i = 0; i < grupo.length; i++) {
       for (let j = i + 1; j < grupo.length; j++) {
         let m = motivo;
-        if (motivo === 'numero') { m = _motivoDuplicata(grupo[i], grupo[j]); if (!m) continue; }   // confere a série
+        if (motivo !== 'chave') { m = _motivoDuplicata(grupo[i], grupo[j]); if (!m) continue; }   // confere a série e as chaves diferentes
         marcar(grupo[i], grupo[j], m);
       }
     }
@@ -9849,7 +9862,7 @@ function _avisarDuplicataAposLeitura() {
   const cand = {
     tipo: $('nf-tipo').value, data: $('nf-data').value, valor: parseFloat($('nf-valor').value),
     cnpj: _digitos($('nf-cnpj').value), razao_social: $('nf-razao').value,
-    chave_nfce: $('nf-chave').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
+    chave_nfce: $('nf-chave').value, qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
   if (!d) { _avisarDuplicataDaEquipeAposLeitura().catch(() => {}); return false; }   // as do aparelho não casaram: confere a equipe/Faturamento
@@ -10003,7 +10016,7 @@ async function _salvarNotaInterno() {
   if (_digitos($('nf-chave').value).length !== 44) {
     const dup = _acharDuplicata({
       tipo, cnpj: cnpjRaw, razao_social: $('nf-razao').value, valor, data,
-      numero: $('nf-numero').value, serie: $('nf-serie').value,
+      qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
     }, $('nf-id').value || null);
     const igual = dup?.nota || null;
     /* DESLIGADO: a remocao automatica estava mandando notas para a lixeira em

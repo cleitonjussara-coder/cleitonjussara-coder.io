@@ -698,11 +698,33 @@ class NotaController extends Controller
         }
         if ($cand['centavos'] > 0 && (int) round(((float) $n->valor) * 100) === $cand['centavos']
             && $cand['data'] && $n->data?->format('Y-m-d') === $cand['data']
-            && $cand['tipo'] !== null && $n->tipo === $cand['tipo']) {
+            && $cand['tipo'] !== null && $n->tipo === $cand['tipo']
+            && ! self::chavesDiferentes($n, $chave, $qrUrl)) {
             return 'igual';
         }
 
         return null;
+    }
+
+    /* Duas chaves diferentes são dois documentos, mesmo com fornecedor, dia e valor iguais: NFS-e 214 e 215 de
+       duas sessões de R$ 80 emitidas juntas acusavam duplicata (06/11/2026). Só vale quando os DOIS lados têm chave do
+       mesmo tipo. O motivo 'numero' não passa por aqui: chave lida do texto pode vir com um dígito errado. */
+    private static function chavesDiferentes(Nota $n, string $chave, string $qrUrl): bool
+    {
+        $daNota = preg_replace('/\D/', '', (string) $n->chave_nfce);
+        if ($chave !== '' && strlen($daNota) === 44 && $daNota !== $chave) {
+            return true;
+        }
+        $nfseNota = self::chaveNfse($n->qr_url);
+        $nfseCand = self::chaveNfse($qrUrl);
+
+        return $nfseNota !== '' && $nfseCand !== '' && $nfseNota !== $nfseCand;
+    }
+
+    /** Chave de 50 dígitos da NFS-e nacional dentro do link da consulta; vazio se não houver. */
+    private static function chaveNfse(?string $url): string
+    {
+        return preg_match('/(?<!\d)\d{50}(?!\d)/', (string) $url, $m) ? $m[0] : '';
     }
 
     /* CNPJ igual quando os dois têm; senão razão social igual (um recibo lido

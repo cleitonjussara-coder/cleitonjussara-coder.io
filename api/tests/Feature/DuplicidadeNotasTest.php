@@ -116,6 +116,63 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'nfse')->assertJsonPath('origem', 'faturamento');
     }
 
+    /* ── 06/11/2026: NFS-e 214 e 215 da mesma clínica, mesmo valor e mesmo dia ── */
+
+    private const NFSE_214 = 'https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=52080042240831425000167000000000021426113884758809';
+    private const NFSE_215 = 'https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=52080042240831425000167000000000021526113661145304';
+
+    private function nfseDaClinica(array $campos = []): array
+    {
+        return array_replace([
+            'tipo' => 'RDM', 'subtipo' => 'Outros', 'documento' => 'nfse', 'qr_url' => self::NFSE_214, 'numero' => '214', 'serie' => '70000',
+            'valor' => 80, 'data' => '2026-11-05', 'mes' => 11, 'ano' => 2026,
+            'cnpj' => '40831425000167', 'razao_social' => 'CLINICA THAIS ZANETTI LTDA',
+        ], $campos);
+    }
+
+    public function test_nfse_de_chaves_diferentes_com_mesmo_dia_e_valor_nao_e_duplicata(): void
+    {
+        $this->faturamento($this->nfseDaClinica());
+        Sanctum::actingAs($this->pessoa('gestor'));
+
+        $this->postJson('/api/notas/duplicada', [
+            'tipo' => 'RDM', 'qr_url' => self::NFSE_215, 'numero' => '215', 'serie' => '70000',
+            'valor' => 80, 'data' => '2026-11-05', 'cnpj' => '40831425000167', 'razao_social' => 'CLINICA THAIS ZANETTI LTDA',
+        ])->assertOk()->assertJsonPath('existe', false);
+    }
+
+    public function test_chaves_de_44_diferentes_com_mesmo_dia_e_valor_nao_e_duplicata(): void
+    {
+        $this->faturamento(['chave_nfce' => self::CHAVE, 'numero' => null]);
+        Sanctum::actingAs($this->pessoa('gestor'));
+
+        $this->postJson('/api/notas/duplicada', $this->candidata(['chave' => '35260117117768000142650010000999991000999990', 'numero' => '']))
+            ->assertOk()->assertJsonPath('existe', false);
+    }
+
+    public function test_nfse_sem_chave_de_um_lado_continua_avisando_por_dia_e_valor(): void
+    {
+        $this->faturamento($this->nfseDaClinica());
+        Sanctum::actingAs($this->pessoa('gestor'));
+
+        // o mesmo documento lançado por foto, sem o QR nem o número lidos: a coincidência é o único sinal
+        $this->postJson('/api/notas/duplicada', [
+            'tipo' => 'RDM', 'valor' => 80, 'data' => '2026-11-05', 'cnpj' => '40831425000167',
+        ])->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
+    public function test_mesmo_numero_com_chave_diferente_continua_avisando(): void
+    {
+        $this->faturamento($this->nfseDaClinica());
+        Sanctum::actingAs($this->pessoa('gestor'));
+
+        // chave lida do texto pode vir com um dígito errado: o número igual segue perguntando
+        $this->postJson('/api/notas/duplicada', [
+            'tipo' => 'RDM', 'qr_url' => self::NFSE_215, 'numero' => '214', 'serie' => '70000',
+            'valor' => 80, 'data' => '2026-11-05', 'cnpj' => '40831425000167',
+        ])->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'numero');
+    }
+
     /* ── sentido inverso: colaborador primeiro, faturamento depois ──── */
 
     public function test_colaborador_depois_faturamento_o_gestor_e_avisado_e_ve_qual_nota(): void
