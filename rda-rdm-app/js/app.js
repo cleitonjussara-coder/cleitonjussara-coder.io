@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 542;
+const APP_BUILD = 543;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10238,7 +10238,7 @@ function _modalGrupoNota(n, grupos) {
    ser de qualquer pessoa (ou de ninguém), então tudo vai direto ao servidor e nada entra no IndexedDB de quem corrige. */
 function faturadaMoverNota(n) {
   if (!n?.id) return;
-  _modalGrupoNota(n, _GRUPOS_FAT);
+  _modalGrupoNota(n, n.pagamento === 'empresa' ? _GRUPOS_FAT : _GRUPOS);   // também nas pastas de colaborador (05/11/2026)
 }
 
 async function faturadaExcluirNota(n) {

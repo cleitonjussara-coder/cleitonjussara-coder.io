@@ -149,6 +149,18 @@ class ArquivosFaturamentoTest extends TestCase
         $this->assertStringContainsString('LOCAÇÃO DE VEÍCULOS', $r->json('notas.0.pasta'));
     }
 
+    public function test_lista_traz_dono_e_pagamento_para_a_janela_de_mudar_categoria(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora Ana');
+        $paulo = $this->pessoa('colaborador', 'Paulo Silva');
+        $this->nota($paulo, 'POSTO X', 100, 'empresa');
+        Sanctum::actingAs($gestor);
+
+        $r = $this->getJson('/api/arquivos/notas?user_id='.$paulo->id.'&ano='.self::ANO.'&mes=3')->assertOk();
+        $this->assertSame($paulo->id, $r->json('notas.0.user_id'));
+        $this->assertSame('empresa', $r->json('notas.0.pagamento'));
+    }
+
     public function test_contabilidade_vira_categoria_propria_na_pasta(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora Ana');

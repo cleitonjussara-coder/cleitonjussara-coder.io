@@ -180,7 +180,8 @@ class ArquivosController extends Controller
             $temArq = $this->fotos->existe($n->foto_path);
             $ext = $temArq ? strtolower(pathinfo($n->foto_path, PATHINFO_EXTENSION)) : null;
             $out[] = [
-                'id' => $n->id, 'data' => $n->data?->format('Y-m-d'), 'mes' => $n->mes, 'ano' => $n->ano,
+                'id' => $n->id, 'user_id' => $n->user_id, 'pagamento' => $n->pagamento,
+                'data' => $n->data?->format('Y-m-d'), 'mes' => $n->mes, 'ano' => $n->ano,
                 'tipo' => $n->tipo, 'subtipo' => $n->subtipo, 'grupo' => PastaModelo::grupoCurto($n),
                 'razao_social' => $n->razao_social, 'cnpj' => $n->cnpj, 'valor' => (float) $n->valor,
                 'documento' => $n->documento, 'numero' => $n->numero, 'observacao' => $n->observacao,

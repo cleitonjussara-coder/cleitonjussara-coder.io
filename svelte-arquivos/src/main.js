@@ -237,17 +237,20 @@ async function renderMes(s) {
   const mm = String(mes).padStart(2, '0');
   const padrao = { ...FILTRO_VAZIO, de: `${ano}-${mm}-01`, ate: `${ano}-${mm}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}` };
   const grupos = agrupar(ns);
-  /* Faturamento (pedido do Paulo, 05/11/2026): resumo no topo e categorias recolhidas; as outras pastas seguem em lista aberta */
-  const recolher = !!colab.faturamento && !!ns.length;
+  /* Categorias recolhidas em todas as pastas (pedido do Paulo, 05/11/2026): cada pasta só mostra as categorias que têm nota.
+     Resumo no topo e relatórios são só do Faturamento: os relatórios da API não existem por colaborador. */
+  const recolher = !!ns.length;
+  const comResumo = !!colab.faturamento && recolher;
   const somaDe = g => g.itens.reduce((s, n) => s + n.valor, 0);
-  const maior = recolher ? grupos.reduce((a, g) => (somaDe(g) > somaDe(a) ? g : a)) : null;
+  const maior = comResumo ? grupos.reduce((a, g) => (somaDe(g) > somaDe(a) ? g : a)) : null;
   const semAnexo = ns.length - comAnexo;
   mostrar('mes', {
     cabecalhoTitulo: `📁 ${esc(colab.nome || colab.email)} · ${dep.MESES_LONGO[mes]}`,
-    cabecalhoSub: recolher ? '' : `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
+    cabecalhoSub: comResumo ? '' : `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
     recolher,
+    relatorios: comResumo,
     abertas: abertasMes,
-    resumo: recolher ? {
+    resumo: comResumo ? {
       totalTxt: brl(total),
       qtd: ns.length,
       anexoTxt: semAnexo ? `${semAnexo} sem anexo` : 'todas com anexo',
@@ -257,8 +260,10 @@ async function renderMes(s) {
     } : null,
     temNotas: !!ns.length,
     comAnexo,
-    acoes: !!colab.faturamento,   // 30/10/2026: na pasta Faturamento cada nota ganha Categoria / Excluir
-    podeExcluir: !!dep.podeExcluir?.(),
+    /* 🔀 Categoria: Faturamento (30/10/2026) e pastas de colaborador (05/11/2026), para quem o servidor deixa corrigir.
+       A lixeira segue só no Faturamento. */
+    acoes: !!colab.faturamento || !!dep.veEquipe(),
+    podeExcluir: !!colab.faturamento && !!dep.podeExcluir?.(),
     mes,   // sem isto o botão do mês baixava o ano inteiro (22/10/2026)
     grupos,
     filtro: filtroMes || padrao,

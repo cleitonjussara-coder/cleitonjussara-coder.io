@@ -286,7 +286,7 @@
       {@render filtros('Buscar nas notas do mês')}
       <div class="arq-bts">
         <button class="btn btn-primary btn-full arq-bt-zip" style="min-height:50px" onclick={() => onBaixarZip(dados.mes)}>⬇️ Baixar ZIP ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
-        {#if dados.recolher}
+        {#if dados.relatorios}
           <button class="btn btn-outline btn-full" style="min-height:50px" onclick={() => onBaixarRelatorio('pdf')}>📄 Relatório PDF</button>
           <button class="btn btn-outline btn-full" style="min-height:50px" onclick={() => onBaixarRelatorio('xlsx')}>📊 Relatório Excel</button>
         {/if}
