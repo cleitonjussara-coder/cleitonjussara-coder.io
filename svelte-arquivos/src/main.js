@@ -31,6 +31,8 @@ let filtroMes = null;
 let filtroAno = null;
 /* Categorias abertas no mês do Faturamento: guardadas aqui para não fecharem quando uma ação remonta a tela */
 let abertasMes = {};
+/* Quadro dos meses do Faturamento: começa oculto e fica como a pessoa deixou enquanto ela anda pelos meses */
+let mesesAbertos = false;
 /* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
    ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
    cima da pasta já aberta (22/10/2026). */
@@ -63,7 +65,7 @@ function mostrar(nivel, dados) {
       onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
       onFiltro: guardarFiltro, onCarregarAno: carregarAno, brl: dep.brl,
-      onAbertas: a => { abertasMes = a; }, onBaixarRelatorio: baixarRelatorioFat,
+      onAbertas: a => { abertasMes = a; }, onBaixarRelatorio: baixarRelatorioFat, onMesesAbertos: v => { mesesAbertos = v; },
     },
   });
   dep.carregarAvatares?.();
@@ -178,7 +180,7 @@ async function renderMeses(s) {
     comAnexo: c.com_anexo,
     ehFaturamento: !!c.faturamento,
     meses,
-    ...(c.faturamento ? { filtro: filtroAno || FILTRO_VAZIO, filtroPadrao: FILTRO_VAZIO, acoes: true, podeExcluir: !!dep.podeExcluir?.(), dataMin: `${ano}-01-01`, dataMax: `${ano}-12-31` } : {}),
+    ...(c.faturamento ? { mesesAbertos, filtro: filtroAno || FILTRO_VAZIO, filtroPadrao: FILTRO_VAZIO, acoes: true, podeExcluir: !!dep.podeExcluir?.(), dataMin: `${ano}-01-01`, dataMax: `${ano}-12-31` } : {}),
   });
 }
 
@@ -268,7 +270,7 @@ async function renderMes(s) {
 
 function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; abertasMes = {}; }
 function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; limparBuscas(); render(); }
-function abrirFaturamento() { colab = FAT; mes = null; limparBuscas(); render(); }
+function abrirFaturamento() { colab = FAT; mes = null; mesesAbertos = false; limparBuscas(); render(); }
 function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; limparBuscas(); render(); }
 function abrirMes(m) { mes = m; filtroMes = null; abertasMes = {}; render(); }
 function voltarMeses() { mes = null; lista = null; filtroMes = null; abertasMes = {}; render(); }

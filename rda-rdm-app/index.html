@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=541">
+  <link rel="manifest" href="manifest.json?v=542">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1455,6 +1455,8 @@ button.cdet-bal:hover,button.cdet-bal.on{border-color:#c9ea62}
 .arq-f select option{background:#0a4d25;color:#fff}
 .arq-f-cat{grid-column:1/-1}
 @media (min-width:640px){.arq-filtros{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)}.arq-f-cat{grid-column:auto}}
+.arq-ver-meses{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:54px;padding:6px 12px;border:4px solid var(--esm-frame);border-radius:14px;background:linear-gradient(160deg,#0f6b34,#083d1e);color:#c9ea62;font:inherit;font-size:16px;font-weight:800;cursor:pointer;text-align:left}
+.arq-ver-meses .arq-abrir{color:#eef9f0;flex:none}
 .arq-ano{display:flex;flex-direction:column;gap:8px}
 .arq-ano-tit{font-size:17px;font-weight:800;color:#c9ea62}
 .arq-achados{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;font-size:15px;font-weight:700;color:#eef9f0}
@@ -2124,7 +2126,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=541" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=542" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2832,39 +2834,39 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=541"></script>
-<script defer src="js/db.js?v=541"></script>
-<script defer src="js/nfce.js?v=541"></script>
-<script defer src="js/sefaz.js?v=541"></script>
-<script defer src="js/brasilapi.js?v=541"></script>
-<script defer src="js/ocr.js?v=541"></script>
-<script defer src="js/scanner.js?v=541"></script>
-<script defer src="js/foto-branca.js?v=541"></script>
-<script defer src="js/recorte.js?v=541"></script>
-<script defer src="js/excel.js?v=541"></script>
-<script defer src="js/gestor.js?v=541"></script>
-<script defer src="js/frota.js?v=541"></script>
-<script defer src="js/frota-painel.js?v=541"></script>
-<script defer src="js/frota-planilha.js?v=541"></script>
-<script defer src="js/ponto.js?v=541"></script>
-<script defer src="js/rastreio.js?v=541"></script>
-<script defer src="js/repasses-equipe.js?v=541"></script>
-<script defer src="js/gdrive.js?v=541"></script>
+<script defer src="js/api.js?v=542"></script>
+<script defer src="js/db.js?v=542"></script>
+<script defer src="js/nfce.js?v=542"></script>
+<script defer src="js/sefaz.js?v=542"></script>
+<script defer src="js/brasilapi.js?v=542"></script>
+<script defer src="js/ocr.js?v=542"></script>
+<script defer src="js/scanner.js?v=542"></script>
+<script defer src="js/foto-branca.js?v=542"></script>
+<script defer src="js/recorte.js?v=542"></script>
+<script defer src="js/excel.js?v=542"></script>
+<script defer src="js/gestor.js?v=542"></script>
+<script defer src="js/frota.js?v=542"></script>
+<script defer src="js/frota-painel.js?v=542"></script>
+<script defer src="js/frota-planilha.js?v=542"></script>
+<script defer src="js/ponto.js?v=542"></script>
+<script defer src="js/rastreio.js?v=542"></script>
+<script defer src="js/repasses-equipe.js?v=542"></script>
+<script defer src="js/gdrive.js?v=542"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=541"></script>
+<script defer src="js/svelte-ajuda.js?v=542"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=541"></script>
+<script defer src="js/svelte-historico.js?v=542"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=541"></script>
+<script defer src="js/svelte-arquivos.js?v=542"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=541"></script>
-<script defer src="js/app.js?v=541"></script>
-<script defer src="js/instalar.js?v=541"></script>
+<script defer src="js/svelte-perfil.js?v=542"></script>
+<script defer src="js/app.js?v=542"></script>
+<script defer src="js/instalar.js?v=542"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=541').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=542').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

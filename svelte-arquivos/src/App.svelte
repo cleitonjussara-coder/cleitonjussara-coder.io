@@ -8,7 +8,7 @@
     nivel, dados, ano,
     onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
     onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
-    onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {},
+    onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {}, onMesesAbertos = () => {},
   } = $props();
   let mesEquipe = $state('');
   let busca = $state('');
@@ -48,6 +48,10 @@
   let abertas = $state({ ...(dados?.abertas || {}) });
   let fechadasNoFiltro = $state({});   // separado: fechar antes de buscar não pode esconder a nota achada
   const estaAberta = g => (filtrando ? !fechadasNoFiltro[g.nome] : !!abertas[g.nome]);
+  /* Faturamento com notas: os meses ficam atrás de um botão. Ele é o caminho para o mês, então recolhe, não some. */
+  const recolheMeses = !!(nivel === 'meses' && dados?.filtro && dados.temNotas);
+  let mesesAbertos = $state(!!dados?.mesesAbertos);
+  const alternarMeses = () => { mesesAbertos = !mesesAbertos; onMesesAbertos(mesesAbertos); };
   const alternar = g => {
     if (filtrando) { fechadasNoFiltro = { ...fechadasNoFiltro, [g.nome]: !fechadasNoFiltro[g.nome] }; return; }
     abertas = { ...abertas, [g.nome]: !abertas[g.nome] };
@@ -234,6 +238,13 @@
         <button class="btn btn-outline btn-full" style="min-height:50px;margin-top:8px" onclick={onBaixarPlanilhaFat}>📊 Planilha de Faturamento {ano} (Excel)</button>
       {/if}
     {/if}
+    {#if recolheMeses}
+      <button type="button" class="arq-ver-meses" aria-expanded={mesesAbertos} onclick={alternarMeses}>
+        <span>📅 Meses de {ano}</span>
+        <span class="arq-abrir">{mesesAbertos ? 'Fechar ▲' : 'Abrir ▼'}</span>
+      </button>
+    {/if}
+    {#if !recolheMeses || mesesAbertos}
     <div class="arq-meses">
       {#each dados.meses as m}
         <button class="arq-mes {m.vazio ? 'arq-vazio' : ''}" disabled={m.vazio} onclick={() => onAbrirMes(m.mes)}>
@@ -244,6 +255,7 @@
         </button>
       {/each}
     </div>
+    {/if}
     {#if dados.filtro && dados.temNotas}
       <div class="arq-ano">
         <div class="arq-ano-tit">🔎 Buscar no ano todo</div>
