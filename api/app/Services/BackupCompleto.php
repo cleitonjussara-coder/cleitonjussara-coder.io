@@ -235,6 +235,26 @@ class BackupCompleto
     }
 
     /**
+     * Data do anexo mais antigo modificado depois deste instante, ou null se não há nenhum
+     * (06/11/2026). Mora aqui para o cartão de saúde enxergar os mesmos anexos do backup:
+     * miniatura refeita e .tmp- em andamento não são foto nova, e contá-los acusaria atraso
+     * onde não há nada para guardar. Devolve a data, e não só sim ou não, porque o cartão
+     * precisa saber há quanto tempo a foto mais velha espera cópia.
+     */
+    public function anexoMaisAntigoDepoisDe(int $quando): ?int
+    {
+        $maisAntigo = null;
+        foreach ($this->fotosDoDisco() as $rel => $caminho) {
+            $data = (int) @filemtime($caminho);
+            if (! str_starts_with(basename($rel), self::TMP_PREFIXO) && $data > $quando) {
+                $maisAntigo = min($maisAntigo ?? $data, $data);
+            }
+        }
+
+        return $maisAntigo;
+    }
+
+    /**
      * Índice do completo, caminho dentro de fotos/ => size e mtime. Lê só o diretório
      * central do zip, então não pesa mesmo com vários GB. Completo que não abre não para
      * o backup do dia, que ainda protege o que é novo: fica a data e o motivo vai para o log.

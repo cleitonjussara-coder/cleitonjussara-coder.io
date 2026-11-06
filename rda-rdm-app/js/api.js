@@ -482,6 +482,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     status: () => req('GET', '/admin/status'),
     migrar: () => req('POST', '/admin/migrar', { timeout: 120_000 }),
     armazenamento: () => req('GET', '/admin/armazenamento'),   // espaço em disco (21/09/2026)
+    saude: () => req('GET', '/admin/saude'),   // cartão Saúde do sistema (06/11/2026)
   };
 
   /* Assistente do "Como usar" (01/11/2026): RAG só sobre o texto da ajuda → { resposta, fontes, motivo }. */

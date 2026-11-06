@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 547;
+const APP_BUILD = 548;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -6992,6 +6992,12 @@ function renderPerfil() {
     ` : ''}
     ${_ehGestorOuAdmin() && sb && !DEMO_MODE ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <details id="saude-card" ontoggle="abrirSaude(this)">
+        <summary class="lbl" style="display:list-item;cursor:pointer;padding:4px 0">🩺 Saúde do sistema</summary>
+        <div id="saude-conteudo" style="font-size:15px;color:var(--text2);margin-top:8px"></div>
+      </details>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:8px">💾 Armazenamento do servidor</p>
       <div id="armazenamento-card" style="font-size:15px;color:var(--text2)">Medindo o espaço em disco…</div>
     </div>
@@ -7084,6 +7090,99 @@ async function desconectarDriveBackup() {
   try { await sb.backup.driveDesconectar(); toast('Drive desconectado do backup'); }
   catch (e) { toast(e.message || 'erro', 'err'); }
   _mostrarBackupDrive();
+}
+
+/* Saúde do sistema (06/11/2026): responde "está tudo funcionando?" sem abrir o painel
+   da Locaweb. Só pergunta ao servidor quando o cartão é aberto, porque ler log e backups
+   a cada visita ao Perfil seria trabalho à toa. O contador descarta a resposta velha
+   quando a pessoa fecha, abre ou toca em "Conferir de novo" antes de ela chegar. */
+let _saudePedido = 0;
+function abrirSaude(d) { if (d.open) _carregarSaude(); }
+async function _carregarSaude() {
+  const el0 = $('saude-conteudo');
+  if (!el0 || !_ehGestorOuAdmin() || !sb) return;
+  if (!navigator.onLine) { el0.textContent = 'Sem conexão — abra de novo quando estiver online.'; return; }
+  const pedido = ++_saudePedido;
+  el0.textContent = 'Conferindo o servidor…';
+  try {
+    const s = await sb.admin.saude();
+    const el = $('saude-conteudo');
+    if (el && pedido === _saudePedido) el.innerHTML = _saudeHtml(s);
+  } catch (e) {
+    const el = $('saude-conteudo');
+    if (el && pedido === _saudePedido) el.textContent = 'Não consegui conferir a saúde do sistema: ' + (e.message || 'erro');
+  }
+}
+
+/* Separada da busca para o mesmo desenho servir ao exemplo de 360 px. O painel não usa o
+   fundo #F8FAF9 dos outros quadros: o tema da tela troca esse fundo e força texto claro com
+   !important, e "atrasado" sairia da mesma cor de "em dia". Por isso as cores são as claras
+   do próprio tema. Cada parte pode vir { disponivel: false } e isso não quebra as outras. */
+function _saudeHtml(s) {
+  const q = d => new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const MB = b => (b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB';
+  const OK = '#b9e24a', ALERTA = '#FDBA74', ERRO = '#ffb4a8', NEUTRO = '#eef9f0', APAGADO = 'rgba(234,247,238,.8)', LINHA = 'rgba(234,247,238,.2)';
+  const linha = (titulo, valor, cor, detalhe) => `
+    <div style="padding:9px 0;border-bottom:1px solid ${LINHA}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <span style="min-width:0">${titulo}</span><b style="flex-shrink:0;color:${cor}">${valor}</b>
+      </div>
+      ${detalhe ? `<div style="font-size:13.5px;line-height:1.5;color:${APAGADO};margin-top:2px;overflow-wrap:anywhere">${detalhe}</div>` : ''}
+    </div>`;
+  const semLeitura = titulo => linha(titulo, 'indisponível', ALERTA, 'Não consegui ler esta parte agora.');
+
+  const backup = (titulo, b) => {
+    if (!b.disponivel) return semLeitura(titulo);
+    const ok = b.estado === 'ok';
+    const vazio = ok ? 'Nenhum zip ainda, e nenhum atraso.' : 'Nenhum arquivo na pasta.';
+    const arquivo = b.arquivo ? `${q(b.em)} · ${MB(b.bytes)}<br>${esc(b.arquivo)}` : vazio;
+    /* 06/11/2026: zip antigo com "em dia" precisa dizer o porquê, senão parece contradição */
+    const fotos = b.sem_foto_nova ? '<br>Sem foto nova para guardar.' : b.aguardando_rodada ? '<br>Foto nova entra na próxima madrugada.' : '';
+    return linha(titulo, ok ? 'em dia' : 'atrasado', ok ? OK : ALERTA, arquivo + fotos);
+  };
+
+  const drive = d => {
+    if (!d.disponivel) return semLeitura('☁️ Google Drive');
+    const envio = (nome, em) => `${nome}: ${em ? q(em) : 'nenhum envio'}`;
+    const u = d.ultimo_envio;
+    const envios = [envio('Banco', u.banco), envio('Fotos', u.fotos), envio('Completo', u.completo)].join('<br>');
+    const erro = d.ultimo_erro ? `<br><span style="color:${ERRO}">⚠️ ${esc(d.ultimo_erro)}</span>` : '';
+    return linha('☁️ Google Drive', d.conectado ? 'conectado' : 'desligado', d.conectado ? OK : ALERTA, envios + erro);
+  };
+
+  const erros = e => !e.disponivel ? semLeitura('📜 Erros no log hoje')
+    : linha('📜 Erros no log hoje', e.quantidade, e.quantidade ? ERRO : OK, e.quantidade ? 'O texto fica só no log do servidor, fora do app.' : '');
+
+  const migracoes = m => {
+    if (!m.disponivel) return semLeitura('🛠️ Migrações pendentes');
+    const n = m.pendentes.length;
+    return linha('🛠️ Migrações pendentes', n, n ? ALERTA : OK, n ? 'Use "Atualizar estrutura do banco" no quadro Backup.' : '');
+  };
+
+  const movimento = m => !m.disponivel ? semLeitura('📥 Notas nas últimas 24 h')
+    : linha('📥 Notas nas últimas 24 h', m.ultimas_24h, NEUTRO, `Última: ${m.ultima_em ? q(m.ultima_em) : 'nenhuma ainda'}<br>Conta nota nova ou corrigida que já chegou ao servidor. Nota presa na fila de um aparelho não aparece aqui.`);
+
+  const ok = s.resumo.estado === 'ok';
+  const topo = ok
+    ? `<div style="background:#F0FBF4;border:1.5px solid #74C69D;border-radius:10px;padding:10px 12px;color:#1B4332"><b>✅ Tudo certo</b></div>`
+    : `<div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
+        <b style="color:#9A3412">⚠️ Atenção</b>
+        <ul style="margin:6px 0 0 18px;line-height:1.5">${s.resumo.olhar.map(t => `<li style="overflow-wrap:anywhere">${esc(t)}</li>`).join('')}</ul>
+      </div>`;
+
+  return `${topo}
+    <div style="background:rgba(255,255,255,.06);border:1.5px solid ${LINHA};border-radius:10px;padding:2px 12px 10px;margin-top:8px;color:${NEUTRO}">
+      ${backup('🧮 Backup do banco', s.backups.banco)}
+      ${backup('📷 Backup das fotos', s.backups.fotos)}
+      ${backup('🗄️ Backup completo', s.backups.completo)}
+      ${drive(s.drive)}
+      ${erros(s.erros_hoje)}
+      ${migracoes(s.migracoes)}
+      ${movimento(s.movimento)}
+      <p style="font-size:13.5px;line-height:1.5;color:${APAGADO};padding-top:9px">⏰ O servidor não consegue ler o Agendador de tarefas: se ele parar, quem mostra é o atraso dos backups.</p>
+      <p style="font-size:13px;color:${APAGADO};margin-top:6px">Conferido em ${q(s.gerado_em)}.</p>
+    </div>
+    <button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="_carregarSaude()">🔄 Conferir de novo</button>`;
 }
 
 /* Armazenamento do servidor (21/09/2026): quanto o app ocupa na Locaweb

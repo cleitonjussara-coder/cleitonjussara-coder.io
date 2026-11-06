@@ -56,6 +56,18 @@ class AdminController extends Controller
     }
 
     /**
+     * GET /admin/saude — "está tudo funcionando?" (06/11/2026): backups, Drive, erros de
+     * hoje, migrações e movimento de notas. Alimenta o cartão "Saúde do sistema" no Perfil,
+     * que só chama esta rota quando é aberto.
+     */
+    public function saude(Request $r, \App\Services\SaudeSistema $s): JsonResponse
+    {
+        abort_unless($r->user()?->manutencao(), 403, 'Só gestor ou admin acessa a manutenção do servidor');
+
+        return response()->json($s->medir());
+    }
+
+    /**
      * POST /admin/migrar — roda as migrações pendentes NO SERVIDOR.
      * É o "php artisan migrate --force" de quem não tem terminal lá: o banco
      * (SQLite) é um arquivo na hospedagem, então a migração tem que rodar
