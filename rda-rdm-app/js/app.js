@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 550;
+const APP_BUILD = 551;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5354,7 +5354,11 @@ async function renderNotasApagadas() {
       items.forEach(n => { n._orfa = !noServidor.has(n.id); });
     } catch (_) { /* offline ou erro: mostra como sempre */ }
   }
-  const ns = (items || []).sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
+  /* 06/11/2026 (pedido do Cleiton): o apagado do Faturamento fica em seção própria. Quem gerencia recebe do servidor; só fica
+     na lista de cima o que ainda não subiu, para não sumir de nenhuma das duas. */
+  const vaiProFaturamento = n => n.pagamento === 'empresa' && noServidor.get(n.id) === true && _ehGestorOuAdmin();
+  const ns = (items || []).filter(n => !vaiProFaturamento(n))
+    .sort((a, b) => String(b.deleted_at || '').localeCompare(String(a.deleted_at || '')));
   /* 30/10/2026 (pedido do Paulo): gestor/admin também veem o que a EQUIPE apagou — de quem era e quem apagou. Vem direto do
      servidor (a lixeira do aparelho só guarda o que passou por ele); o que já está na lista de cima não repete. */
   let daEquipe = [];
@@ -5398,6 +5402,7 @@ async function renderNotasApagadas() {
         <div class="nota-head">
           <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
           ${n.subtipo ? `<span class="subtipo-tag">${esc(n.subtipo)}</span>` : ''}
+          ${n.pagamento === 'empresa' ? '<span class="subtipo-tag">🏢 Faturamento</span>' : ''}
           <span class="nota-data">${fmtHora(n.deleted_at || n.updated_at || n.created_at)}</span>
         </div>
         <div class="nota-body">
@@ -5429,8 +5434,10 @@ async function renderNotasApagadas() {
 
   if (daEquipe.length) {
     const nomeDe = uid => uid ? (equipePorId[uid]?.nome || equipePorId[uid]?.email || (uid === user.id ? (user.nome || user.email) : 'colaborador removido')) : 'Faturamento geral (sem colaborador)';
-    html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 6px">
-      <span style="font-weight:700;font-size:16px">👥 Apagadas pela equipe <span style="opacity:.7;font-weight:600">(${daEquipe.length})</span></span>
+    const doFaturamento = daEquipe.filter(n => n.pagamento === 'empresa');
+    const dosColaboradores = daEquipe.filter(n => n.pagamento !== 'empresa');
+    const tituloSecao = (rotulo, qtd) => `<div style="font-weight:700;font-size:16px;padding:14px 14px 6px">${rotulo} <span style="opacity:.7;font-weight:600">(${qtd})</span></div>`;
+    html += `<div style="display:flex;justify-content:flex-end;padding:14px 14px 0">
       <button class="btn btn-sm btn-outline" id="eq-selbtn" onclick="selecionarEquipe(!this.classList.contains('on'))">☑️ Selecionar</button>
     </div>
     <div id="eq-selbar" class="cdet-selbar" style="display:none">
@@ -5440,11 +5447,10 @@ async function renderNotasApagadas() {
       <button class="btn btn-sm btn-primary sel-acao" data-rotulo="♻️ Restaurar" onclick="restaurarEquipeSelecionadas()" disabled>♻️ Restaurar</button>
       <button class="btn btn-sm btn-danger-outline sel-acao" data-rotulo="🗑 Apagar definitivo" onclick="apagarEquipeSelecionadas()" disabled>🗑 Apagar definitivo</button>
       <button class="btn btn-sm btn-outline" onclick="selecionarEquipe(false)">Cancelar</button>
-    </div>
-    <div class="notas-list" id="notas-equipe-apagadas">`;
-    daEquipe.forEach(n => {
+    </div>`;
+    const cartaoEquipe = n => {
       const quem = n.updated_by ? nomeDe(n.updated_by) : 'não registrado';
-      html += `
+      return `
       <div class="nota-card" data-tipo="${_at(n.tipo)}">
         <input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarEquipe(this.value,this.checked)" aria-label="Selecionar este lançamento">
         <div class="nota-head">
@@ -5466,8 +5472,11 @@ async function renderNotasApagadas() {
           </div>
         </div>
       </div>`;
-    });
-    html += `</div>`;
+    };
+    if (doFaturamento.length) html += `${tituloSecao('🏢 Apagadas do Faturamento', doFaturamento.length)}
+      <div class="notas-list notas-eq-lista" id="notas-faturamento-apagadas">${doFaturamento.map(cartaoEquipe).join('')}</div>`;
+    if (dosColaboradores.length) html += `${tituloSecao('👥 Apagadas pela equipe', dosColaboradores.length)}
+      <div class="notas-list notas-eq-lista" id="notas-equipe-apagadas">${dosColaboradores.map(cartaoEquipe).join('')}</div>`;
   }
 
   _selNotas.clear();
@@ -5481,7 +5490,7 @@ async function renderNotasApagadas() {
 const _selEq = new Set();
 let _equipeApagadasCache = [];
 
-function _eqChks() { return [...document.querySelectorAll('#notas-equipe-apagadas .nota-chk')]; }
+function _eqChks() { return [...document.querySelectorAll('.notas-eq-lista .nota-chk')]; }
 
 function _eqAtualizar() {
   const barra = $('eq-selbar');
@@ -5499,17 +5508,19 @@ function _eqAtualizar() {
 }
 
 function selecionarEquipe(ligar) {
-  const lista = $('notas-equipe-apagadas'), barra = $('eq-selbar');
-  if (!lista || !barra) return;
+  const listas = [...document.querySelectorAll('.notas-eq-lista')], barra = $('eq-selbar');
+  if (!listas.length || !barra) return;
   _selEq.clear();
-  lista.classList.toggle('nota-sel-on', !!ligar);
   barra.style.display = ligar ? 'flex' : 'none';
   $('eq-selbtn')?.classList.toggle('on', !!ligar);
-  lista.onclick = ligar ? e => {
-    if (e.target.closest('button,a,input')) return;
-    const c = e.target.closest('.nota-card')?.querySelector('.nota-chk');
-    if (c) marcarEquipe(c.value, !c.checked);
-  } : null;
+  listas.forEach(lista => {
+    lista.classList.toggle('nota-sel-on', !!ligar);
+    lista.onclick = ligar ? e => {
+      if (e.target.closest('button,a,input')) return;
+      const c = e.target.closest('.nota-card')?.querySelector('.nota-chk');
+      if (c) marcarEquipe(c.value, !c.checked);
+    } : null;
+  });
   _eqAtualizar();
 }
 
