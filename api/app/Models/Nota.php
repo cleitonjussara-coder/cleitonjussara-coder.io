@@ -110,6 +110,28 @@ class Nota extends Model
         return $tem;
     }
 
+    /* Fechamento de mês (06/11/2026): mesma proteção, com o memorizado esquecível para o teste de API antes da migração. */
+    private static ?bool $temFora = null;
+
+    public static function temForaFechamento(): bool
+    {
+        if (self::$temFora === null) {
+            try {
+                self::$temFora = Schema::hasColumn('notas', 'fora_fechamento_em');
+            } catch (\Throwable) {
+                self::$temFora = false;
+            }
+        }
+
+        return self::$temFora;
+    }
+
+    /** Só para teste: esquece o que foi memorizado. */
+    public static function esquecerForaFechamento(): void
+    {
+        self::$temFora = null;
+    }
+
     /** Link impresso no recibo, como https://site.com.br. Só site .br que não seja do governo; o resto vira null, sem recusar a nota. */
     public static function portalNormalizado(mixed $v): ?string
     {
@@ -156,6 +178,45 @@ class Nota extends Model
         return preg_match('/^\d{14}$/', $c)
             ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $c)
             : $c;
+    }
+
+    /**
+     * O que entra nos relatórios entregáveis (06/11/2026, decisão do dono): a planilha de um mês fechado não muda sozinha depois de
+     * entregue. Fica de fora só a nota que chegou com o mês fechado, ainda sem conferência, enquanto o mês ESTIVER fechado. Olhar o
+     * mês fechado agora, e não só a marca da nota, é o que impede esconder para sempre: reabriu o mês, tudo volta a aparecer, porque
+     * mês aberto não promete planilha parada; nota movida para mês aberto também volta. Fechou de novo sem conferir, ela sai outra
+     * vez, com o aviso no arquivo. As telas não usam este escopo: mostram o dinheiro real, com a nota.
+     */
+    public function scopeNoRelatorio(Builder $q): Builder
+    {
+        if (! self::seguraNotaEmRelatorio()) {
+            return $q;
+        }
+
+        return $q->where(fn (Builder $w) => $w->whereNull('notas.fora_fechamento_em')->orWhereNotNull('notas.fora_conferida_em')
+            ->orWhereNotExists(fn ($s) => self::mesFechadoDaNota($s)));
+    }
+
+    /** O contrário de noRelatorio: quem o relatório deixou de fora, para dizer quantas são e quanto valem. */
+    public function scopeAguardandoConferencia(Builder $q): Builder
+    {
+        if (! self::seguraNotaEmRelatorio()) {
+            return $q->whereRaw('1 = 0');
+        }
+
+        return $q->where('notas.deleted', false)->whereNotNull('notas.fora_fechamento_em')->whereNull('notas.fora_conferida_em')
+            ->whereExists(fn ($s) => self::mesFechadoDaNota($s));
+    }
+
+    /* Banco antes da migração: sem as colunas ou sem a tabela, nada é segurado e os relatórios saem como antes. */
+    private static function seguraNotaEmRelatorio(): bool
+    {
+        return self::temForaFechamento() && MesFechado::tabelaExiste();
+    }
+
+    private static function mesFechadoDaNota($s): void
+    {
+        $s->selectRaw('1')->from('meses_fechados')->whereColumn('meses_fechados.ano', 'notas.ano')->whereColumn('meses_fechados.mes', 'notas.mes');
     }
 
     /* Recorte da policy notas_sel: dono vê as suas; gestor/admin veem tudo. */

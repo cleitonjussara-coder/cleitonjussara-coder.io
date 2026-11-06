@@ -25,11 +25,27 @@ use App\Models\Repasse;
  * Limite conhecido, para o dono decidir: quem veio do RDM/RDA para o C.V. traz o gasto antigo sem pagamento gravado como cartão
  * (a regra é "cartão = fora de carteira/empresa") e o repasse antigo como crédito de reembolso, então o cartão pode sair
  * negativo sem ser. Separar isso pede a data da mudança de regime, que o banco não tem.
+ *
+ * Duas leituras (06/11/2026, decisão do dono): por padrão é o dinheiro real, com todas as notas, para as telas e os avisos do
+ * cartão. Os relatórios leem por doRelatorio(), que deixa de fora a nota que aguarda conferência em mês fechado. Se só o ano da
+ * nota a deixasse de fora, o saldo final de um ano não seria o anterior do seguinte. Assim a nota sai dos dois lados enquanto
+ * aguarda, o relatório do ano seguinte diz isso por escrito, e depois de conferida entra nos dois ao mesmo tempo.
  */
 class SaldoAnterior
 {
     /** Rótulo da linha em planilhas e PDFs, em maiúsculas como os outros rótulos dos modelos. */
     public const ROTULO = 'SALDO DO ANO ANTERIOR';
+
+    private bool $doRelatorio = false;
+
+    /** Uma cópia que soma como os relatórios entregáveis: ver Nota::noRelatorio. */
+    public function doRelatorio(): self
+    {
+        $copia = clone $this;
+        $copia->doRelatorio = true;
+
+        return $copia;
+    }
 
     /**
      * @param  iterable<string>|null  $ids  só estes colaboradores; null = todos
@@ -59,6 +75,7 @@ class SaldoAnterior
 
         $gastos = $corte(Nota::query()->where('deleted', false)->whereNotNull('user_id'))
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
+            ->when($this->doRelatorio, fn ($q) => $q->noRelatorio())
             ->when($ids !== null, fn ($q) => $q->whereIn('user_id', $ids))
             ->selectRaw('user_id, tipo, pagamento, SUM(valor) AS v')->groupBy('user_id', 'tipo', 'pagamento')->get();
         $repasses = self::recebidos($corte(Repasse::query()->where('deleted', false)))

@@ -61,7 +61,7 @@ class RelatorioRdmRda
 
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai da planilha individual dele, só soma no painel geral. */
-        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
 
@@ -202,6 +202,12 @@ class RelatorioRdmRda
 
         $this->escreverSaldoAnterior($c, $ano, $bd, $rdm, $totalRda);
 
+        /* 06/11/2026: nota que aguarda conferência ficou fora das abas e do saldo; o arquivo diz isso na primeira aba e ao lado do
+           saldo. A1:C4 e L1:X2 estão livres no modelo (endereço em D1, logo em I1 no CABEÇALHO e na ponta esquerda do BANCO DE DADOS). */
+        $avisos = NotasAguardando::doPeriodo($ano, null, [$c->id]);
+        NotasAguardando::estampar($cab, 'A1:C4', $avisos);
+        NotasAguardando::estampar($bd, 'L1:X2', $avisos);
+
         $ss->setActiveSheetIndex(0);
 
         return $ss;
@@ -258,7 +264,7 @@ class RelatorioRdmRda
      */
     private function escreverSaldoAnterior(Colaborador $c, int $ano, Worksheet $bd, Worksheet $rdm, int $total): void
     {
-        $svc = app(SaldoAnterior::class);
+        $svc = app(SaldoAnterior::class)->doRelatorio();
         $tipos = $svc->porTipo($c, $svc->de($c, $ano));
         $borda = ['outline' => ['borderStyle' => 'medium']];
 

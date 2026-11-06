@@ -50,7 +50,7 @@ class RelatorioFaturamentoXlsx
     /** Sem $mes: o ano inteiro (RESUMO + Jan–Dez). Com $mes: relatório só daquele mês (CATEGORIAS + a aba do mês). */
     public function gerar(int $ano, ?Colaborador $gerador = null, ?int $mes = null): Spreadsheet
     {
-        $notas = Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano)
+        $notas = Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->when($mes, fn ($q) => $q->where('mes', $mes))
             ->orderBy('data')->orderBy('created_at')->get();
 
@@ -178,6 +178,8 @@ class RelatorioFaturamentoXlsx
             $qtd, $qtd === 1 ? '' : 's', now(PontoCalculo::TZ)->format('d/m/Y H:i'), $gerador ? ' por '.($gerador->nome ?: $gerador->email) : ''
         ));
         $ws->getStyle([1, $r])->getFont()->setItalic(true)->setSize(10)->setColor(new Color('FF666666'));
+        /* 06/11/2026: nota que aguarda conferência ficou fora; a linha 3, em branco nas três abas, diz isso */
+        NotasAguardando::estampar($ws, 'A3:N3', NotasAguardando::doFaturamento($ano), 3);
         $r += 2;
 
         /* ── Quadro 1: por mês × categoria ── */
@@ -266,6 +268,7 @@ class RelatorioFaturamentoXlsx
         $ws->mergeCells([1, 2, 4, 2]);
         $ws->setCellValue([1, 2], 'Gerado em '.now(PontoCalculo::TZ)->format('d/m/Y H:i').($gerador ? ' por '.($gerador->nome ?: $gerador->email) : ''));
         $ws->getStyle([1, 2])->getFont()->setItalic(true)->setSize(10)->setColor(new Color('FF666666'));
+        NotasAguardando::estampar($ws, 'A3:D3', NotasAguardando::doFaturamento($ano, $m), 3, 30);   // quatro colunas: a frase quebra em duas linhas
 
         $cab = ['Categoria', 'Notas', 'Valor (R$)', '% do mês'];
         $this->cabecalho($ws, 4, $cab, $hdr);
@@ -305,6 +308,7 @@ class RelatorioFaturamentoXlsx
         $ws->mergeCells([1, 2, $ncol, 2]);
         $ws->setCellValue([1, 2], sprintf('%d nota%s · R$ %s', count($notas), count($notas) === 1 ? '' : 's', number_format($total, 2, ',', '.')));
         $ws->getStyle([1, 2])->getFont()->setItalic(true)->setSize(10)->setColor(new Color('FF666666'));
+        NotasAguardando::estampar($ws, 'A3:L3', NotasAguardando::doFaturamento($ano, $m), 3);
 
         $hdrRow = 4;
         $this->cabecalho($ws, $hdrRow, self::COLUNAS, $hdr);

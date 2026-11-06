@@ -364,6 +364,14 @@ class FotoStorage
         return $this->arquivoDaNota("{$pasta}/".self::ESPERA_DIR, $notaId) !== null;
     }
 
+    /** 06/11/2026: sha1 do anexo em espera, ou null se não há nenhum. O mês fechado compara com o atual antes de dizer "nada mudou". */
+    public function conteudoDaEspera(string $pasta, string $notaId): ?string
+    {
+        $arquivo = $this->arquivoDaNota("{$pasta}/".self::ESPERA_DIR, $notaId);
+
+        return $arquivo === null ? null : sha1((string) $this->disk()->get($arquivo));
+    }
+
     /** O anexo em espera vira o anexo da nota. Devolve o caminho novo, ou null se não havia nada esperando. */
     public function promoverEspera(string $pasta, string $notaId): ?string
     {

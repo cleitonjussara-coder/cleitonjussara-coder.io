@@ -67,9 +67,10 @@ function aparelho({ pagina = true } = {}) {
     const metodo = op.method;
     const caminho = String(url).replace(/^.*\/api/, '').split('?')[0];
     const corpo = typeof op.body === 'string' ? JSON.parse(op.body) : null;
-    rede.chamadas.push({ metodo, caminho, corpo });
+    rede.chamadas.push({ metodo, caminho, corpo, form: typeof op.body === 'string' ? null : op.body });
     if (metodo === 'PUT' && caminho.startsWith('/notas/')) return rede.put ? rede.put(corpo) : resposta(200, { ...corpo, updated_at: 'S-padrao' });
     if (metodo === 'POST' && /\/foto$/.test(caminho)) return rede.foto ? rede.foto() : resposta(200, { foto_path: 'u/x.jpg', updated_at: 'S-foto' });
+    if (metodo === 'PUT' && caminho.startsWith('/repasses/') && rede.putRep) return rede.putRep(corpo);
     if (metodo === 'GET' && caminho === '/notas/apagadas') return resposta(200, rede.apagadas);
     if (metodo === 'GET' && caminho === '/notas') { await espera(rede.atraso); return resposta(200, rede.lista); }
     if (metodo === 'GET') return resposta(200, []);
@@ -501,6 +502,116 @@ async function notaEnviada(a, id, x) {
     await c.DB.sync(c.API, UID, true);
     const n32 = c.ler('notas', 'n32');
     confere(n32?.valor === 77 && n32?.foto_path === `${B}/n32.jpg` && c.fila().length === 0, 'edição feita com o PUT no ar sobe e o caminho novo entra no envio dela');
+  }
+
+  console.log('Mês fechado: 423 com mes_fechado (06/11/2026)');
+  {
+    const corpo423 = (nota, x) => ({ message: 'x', mes_fechado: true, ano: 2026, mes: 10, mes_rotulo: 'outubro/2026', nota, ...x });
+
+    /* edição de nota existente: vale a do servidor e o item sai da fila */
+    const a = aparelho();
+    await notaEnviada(a, 'm1', { razao_social: 'Posto Sul' });
+    await a.DB.saveNota({ ...a.ler('notas', 'm1'), valor: 99 }, UID);
+    a.rede.put = () => resposta(423, corpo423({ ...notaBase('m1', { razao_social: 'Posto Sul' }), valor: 10, foto_path: 'u/m1.jpg', updated_at: 'S2' }));
+    const r = await a.DB.sync(a.API, UID, true);
+    const m1 = a.ler('notas', 'm1');
+    confere(m1?.valor === 10 && m1?.synced === true && m1?.server_updated_at === 'S2', '423 grava a versão do servidor');
+    confere(a.fila().length === 0, 'item sai da fila');
+    confere(!r?.fail, 'não conta como falha');
+    const avisos = await a.DB.getMeta('avisos_conflito', []);
+    confere(avisos.length === 1 && avisos[0].texto === 'O mês de outubro/2026 foi fechado pela gestão. Sua alteração na nota Posto Sul não foi gravada; fale com o gestor.', 'aviso com o mês e a nota');
+    const chamadas = a.puts().length;
+    await a.DB.sync(a.API, UID, true);
+    confere(a.puts().length === chamadas, 'rodada seguinte não reenvia');
+
+    /* sem mes_rotulo o mês sai da data da nota */
+    const b = aparelho();
+    await notaEnviada(b, 'm2', { razao_social: 'Hotel', data: '2026-09-03' });
+    await b.DB.saveNota({ ...b.ler('notas', 'm2'), valor: 5 }, UID);
+    b.rede.put = () => resposta(423, { message: 'x', mes_fechado: true, nota: { ...notaBase('m2', { razao_social: 'Hotel', data: '2026-09-03' }), foto_path: 'u/m2.jpg', updated_at: 'S2' } });
+    await b.DB.sync(b.API, UID, true);
+    confere((await b.DB.getMeta('avisos_conflito', []))[0]?.texto.includes('setembro/2026'), 'mês vem da data quando o servidor não manda o rótulo');
+
+    /* nota NOVA nunca é recusada: entra, e o aparelho a guarda como sempre */
+    const c = aparelho(); await c.DB.open();
+    c.rede.put = co => resposta(200, { ...co, updated_at: 'S1', fora_fechamento_em: '2026-11-06T12:00:00Z' });
+    await c.DB.saveNota(notaBase('m3', { data: '2026-10-02' }), UID);
+    await c.DB.sync(c.API, UID, true);
+    confere(c.ler('notas', 'm3')?.synced === true && c.fila().length === 0, 'nota nova de mês fechado sobe normalmente');
+    confere((await c.DB.getMeta('avisos_conflito', [])).length === 0, 'nota nova não gera aviso de recusa');
+
+    /* anexo de nota existente, com o servidor já tendo o dele */
+    const d = aparelho();
+    await notaEnviada(d, 'm4', { foto_path: 'u/m4.jpg' });
+    const blob = new Blob(['novo'], { type: 'image/jpeg' });
+    await d.DB.saveFotoLocal('m4', blob, 'jpg');
+    await d.DB.saveNota({ ...d.ler('notas', 'm4'), valor: 7 }, UID);
+    d.rede.foto = () => resposta(423, corpo423({ ...notaBase('m4'), foto_path: 'u/m4.jpg', updated_at: 'S2' }));
+    await d.DB.sync(d.API, UID, true);
+    confere(d.fila().length === 0, 'anexo recusado solta anexo e nota da fila');
+    confere(!d.ler('fotos', 'm4'), 'anexo novo sai junto: o servidor tem o comprovante');
+    confere((await d.DB.getMeta('avisos_conflito', [])).length === 1, 'um aviso só para anexo e nota');
+
+    /* nota de mês aberto movida para mês fechado com anexo novo: o servidor recusa pelo anexo, antes de ele tocar no comprovante */
+    const d2 = aparelho();
+    await notaEnviada(d2, 'm4b', { data: '2026-11-03', foto_path: 'u/m4b.jpg' });
+    await d2.DB.saveFotoLocal('m4b', new Blob(['novo'], { type: 'image/jpeg' }), 'jpg');
+    await d2.DB.saveNota({ ...d2.ler('notas', 'm4b'), data: '2026-10-20' }, UID);
+    d2.rede.foto = () => resposta(423, corpo423({ ...notaBase('m4b', { data: '2026-11-03' }), foto_path: 'u/m4b.jpg', updated_at: 'S2' }));
+    await d2.DB.sync(d2.API, UID, true);
+    confere(d2.rede.chamadas.find(x => /\/foto$/.test(x.caminho))?.form?.get('data') === '2026-10-20', 'o anexo sobe dizendo a data da edição');
+    confere(d2.ler('notas', 'm4b')?.data === '2026-11-03' && d2.fila().length === 0, 'volta à versão do servidor e sai da fila');
+    confere(!d2.puts().length, 'o PUT nem sai: o anexo já disse que não entra');
+
+    /* servidor sem anexo: o arquivo é a única cópia, fica guardado sem voltar para a fila */
+    const e = aparelho();
+    await notaEnviada(e, 'm5');
+    await e.DB.saveFotoLocal('m5', new Blob(['unica'], { type: 'image/jpeg' }), 'jpg');
+    e.rede.foto = () => resposta(423, corpo423({ ...notaBase('m5'), foto_path: null, updated_at: 'S2' }));
+    await e.DB.sync(e.API, UID, true);
+    confere(e.ler('fotos', 'm5')?.recusada === true, 'única cópia do anexo fica guardada e marcada');
+    confere(e.fila().length === 0, 'e não fica na fila');
+    e.rede.chamadas.length = 0;
+    await e.DB.sync(e.API, UID, true);
+    confere(!e.rede.chamadas.some(x => /\/foto$/.test(x.caminho)), 'rodada seguinte não sobe o anexo de novo');
+
+    /* repasse */
+    const f = aparelho(); await f.DB.open();
+    const rep = { id: 'r1', user_id: UID, tipo: 'RDM', valor: 50, data: '2026-10-05', mes: 10, ano: 2026, kind: 'received' };
+    await f.DB.saveRepasse(rep, UID);
+    f.rede.putRep = () => resposta(423, { message: 'Reabra o mês.', mes_fechado: true, mes_rotulo: 'outubro/2026', repasse: null });
+    await f.DB.sync(f.API, UID, true);
+    confere(f.fila().length === 0, 'repasse novo recusado sai da fila');
+    confere(f.ler('repasses', 'r1')?.deleted === true, 'e sai da conta deste aparelho, sem ser apagado');
+    confere((await f.DB.getMeta('avisos_conflito', []))[0]?.texto === 'Reabra o mês.', 'aviso traz o que o servidor disse');
+
+    const g = aparelho(); await g.DB.open();
+    await g.DB.saveRepasse({ ...rep, id: 'r2' }, UID);
+    g.rede.putRep = () => resposta(423, { message: 'x', mes_fechado: true, mes_rotulo: 'outubro/2026', repasse: { ...rep, id: 'r2', valor: 40 } });
+    await g.DB.sync(g.API, UID, true);
+    confere(g.ler('repasses', 'r2')?.valor === 40 && g.fila().length === 0, 'repasse existente volta à versão do servidor');
+
+    /* 423 desconhecido não some em silêncio: fica com o motivo e espera longa, como as outras recusas */
+    const h = aparelho();
+    await notaEnviada(h, 'm6');
+    await h.DB.saveNota({ ...h.ler('notas', 'm6'), valor: 3 }, UID);
+    h.rede.put = () => resposta(423, { message: 'Travado por outro motivo' });
+    await h.DB.sync(h.API, UID, true);
+    confere(h.ler('notas', 'm6')?.sync_error === 'Travado por outro motivo', '423 sem mes_fechado mostra o motivo');
+    confere(h.ler('notas', 'm6')?.valor === 3 && h.fila().length === 1, 'e não descarta a edição');
+
+    /* service worker não tem tela */
+    const w = aparelho({ pagina: false });
+    await w.DB.open();
+    await w.DB.setMeta('sessao_fundo', { token: 't', uid: UID });
+    w.rede.put = c2 => resposta(200, { ...c2, updated_at: 'S1' });
+    await w.DB.saveNota(notaBase('m7'), UID);
+    await w.DB.enviarEmFundo({ prazoMs: 2000 });
+    await w.DB.saveNota({ ...w.ler('notas', 'm7'), valor: 5 }, UID);
+    w.rede.put = () => resposta(423, corpo423({ ...notaBase('m7'), foto_path: 'u/m7.jpg', valor: 6, updated_at: 'S2' }));
+    const rw = await w.DB.enviarEmFundo({ prazoMs: 2000 });
+    confere(w.ler('notas', 'm7')?.valor === 6 && w.fila().length === 0 && rw.fail === 0, 'worker aplica o 423 sem quebrar');
+    confere((await w.DB.getMeta('avisos_conflito', [])).length === 1, 'aviso espera a página');
   }
 
   console.log('Service worker (sem window, document nem toast)');

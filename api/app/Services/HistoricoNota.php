@@ -27,13 +27,14 @@ class HistoricoNota
         'valor' => 'Valor', 'data' => 'Data', 'tipo' => 'Grupo', 'subtipo' => 'Categoria', 'pagamento' => 'Pagamento',
         'cnpj' => 'CNPJ', 'razao_social' => 'Razão social', 'numero' => 'Número', 'serie' => 'Série',
         'observacao' => 'Observação', 'documento' => 'Documento', 'placa' => 'Placa', 'deleted' => 'Situação',
-        'user_id' => 'Colaborador', 'anexo' => 'Anexo',
+        'user_id' => 'Colaborador', 'anexo' => 'Anexo', 'fechamento' => 'Fechamento',
     ];
 
     private const ROTULO_ACAO = [
         'criacao' => 'Nota lançada', 'edicao' => 'Nota editada', 'tipo' => 'Grupo corrigido',
         'lixeira' => 'Enviada para a lixeira', 'restaurada' => 'Restaurada da lixeira', 'anexo' => 'Anexo alterado',
         'dono' => 'Colaborador trocado', 'exclusao' => 'Apagada em definitivo',
+        'fora_fechamento' => 'Entrou com o mês fechado', 'conferida' => 'Conferida pela gestão',
     ];
 
     private const ROTULO_PAPEL = ['colaborador' => 'Colaborador', 'gestor' => 'Gestor', 'admin' => 'Admin', 'contabilidade' => 'Contador'];
@@ -119,6 +120,15 @@ class HistoricoNota
     public function registrarAnexo(string $notaId, Colaborador $por, string $texto = 'anexo trocado'): void
     {
         $this->gravar($notaId, 'anexo', ['anexo' => ['antes' => null, 'depois' => $texto]], $por);
+    }
+
+    /**
+     * 06/11/2026: a nota entrou com o mês fechado, ou a gestão a conferiu. Fechar e reabrir um mês não passam por aqui: uma linha
+     * em cada nota seriam milhares de registros iguais, e o histórico do mês já diz quem, quando e por quê.
+     */
+    public function registrarFechamento(string $notaId, string $acao, Colaborador $por, string $texto): void
+    {
+        $this->gravar($notaId, $acao, ['fechamento' => ['antes' => null, 'depois' => $texto]], $por);
     }
 
     /** Exclusão definitiva: guarda como a nota estava, porque depois disso a linha dela não existe mais. */

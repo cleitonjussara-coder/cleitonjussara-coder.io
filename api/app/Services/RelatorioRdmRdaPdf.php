@@ -37,7 +37,7 @@ class RelatorioRdmRdaPdf
     {
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai da planilha individual dele, só soma no painel geral. */
-        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
         /* 04/11/2026: mesma regra de recebido do saldo anterior e do Excel */
@@ -70,7 +70,7 @@ class RelatorioRdmRdaPdf
         $recRdm = (float) $repsRdm->sum('valor');
         $recRda = (float) $repsRda->sum('valor');
         /* 04/11/2026: saldo do ano anterior, nos mesmos números da planilha (RelatorioRdmRda::escreverSaldoAnterior) */
-        $svcSaldo = app(SaldoAnterior::class);
+        $svcSaldo = app(SaldoAnterior::class)->doRelatorio();
         $antes = $svcSaldo->porTipo($c, $svcSaldo->de($c, $ano));
         $saldoRdm = $antes['RDM'] + $recRdm - $gastoRdm;
         $saldoRda = $antes['RDA'] + $recRda - $gastoRda;
@@ -83,9 +83,12 @@ class RelatorioRdmRdaPdf
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
         $neg = fn ($v) => $v < 0 ? 'vermelho' : '';
 
+        /* 06/11/2026: nota que aguarda conferência ficou fora; a capa e a página do saldo dizem isso */
+        $aguarda = NotasAguardando::html(NotasAguardando::doPeriodo($ano, null, [$c->id], 'neste relatório'));
+
         $h = [];
         /* ── CAPA (CABEÇALHO) ───────────────────────────────── */
-        $h[] = '<div class="capa"><div class="empresa">PETERMANN &amp; MORAIS LTDA ME - CNPJ 17.117.768/0001-42<br>Rua Natal Vasconcelos Montes, 185 - Sala 01. Centro. CEP.: 75.503-340 · Itumbiara, Goiás</div>'
+        $h[] = $aguarda.'<div class="capa"><div class="empresa">PETERMANN &amp; MORAIS LTDA ME - CNPJ 17.117.768/0001-42<br>Rua Natal Vasconcelos Montes, 185 - Sala 01. Centro. CEP.: 75.503-340 · Itumbiara, Goiás</div>'
             .'<div class="titulo-capa-top">DESPESAS CORPORATIVAS | PETERMANN &amp; MORAIS LTDA</div>'
             .'<table class="cab"><tr><th>FUNCIONÁRIO:</th><td class="vermelho">'.$e($nome).'</td></tr>'
             .'<tr><th>SAFRA:</th><td>'.$safra.'</td><th class="dir">ANO DO EXERCÍCIO:</th><td>'.$ano.'</td></tr></table>'
@@ -128,7 +131,7 @@ class RelatorioRdmRdaPdf
             .'<tr><th class="esq">RDA</th>'.implode('', array_map(fn ($v) => '<td class="num">'.$num($v).'</td>', $tRda)).'<td class="num tot">'.$num($gastoRda).'</td></tr>'
             .'<tr class="tot"><th class="esq">TOTAL/TRIM</th>'.implode('', array_map(fn ($i) => '<td class="num">'.$num($tRdm[$i] + $tRda[$i]).'</td>', [0, 1, 2, 3])).'<td class="num">'.$num($gastoRdm + $gastoRda).'</td></tr></table>';
 
-        $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).' — EXERCÍCIO DE '.$ano.'</h2>'
+        $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).' — EXERCÍCIO DE '.$ano.'</h2>'.$aguarda
             .'<table class="resumo"><tr>'
             .'<td><b>CUSTOS TOTAIS DE RDM RECEBIDO</b><br><span class="big">'.$brl($recRdm).'</span></td>'
             .'<td><b>CUSTOS TOTAIS DE RDA RECEBIDO</b><br><span class="big">'.$brl($recRda).'</span></td></tr><tr>'

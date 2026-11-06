@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
 use App\Models\Repasse;
+use App\Services\FechamentoMes;
 use App\Services\PushService;
 use App\Services\RepasseEmailService;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -27,7 +29,7 @@ class RepasseController extends Controller
 {
     private const SO_O_GESTOR_REGISTRA = 'Repasse e recarga quem registra é o gestor. Se o dinheiro caiu e não aparece, fale com ele.';
 
-    public function __construct(private RepasseEmailService $email, private PushService $push) {}
+    public function __construct(private RepasseEmailService $email, private PushService $push, private FechamentoMes $fechamento) {}
 
     public function index(Request $r): JsonResponse
     {
@@ -233,6 +235,15 @@ class RepasseController extends Controller
                     abort(403, 'Repasse e recarga registrados pelo gestor só o gestor cancela ou altera. Fale com ele.');
                 }
             }
+            /* Fechamento de mês (06/11/2026): depois das permissões, como na nota. A data nova entra na conta: mover o dinheiro
+               para dentro de um mês fechado muda a planilha dele. Reenvio idêntico responde 200 sem gravar, para não prender a fila.
+               A exceção sai da transação sem gravar nada. */
+            if ($periodo = $this->fechamento->periodoTravado($rep, $d['data'])) {
+                if ($this->reenvioIdentico($rep, $d)) {
+                    return [$rep, false];
+                }
+                throw new HttpResponseException($this->fechamento->recusa($rep, $periodo, $u));
+            }
             unset($d['created_at']);
             $rep->fill($d);
             $rep->updated_by = $u->id;
@@ -242,6 +253,11 @@ class RepasseController extends Controller
             /* Registro NOVO só nasce com id em UUID (24/10/2026): o app gera com crypto.randomUUID() e põe o id em atributos
                de HTML (onclick) — um id com aspas seria código rodando na tela do gestor. Mesma regra de notas e de KM. */
             abort_unless(Str::isUuid($id), 422, 'Identificador de repasse inválido.');
+            /* 06/11/2026: dinheiro novo em mês fechado muda a planilha entregue. Ao contrário da nota, quem lança aqui é o gestor, que
+               pode reabrir. Pedido não é dinheiro na mão e vem da fila do colaborador, que não pode prender: esse entra. */
+            if ($d['kind'] === 'received' && ! $d['deleted'] && $this->fechamento->dataFechada($d['data'])) {
+                throw new HttpResponseException($this->fechamento->recusaRepasseNovo($d['data'], $u));
+            }
             /* Duplo toque / reenvio com outro id (24/10/2026): recebido idêntico criado há menos de 2 minutos
                para a mesma pessoa é recusado, sem apagar nada. Quem lança de propósito espera e lança de novo. */
             if ($d['kind'] === 'received' && ! $d['deleted']) {
@@ -405,6 +421,21 @@ class RepasseController extends Controller
         DB::table('repasses')->where('id', $id)->update(['updated_by' => DB::raw('updated_by')]);
     }
 
+    /* O aparelho reenviou o que o servidor já tem? Sem destino e 'carteira' são o mesmo dinheiro, como na trava do colaborador acima. */
+    private function reenvioIdentico(Repasse $rep, array $d): bool
+    {
+        $texto = fn (mixed $v): ?string => ($s = trim((string) $v)) === '' ? null : $s;
+
+        return $d['user_id'] === $rep->user_id
+            && $d['tipo'] === $rep->tipo
+            && abs((float) $d['valor'] - (float) $rep->valor) < 0.005
+            && $d['data'] === $rep->data->format('Y-m-d')
+            && ($d['kind'] ?? 'received') === ($rep->kind ?: 'received')
+            && (($d['destino'] ?? null) === 'recarga') === ($rep->destino === 'recarga')
+            && $d['deleted'] === (bool) $rep->deleted
+            && (! array_key_exists('descricao', $d) || $texto($d['descricao']) === $texto($rep->descricao));
+    }
+
     private function emReais($v): string
     {
         return 'R$ ' . number_format((float) $v, 2, ',', '.');
@@ -431,6 +462,10 @@ class RepasseController extends Controller
 
         if ($aceita) {
             if (! $rec->confirmado_em) {
+                /* 06/11/2026: só repasse confirmado entra no saldo e no relatório, então confirmar agora mudaria o mês fechado */
+                if ($periodo = $this->fechamento->periodoTravado($rec)) {
+                    return $this->fechamento->recusa($rec, $periodo, $u);
+                }
                 $rec->forceFill(['confirmado_em' => now(), 'confirmado_por' => $u->id])->save();
                 Log::info('repasse confirmado pelo colaborador', ['repasse' => $rec->id, 'user' => $u->email]);
             }

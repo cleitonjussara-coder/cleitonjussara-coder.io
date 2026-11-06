@@ -57,6 +57,8 @@ window.Excel = (() => {
   function totNeg(v)   { return { t:'n', v:cur(v), s:{ font:{...FONT_TOT,color:{rgb:COR.vermelho}}, border:BORDER_BOTTOM, alignment:ALIGN_R, numFmt:'R$ #,##0.00' } }; }
   function titCell(v)  { return { t:'s', v:String(v), s:STYLE_TIT }; }
   function subCell(v)  { return { t:'s', v:String(v), s:STYLE_SUB }; }
+  /* 06/11/2026: nota que aguarda conferência ficou de fora (Fechamento.avisos); o arquivo diz isso em destaque */
+  function avisoCell(v) { return { t:'s', v:String(v), s:{ font:{ bold:true, sz:10, color:{rgb:COR.vermelho}, name:'Calibri' }, fill:{ fgColor:{rgb:COR.laranjaClaro}, patternType:'solid' }, alignment:ALIGN_L } }; }
 
   /* aplica estilo a um range (linha×coluna base-0) */
   function styleRange(ws, r0, c0, r1, c1, style) {
@@ -82,7 +84,7 @@ window.Excel = (() => {
   }
 
   /* ── RESUMO Gerencial ───────────────────────────────── */
-  function buildResumo(notas, repasses, ano, colab, abertura) {
+  function buildResumo(notas, repasses, ano, colab, abertura, avisos = []) {
     const ws = {};
     ws['!cols'] = [{wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:16},{wch:16}];
     ws['!merges'] = [];
@@ -106,8 +108,10 @@ window.Excel = (() => {
       ? `Saldo do ano anterior: RDM ${brlTxt(abRDM)} · RDA ${brlTxt(abRDA)} (já somado em Pend. Anterior e Saldo Acum.)`
       : 'Saldo de anos anteriores não incluído (histórico indisponível).');
     r++;
+    avisos.forEach(a => { merge(ws, r, 0, r, 8); ws[XLSX.utils.encode_cell({r, c:0})] = avisoCell(a); r++; });
 
     // Cabeçalho
+    const linhaCab = r;
     hdrRow(ws, r, ['Mês','RDM Gasto','RDM Repasse','RDM Saldo','RDA Gasto','RDA Repasse','RDA Saldo','Pend. Anterior','Saldo Acum.']);
     r++;
 
@@ -158,7 +162,7 @@ window.Excel = (() => {
     r++;
 
     ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:r-1,c:8}});
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:3,c:0},e:{r:3+11,c:8}}) };
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({s:{r:linhaCab,c:0},e:{r:linhaCab+11,c:8}}) };
     return ws;
   }
 
@@ -283,7 +287,7 @@ window.Excel = (() => {
   }
 
   /* ── Equipe (dashboard gestor) ───────────────────────── */
-  function buildEquipe(notas, repasses, collabs, mes, ano, anterior, cv) {
+  function buildEquipe(notas, repasses, collabs, mes, ano, anterior, cv, avisos = []) {
     /* C.V. (04/11/2026, decisão do dono): quadro próprio, cartão e reembolso até o fim do mês, igual ao PDF da equipe. Na tabela de
        baixo o gasto do cartão entraria como dívida; somar os dois regimes num total daria um número sem sentido. */
     const cvs = collabs.filter(c => c.regime === 'cv' && c.role !== 'contabilidade');
@@ -300,7 +304,9 @@ window.Excel = (() => {
     merge(ws, r, 0, r, 9);
     ws[XLSX.utils.encode_cell({r, c:0})] = subCell(`Mês: ${MESES[mes-1]}/${ano}      Gerado em ${FusoBR.data(new Date())}      `
       + (anterior ? 'Saldo Acum. = Anterior (todos os meses antes deste) + Repasse − Gasto' : 'Saldo anterior NÃO incluído (histórico indisponível): saldo só do mês'));
-    r += 2;
+    r++;
+    avisos.forEach(a => { merge(ws, r, 0, r, 9); ws[XLSX.utils.encode_cell({r, c:0})] = avisoCell(a); r++; });
+    if (!avisos.length) r++;   // sem aviso, a linha em branco de sempre
 
     hdrRow(ws, r, ['Núcleo','Colaborador','RDM Anterior','RDM Gasto','RDM Repasse','RDM Saldo Acum.','RDA Anterior','RDA Gasto','RDA Repasse','RDA Saldo Acum.']);
     r++;
@@ -404,11 +410,11 @@ window.Excel = (() => {
 
   /* abertura = { RDM, RDA } - saldo que o colaborador trazia de anos anteriores (null se o
      historico nao carregou). Janeiro e o saldo acumulado partem dele (01/10/2026). */
-  function exportarAnual(ano, notas, repasses, colab, abertura) {
+  function exportarAnual(ano, notas, repasses, colab, abertura, avisos = []) {
     notas = _semFaturamento(notas);
     repasses = _soRecebidos(repasses);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildResumo(notas,repasses,ano,colab,abertura), 'RESUMO');
+    XLSX.utils.book_append_sheet(wb, buildResumo(notas,repasses,ano,colab,abertura,avisos), 'RESUMO');
     XLSX.utils.book_append_sheet(wb, buildRDM(notas,repasses,ano,abertura), 'RDM Detalhado');
     XLSX.utils.book_append_sheet(wb, buildRDA(notas,repasses,ano),          'RDA Detalhado');
     XLSX.utils.book_append_sheet(wb, buildRepasses(repasses,ano),           'Repasses');
@@ -417,21 +423,21 @@ window.Excel = (() => {
   }
 
   /* ── Exportar Equipe (gestor) ─────────────────────────── */
-  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome, anterior, cv) {
+  function exportarEquipe(notas, repasses, collabs, mes, ano, gestorNome, anterior, cv, avisos = []) {
     notas = _semFaturamento(notas);
     repasses = _soRecebidos(repasses);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano,anterior,cv), 'EQUIPE');
+    XLSX.utils.book_append_sheet(wb, buildEquipe(notas,repasses,collabs,mes,ano,anterior,cv,avisos), 'EQUIPE');
     const nome = (gestorNome||'equipe').replace(/\s+/g,'_');
     XLSX.writeFile(wb, `Petermann_${nome}_Equipe_${MESES[mes-1]}${ano}.xlsx`);
   }
 
   /* ── Exportar CSV mensal ──────────────────────────────── */
-  function exportarCSV(mes, ano, notas, repasses, colab) {
+  function exportarCSV(mes, ano, notas, repasses, colab, avisos = []) {
     notas = _semFaturamento(notas);
     const mesNome = MESES[mes-1];
     const rows = [
-      ['PETERMANN', `${mesNome}/${ano}`, '', '', colab.nome||''], [''],
+      ['PETERMANN', `${mesNome}/${ano}`, '', '', colab.nome||''], ...avisos.map(a => [a]), [''],
       ['Tipo','Subtipo','Data','CNPJ','Razão Social','Valor (R$)','Captura'],
     ];
     notas.filter(n=>n.mes===mes && n.ano===ano && !n.deleted)

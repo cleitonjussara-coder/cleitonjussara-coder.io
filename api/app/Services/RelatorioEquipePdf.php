@@ -39,7 +39,7 @@ class RelatorioEquipePdf
         $colabs =Colaborador::query()->when($ids, fn ($q) => $q->whereIn('id', $ids))->orderBy('nome')->get();
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai do quadro individual, não infla o RDM/RDA de ninguém. */
-        $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
+        $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get()->groupBy('user_id');
         $reps = Repasse::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
@@ -119,6 +119,7 @@ class RelatorioEquipePdf
             : '';
         $q = '<div class="faixa">RELATÓRIO DA EQUIPE — '.$e(mb_strtoupper($periodo)).'</div>'
             .'<div class="meta">Petermann &amp; Morais · Serviços Agronômicos · gerado em '.$geradoEm.($gerador ? ' por '.$e($gerador->nome ?: $gerador->email) : '').'</div>'
+            .NotasAguardando::html(NotasAguardando::doPeriodo($ano, $mes, $ids ?: null, 'neste relatório'))
             .'<table class="kpis'.($linhasCv ? ' kpis-cv' : '').'"><tr>'
             .'<td><span class="lbl">Gasto no mês</span><span class="val">'.$brl($geral['gasto']).'</span><span class="sub">RDA '.$brl($geral['rda']).' · RDM '.$brl($geral['rdm']).'</span></td>'
             .'<td><span class="lbl">Recebido</span><span class="val">'.$brl($geral['rec']).'</span><span class="sub">'.($geral['pend'] ? $geral['pend'].' pedido(s) pendente(s)' : 'repasses do mês').($linhasCv ? ' · recargas do cartão à parte: '.$brl(array_sum(array_map(fn ($l) => $l['mes']['recarga'], $linhasCv))) : '').'</span></td>'
@@ -244,7 +245,7 @@ class RelatorioEquipePdf
     public function contasCv(int $ano, int $mes, ?array $ids = null): array
     {
         $ids = $ids ?: null;
-        $svc = app(SaldoAnterior::class);
+        $svc = app(SaldoAnterior::class)->doRelatorio();
         $anteriores = $svc->deTodos($ano, $ids);
         $ate = $svc->ateMes($ano, $mes, $ids);
         $lado = fn (array $s) => ['cartao' => $s['cartao'], 'reembolso' => $s['reembolso'], 'reembolsoTotal' => round($s['reembolso']['RDM'] + $s['reembolso']['RDA'], 2)];
@@ -387,7 +388,7 @@ class RelatorioEquipePdf
     {
         $k = $ano * 12 + $mes;
         $gasto = Nota::query()->where('deleted', false)->whereNotNull('user_id')
-            ->whereRaw('(ano * 12 + mes) < ?', [$k])
+            ->whereRaw('(ano * 12 + mes) < ?', [$k])->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->when($ids, fn ($q) => $q->whereIn('user_id', $ids))
             ->selectRaw('user_id, tipo, SUM(valor) AS v')->groupBy('user_id', 'tipo')->get();

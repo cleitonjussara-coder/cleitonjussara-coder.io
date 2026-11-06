@@ -32,7 +32,7 @@ class RelatorioFaturamentoPdf
     public function html(int $ano, int $mes, ?Colaborador $gerador = null): string
     {
         $notas = Nota::query()->where('deleted', false)->where('ano', $ano)->where('mes', $mes)
-            ->where('pagamento', 'empresa')
+            ->where('pagamento', 'empresa')->noRelatorio()
             ->orderBy('data')->orderBy('created_at')->get();
 
         $colabIds = $notas->pluck('user_id')->merge($notas->pluck('created_by'))->filter()->unique();
@@ -54,6 +54,7 @@ class RelatorioFaturamentoPdf
         $h = '<div class="faixa">FATURAMENTO — PAGO DIRETO PELA EMPRESA — '.$e(mb_strtoupper($periodo)).'</div>'
             .'<div class="meta">Petermann &amp; Morais · Serviços Agronômicos · gerado em '.$geradoEm.($gerador ? ' por '.$e($gerador->nome ?: $gerador->email) : '').'</div>'
             .'<p class="nota">Notas pagas direto pela empresa, sem passar pelo colaborador — não entram no saldo nem nas planilhas de RDM/RDA ou C.V. de ninguém.</p>'
+            .NotasAguardando::html(NotasAguardando::doFaturamento($ano, $mes, 'neste relatório'))
             .'<table class="kpis"><tr>'
             .'<td><span class="lbl">Total no período</span><span class="val">'.$brl($total).'</span><span class="sub">'.$notas->count().' nota'.($notas->count() === 1 ? '' : 's').'</span></td>'
             .'</tr></table>';

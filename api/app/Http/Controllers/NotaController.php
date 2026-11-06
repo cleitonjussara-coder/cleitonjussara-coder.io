@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Colaborador;
 use App\Models\Nota;
 use App\Models\NotaHistorico;
+use App\Services\FechamentoMes;
 use App\Services\FotoEmBrancoAviso;
 use App\Services\FotoStorage;
 use App\Services\HistoricoNota;
@@ -28,7 +29,7 @@ use Illuminate\Validation\ValidationException;
  */
 class NotaController extends Controller
 {
-    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca, private HistoricoNota $historico) {}
+    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca, private HistoricoNota $historico, private FechamentoMes $fechamento) {}
 
     /**
      * GET /notas?since=…&ano=…&mes=…&user_id=…&deleted=0|1|all&fields=a,b
@@ -208,6 +209,27 @@ class NotaController extends Controller
             abort_if($nota->deleted || ($d['deleted'] ?? false), 403, 'Contabilidade corrige notas, mas não as exclui.');
             abort_unless(($d['user_id'] ?? null) === $nota->user_id, 403, 'Contabilidade não troca o dono da nota.');
         }
+        /* Fechamento de mês (06/11/2026): vale para todos, gestor inclusive, e também quando a data nova entra num mês fechado.
+           Vem depois das permissões (quem não pode mexer ouve 403 de qualquer jeito) e ANTES do 409. Os dois não gravam nada e
+           devolvem a nota; a diferença é o que a pessoa faz depois. O 409 diz "refaça em cima da versão nova", e ela refaria só
+           para tomar 423. O 423 diz o que continua valendo: nada muda até reabrir. Também antes da trava de Faturamento, pelo
+           motivo do 409 abaixo. Reenvio idêntico responde 200 sem gravar: nada mudou, e a fila não pode prender por isso.
+           Anexo diferente em espera é mudança mesmo com os campos iguais: com 200, o aparelho apagaria o arquivo sem aviso, e a
+           espera entraria na nota com a próxima edição, depois de reabrir. Por isso ela sai aqui nos dois caminhos (ver foto()).
+           Só a espera de quem não é da gestão, que é de quem ela seria: o PUT do gestor não decide pelo anexo do colaborador. */
+        if ($nota && ($periodo = $this->fechamento->periodoTravado($nota, $d['data']))) {
+            $pasta = $this->fotos->pastaDe($nota);
+            $espera = $u->veTudo() ? null : $this->fotos->conteudoDaEspera($pasta, $id);
+            if ($espera !== null) {
+                $this->fotos->descartarEspera($pasta, $id);
+            }
+            $anexoNovo = $espera !== null && $espera !== $this->conteudoDoAnexo($nota->foto_path);
+            if (! $anexoNovo && $this->reenvioIdentico($nota, $d)) {
+                return response()->json($nota);
+            }
+
+            return $this->fechamento->recusa($nota, $periodo, $u);
+        }
         /* 03/11/2026: a correção da gestão vence. O aparelho diz em cima de qual versão editou; se a gestão mexeu depois, nada
            é gravado e ele recebe a nota atual. Fica ANTES da trava de Faturamento: a nota que a gestão virou Faturamento
            daria 403 no colaborador e o item ficaria recusado para sempre; nos dois casos nada é gravado. */
@@ -313,8 +335,17 @@ class NotaController extends Controller
             $nota = new Nota(['id' => $id] + $d);
             $nota->created_by = $u->id;
             $nota->updated_by = $u->id;
+            /* 06/11/2026: nota nova de mês fechado ENTRA, nunca é recusada: quem estava em campo sem sinal não pode perder o
+               lançamento. Fica marcada para a gestão conferir. A que nasce na lixeira não muda a planilha, então não é marcada. */
+            $foraDoFechamento = ! $d['deleted'] && Nota::temForaFechamento() && $this->fechamento->dataFechada($d['data']);
+            if ($foraDoFechamento) {
+                $nota->fora_fechamento_em = now();
+            }
             $nota->save();
             $this->historico->registrarCriacao($nota, $u);
+            if ($foraDoFechamento) {
+                $this->fechamento->notaEntrouFora($nota, $u);
+            }
         }
 
         /* Foto em branco (21/10/2026): mede o anexo se ainda não foi medido (nota nova, ou antiga que acabou de ser
@@ -374,6 +405,9 @@ class NotaController extends Controller
         if ($tipo === $nota->tipo && $subtipo === $nota->subtipo) {
             return response()->json(['nota' => $nota, 'mudou' => false]);
         }
+        if ($periodo = $this->fechamento->periodoTravado($nota)) {
+            return $this->fechamento->recusa($nota, $periodo, $u);   // 06/11/2026
+        }
 
         $retrato = $this->historico->retrato($nota);
         $nota->forceFill(['tipo' => $tipo, 'subtipo' => $subtipo, 'updated_by' => $u->id])->save();
@@ -400,6 +434,9 @@ class NotaController extends Controller
 
         $nota = Nota::findOrFail($id);
         if ((bool) $nota->deleted !== (bool) $d['deleted']) {
+            if ($periodo = $this->fechamento->periodoTravado($nota)) {
+                return $this->fechamento->recusa($nota, $periodo, $u);   // 06/11/2026: sair ou voltar da lixeira muda a planilha
+            }
             $retrato = $this->historico->retrato($nota);
             $nota->forceFill(['deleted' => (bool) $d['deleted'], 'updated_by' => $u->id])->save();
             $this->historico->registrarMudanca($retrato, $nota, $u);
@@ -499,6 +536,11 @@ class NotaController extends Controller
         $u = $r->user();
         $nota = Nota::findOrFail($id);
         abort_unless($nota->user_id === $u->id || $u->gerencia(), 403, 'Só o dono, o gestor ou o admin apagam em definitivo');
+
+        /* 06/11/2026: antes do 409, pelo mesmo motivo do upsert: a nota sair da lixeira não resolveria nada, o mês é que manda */
+        if ($periodo = $this->fechamento->periodoTravado($nota)) {
+            return $this->fechamento->recusa($nota, $periodo, $u);
+        }
 
         /* Quem não é o dono só apaga o que já está na lixeira (23/10/2026). A Lixeira do app já filtra assim, mas a nota
            sem dono é de todos os gestores: se um restaura enquanto outro está com a Lixeira aberta, o segundo apagaria
@@ -818,6 +860,7 @@ class NotaController extends Controller
             'ext' => ['nullable', 'string', 'max:5'],
             'user_id' => ['nullable', 'string', 'size:36', Rule::exists('colaboradores', 'id')],
             'sem_colaborador' => ['nullable', 'boolean'],
+            'data' => ['nullable', 'string', 'max:10'],
         ]);
 
         $nota = Nota::find($id);
@@ -828,6 +871,18 @@ class NotaController extends Controller
         } else {
             $pasta = $nota ? $nota->user_id : ($r->input('user_id') ?: $u->id);
             $this->podeGravar($u, $pasta, $nota !== null);
+        }
+
+        /* 06/11/2026: o anexo é comprovante da planilha entregue, então trocar é alterar. Nota que ainda não existe nem chega aqui:
+           o anexo dela sobe antes do PUT, e nota nova nunca é recusada. O mesmo arquivo de novo (resposta perdida) não troca nada.
+           `data` é a data da edição que este anexo acompanha: sem ela, a nota de mês aberto movida para um mês fechado gravava o
+           anexo aqui, salvarPara apagava o comprovante e só o PUT tomava 423. App anterior não manda e segue como antes. */
+        if ($nota && ($periodo = $this->fechamento->periodoTravado($nota, $r->input('data')))) {
+            if ($this->conteudoDoAnexo($nota->foto_path) === sha1_file($r->file('file')->getRealPath())) {
+                return response()->json(['foto_path' => $nota->foto_path, 'updated_at' => $nota->updated_at]);
+            }
+
+            return $this->fechamento->recusa($nota, $periodo, $u);
         }
 
         /* 03/11/2026: o app sobe o anexo ANTES da nota, e só o PUT diz de qual versão a edição veio. Em nota que a gestão
@@ -905,6 +960,34 @@ class NotaController extends Controller
         }
 
         return response()->json(['recuperadas' => count($recuperadas), 'notas' => $recuperadas]);
+    }
+
+    /* O aparelho reenviou o que o servidor já tem (resposta perdida, item velho na fila)? Compara só o que veio no corpo, com a
+       mesma limpeza da gravação. metodo_captura fica de fora: é técnico, não vai à planilha, e o padrão 'manual' daria falso
+       "mudou". portal_nfse nulo também: o servidor pode ter preenchido pelo CNPJ, e o aparelho antigo nunca soube. */
+    private function reenvioIdentico(Nota $nota, array $d): bool
+    {
+        $texto = fn (mixed $v): ?string => ($s = trim((string) $v)) === '' ? null : $s;
+        $campos = ['user_id', 'tipo', 'subtipo', 'pagamento', 'consumidor', 'razao_social', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'qr_url', 'observacao'];
+        foreach ($campos as $c) {
+            if (array_key_exists($c, $d) && $texto($d[$c]) !== $texto($nota->{$c})) {
+                return false;
+            }
+        }
+        $cnpj = fn (mixed $v): string => ltrim((string) preg_replace('/\D/', '', (string) $v), '0');   // 14 zeros é o vazio do app antigo
+        if (array_key_exists('cnpj', $d) && $cnpj($d['cnpj']) !== $cnpj($nota->cnpj)) {
+            return false;
+        }
+        if (Nota::temPlaca() && array_key_exists('placa', $d) && strtoupper((string) $d['placa']) !== strtoupper((string) $nota->placa)) {
+            return false;
+        }
+        if (Nota::temPortalNfse() && ($portal = Nota::portalNormalizado($d['portal_nfse'] ?? null)) !== null && $portal !== $nota->portal_nfse) {
+            return false;
+        }
+
+        return abs((float) $d['valor'] - (float) $nota->valor) < 0.005
+            && $d['data'] === $nota->data?->format('Y-m-d')
+            && (bool) ($d['deleted'] ?? false) === (bool) $nota->deleted;
     }
 
     /* Tem lápide e não está na tabela. Nota com lápide que segue na tabela renasceu antes de 03/11/2026: está viva e continua editável. */

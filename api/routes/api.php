@@ -9,6 +9,7 @@ use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CnpjController;
 use App\Http\Controllers\ColaboradorController;
 use App\Http\Controllers\ConviteController;
+use App\Http\Controllers\FechamentoController;
 use App\Http\Controllers\FotoController;
 use App\Http\Controllers\FrotaController;
 use App\Http\Controllers\JustificativaController;
@@ -97,6 +98,13 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::patch('/repasses/{id}/atendido', [RepasseController::class, 'atendido']);     // 1ª etapa: gestor marca o pedido como pago (21/09/2026)
     Route::patch('/repasses/{id}/recebi', [RepasseController::class, 'recebi']);         // CV: o próprio colaborador confirma que o pedido caiu, podendo mudar o valor (24/10/2026)
     Route::patch('/repasses/{id}/confirmar', [RepasseController::class, 'confirmar']);   // 2ª etapa: colaborador confirma o recebimento (23/09/2026)
+
+    /* fechamento de mês (06/11/2026): gestor/admin fecham e reabrem; Contador lê (SomenteLeitura barra a escrita dele) */
+    Route::get('/fechamento', [FechamentoController::class, 'index']);
+    Route::get('/fechamento/aguardando', [FechamentoController::class, 'aguardando']);
+    Route::post('/fechamento/fechar', [FechamentoController::class, 'fechar']);
+    Route::post('/fechamento/reabrir', [FechamentoController::class, 'reabrir']);
+    Route::post('/fechamento/fora/{id}/conferir', [FechamentoController::class, 'conferir']);
 
     Route::post('/fotos/urls', [FotoController::class, 'urls']);
 

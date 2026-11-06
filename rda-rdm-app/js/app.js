@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 549;
+const APP_BUILD = 550;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2635,13 +2635,19 @@ async function dispensarAvisoCorrecao(id, btn) {
   await _atualizarSinoDepoisDeJustificativa();
 }
 
-/* Tocar na notificação do celular com o app FECHADO abre ./?abrir=sino: abre o sino direto, uma vez só. */
+/* Tocar na notificação do celular com o app FECHADO abre ./?abrir=sino: abre o sino direto, uma vez só.
+   ./?abrir=fechamento (06/11/2026): nota chegou em mês fechado; abre a Equipe com o quadro aberto. */
 function _abrirSinoPelaUrl() {
   try {
     const q = new URLSearchParams(location.search);
-    if (q.get('abrir') !== 'sino') return;
+    const alvo = q.get('abrir');
+    if (alvo !== 'sino' && alvo !== 'fechamento') return;
     q.delete('abrir');
     history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    if (alvo === 'fechamento') {
+      if (user && _ehGestorOuAdmin()) { window.Fechamento?.abrirQuadro(); switchView('equipe'); }
+      return;
+    }
     if (user && !_ehContabilidade()) abrirNotificacoes();
   } catch (_) {}
 }
@@ -5234,6 +5240,7 @@ function _dupNaLixeira(n) {
 
 async function restaurarNota(id) {
   const arq = (await DB.getDeletedNotasUser(user.id).catch(() => [])).find(x => x.id === id);
+  if (await window.Fechamento?.barrarNotas([arq])) return;
   const d = arq ? _dupNaLixeira(arq) : null;
   if (d && !(await pedirConfirmacao({ mensagem: `Já existe uma nota igual ativa:\n${_resumoNota(d.nota)}\n\nRestaurar mesmo assim? Vai ficar duplicada.`, confirmar: 'Restaurar' }))) return;
   /* 21/10/2026: enquanto esta ficou na lixeira, o Faturamento (ou outra pessoa) pode ter lançado a mesma nota — o aparelho não vê isso */
@@ -5270,6 +5277,7 @@ async function apagarDefinitivo(id) {
     .find(x => x.id === id) || _notaPorId(id);
   if (!n) { toast('Lançamento não encontrado', 'err'); return; }
   if (!_podeApagarDefinitivo(n)) { toast('Só o dono da nota, o gestor ou o admin pode apagar em definitivo', 'err'); return; }
+  if (await window.Fechamento?.barrarNotas([n])) return;
 
   /* Sem internet não dá: apagaria só aqui, a linha continuaria no Supabase e
      a sincronização seguinte traria a nota de volta. */
@@ -9180,6 +9188,7 @@ async function abrirFormNota(dados = {}) {
         : `Paga direto pela empresa em nome de ${_rotuloProprietario(dados)} — não entra no saldo nem no cartão dela, só no painel geral da equipe.`)
     : `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
   $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : (isFaturamento ? `Faturamento · ${_rotuloProprietario(dados)}` : 'Nova Nota');
+  window.Fechamento?.abrirForm(dados);   // 06/11/2026: nota de mês fechado abre sem Salvar
 }
 
 /* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
@@ -10035,6 +10044,8 @@ async function _salvarNotaInterno() {
     return;
   }
 
+  if (window.Fechamento && !(await Fechamento.conferirAoSalvar())) return;   // 06/11/2026: o aviso já está na tela do formulário
+
   /* 28/09/2026: achado corrigindo o Faturamento sem colaborador — estas duas
      linhas viviam MAIS ABAIXO (build 262), depois de já serem usadas aqui em
      cima (donoDaNota). const/let têm TDZ: toda vez que esta função rodava com
@@ -10303,7 +10314,7 @@ async function editarNota(id) {
 function _histNotaCampoHTML(r, c) {
   const val = v => (v === null || v === undefined || v === '') ? '<span class="hist-nota-vazio">vazio</span>' : esc(v);
   /* na criação e na exclusão só há um lado da conta; no anexo só há o fato, nunca o arquivo */
-  const unico = r.acao === 'exclusao' ? c.antes : (r.acao === 'criacao' || c.campo === 'anexo') ? c.depois : undefined;
+  const unico = r.acao === 'exclusao' ? c.antes : (r.acao === 'criacao' || c.campo === 'anexo' || c.campo === 'fechamento') ? c.depois : undefined;
   return `<li class="hist-nota-campo"><b>${esc(c.rotulo)}:</b> ${unico !== undefined ? val(unico)
     : `<span class="hist-nota-antes">${val(c.antes)}</span> → ${val(c.depois)}`}</li>`;
 }
@@ -10484,6 +10495,7 @@ async function confirmarExclusaoNota(id) {
 
 async function excluirNota(id) {
   if (_ehContabilidade()) { toast('Contador só consulta e baixa', 'err'); return; }
+  if (await window.Fechamento?.barrarNotas([_notaPorId(id)])) return;
   if (!(await confirmarExclusaoNota(id))) return;
   await DB.softDeleteNota(id);
   await syncBadge(false);
@@ -10570,6 +10582,7 @@ async function excluirNotasSelecionadas() {
   const vis = new Set(_selNotasVisiveis().map(c => c.value));
   const lista = [..._selNotas].filter(id => vis.has(id)).map(_notaPorId).filter(Boolean);
   if (!lista.length) { toast('Nenhuma nota selecionada', 'err'); return false; }
+  if (await window.Fechamento?.barrarNotas(lista)) return false;
   if (lista.some(_ehNotaDeOutroUsuario) && !_ehGestorOuAdmin()) {
     toast('Só gestor ou admin exclui a nota de outra pessoa', 'err'); return false;
   }
@@ -10626,6 +10639,7 @@ function _somaNotas(lista) { return lista.reduce((s, n) => s + (Number(n.valor) 
 async function restaurarNotasSelecionadas() {
   const lista = await _lixeiraSelecionados();
   if (!lista.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
+  if (await window.Fechamento?.barrarNotas(lista)) return false;
   const dups = lista.filter(n => _dupNaLixeira(n)).length;
   const ok = await pedirConfirmacao({
     titulo: `Restaurar ${lista.length} lançamento${lista.length > 1 ? 's' : ''}?`,
@@ -10657,6 +10671,7 @@ async function apagarDefinitivoSelecionadas() {
   if (!marcadas.length) { toast('Nenhum lançamento selecionado', 'err'); return false; }
   const lista = marcadas.filter(_podeApagarDefinitivo);
   if (!lista.length) { toast('Só o dono da nota, o gestor ou o admin pode apagar em definitivo', 'err'); return false; }
+  if (await window.Fechamento?.barrarNotas(lista)) return false;
   /* sem internet apagaria só aqui e o servidor traria a nota de volta */
   if (!sb || !navigator.onLine) { toast('Precisa de internet para apagar em definitivo', 'err'); return false; }
   const semPermissao = marcadas.length - lista.length;
@@ -11302,9 +11317,20 @@ async function excluirRepasse(id) {
 
 /* ── Exportações ─────────────────────────────────────────── */
 /* A lib SheetJS é baixada pelo próprio Excel.carregar() na 1ª exportação. */
+/* 06/11/2026: o arquivo baixado é relatório: nota que aguarda conferência fica fora dele e ele diz isso, como no servidor. A lista
+   `notas` não muda, porque as telas mostram o dinheiro real. `fora` vai também para o saldo trazido. */
+async function _notasParaRelatorio(opcoes) {
+  if (!window.Fechamento) return { doRelatorio: notas, fora: null, avisos: [] };
+  const lista = await Fechamento.aguardando();
+  const fora = new Set(lista.map(n => n.id));
+  return { doRelatorio: notas.filter(n => !fora.has(n.id)), fora, avisos: Fechamento.avisos(lista, { ids: [user.id], ...opcoes }) };
+}
 async function exportCSV() {
   setLoading(true);
-  try { await Excel.exportarCSV(filMes, filAno, notas, repasses, user); }
+  try {
+    const { doRelatorio, avisos } = await _notasParaRelatorio({ ano: filAno, mes: filMes, onde: 'neste arquivo', saldo: false });
+    await Excel.exportarCSV(filMes, filAno, doRelatorio, repasses, user, avisos);
+  }
   catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }
 }
 async function exportExcel() {
@@ -11313,9 +11339,10 @@ async function exportExcel() {
     /* "sempre somar os saldos acumulados dos meses anteriores" (01/10/2026): janeiro parte do que
        sobrou ate dezembro do ano anterior. O saldo vem do servidor (todos os anos): o aparelho so
        tem as notas do ano atual e daria credito fantasma. */
+    const { doRelatorio, fora, avisos } = await _notasParaRelatorio({ ano: filAno });
     const abertura = (sb && navigator.onLine && window.Gestor?.aberturaAnual)
-      ? await Gestor.aberturaAnual(sb, user.id, filAno).catch(() => null) : null;
-    await Excel.exportarAnual(filAno, notas, repasses, user, abertura);
+      ? await Gestor.aberturaAnual(sb, user.id, filAno, fora).catch(() => null) : null;
+    await Excel.exportarAnual(filAno, doRelatorio, repasses, user, abertura, avisos);
     if (!abertura) toast('Planilha gerada — sem o saldo de anos anteriores (histórico indisponível)');
   }
   catch (e) { toast(e.message, 'err'); } finally { setLoading(false); }

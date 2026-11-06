@@ -339,12 +339,13 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
        semColaborador (28/09/2026): Faturamento sem dono — sem isso o
        servidor não sabe distinguir "não mandei user_id" de "esta nota é
        de propósito sem colaborador nenhum". */
-    foto(id, blob, ext, userId, semColaborador) {
+    foto(id, blob, ext, userId, semColaborador, data) {
       const form = new FormData();
       form.append('file', blob, `anexo.${ext || 'jpg'}`);
       if (ext) form.append('ext', ext);
       if (userId) form.append('user_id', userId);
       if (semColaborador) form.append('sem_colaborador', '1');
+      if (data) form.append('data', data);   // 06/11/2026: o anexo não entra se a edição que ele acompanha cai em mês fechado
       return req('POST', `/notas/${id}/foto`, { form, timeout: 120_000 });
     },
     repararFotos: () => req('POST', '/notas/reparar-fotos'),
@@ -487,6 +488,15 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     saude: () => req('GET', '/admin/saude'),   // cartão Saúde do sistema (06/11/2026)
   };
 
+  /* Fechamento de mês (06/11/2026): cada escrita devolve o quadro inteiro, já atualizado. */
+  const fechamento = {
+    lista: () => req('GET', '/fechamento'),
+    aguardando: () => req('GET', '/fechamento/aguardando'),
+    fechar: (ano, mes) => req('POST', '/fechamento/fechar', { body: { ano, mes } }),
+    reabrir: (ano, mes, motivo) => req('POST', '/fechamento/reabrir', { body: { ano, mes, motivo } }),
+    conferir: id => req('POST', `/fechamento/fora/${encodeURIComponent(id)}/conferir`),
+  };
+
   /* Assistente do "Como usar" (01/11/2026): RAG só sobre o texto da ajuda → { resposta, fontes, motivo }. */
   const assistente = {
     perguntar: pergunta => req('POST', '/assistente/perguntar', { body: { pergunta }, timeout: 40_000 }),
@@ -497,5 +507,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
 })();

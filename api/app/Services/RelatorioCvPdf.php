@@ -40,7 +40,7 @@ class RelatorioCvPdf
     {
         /* 25/09/2026: nota de Faturamento (pagamento=empresa) não é gasto DO
            colaborador — sai da planilha individual dele, só soma no painel geral. */
-        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->orderBy('data')->orderBy('created_at')->get();
         /* 04/11/2026: mesma regra de recebido do saldo anterior e do Excel */
@@ -52,7 +52,7 @@ class RelatorioCvPdf
            Lançamento antigo, sem destino, conta como carteira (era 'reembolso'). */
         $ehCv = $c->usaCartao();
         /* 04/11/2026: saldo do ano anterior, nos mesmos números da planilha (RelatorioCv::escreverSaldoAnterior) */
-        $svcSaldo = app(SaldoAnterior::class);
+        $svcSaldo = app(SaldoAnterior::class)->doRelatorio();
         $saldoAntes = $svcSaldo->de($c, $ano);
         $antTipo = $svcSaldo->porTipo($c, $saldoAntes);
         $antReembolso = round($antTipo['RDM'] + $antTipo['RDA'], 2);
@@ -86,9 +86,12 @@ class RelatorioCvPdf
         $num = fn ($v) => number_format((float) $v, 2, ',', '.');   // grade: sem prefixo, cabe na coluna
         $dt = fn ($d) => $d ? $d->format('d/m/Y') : '';
 
+        /* 06/11/2026: nota que aguarda conferência ficou fora; a capa e a página do saldo dizem isso */
+        $aguarda = NotasAguardando::html(NotasAguardando::doPeriodo($ano, null, [$c->id], 'neste relatório'));
+
         $h = [];
         /* ── CABEÇALHO ─────────────────────────────────────── */
-        $h[] = '<div class="capa"><table class="cab"><tr><th>FUNCIONÁRIO:</th><td class="vermelho">'.$e($nome).'</td></tr>'
+        $h[] = $aguarda.'<div class="capa"><table class="cab"><tr><th>FUNCIONÁRIO:</th><td class="vermelho">'.$e($nome).'</td></tr>'
             .'<tr><th>SAFRA:</th><td>'.$ano.'</td><th class="dir">ANO DO EXERCÍCIO:</th><td>'.$ano.'</td></tr></table>'
             .'<div class="titulo-capa">RELATÓRIO DE CUSTOS VARIÁVEIS (C.V.).</div></div>';
 
@@ -125,7 +128,7 @@ class RelatorioCvPdf
             .'<tr class="tot"><td colspan="2">TOTAL PAGO '.$t.'</td><td class="num">'.$brl($b['pago']).'</td></tr>'
             .'<tr><td colspan="2">'.SaldoAnterior::ROTULO.' '.$t.'</td><td class="num">'.$brl($b['anterior']).'</td></tr></table>';
         $saldoCv = ($ehCv ? $totalRecarga : $recebido) + $antCartao - $gastoTotal;
-        $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'
+        $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'.$aguarda
             .'<table class="resumo"><tr>'
             .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span><br>'.$detTipo($ehCv ? $recargas : $reps).'</td>'
             .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>'

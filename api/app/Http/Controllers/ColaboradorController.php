@@ -8,6 +8,7 @@ use App\Models\Nota;
 use App\Models\Ponto;
 use App\Models\Repasse;
 use App\Models\Veiculo;
+use App\Services\FechamentoMes;
 use App\Services\FotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ use Illuminate\Validation\Rule;
  */
 class ColaboradorController extends Controller
 {
-    public function __construct(private FotoStorage $fotos) {}
+    public function __construct(private FotoStorage $fotos, private FechamentoMes $fechamento) {}
 
     /** GET /colaboradores[?todos=1] — sem `todos`, só os ativos. */
     public function index(Request $r): JsonResponse
@@ -218,6 +219,17 @@ class ColaboradorController extends Controller
            servidor confere também — chamada direta sem a palavra não apaga. */
         $d = $r->validate(['confirmacao' => ['required', 'string']]);
         abort_unless(mb_strtoupper(trim($d['confirmacao'])) === 'EXCLUIR', 422, 'Digite EXCLUIR para confirmar');
+
+        /* 06/11/2026: excluir apaga tudo dele, e isso mudaria em silêncio a planilha dos meses fechados. Recusa e diz quais meses.
+           Lançamento na lixeira não conta: não está na planilha. A saída sem reabrir é desativar, que mantém o histórico. */
+        $meses = $this->fechamento->mesesComRegistrosDe($alvo->id);
+        if ($meses !== []) {
+            return response()->json([
+                'message' => 'Este colaborador tem lançamentos em mês fechado ('.implode(', ', array_column($meses, 'rotulo')).'). Reabra esses meses para excluir, ou apenas desative: ele sai da equipe e o histórico fica.',
+                'mes_fechado' => true,
+                'meses' => $meses,
+            ], 423);
+        }
 
         /* executa */
         $contagem = DB::transaction(function () use ($alvo, $u) {

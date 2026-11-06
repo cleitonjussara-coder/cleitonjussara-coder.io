@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Colaborador;
 use App\Models\Nota;
 use App\Services\FotoStorage;
+use App\Services\NotasAguardando;
 use App\Services\PastaModelo;
 use App\Services\RelatorioCv;
 use App\Services\RelatorioFaturamentoXlsx;
@@ -142,12 +143,12 @@ class ArquivosController extends Controller
     /** Notas de Faturamento do período (todas as pessoas), mais antigas primeiro. */
     private function notasFaturamento(int $ano, ?int $mes)
     {
-        $q = Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano);
-        if ($mes) {
-            $q->where('mes', $mes);
-        }
+        return $this->consultaFaturamento($ano, $mes)->orderBy('data')->orderBy('created_at')->get();
+    }
 
-        return $q->orderBy('data')->orderBy('created_at')->get();
+    private function consultaFaturamento(int $ano, ?int $mes)
+    {
+        return Nota::query()->where('pagamento', 'empresa')->where('deleted', false)->where('ano', $ano)->when($mes, fn ($q) => $q->where('mes', $mes));
     }
 
     public function notas(Request $r): JsonResponse
@@ -224,16 +225,12 @@ class ArquivosController extends Controller
         @ini_set('memory_limit', '512M');
         @set_time_limit(170);
 
-        if ($fat) {
-            $notas = $this->notasFaturamento($ano, $mes);
-        } else {
-            $q = Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano);
-            if ($mes) {
-                $q->where('mes', $mes);
-            }
-            $notas = $q->orderBy('data')->get();
-        }
-        abort_if($notas->isEmpty(), 404, 'Nenhuma nota nesse período');
+        /* 06/11/2026: o ZIP é entregável. Nota que aguarda conferência sai com o anexo e tudo, e um .txt conta quais são; se só
+           houver ela no período, o ZIP sai com o aviso, para o 404 não dizer que não há nota nenhuma. */
+        $base = $fat ? $this->consultaFaturamento($ano, $mes) : Nota::query()->where('user_id', $alvo->id)->where('deleted', false)->where('ano', $ano)->when($mes, fn ($q) => $q->where('mes', $mes));
+        $notas = (clone $base)->noRelatorio()->orderBy('data')->orderBy('created_at')->get();
+        $aguardando = (clone $base)->aguardandoConferencia()->orderBy('data')->get();
+        abort_if($notas->isEmpty() && $aguardando->isEmpty(), 404, 'Nenhuma nota nesse período');
 
         $tmp = $this->temporario('arq_', 'zip');
         $zip = new ZipArchive;
@@ -261,6 +258,9 @@ class ArquivosController extends Controller
                 $txt .= sprintf("%s  %-40s  R$ %s  [%s]\n", $n->data?->format('Y-m-d') ?: 'sem-data', mb_substr((string) $n->razao_social, 0, 40), number_format((float) $n->valor, 2, ',', '.'), PastaModelo::grupoCurto($n));
             }
             $zip->addFromString("{$pastaColab}/SEM ANEXO.txt", $txt);
+        }
+        if ($aguardando->isNotEmpty()) {
+            $zip->addFromString("{$pastaColab}/AGUARDANDO CONFERENCIA.txt", NotasAguardando::texto($aguardando, 'neste ZIP'));
         }
 
         $xlsx = null;
@@ -327,8 +327,10 @@ class ArquivosController extends Controller
         if ($mes) {
             $q->where('mes', $mes);
         }
-        $porColab = $q->orderBy('data')->get()->groupBy('user_id');
-        abort_if($porColab->isEmpty(), 404, 'Nenhuma nota nesse período');
+        /* 06/11/2026: como no ZIP individual, nota que aguarda conferência fica fora e o LEIAME diz quais são */
+        $aguardando = (clone $q)->aguardandoConferencia()->orderBy('data')->get();
+        $porColab = $q->noRelatorio()->orderBy('data')->get()->groupBy('user_id');
+        abort_if($porColab->isEmpty() && $aguardando->isEmpty(), 404, 'Nenhuma nota nesse período');
 
         $tmp = $this->temporario('arq_', 'zip');
         $zip = new ZipArchive;
@@ -364,7 +366,7 @@ class ArquivosController extends Controller
             }
             $resumo .= sprintf("%-40s %4d nota(s)  R$ %s  (%d sem anexo)\n", PastaModelo::nomeColaborador($c), $qtd, number_format($total, 2, ',', '.'), count($semAnexo));
         }
-        $zip->addFromString('LEIAME.txt', 'Notas da equipe — '.($mes ? sprintf('%02d/%d', $mes, $ano) : (string) $ano)."\n\n".$resumo."\nUma pasta por colaborador (Ano / Grupo / Categoria / mês). As planilhas baixam à parte, no botão \"Planilhas de todos\".\n");
+        $zip->addFromString('LEIAME.txt', 'Notas da equipe — '.($mes ? sprintf('%02d/%d', $mes, $ano) : (string) $ano)."\n\n".($aguardando->isEmpty() ? '' : NotasAguardando::texto($aguardando, 'neste ZIP')."\n").$resumo."\nUma pasta por colaborador (Ano / Grupo / Categoria / mês). As planilhas baixam à parte, no botão \"Planilhas de todos\".\n");
         $zip->close();
 
         $periodo = $mes ? sprintf('%d-%02d', $ano, $mes) : (string) $ano;

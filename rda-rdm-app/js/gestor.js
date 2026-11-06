@@ -361,11 +361,13 @@ window.Gestor = (() => {
   }
 
   /* O que um colaborador trazia ao abrir o ANO (saldo até dezembro do ano anterior);
-     null se o histórico não carregou. Usado pelo Excel anual. */
-  async function aberturaAnual(sb, userId, ano) {
+     null se o histórico não carregou. Usado pelo Excel anual. `fora`: ids que o relatório deixa de fora (06/11/2026), para
+     o saldo final de um ano continuar igual ao anterior do seguinte, como em SaldoAnterior::doRelatorio. */
+  async function aberturaAnual(sb, userId, ano, fora = null) {
     const h = await _historico(sb, { user_id: userId });
     if (!h) return null;
-    return saldoAnteriorPorUsuario(h.notas, h.repasses, 1, ano).get(userId) || { RDM: 0, RDA: 0 };
+    const ns = fora ? h.notas.filter(n => !fora.has(n.id)) : h.notas;
+    return saldoAnteriorPorUsuario(ns, h.repasses, 1, ano).get(userId) || { RDM: 0, RDA: 0 };
   }
 
   /* Detalhe de um colaborador: id aberto e o contexto do último render, para
@@ -736,6 +738,8 @@ window.Gestor = (() => {
         </div>`;
       }
 
+      html += '<div id="fech-quadro"></div>';   // fechamento de mês (06/11/2026): preenchido por js/fechamento.js
+
       html += `<div class="section-hd">Detalhe por colaborador</div>
       <div class="busca-colab">
         <span class="busca-ico">🔍</span>
@@ -849,6 +853,7 @@ window.Gestor = (() => {
 
       el.innerHTML = html;
       _restaurarRolagem(el);
+      window.Fechamento?.pintar().catch(() => {});   // não segura a lista: o quadro aparece quando o servidor responder
 
       el.querySelectorAll('[data-eid]').forEach(btn =>
         btn.addEventListener('click', e => {
@@ -884,7 +889,7 @@ window.Gestor = (() => {
     if (_evoScroll === null && fichaAntes && fichaAntes.dataset.ficha === chaveFicha) _evoScroll = el.scrollTop;
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando…</p></div>';
     try {
-      const [colab, ns, rs, nsAno, histNotas, histReps] = await Promise.all([
+      const [colab, ns, rs, nsAno, histNotas, histReps, aguardando] = await Promise.all([
         sb.colaboradores.get(id).catch(() => null),
         sb.notas.list({ user_id: id, ano, mes, deleted: '0' }),
         sb.repasses.list({ user_id: id, ano, mes, deleted: '0' }),
@@ -892,6 +897,7 @@ window.Gestor = (() => {
         /* histórico completo para o saldo acumulado (01/10/2026) */
         sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento,data,subtipo,razao_social' }).catch(() => null),
         sb.repasses.list({ user_id: id, deleted: '0' }).catch(() => null),
+        window.Fechamento ? Fechamento.aguardando() : [],
       ]);
       if (seq !== _fichaSeq) return;   // chegou depois de outro redesenho (ou de a ficha ser fechada): não pinta por cima
       if (!colab) { _evoScroll = null; fechar(); return; }
@@ -1099,6 +1105,13 @@ window.Gestor = (() => {
       };
 
       if (typeof _voltarRodape === 'function') _voltarRodape('Gestor.fechar()', '‹ Equipe');
+      /* 06/11/2026: a ficha mostra o dinheiro real e a planilha fica sem a nota até a conferência; quem compara os dois precisa saber por quê.
+         Só até o ano aberto: nota de ano depois deste não mexe na planilha deste ano.
+         Sem Faturamento: ele fica fora do saldo desta ficha e da planilha do colaborador, então não cria diferença entre os dois. */
+      const pendentesDaFicha = (aguardando || []).filter(n => n.user_id === id && n.pagamento !== 'empresa' && Number(n.ano) <= ano);
+      const avisoConferencia = pendentesDaFicha.length
+        ? `<div class="cdet-pendente"><div>🕓 ${esc(Fechamento.frase(pendentesDaFicha, 'na planilha'))}. Esta tela já conta com ${pendentesDaFicha.length === 1 ? 'ela' : 'elas'}, então o saldo daqui e o da planilha podem ser diferentes até a conferência em Fechamento de mês.</div></div>`
+        : '';
       let html = `${ehContador ? '' : `<div class="page-hd">
         <div class="mes-nav">
           <button class="btn-mes-nav" onclick="mudarMesEquipe(-1)">‹</button>
@@ -1108,6 +1121,7 @@ window.Gestor = (() => {
       </div>`}
 
       <div class="cdet" data-ficha="${_at(chaveFicha)}">
+        ${avisoConferencia}
         <div class="cdet-hero">
           <div class="avatar cdet-avatar ${colab.foto_path ? 'clicavel' : ''}" data-foto="${_at(colab.foto_path||'')}" data-nome="${_at(colab.nome||colab.email)}" data-sub="${_at(colab.email)} · ${_at(colab.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(colab.nome))}</div>
           <div class="cdet-nome">${esc(colab.nome||colab.email)}</div>
@@ -1300,6 +1314,10 @@ window.Gestor = (() => {
     /* histórico completo: o mês sai dele e o saldo ANTERIOR de cada colaborador também
        (01/10/2026). Sem histórico (offline/erro), cai no mês só — `anterior` fica null. */
     const hist = await _historico(sb);
+    /* 06/11/2026: este Excel é relatório: nota que aguarda conferência fica fora do mês e do saldo, como no PDF da equipe */
+    const aguardando = window.Fechamento ? await Fechamento.aguardando() : [];
+    const fora = new Set(aguardando.map(n => n.id));
+    if (hist) hist.notas = hist.notas.filter(n => !fora.has(n.id));
     let notas, repasses;
     if (hist) {
       const doMes = o => Number(o.ano) === ano && Number(o.mes) === mes;
@@ -1310,23 +1328,25 @@ window.Gestor = (() => {
         sb.notas.list({ ano, mes, fields: 'user_id,tipo,subtipo,valor,data,cnpj,razao_social,mes,ano,deleted,pagamento' }),
         sb.repasses.list({ ano, mes }),
       ]);
+      notas = (notas || []).filter(n => !fora.has(n.id));
     }
     const anterior = hist ? Object.fromEntries(saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano)) : null;
     /* C.V. no Excel (04/11/2026, decisão do dono): cartão e reembolso até o fim do mês, os números do PDF da equipe; null sem histórico */
     const cv = hist ? Object.fromEntries((collabs||[]).filter(c => c.regime === 'cv').map(c => [c.id, saldoCvAteMes(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), mes, ano)])) : null;
     /* "Repasse" na planilha = só o que conta no saldo: sem pedido pendente e sem recarga do cartão */
-    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior, cv };
+    return { collabs: collabs||[], notas: (notas||[]).filter(n=>!n.deleted), repasses: (repasses||[]).filter(_contaRecebido), mes, ano, anterior, cv, aguardando };
   }
 
   async function exportEquipeExcel(sb, currentUser, mes, ano, ids = []) {
     setLoading(true, 'Gerando a planilha da equipe…');
     try {
-      let { collabs, notas, repasses, mes: m, ano: a, anterior, cv } = await renderForExcel(sb, currentUser, mes, ano);
+      let { collabs, notas, repasses, mes: m, ano: a, anterior, cv, aguardando } = await renderForExcel(sb, currentUser, mes, ano);
       if (ids.length) {   // só os marcados no seletor (21/09/2026)
         const sel = new Set(ids);
         collabs = collabs.filter(c => sel.has(c.id)); notas = notas.filter(n => sel.has(n.user_id)); repasses = repasses.filter(r => sel.has(r.user_id));
       }
-      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome, anterior, cv);
+      const avisos = window.Fechamento ? Fechamento.avisos(aguardando, { ano: a, mes: m, ids: ids.length ? ids : null, onde: 'neste relatório' }) : [];
+      await Excel.exportarEquipe(notas, repasses, collabs, m, a, currentUser.nome, anterior, cv, avisos);
       toast(anterior ? 'Planilha gerada 📗' : 'Planilha gerada 📗 — sem o saldo dos meses anteriores (histórico indisponível)');
     } catch (e) { toast('Erro ao exportar: ' + e.message, 'err'); }
     finally { setLoading(false); }

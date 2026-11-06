@@ -200,7 +200,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
      adianta — só muda se a pessoa mexer na nota ou entrar com a conta certa. Depois de 3 tentativas o app
      espera 30 min entre uma e outra (e o "Tentar de novo" da nota zera isso). Falha de rede ou 5xx segue com a
      espera curta de sempre. (03/10/2026: uma nota com anexo vazio foi reenviada de minuto em minuto por horas.) */
-  const STATUS_RECUSADO = [400, 403, 404, 409, 413, 422];
+  const STATUS_RECUSADO = [400, 403, 404, 409, 413, 422, 423];   // 423 aqui é só a rede de segurança: o de mês fechado sai antes, em pushPending
   const ESPERA_RECUSADO_MS = 30 * 60_000;
   const _esperaDoErro = (e, attempts) =>
     (STATUS_RECUSADO.includes(e?.status) && attempts >= 3) ? ESPERA_RECUSADO_MS : _retryDelayMs(attempts);
@@ -768,7 +768,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
   /* Edição descartada: a versão do servidor passa a valer aqui. O anexo da edição sai junto (04/11/2026): subindo depois,
      cairia na espera do servidor sem PUT nenhum e a próxima edição aceita o poria sobre o da gestão. Só fica se o servidor
      não tem anexo nesta nota, porque aí ele é a única cópia. */
-  async function _aplicarConflito(id, nota) {
+  async function _aplicarConflito(id, nota, texto) {
     const local = await _get('notas', id).catch(() => null);
     await _put('notas', {
       ...nota,
@@ -783,7 +783,49 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     }
     if (nota.foto_path) await delFotoLocal(id);      // sem isto _ensureQueueFromExisting recoloca o anexo na fila
     const titulo = _tituloNota(nota);
-    await _guardarAviso(id, titulo, `A gestão corrigiu a nota ${titulo}. Sua edição anterior foi descartada; confira a nota.`);
+    await _guardarAviso(id, titulo, texto || `A gestão corrigiu a nota ${titulo}. Sua edição anterior foi descartada; confira a nota.`);
+    _descartesTotal += tirados;
+    return tirados;
+  }
+
+  /* 423 com mes_fechado (06/11/2026): igual ao 409, a versão do servidor passa a valer e o item sai da fila, com o motivo guardado
+     para a página mostrar (o service worker também passa por aqui e não tem tela). Só chega aqui nota que JÁ EXISTE no servidor:
+     nota nova nunca é recusada, então nenhum lançamento se perde. A diferença é o anexo: se o servidor não tem nenhum, o
+     _aplicarConflito deixa o item na fila, e aqui ele tomaria 423 para sempre. O arquivo fica guardado, marcado como no Contador. */
+  const _NOMES_MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const _rotuloMes = (corpo, registro) => {
+    if (corpo?.mes_rotulo) return corpo.mes_rotulo;
+    const [a, m] = String(registro?.data || '').split('-');
+    return `${_NOMES_MES[Number(m) - 1] || m}/${a}`;
+  };
+
+  async function _aplicarMesFechado(id, corpo) {
+    const nota = corpo.nota;
+    let tirados = await _aplicarConflito(id, nota,
+      `O mês de ${_rotuloMes(corpo, nota)} foi fechado pela gestão. Sua alteração na nota ${_tituloNota(nota)} não foi gravada; fale com o gestor.`);
+    for (const i of await _getAll('sync_queue')) {
+      if (i.entity_id === id) { await _del('sync_queue', i.id); tirados++; _descartesTotal++; }
+    }
+    const f = await _get('fotos', id).catch(() => null);
+    if (f) { try { await _put('fotos', { ...f, recusada: true }); } catch (_) { await _del('fotos', id); } }
+    return tirados;
+  }
+
+  /* Repasse: o que já existe volta à versão do servidor. O novo não entrou lá e só o gestor lança: sai da conta aqui (deleted),
+     sem ser apagado, senão apareceria no saldo deste aparelho um dinheiro que o servidor recusou. O aviso diz para reabrir. */
+  async function _repasseMesFechado(id, corpo) {
+    const local = await _get('repasses', id).catch(() => null);
+    const atual = corpo.repasse?.id === id ? corpo.repasse : null;
+    if (atual) await _put('repasses', { ...atual, synced: true, sync_status: 'synced', sync_error: null });
+    else if (local) await _put('repasses', { ...local, deleted: true, synced: true, sync_status: 'synced', sync_error: corpo.message || null });
+    let tirados = 0;
+    for (const i of await _getAll('sync_queue')) {
+      if (i.entity === 'repass' && i.entity_id === id) { await _del('sync_queue', i.id); tirados++; }
+    }
+    const registro = atual || local;
+    await _guardarAviso(id, 'repasse', atual
+      ? `O mês de ${_rotuloMes(corpo, registro)} foi fechado pela gestão. Sua alteração no repasse não foi gravada; fale com o gestor.`
+      : (corpo.message || `O mês de ${_rotuloMes(corpo, registro)} foi fechado pela gestão. O repasse não foi gravado.`));
     _descartesTotal += tirados;
     return tirados;
   }
@@ -905,7 +947,7 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
           let corpo = null;
           try { const buf = await blob.arrayBuffer(); if (buf.byteLength) corpo = new Blob([buf], { type: mime }); } catch (_) {}
           if (!corpo) { const vazio = new Error('Anexo vazio (0 KB): o arquivo não chegou inteiro ao app'); vazio.status = 422; throw vazio; }
-          const { foto_path: path } = await sb.notas.foto(item.entity_id, corpo, ext, nota.user_id, nota.user_id === null);
+          const { foto_path: path } = await sb.notas.foto(item.entity_id, corpo, ext, nota.user_id, nota.user_id === null, nota.data);
           /* 14/10/2026 (revisão): a nota é LIDA DE NOVO e só recebe o caminho do anexo — a cópia lida antes do upload
              (até 120 s atrás) desfazia a edição ou a exclusão feita nesse meio tempo. updated_at não é mexido, para o
              envio da nota perceber a edição (compara updated_at). */
@@ -991,6 +1033,10 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
         if (item.entity === 'nota' && e?.status === 409 && e?.corpo?.conflito === true && e.corpo.nota?.id === item.entity_id) {
           descartadas += await _aplicarConflito(item.entity_id, e.corpo.nota);
           continue;
+        }
+        if (e?.status === 423 && e?.corpo?.mes_fechado === true) {
+          if (item.entity === 'repass') { descartadas += await _repasseMesFechado(item.entity_id, e.corpo); continue; }
+          if (e.corpo.nota?.id === item.entity_id) { descartadas += await _aplicarMesFechado(item.entity_id, e.corpo); continue; }
         }
         /* Recusa por PAPEL (Contador, 14/10/2026): o servidor nunca vai aceitar esse item — quem virou Contador com
            nota nova ou repasse parado na fila ficava com "N itens pendentes" para sempre. Sai da fila (o aviso some);

@@ -68,7 +68,7 @@ class RelatorioCv
         $cab->setCellValue('I6', $ano);
 
         /* ── RDM_RDA e CV REEMBOLSO ────────────────────────── */
-        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)
+        $notas = Nota::query()->where('user_id', $c->id)->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->orderBy('data')->orderBy('created_at')->get();
         /* Regime (reunião de 21/09/2026):
            • CV (cartão corporativo): RDM_RDA ← notas pagas no cartão;
@@ -145,6 +145,12 @@ class RelatorioCv
         $this->abrirTotalRecebido($ss);
         $this->escreverSaldoAnterior($c, $ano, $bd);
 
+        /* 06/11/2026: nota que aguarda conferência ficou fora da grade e do saldo; o arquivo diz isso na primeira aba e ao lado do
+           saldo. A1:E4 e I1:M4 estão livres no modelo (logo em F1 no CABEÇALHO e em A1:E4 no BANCO DE DADOS, F:H ocultas). */
+        $avisos = NotasAguardando::doPeriodo($ano, null, [$c->id]);
+        NotasAguardando::estampar($cab, 'A1:E4', $avisos);
+        NotasAguardando::estampar($bd, 'I1:M4', $avisos);
+
         $ss->setActiveSheetIndex(0);
 
         return $ss;
@@ -158,7 +164,7 @@ class RelatorioCv
      */
     private function escreverSaldoAnterior(Colaborador $c, int $ano, \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $bd): void
     {
-        $svc = app(SaldoAnterior::class);
+        $svc = app(SaldoAnterior::class)->doRelatorio();
         $saldo = $svc->de($c, $ano);
         $tipos = $svc->porTipo($c, $saldo);
 
@@ -429,7 +435,7 @@ class RelatorioCv
         }
         /* 22/10/2026: sem as notas de Faturamento (pagamento=empresa), como nas abas de cada um e nos outros relatórios —
            a empresa pagou direto, não é gasto do colaborador. Antes entravam aqui e o Saldo do RESUMO saía negativo à toa. */
-        Nota::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)
+        Nota::query()->whereIn('user_id', $ids)->where('deleted', false)->where('ano', $ano)->noRelatorio()
             ->where(fn ($q) => $q->where('pagamento', '!=', 'empresa')->orWhereNull('pagamento'))
             ->select('user_id', 'tipo', 'subtipo', 'valor', 'mes', 'pagamento')->cursor()->each(function (Nota $n) use (&$gCat, &$gMes, &$mCat, &$movMes, $usaCartao) {
                 $m = (int) $n->mes;
@@ -497,6 +503,8 @@ class RelatorioCv
             : 'Saldo = Saldo do ano anterior + Recebido − Total gasto (negativo = a reembolsar)';
         $ws->setCellValue([1, $r], sprintf('%d colaborador(es) · gerado em %s · %s', $colabs->count(), now('America/Sao_Paulo')->format('d/m/Y H:i'), $legenda));
         $ws->getStyle([1, $r])->getFont()->setItalic(true)->setSize(10)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF666666'));
+        /* 06/11/2026: a linha 3 é a que sobra em branco antes do quadro 1 */
+        NotasAguardando::estampar($ws, 'A3:N3', NotasAguardando::doPeriodo($ano, null, $ids, 'neste resumo'), 3);
         $r += 2;
 
         /* ── Quadro 1: por colaborador ── */
@@ -522,7 +530,7 @@ class RelatorioCv
         $totRecarga = 0.0;
         $totAnt = array_fill_keys(array_keys($contas), 0.0);
         $totSaldo = $totAnt;
-        $svcSaldo = app(SaldoAnterior::class);
+        $svcSaldo = app(SaldoAnterior::class)->doRelatorio();
         $anteriores = $svcSaldo->deTodos($ano, $ids);
         $fins = $svcSaldo->deTodos($ano + 1, $ids);   // pedir o ano seguinte dá o saldo até dezembro, o mesmo da planilha de cada um
         foreach ($colabs as $c) {
