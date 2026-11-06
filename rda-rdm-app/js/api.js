@@ -493,6 +493,10 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
   };
 
   /* Fechamento de mês (06/11/2026): cada escrita devolve o quadro inteiro, já atualizado. */
+  const busca = {
+    geral: query => req('GET', '/busca', { query }),
+  };
+
   const fechamento = {
     lista: () => req('GET', '/fechamento'),
     aguardando: () => req('GET', '/fechamento/aguardando'),
@@ -511,5 +515,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, busca, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
 })();

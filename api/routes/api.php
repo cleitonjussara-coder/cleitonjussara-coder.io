@@ -6,6 +6,7 @@ use App\Http\Controllers\ArquivosController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvisoCorrecaoController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\BuscaController;
 use App\Http\Controllers\CnpjController;
 use App\Http\Controllers\ColaboradorController;
 use App\Http\Controllers\ConviteController;
@@ -71,6 +72,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/colaboradores/{id}/excluir', [ColaboradorController::class, 'excluir']);
     Route::delete('/colaboradores/{id}/excluir', [ColaboradorController::class, 'cancelarExclusao']);
 
+    Route::get('/busca', [BuscaController::class, 'index']);   // busca geral do app (06/11/2026): só leitura, cada papel vê o que já pode ver
     Route::get('/notas', [NotaController::class, 'index']);
     Route::post('/notas/chave-existe', [NotaController::class, 'chaveExiste']);
     Route::post('/notas/duplicada', [NotaController::class, 'duplicada']);   // chave, NFS-e, nº+fornecedor, dia+valor+fornecedor em TODAS as notas (21/10/2026)

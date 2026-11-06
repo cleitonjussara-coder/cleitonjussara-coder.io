@@ -21,7 +21,7 @@ const dom = new JSDOM('<main id="app-content"></main>', { runScripts: 'dangerous
 const w = dom.window;
 w.eval(`
   var MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  var FusoBR = { partes: () => ({ mes: 3, ano: 2026 }), data: d => d };
+  var FusoBR = { partes: () => ({ mes: 3, ano: 2026, dia: 15 }), data: d => d };
   var brl = v => 'R$ ' + Number(v || 0).toFixed(2);
   var chipDelta = (a, b) => '<span class="dl">' + a.toFixed(2) + '|' + b.toFixed(2) + '</span>';
   var toast = () => {}; var navegou = [];
@@ -35,14 +35,14 @@ const G = w.Gestor;
 const u = (id, nome, regime, extra = {}) => ({ id, nome, email: id + '@x.com', role: 'colaborador', regime, ativo: true, ...extra });
 const colabs = [u('a', 'Ana', 'rdm_rda'), u('b', 'Bia', 'cv'), u('c', 'Caio', 'rdm_rda'), u('cont', 'Contador', 'rdm_rda', { role: 'contabilidade' }), u('g1', 'Gestor', 'rdm_rda', { role: 'gestor' }), u('x', 'Xico', 'cv', { ativo: false })];
 let seq = 0;
-const nota = (user_id, mes, tipo, subtipo, valor, pagamento = null, ano = 2026) => ({ id: 'n' + (++seq), user_id, mes, ano, tipo, subtipo, valor, pagamento, foto_path: 'f', deleted: false });
+const nota = (user_id, mes, tipo, subtipo, valor, pagamento = null, ano = 2026, dia = 10) => ({ id: 'n' + (++seq), user_id, mes, ano, tipo, subtipo, valor, pagamento, foto_path: 'f', deleted: false, data: `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` });
 const todas = [
   nota('a', 3, 'RDA', null, 100), nota('a', 3, 'RDM', 'Abastecimento', 200), nota('a', 3, 'RDM', 'Pedágio', 15.5), nota('a', 3, 'RDM', 'Hospedagem', 700, 'empresa'),
   nota('b', 3, 'RDM', 'Manutenção de Veículos', 400), nota('b', 3, 'RDM', 'Exames', 90, 'carteira'), nota('b', 3, 'RDM', 'Outros', 30),
   nota('c', 3, 'RDM', 'qualquer antigo', 10),
   nota('x', 3, 'RDA', null, 50),
   nota(null, 3, 'RDM', 'Locação de Veículos', 3000, 'empresa'), nota(null, 3, 'RDM', 'Contabilidade', 1450, 'empresa'),
-  nota('a', 2, 'RDM', 'Abastecimento', 80), nota('b', 1, 'RDM', 'Pedágio', 20), nota('a', 12, 'RDM', 'Abastecimento', 55, null, 2025),
+  nota('a', 2, 'RDM', 'Abastecimento', 80), nota('a', 2, 'RDM', 'Abastecimento', 999, null, 2026, 20), nota('b', 1, 'RDM', 'Pedágio', 20), nota('a', 12, 'RDM', 'Abastecimento', 55, null, 2025), nota('a', 2, 'RDM', 'Abastecimento', 7, null, 2025),
 ];
 const soma = arr => arr.reduce((t, n) => t + Number(n.valor), 0);
 let chamadas = 0;
@@ -96,6 +96,13 @@ const hero = () => el.querySelector('.db-hero-val').textContent.trim();
   confere(hero() === dinheiro(40), 'subtipo antigo cai em Outros, com o Outros de verdade');
   G.eqLimpar();
 
+  console.log('Comparação: período em andamento para no mesmo dia');
+  confere(el.querySelector('.dl').textContent.endsWith('|80.00'), `março em andamento compara com 1 a 15 de fevereiro, sem a nota do dia 20 (${el.querySelector('.dl').textContent})`);
+  confere(/vs\. dia 1 a 15 de fevereiro/.test(texto()), 'e a tela diz qual é a comparação');
+  await carregar(2);
+  confere(el.querySelector('.dl').textContent.endsWith('|20.00') && /vs\. janeiro/.test(texto()), 'mês encerrado compara o mês inteiro');
+  await carregar(3);
+
   console.log('Regime: nota sem colaborador não entra em nenhum');
   G.eqFiltro('reg', 'cv');
   confere(hero() === dinheiro(400 + 90 + 30 + 50), 'C.V.: só quem é C.V., com desativado pelo regime dele');
@@ -109,7 +116,7 @@ const hero = () => el.querySelector('.db-hero-val').textContent.trim();
   console.log('Ano');
   G.eqFiltro('modo', 'anual');
   confere(hero() === dinheiro(soma(todas.filter(n => n.ano === 2026))), 'modo Ano soma o ano');
-  confere(el.querySelector('.dl').textContent.endsWith('|55.00'), 'compara com o ano anterior pelo histórico');
+  confere(el.querySelector('.dl').textContent.endsWith('|7.00') && /mesmo período de 2025/.test(texto()), `ano em andamento compara até o mesmo dia de 2025 (${el.querySelector('.dl').textContent})`);
   G.mudarPeriodo(-1);
   confere(w.eval('navegou.pop()') === 'ano-1', 'seta anda de ano');
   el.querySelectorAll('.evo-col')[2].click();

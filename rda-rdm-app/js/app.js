@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 555;
+const APP_BUILD = 556;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1086,29 +1086,66 @@ function _pintarBarraUsuario() {
 ═══════════════════════════════════════════════════════════ */
 function _itensMenu() {
   const itens = [
-    { view:'inicio', ico:'🏠', lbl:'Início', sub: _ehContabilidade() ? 'equipe e arquivos' : 'lançar nota e repasse' },
+    { g:'dia', view:'inicio', ico:'🏠', lbl:'Início', sub: _ehContabilidade() ? 'equipe e arquivos' : 'lançar nota e repasse' },
   ];
   if (!_ehContabilidade()) {
-    itens.push({ view:'home', ico:'📊', lbl:'Painel', sub:'gráficos e pendências' });
-    itens.push({ acao:"irParaNotas()", ico:'🧾', lbl:'Minhas notas', sub:'lista completa' });
-    itens.push({ view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
-    itens.push({ view:'saldo', ico: _usaCartao() ? '💳' : '💰', lbl: _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas', sub: _usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios' });
+    itens.push({ g:'dia', acao:"irParaNotas()", ico:'🧾', lbl:'Minhas notas', sub:'lista completa' });
+    itens.push({ g:'dia', view:'home', ico:'📊', lbl:'Painel', sub:'gráficos e pendências' });
+    itens.push({ g:'dia', view:'saldo', ico: _usaCartao() ? '💳' : '💰', lbl: _ehCV() ? 'C.V. e Planilha' : 'RDM/RDA e Planilhas', sub: _usaCartao() ? 'cartão, repasses e planilha' : 'saldo e relatórios' });
   }
   if (_veEquipe()) {
-    itens.push({ view:'equipe', ico:'👥', lbl:'Equipe', sub:'gastos, pessoas e relatórios' });
-    itens.push({ view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
+    itens.push({ g:'equipe', view:'equipe', ico:'👥', lbl:'Equipe', sub:'gastos, pessoas e relatórios', fixaSub:true });
   }
   if (_ehGestorOuAdmin()) {
-    itens.push({ view:'repasses', ico:'💸', lbl:'Repasses e recargas', sub:'corrigir, vendo saldo e lançamentos' });
-    itens.push({ view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
-    itens.push({ view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
+    itens.push({ g:'equipe', view:'repasses', ico:'💸', lbl:'Repasses e recargas', sub:'corrigir, vendo saldo e lançamentos' });
   }
-  if (_veFrota()) itens.push({ view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
+  if (_veEquipe()) itens.push({ g:'equipe', view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
+  if (_ehGestorOuAdmin()) {
+    itens.push({ g:'equipe', view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
+    itens.push({ g:'controle', view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
+  }
+  if (!_ehContabilidade()) itens.push({ g: _ehGestorOuAdmin() ? 'controle' : 'dia', view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
+  if (_veFrota()) itens.push({ g:'dia', view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
-    itens.push({ view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
+    itens.push({ g:'controle', view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
   }
-  itens.push({ view:'perfil', ico:'👤', lbl:'Perfil', sub:'conta, backup, ajuda' });
+  itens.push({ g:'conta', view:'perfil', ico:'👤', lbl:'Perfil', sub:'conta, backup, ajuda' });
   return itens;
+}
+
+const _GRUPOS_MENU = [['dia', 'Meu dia a dia'], ['equipe', 'Gestão da equipe'], ['controle', 'Controle']];
+
+/* "Precisa de você" (06/11/2026): as mesmas contas do sino e do quadro "O que falta corrigir". Cada caixa abre o lugar de resolver. */
+function _pendenciasMenu() {
+  const conta = t => _notificacoes().filter(i => i.tipo === t).length;
+  const lista = [{ n: _notasComPendencia().length, um: 'nota para corrigir', varios: 'notas para corrigir', acao: 'abrirPendencias()' }];
+  if (_ehGestorOuAdmin()) {
+    lista.unshift({ n: conta('pedido'), um: 'pedido de repasse', varios: 'pedidos de repasse', acao: 'abrirNotificacoes()' });
+    lista.push({ n: conta('novo'), um: 'cadastro para liberar', varios: 'cadastros para liberar', acao: 'abrirNotificacoes()' });
+  }
+  lista.push({ n: conta('justificativa'), um: 'justificativa pedida', varios: 'justificativas pedidas', acao: 'abrirNotificacoes()' });
+  return lista.filter(p => p.n > 0);
+}
+
+function _pendMenuHTML(lista) {
+  if (!lista.length) return '<li id="menu-pend" hidden></li>';
+  return `<li class="menu-pend" id="menu-pend"><div class="menu-grupo-tit">Precisa de você</div>${lista.map(p => `
+    <button onclick="fecharMenu();${p.acao}"><b>${p.n}</b>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</li>`;
+}
+
+function abrirFechamentoPeloMenu() {
+  window.Fechamento?.abrirQuadro();
+  window.Gestor?.definirAba('rel');
+  switchView('equipe');
+}
+
+/* Notas do Fechamento vêm do servidor: a caixa entra depois de o menu abrir, para ele nunca esperar a rede. */
+async function _pendFechamentoMenu(base) {
+  if (!_ehGestorOuAdmin() || !window.Fechamento) return;
+  const n = (await window.Fechamento.aguardando().catch(() => [])).length;
+  const alvo = $('menu-pend');
+  if (!n || !alvo || !$('menu-drawer-overlay')?.classList.contains('open')) return;
+  alvo.outerHTML = _pendMenuHTML([...base, { n, um: 'nota no fechamento', varios: 'notas no fechamento', acao: 'abrirFechamentoPeloMenu()' }]);
 }
 
 function abrirMenu() {
@@ -1119,14 +1156,27 @@ function abrirMenu() {
   const nm = $('menu-nome'); if (nm) nm.textContent = nome || 'Usuário';
   const rp = $('menu-role-pill'); if (rp) rp.innerHTML = `<span class="role-pill role-${_at(papel)}">${esc(PAPEL_NOME[papel] || papel)}</span>`;
   const lista = $('menu-lista');
-  if (lista) lista.innerHTML = _itensMenu().map(it => `
+  /* gestor e admin têm muitas telas: só o item principal mantém a descrição, para o menu caber com menos rolagem */
+  const compacto = _ehGestorOuAdmin();
+  const itens = _itensMenu();
+  const pend = _pendenciasMenu();
+  const pedidos = pend.find(p => p.um === 'pedido de repasse')?.n || 0;
+  const linha = it => `
       <li>
         <button class="menu-item" onclick="fecharMenu();${it.acao || `switchView('${it.view}')`}">
           <span class="menu-item-ico">${it.ico}</span>
-          <span class="menu-item-txt"><span>${esc(it.lbl)}</span><span class="menu-item-sub">${esc(it.sub)}</span></span>
+          <span class="menu-item-txt"><span>${esc(it.lbl)}</span>${!compacto || it.fixaSub ? `<span class="menu-item-sub">${esc(it.sub)}</span>` : ''}</span>
+          ${it.view === 'repasses' && pedidos ? `<span class="menu-item-num">${pedidos}</span>` : ''}
         </button>
-      </li>`).join('');
+      </li>`;
+  if (lista) lista.innerHTML = _pendMenuHTML(pend) + _GRUPOS_MENU.map(([g, titulo]) => {
+    const doGrupo = itens.filter(it => it.g === g);
+    return doGrupo.length ? `<li class="menu-grupo-tit">${titulo}</li>${doGrupo.map(linha).join('')}` : '';
+  }).join('');
+  const busca = $('menu-busca-txt');
+  if (busca) busca.textContent = _veEquipe() ? 'Buscar nota, pessoa ou tela…' : 'Buscar nota ou tela…';
   $('menu-drawer-overlay')?.classList.add('open');
+  _pendFechamentoMenu(pend).catch(() => {});
 }
 function fecharMenu() { $('menu-drawer-overlay')?.classList.remove('open'); }
 

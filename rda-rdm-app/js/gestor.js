@@ -227,7 +227,7 @@ window.Gestor = (() => {
   async function _historico(sb, extra = {}) {
     try {
       const [notas, repasses] = await Promise.all([
-        sb.notas.list({ ...extra, deleted: '0', fields: 'user_id,tipo,subtipo,valor,mes,ano,deleted,pagamento' }),
+        sb.notas.list({ ...extra, deleted: '0', fields: 'user_id,tipo,subtipo,valor,data,mes,ano,deleted,pagamento' }),
         sb.repasses.list({ ...extra, deleted: '0' }),
       ]);
       return Array.isArray(notas) && Array.isArray(repasses) ? { notas, repasses } : null;
@@ -621,12 +621,23 @@ window.Gestor = (() => {
     const empresa = _eqSoma(semPag.filter(n => n.pagamento === 'empresa'));
     const colaboradores = _eqSoma(semPag.filter(n => n.pagamento !== 'empresa'));
 
+    /* Período em andamento (06/11/2026): 6 dias de novembro contra outubro inteiro dava "▼ 87%" sem queda nenhuma. Enquanto o
+       mês ou o ano não acaba, a comparação para no mesmo dia do período anterior. */
     const alvoAno = anual || mes === 1 ? ano - 1 : ano;
     const alvoMes = anual ? null : mes === 1 ? 12 : mes - 1;
+    const hoje = FusoBR.partes();
+    const emAndamento = hoje.ano === ano && (anual || hoje.mes === mes);
+    const p2 = v => String(v).padStart(2, '0');
+    const limite = emAndamento ? `${alvoAno}-${p2(anual ? hoje.mes : alvoMes)}-${p2(hoje.dia)}` : null;
     const fonteAnt = alvoAno === ano ? nsAno : hist?.notas;   // sem o histórico não dá para comparar com o ano anterior
     const anterior = fonteAnt
-      ? _eqSoma(fonteAnt.filter(n => !n.deleted && Number(n.ano) === alvoAno && (alvoMes === null || Number(n.mes) === alvoMes) && _eqPassaTudo(n)))
+      ? _eqSoma(fonteAnt.filter(n => !n.deleted && Number(n.ano) === alvoAno && (alvoMes === null || Number(n.mes) === alvoMes)
+        && (!limite || String(n.data || '').slice(0, 10) <= limite) && _eqPassaTudo(n)))
       : null;
+    const nomeAnt = anual ? String(alvoAno) : MESES_LONGO[alvoMes - 1].toLowerCase();
+    const comparacao = !emAndamento ? `vs. ${nomeAnt}`
+      : anual ? `vs. mesmo período de ${alvoAno}`
+      : `vs. dia 1 a ${hoje.dia} de ${nomeAnt}`;
 
     const paraCats = periodo.filter(n => _eqPassaPessoa(n) && _eqPassaPag(n));
     const totalCats = _eqSoma(paraCats);
@@ -639,7 +650,7 @@ window.Gestor = (() => {
     const comDono = ranking.filter(p => p.id);
     const tipos = new Map();
     lista.forEach(n => { const t = _tipoEvo(n); tipos.set(t, (tipos.get(t) || 0) + Number(n.valor || 0)); });
-    return { lista, total, empresa, colaboradores, anterior, cats, totalCats, ranking, nPessoas: comDono.length,
+    return { lista, total, empresa, colaboradores, anterior, comparacao, cats, totalCats, ranking, nPessoas: comDono.length,
       media: comDono.length ? _eqSoma(comDono.map(p => ({ valor: p.val }))) / comDono.length : 0,
       tipos: [...tipos].sort((a, b) => b[1] - a[1]), evo: nsAno.filter(_eqPassaTudo) };
   }
@@ -704,7 +715,7 @@ window.Gestor = (() => {
             <div class="db-hero-lbl">${esc(catSel ? catSel.nome : quem)} · ${esc(rotulo)}</div>
             <div class="db-hero-val">${brl(c.total)}</div>
           </div>
-          ${c.anterior === null ? '' : chipDelta(c.total, c.anterior, false)}
+          ${c.anterior === null ? '' : `<div class="eqp-delta">${chipDelta(c.total, c.anterior, false)}<small>${esc(c.comparacao)}</small></div>`}
         </div>
         <div class="eqp-soma">${lado('colab', '👥 Colaboradores', c.colaboradores)}<span aria-hidden="true">+</span>${lado('empresa', '🏢 Empresa pagou', c.empresa)}</div>
         <div class="db-hero-meta">
@@ -973,7 +984,7 @@ window.Gestor = (() => {
          com o que o saldo precisa: dele sai o saldo dos meses anteriores de cada colaborador.
          Se o histórico não carregar, a lista segue com o ano e avisa que o saldo é só do mês. */
       const [notasAno, repAno, hist] = await Promise.all([
-        sb.notas.list({ ano, fields: 'user_id,tipo,subtipo,valor,mes,ano,foto_path,deleted,pagamento,created_by' }),
+        sb.notas.list({ ano, fields: 'user_id,tipo,subtipo,valor,data,mes,ano,foto_path,deleted,pagamento,created_by' }),
         sb.repasses.list({ ano }),
         _historico(sb),
       ]);
