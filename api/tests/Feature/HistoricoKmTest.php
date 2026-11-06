@@ -210,7 +210,7 @@ class HistoricoKmTest extends TestCase
             $this->getJson('/api/veiculos')->assertOk();
             $this->getJson('/api/frota/painel')->assertOk()->assertJsonPath('colaboradores', null);
             $this->getJson('/api/frota/historico')->assertOk();
-            $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600])->assertOk();
+            $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600, 'observacao' => 'Fazenda Teste'])->assertOk();
             $this->getJson('/api/frota/anual?ano=2026')->assertOk();
         }
         Sanctum::actingAs($this->contador);
@@ -454,7 +454,7 @@ class HistoricoKmTest extends TestCase
         $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-25', 'odometro' => 1600])->assertStatus(422);
         $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2999-01-01', 'odometro' => 9999999])->assertStatus(422);
 
-        $perto = $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-22', 'odometro' => 1600])->assertOk()->json();
+        $perto = $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-22', 'odometro' => 1600, 'observacao' => 'Fazenda Teste'])->assertOk()->json();
         $this->assertSame('2026-10-21', $perto['data'], 'até 2 dias à frente é relógio adiantado: vira hoje');
 
         /* a edição também não leva a leitura para o futuro */
@@ -583,12 +583,27 @@ class HistoricoKmTest extends TestCase
         $this->assertSame(0, $j['total']);
     }
 
+    /* ── Local visitado ────────────────────────────────────── */
+
+    public function test_leitura_nova_exige_local_visitado_e_a_antiga_segue_corrigivel(): void
+    {
+        Sanctum::actingAs($this->ana);
+        $base = ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600];
+
+        $this->putJson('/api/km/'.Str::uuid(), $base)->assertStatus(422)->assertJsonPath('message', 'Descreva o local visitado: campo, fazenda ou cidade.');
+        $this->putJson('/api/km/'.Str::uuid(), $base + ['observacao' => '   '])->assertStatus(422);
+        $this->putJson('/api/km/'.Str::uuid(), $base + ['observacao' => 'Fazenda Boa Vista'])->assertOk();
+
+        $antiga = KmRegistro::create(['id' => (string) Str::uuid(), 'veiculo_id' => $this->v2->id, 'user_id' => $this->ana->id, 'data' => '2026-10-01', 'odometro' => 500]);
+        $this->putJson('/api/km/'.$antiga->id, ['veiculo_id' => $this->v2->id, 'data' => '2026-10-01', 'odometro' => 510])->assertOk();
+    }
+
     /* ── Hora do registro ──────────────────────────────────── */
 
     private function novoRegistro(array $extra = []): array
     {
         return $this->putJson('/api/km/'.Str::uuid(), array_replace([
-            'veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600,
+            'veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1600, 'observacao' => 'Fazenda Teste',
         ], $extra))->assertOk()->json();
     }
 
@@ -633,7 +648,7 @@ class HistoricoKmTest extends TestCase
         KmRegistro::esquecerAuditoria();
 
         Sanctum::actingAs($this->gestor);
-        $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1700, 'registrado_em' => '2026-10-21T10:00:00Z'])->assertOk();
+        $this->putJson('/api/km/'.Str::uuid(), ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1700, 'observacao' => 'Fazenda Teste', 'registrado_em' => '2026-10-21T10:00:00Z'])->assertOk();
         $k = $this->registroDaAna();
         $this->putJson('/api/km/'.$k->id, ['veiculo_id' => $this->v1->id, 'data' => '2026-10-21', 'odometro' => 1450])->assertOk();
 

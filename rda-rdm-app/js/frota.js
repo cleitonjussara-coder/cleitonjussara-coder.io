@@ -395,7 +395,7 @@ window.Frota = (() => {
     const ativos = veiculos.filter(v => v.ativo !== false);
     if (!ativos.length) { toast('Nenhum veículo cadastrado — peça ao gestor', 'err'); return; }
     const r = id ? _reg(id) : null;
-    _fotoKm = null; _odoLido = null; _avisoOdo('');
+    _fotoKm = null; _odoLido = null; _avisoOdo(''); _fecharBuscaVeiculo();
     _idNovo = r ? null : crypto.randomUUID();
     if (!rascunho) _limparRascunho();              // formulário novo: o rascunho antigo foi resolvido (salvo ou Voltar)
     _ligarRascunho();
@@ -438,7 +438,49 @@ window.Frota = (() => {
     ov.addEventListener('input', e => { if (e.target.id !== 'km-foto') _guardarRascunho(); });
     ov.addEventListener('change', e => { if (e.target.id !== 'km-foto') _guardarRascunho(); });
   }
-  function destravarVeiculo() { $('km-veiculo').disabled = false; $('km-veiculo-fixo').style.display = 'none'; $('km-veiculo').focus(); }
+  function destravarVeiculo() { $('km-veiculo').disabled = false; $('km-veiculo-fixo').style.display = 'none'; _pintarVeiculo(); _abrirBuscaVeiculo(); }
+
+  /* Escolha do veículo pelo nome da pessoa (06/11/2026): placa sozinha confundia. O <select> escondido segue guardando o
+     valor (rascunho e Salvar leem dele); aqui só se mostra e se busca. O nome vem do Responsável habitual ou, enquanto ele
+     não está preenchido, do cadastro "Nome - MODELO". */
+  const _semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function _partesVeiculo(v) {
+    const m = String(v.modelo || '').trim(), i = m.indexOf(' - ');
+    return { nome: v.responsavel_nome || (i > 0 ? m.slice(0, i).trim() : ''), carro: i > 0 ? m.slice(i + 3).trim() : m, placa: v.placa || '' };
+  }
+  const _textoVeiculo = p => ({ titulo: p.nome || p.carro || p.placa, sub: [p.nome ? p.carro : '', p.nome || p.carro ? p.placa : ''].filter(Boolean).join(' · ') });
+  function _opcoesVeiculo() {
+    return [...$('km-veiculo').options].filter(o => o.value).map(o => {
+      const v = veiculos.find(x => x.id === o.value) || { placa: o.textContent };
+      const p = _partesVeiculo(v);
+      return { id: o.value, ...p, ..._textoVeiculo(p), meu: !!user?.id && v.responsavel_id === user.id, inativo: o.textContent.endsWith('(inativo)'),
+               busca: _semAcento([p.nome, v.modelo, v.placa].join(' ')) };
+    }).sort((a, b) => (b.meu - a.meu) || (!a.nome - !b.nome) || a.titulo.localeCompare(b.titulo, 'pt-BR', { sensitivity: 'base' }));
+  }
+  function _pintarVeiculo() {
+    const sel = $('km-veiculo'), btn = $('km-vei-btn');
+    const i = _opcoesVeiculo().find(x => x.id === sel.value);
+    btn.disabled = sel.disabled;
+    btn.innerHTML = i ? `<span class="km-vei-txt"><b>${esc(i.titulo)}</b><small>${esc(i.sub)}${i.inativo ? ' (inativo)' : ''}</small></span>` : '<span class="km-vei-txt">Escolha o veículo…</span>';
+  }
+  function filtrarVeiculos() {
+    const termos = _semAcento($('km-vei-q').value).split(/\s+/).filter(Boolean), atual = $('km-veiculo').value;
+    const itens = _opcoesVeiculo().filter(i => termos.every(t => i.busca.includes(t)));
+    $('km-vei-lista').innerHTML = itens.map(i => `<button type="button" class="km-vei-item${i.id === atual ? ' sel' : ''}" data-id="${_at(i.id)}"><span class="km-vei-txt"><b>${esc(i.titulo)}</b><small>${esc(i.sub)}${i.inativo ? ' (inativo)' : ''}</small></span></button>`).join('')
+      || '<div class="km-vei-vazio">Nenhum veículo encontrado</div>';
+  }
+  function _abrirBuscaVeiculo() { $('km-vei-q').value = ''; filtrarVeiculos(); $('km-vei-busca').style.display = 'block'; }
+  function _fecharBuscaVeiculo() { $('km-vei-busca').style.display = 'none'; }
+  function alternarBuscaVeiculo() { if ($('km-vei-busca').style.display === 'none') _abrirBuscaVeiculo(); else _fecharBuscaVeiculo(); }
+  function escolherVeiculo(e) {
+    const item = e.target.closest('[data-id]');
+    if (!item) return;
+    $('km-veiculo').value = item.dataset.id;
+    _fecharBuscaVeiculo();
+    _mostrarUltimaLeitura();
+    _guardarRascunho();
+    if (!$('km-odometro').value) $('km-odometro').focus();
+  }
 
   /* A leitura de referência do veículo: a que o servidor informa (de qualquer pessoa, em qualquer mês) e o que há nesta
      tela (mês carregado e fila do aparelho); vale a mais recente. Ao EDITAR, a referência é a leitura ANTERIOR à que está
@@ -469,7 +511,8 @@ window.Frota = (() => {
   }
 
   function _mostrarUltimaLeitura() {
-    if (!$('km-veiculo').value) { $('km-ultima').textContent = 'Escolha o veículo (confira a placa) antes de registrar.'; return; }
+    _pintarVeiculo();
+    if (!$('km-veiculo').value) { $('km-ultima').textContent = 'Escolha o veículo antes de registrar.'; return; }
     const { odo, dt } = _ultimaLeitura();
     $('km-ultima').textContent = odo != null ? `Última leitura: ${kmFmt(odo)} km em ${fmtData(dt)}` : 'Primeira leitura deste veículo';
   }
@@ -594,6 +637,11 @@ window.Frota = (() => {
       observacao: $('km-obs').value.trim() || null,
     };
     if (!payload.veiculo_id || !payload.data || !Number.isFinite(payload.odometro)) { toast('Veículo, data e odômetro são obrigatórios', 'err'); return; }
+    /* Local visitado (06/11/2026): obrigatório na leitura nova, na que ainda está na fila e na que já tinha texto. Só a
+       leitura antiga, gravada sem local, pode ser corrigida sem inventar um. */
+    const naFila = (await _fila()).find(x => x.id === id);       // correção de leitura pendente (depois de recarregar, _reg não a conhece)
+    const exigeLocal = !$('km-id').value || !!naFila || !!_reg($('km-id').value)?.observacao;
+    if (exigeLocal && (payload.observacao || '').length < 3) { toast('Descreva o local visitado: campo, fazenda ou cidade', 'err'); $('km-obs').focus(); return; }
     if (!$('km-id').value) {                       // leitura nova: confirma a placa por extenso
       const v = veiculos.find(x => x.id === payload.veiculo_id);
       if (!(await pedirConfirmacao({ mensagem: `Registrar ${kmFmt(payload.odometro)} km no veículo ${v?.placa || '?'}${v?.modelo ? ' · ' + v.modelo : ''}? Confira se a placa é a do carro que você está usando.`, confirmar: 'Placa certa, salvar' }))) return;
@@ -603,7 +651,6 @@ window.Frota = (() => {
        que o histórico mostra, mesmo que a leitura só suba horas depois, quando voltar o sinal. Ao editar, vale a original. */
     const existente = $('km-id').value ? _reg($('km-id').value) : null;
     if (!$('km-id').value) payload.registrado_em = new Date(sb?.horaServidorMs ? sb.horaServidorMs() : Date.now()).toISOString();
-    const naFila = (await _fila()).find(x => x.id === id);       // correção de leitura pendente (depois de recarregar, _reg não a conhece)
     if (naFila?.payload?.registrado_em) payload.registrado_em = naFila.payload.registrado_em;
     /* número lido da foto com salto grande sobre a última leitura: confirma antes de gravar */
     if (_odoLido != null && payload.odometro === _odoLido) {
@@ -733,7 +780,7 @@ window.Frota = (() => {
   }
 
   return { render, trocarAba, abaAtiva: () => _aba, mudarMes, lancar, abrirForm, fecharForm, salvar, excluir, verFoto, onFoto, fotografar, restaurarRascunho,
-           destravarVeiculo, abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
+           destravarVeiculo, alternarBuscaVeiculo, filtrarVeiculos, escolherVeiculo, abrirFormVeiculo, fecharFormVeiculo, salvarVeiculo, onVeiculoChange: _mostrarUltimaLeitura,
            exportarExcel, exportarCSV, reenviar, subirFila,
            pendentes: () => _pendTodos };
 })();

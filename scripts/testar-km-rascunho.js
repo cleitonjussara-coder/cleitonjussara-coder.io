@@ -76,7 +76,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     let w = abrirPagina(cel);
     await w.Frota.lancar();
     digita(w, 'km-veiculo', V2);
-    digita(w, 'km-odometro', '85420');
+    digita(w, 'km-odometro', '85420'); digita(w, 'km-obs', 'Fazenda Teste');
     digita(w, 'km-obs', 'saída para Cristalina');
     w.Frota.fotografar();
     confere(w.__camera.length === 1 && w.__clicks === 0, 'usa a câmera de dentro do app, não a do sistema');
@@ -104,7 +104,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     w = abrirPagina(cel);
     await w.Frota.restaurarRascunho();
     confere(/com a foto/.test(aviso(w)), 'avisa que a foto voltou');
-    digita(w, 'km-odometro', '1000');
+    digita(w, 'km-odometro', '1000'); digita(w, 'km-obs', 'Fazenda Teste');
     await w.Frota.salvar();
     confere(w.__puts.length === 1 && w.__fotos[0]?.tamanho === 4096, 'salva o registro e sobe a foto recuperada');
     confere(!aberto(w), 'formulário fecha ao salvar');
@@ -118,7 +118,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     const cel = celular();
     let w = abrirPagina(cel);
     await w.Frota.lancar();
-    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '500');
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '500'); digita(w, 'km-obs', 'Fazenda Teste');
     w.eval(`sb.frota.kmUpsert = async (id, p) => { __puts.push({ id, p }); const e = new Error('Sem permissão'); e.status = 403; throw e; };`);
     await w.Frota.salvar();
     const idPrimeiro = w.__puts[0].id;
@@ -134,7 +134,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     const cel = celular();
     let w = abrirPagina(cel);
     await w.Frota.lancar();
-    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '777');
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '777'); digita(w, 'km-obs', 'Fazenda Teste');
     w = abrirPagina(cel, { uid: 'outra-conta' });
     confere(await w.Frota.restaurarRascunho() === false && !aberto(w), 'outra conta no aparelho não vê o rascunho');
     w = abrirPagina(cel);
@@ -157,7 +157,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     const cel = celular();
     let w = abrirPagina(cel);
     await w.Frota.lancar();
-    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '321');
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '321'); digita(w, 'km-obs', 'Fazenda Teste');
     w = abrirPagina(cel, { uid: 'outra-conta' });
     await w.Frota.lancar();
     digita(w, 'km-veiculo', V2);
@@ -171,7 +171,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     const cel = celular();
     let w = abrirPagina(cel);
     await w.Frota.lancar();
-    digita(w, 'km-veiculo', V2); digita(w, 'km-odometro', '654');
+    digita(w, 'km-veiculo', V2); digita(w, 'km-odometro', '654'); digita(w, 'km-obs', 'Fazenda Teste');
     w.Frota.fotografar();
     await w.__camera[0].aoFoto(foto(1024));
     w = abrirPagina(cel);
@@ -204,6 +204,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     cel.ls.set('frota_rascunho_u1', JSON.stringify({ uid: 'u1', em: Date.now(), id: 'D', id_novo: null, veiculo_id: V1, data: '2026-11-03', odometro: '20', obs: '', camera: false, foto: false }));
     w = abrirPagina(cel);
     await w.Frota.restaurarRascunho();
+    digita(w, 'km-obs', 'Fazenda Teste');
     await w.Frota.salvar();
     confere(w.__puts[0]?.p.registrado_em === '2026-11-03T11:00:00.000Z', 'correção restaurada mantém a hora original da leitura');
     confere(w.__fotos[0]?.tamanho === 2, 'corrigir leitura da fila sobe a foto que estava guardada');
@@ -212,7 +213,7 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     w = abrirPagina(cel);
     w.eval(`sb.frota.kmFoto = async () => { throw new Error('sem rede'); };`);
     await w.Frota.lancar();
-    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '30');
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '30'); digita(w, 'km-obs', 'Fazenda Teste');
     w.Frota.fotografar();
     await w.__camera[0].aoFoto(foto(512));
     await w.Frota.salvar();
@@ -235,6 +236,55 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     w.Frota.fotografar();
     confere(w.__clicks === 1, 'cai na câmera do sistema');
     confere(JSON.parse(cel.ls.get('frota_rascunho_u1')).camera === true, 'e o rascunho já está gravado antes de sair do app');
+  }
+
+  console.log('Local visitado obrigatório:');
+  {
+    const cel = celular();
+    const w = abrirPagina(cel);
+    await w.Frota.lancar();
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '700');
+    await w.Frota.salvar();
+    confere(!w.__puts.length && aberto(w), 'sem local não salva e o formulário fica aberto');
+    digita(w, 'km-obs', 'Fazenda Boa Vista');
+    await w.Frota.salvar();
+    confere(w.__puts[0]?.p.observacao === 'Fazenda Boa Vista', 'com local salva');
+  }
+
+  console.log('Escolha do veículo pelo nome:');
+  {
+    const cel = celular();
+    const w = abrirPagina(cel);
+    const V3 = '33333333-3333-4333-8333-333333333333', V4 = '44444444-4444-4444-8444-444444444444';
+    w.__veiculos.push({ id: V3, placa: 'CCC3C33', modelo: 'Édson Lima - SAVEIRO ROBUST', ativo: true },
+                      { id: V4, placa: 'DDD4D44', modelo: 'COROLLA', responsavel_id: 'outro', responsavel_nome: 'Bruno Alves', ativo: true });
+    await w.Frota.lancar();
+    const d = w.document, nomes = () => [...d.querySelectorAll('.km-vei-item b')].map(x => x.textContent);
+    const buscar = t => { d.getElementById('km-vei-q').value = t; w.Frota.filtrarVeiculos(); };
+    w.Frota.alternarBuscaVeiculo();
+    confere(nomes().slice(0, 2).join() === 'Bruno Alves,Édson Lima', 'quem tem nome vem primeiro, em ordem alfabética');
+    buscar('edson'); confere(nomes().join() === 'Édson Lima', 'busca pelo nome ignora acento');
+    buscar('saveiro'); confere(nomes().join() === 'Édson Lima', 'busca pelo modelo');
+    buscar('ddd4'); confere(nomes().join() === 'Bruno Alves', 'busca pela placa');
+    buscar('xyz'); confere(/Nenhum veículo/.test(d.getElementById('km-vei-lista').textContent), 'avisa quando nada combina');
+    buscar('bruno');
+    d.querySelector('.km-vei-item b').click();
+    confere(d.getElementById('km-veiculo').value === V4, 'tocar na pessoa escolhe o veículo dela');
+    confere(d.getElementById('km-vei-busca').style.display === 'none', 'a lista fecha depois de escolher');
+    confere(/Bruno Alves/.test(d.getElementById('km-vei-btn').textContent), 'o campo mostra a pessoa escolhida');
+    confere(JSON.parse(cel.ls.get('frota_rascunho_u1')).veiculo_id === V4, 'a escolha entra no rascunho');
+  }
+
+  console.log('Veículo em nome da pessoa:');
+  {
+    const cel = celular();
+    const w = abrirPagina(cel);
+    w.__veiculos[1].responsavel_id = 'u1';
+    await w.Frota.lancar();
+    const d = w.document;
+    confere(d.getElementById('km-veiculo').value === V2 && d.getElementById('km-vei-btn').disabled, 'já vem preenchido e travado');
+    w.Frota.destravarVeiculo();
+    confere(!d.getElementById('km-vei-btn').disabled && d.getElementById('km-vei-busca').style.display === 'block', 'Usar outro veículo abre a lista');
   }
 
   console.log('Recarga automática de versão nova:');

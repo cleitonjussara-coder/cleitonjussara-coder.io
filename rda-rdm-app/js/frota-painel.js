@@ -594,7 +594,7 @@ window.FrotaPainel = (() => {
         ${linha('Data da leitura', fmtData(r.data))}
         ${linha('Registrado em', r.registrado_em ? esc(dmhm(r.registrado_em)) + ' (Brasília)' : '—')}
         ${linha('Leitura anterior', anterior)}
-        ${linha('Observação', esc(r.observacao || ''))}
+        ${linha('Local visitado', esc(r.observacao || ''))}
         ${linha('Corrigido por', corrigido)}
         ${linha('Editado em', editado)}
       </div>

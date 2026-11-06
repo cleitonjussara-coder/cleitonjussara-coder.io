@@ -146,6 +146,10 @@ class FrotaController extends Controller
             }
             $d['user_id'] = $d['user_id'] ?? $u->id;
             abort_unless($d['user_id'] === $u->id || $u->ehAdmin(), 403, 'Registro só pode ser lançado pelo próprio colaborador');
+            /* o local visitado é obrigatório na leitura nova (06/11/2026); as antigas, sem local, seguem corrigíveis */
+            if (mb_strlen(trim((string) ($d['observacao'] ?? ''))) < 3) {
+                return response()->json(['message' => 'Descreva o local visitado: campo, fazenda ou cidade.'], 422);
+            }
             /* leitura menor que a anterior do mesmo veículo é quase sempre erro de
                digitação — recusa com mensagem clara; correção passa por editar. */
             $ultimo = KmRegistro::where('veiculo_id', $d['veiculo_id'])->where('deleted', false)
