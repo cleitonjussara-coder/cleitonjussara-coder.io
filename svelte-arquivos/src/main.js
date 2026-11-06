@@ -24,14 +24,14 @@ const FAT = { faturamento: true, nome: 'Faturamento' };   // "colaborador" de me
 let mes = null;
 let resumo = null;
 let lista = null;
-/* Busca do ano inteiro, abaixo dos meses do Faturamento (05/11/2026): notas do ano e os filtros de cada tela. Os filtros
+/* Busca do ano inteiro, abaixo dos meses de cada pasta (05/11/2026): notas do ano e os filtros de cada tela. Os filtros
    ficam aqui porque toda ação remonta o componente; sem isso, mudar a categoria de uma nota limparia a busca. */
 let listaAno = null;
 let filtroMes = null;
 let filtroAno = null;
 /* Categorias abertas no mês do Faturamento: guardadas aqui para não fecharem quando uma ação remonta a tela */
 let abertasMes = {};
-/* Quadro dos meses do Faturamento: começa oculto e fica como a pessoa deixou enquanto ela anda pelos meses */
+/* Quadro dos meses da pasta: começa oculto e fica como a pessoa deixou enquanto ela anda pelos meses */
 let mesesAbertos = false;
 /* Número do último render(). Toda busca na rede confere, ao voltar, se ainda é a mais recente: o botão Arquivos da
    ficha faz switchView (que busca a lista) e logo depois abrirColab — a lista, chegando atrasada, desenhava por
@@ -175,12 +175,24 @@ async function renderMeses(s) {
   }
   mostrar('meses', {
     cabecalhoTitulo: `📁 ${esc(c.nome || c.email)}`,
-    cabecalhoSub: `${c.qtd} nota${c.qtd === 1 ? '' : 's'} em ${ano} · ${brl(c.total)}`,
+    cabecalhoSub: c.qtd ? '' : `0 notas em ${ano}`,
     temNotas: !!c.qtd,
     comAnexo: c.com_anexo,
     ehFaturamento: !!c.faturamento,
     meses,
-    ...(c.faturamento ? { mesesAbertos, filtro: filtroAno || FILTRO_VAZIO, filtroPadrao: FILTRO_VAZIO, acoes: true, podeExcluir: !!dep.podeExcluir?.(), dataMin: `${ano}-01-01`, dataMax: `${ano}-12-31` } : {}),
+    mesesAbertos,
+    filtro: filtroAno || FILTRO_VAZIO,
+    filtroPadrao: FILTRO_VAZIO,
+    acoes: !!c.faturamento || !!dep.veEquipe(),
+    podeExcluir: !!c.faturamento && !!dep.podeExcluir?.(),
+    dataMin: `${ano}-01-01`,
+    dataMax: `${ano}-12-31`,
+    resumoAno: c.qtd ? {
+      totalTxt: brl(c.total),
+      qtd: c.qtd,
+      anexoTxt: c.qtd - c.com_anexo ? `${c.qtd - c.com_anexo} sem anexo` : 'todas com anexo',
+      temAlerta: !!(c.qtd - c.com_anexo),
+    } : null,
   });
 }
 
@@ -210,12 +222,13 @@ function agrupar(ns) {
   }));
 }
 
-/* Só a pasta Faturamento pede o ano inteiro. A resposta atrasada de outro ano ou pasta não fica guardada. */
+/* Notas do ano da pasta aberta, para o painel e a busca. A resposta atrasada de outro ano ou pasta não fica guardada. */
+const pastaDe = c => (c?.faturamento ? 'faturamento' : c?.user_id);
 async function carregarAno() {
   if (!listaAno) {
-    const a = ano;
-    const l = await dep.sb.arquivos.notas(colab.user_id, a, null, true);
-    if (a !== ano || !colab?.faturamento) return { grupos: [] };
+    const a = ano, pasta = pastaDe(colab);
+    const l = await dep.sb.arquivos.notas(colab.user_id, a, null, colab.faturamento);
+    if (a !== ano || pasta !== pastaDe(colab)) return { grupos: [] };
     listaAno = l;
   }
   return { grupos: agrupar(listaAno.notas || []) };
@@ -237,20 +250,19 @@ async function renderMes(s) {
   const mm = String(mes).padStart(2, '0');
   const padrao = { ...FILTRO_VAZIO, de: `${ano}-${mm}-01`, ate: `${ano}-${mm}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}` };
   const grupos = agrupar(ns);
-  /* Categorias recolhidas em todas as pastas (pedido do Paulo, 05/11/2026): cada pasta só mostra as categorias que têm nota.
-     Resumo no topo e relatórios são só do Faturamento: os relatórios da API não existem por colaborador. */
+  /* Categorias recolhidas e painel em todas as pastas (05/11/2026): cada pasta só mostra as categorias que têm nota.
+     Os relatórios são só do Faturamento: os da API não existem por colaborador. */
   const recolher = !!ns.length;
-  const comResumo = !!colab.faturamento && recolher;
   const somaDe = g => g.itens.reduce((s, n) => s + n.valor, 0);
-  const maior = comResumo ? grupos.reduce((a, g) => (somaDe(g) > somaDe(a) ? g : a)) : null;
+  const maior = recolher ? grupos.reduce((a, g) => (somaDe(g) > somaDe(a) ? g : a)) : null;
   const semAnexo = ns.length - comAnexo;
   mostrar('mes', {
     cabecalhoTitulo: `📁 ${esc(colab.nome || colab.email)} · ${dep.MESES_LONGO[mes]}`,
-    cabecalhoSub: comResumo ? '' : `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
+    cabecalhoSub: recolher ? '' : `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(total)} · ${comAnexo} com anexo`,
     recolher,
-    relatorios: comResumo,
+    relatorios: !!colab.faturamento && recolher,
     abertas: abertasMes,
-    resumo: comResumo ? {
+    resumo: recolher ? {
       totalTxt: brl(total),
       qtd: ns.length,
       anexoTxt: semAnexo ? `${semAnexo} sem anexo` : 'todas com anexo',
@@ -276,7 +288,7 @@ async function renderMes(s) {
 function limparBuscas() { listaAno = null; filtroMes = null; filtroAno = null; abertasMes = {}; }
 function mudarAno(d) { ano += d; resumo = null; lista = null; if (mes) mes = null; limparBuscas(); render(); }
 function abrirFaturamento() { colab = FAT; mes = null; mesesAbertos = false; limparBuscas(); render(); }
-function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; limparBuscas(); render(); }
+function abrirColab(id) { colab = (resumo?.colaboradores || []).find(c => c.user_id === id) || { user_id: id }; mes = null; mesesAbertos = false; limparBuscas(); render(); }
 function abrirMes(m) { mes = m; filtroMes = null; abertasMes = {}; render(); }
 function voltarMeses() { mes = null; lista = null; filtroMes = null; abertasMes = {}; render(); }
 function voltarColabs() { colab = null; mes = null; lista = null; limparBuscas(); render(); }
@@ -369,7 +381,7 @@ async function baixarRelatorioFat(formato) {
   } finally { dep.setLoading(false); }
 }
 
-function reset() { colab = null; mes = null; lista = null; limparBuscas(); }
+function reset() { colab = null; mes = null; lista = null; mesesAbertos = false; limparBuscas(); }
 
 /* MESMO NOME do módulo original (window.Arquivos) — substitui o
    arquivos.js de antes, não convive com ele. gestor.js chama

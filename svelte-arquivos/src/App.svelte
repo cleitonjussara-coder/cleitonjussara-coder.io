@@ -48,9 +48,19 @@
   let abertas = $state({ ...(dados?.abertas || {}) });
   let fechadasNoFiltro = $state({});   // separado: fechar antes de buscar não pode esconder a nota achada
   const estaAberta = g => (filtrando ? !fechadasNoFiltro[g.nome] : !!abertas[g.nome]);
-  /* Faturamento com notas: os meses ficam atrás de um botão. Ele é o caminho para o mês, então recolhe, não some. */
+  /* Pasta com notas: os meses ficam atrás de um botão. Ele é o caminho para o mês, então recolhe, não some. */
   const recolheMeses = !!(nivel === 'meses' && dados?.filtro && dados.temNotas);
   let mesesAbertos = $state(!!dados?.mesesAbertos);
+  /* Maior gasto do ano: vem das notas do ano, que chegam depois da tela */
+  const maiorAno = $derived.by(() => {
+    if (!gruposAno?.length) return null;
+    const total = gruposAno.reduce((s, g) => s + soma(g.itens), 0);
+    const g = gruposAno.reduce((a, b) => (soma(b.itens) > soma(a.itens) ? b : a));
+    return {
+      pct: total > 0 ? (soma(g.itens) / total * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%' : '—',
+      nome: g.nome.replace('RDM · ', ''),
+    };
+  });
   const alternarMeses = () => { mesesAbertos = !mesesAbertos; onMesesAbertos(mesesAbertos); };
   const alternar = g => {
     if (filtrando) { fechadasNoFiltro = { ...fechadasNoFiltro, [g.nome]: !fechadasNoFiltro[g.nome] }; return; }
@@ -232,6 +242,13 @@
 {:else if nivel === 'meses'}
   <div class="db-container">
     {@render cabecalho(dados.cabecalhoTitulo, dados.cabecalhoSub)}
+    {#if dados.resumoAno}
+      <div class="arq-kpis">
+        <div class="arq-kpi arq-kpi-total"><small>Total do ano</small><b>{dados.resumoAno.totalTxt}</b></div>
+        <div class="arq-kpi"><small>Notas</small><b>{dados.resumoAno.qtd}</b><span class={dados.resumoAno.temAlerta ? 'arq-kpi-alerta' : ''}>{dados.resumoAno.anexoTxt}</span></div>
+        <div class="arq-kpi"><small>Maior gasto</small><b>{maiorAno?.pct || '…'}</b><span>{maiorAno?.nome || ''}</span></div>
+      </div>
+    {/if}
     {#if dados.temNotas}
       <button class="btn btn-primary btn-full" style="min-height:50px" onclick={() => onBaixarZip(null)}>⬇️ Baixar ZIP do ano {ano} ({dados.comAnexo} anexo{dados.comAnexo === 1 ? '' : 's'} + planilha)</button>
       {#if dados.ehFaturamento}
