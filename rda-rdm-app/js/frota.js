@@ -407,16 +407,19 @@ window.Frota = (() => {
     if (r && !lista.some(v => v.id === r.veiculo_id)) lista.push(veiculos.find(v => v.id === r.veiculo_id) || { id: r.veiculo_id, placa: r.placa || '?', modelo: r.modelo });
     sel.innerHTML = lista.map(v => `<option value="${_at(v.id)}">${esc(v.placa)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ativo === false || !ativos.includes(v) ? ' (inativo)' : ''}</option>`).join('');
     $('km-data').max = hojeDoApp();                 // a leitura registra algo que já aconteceu
-    /* Veículo: só vem preenchido quando se sabe QUAL é (leitura editada, botão do próprio veículo, o veículo de que o
-       usuário é responsável, ou o único existente). Nunca "o último usado": isso levava a gravar na placa errada sem
-       perceber. Sem certeza, o campo fica vazio e obriga a escolher. */
+    /* Veículo: vem preenchido pela leitura editada, pelo botão do próprio veículo, pelo veículo de que o usuário é
+       responsável, pelo último que ELE registrou (pedido de 06/11/2026: fica fixado depois do primeiro registro) ou pelo
+       único existente. O risco de placa errada fica coberto pelo aviso de fixado e pela confirmação da placa ao salvar. */
     const meus = ativos.filter(v => v.responsavel_id === user?.id);
     const doBotao = veiculoId && ativos.find(v => v.id === veiculoId);
-    const certo = r?.veiculo_id || doBotao?.id || (meus.length === 1 ? meus[0].id : '') || (ativos.length === 1 ? ativos[0].id : '');
+    const ultimo = ativos.find(v => v.meu_ultimo);
+    const certo = r?.veiculo_id || doBotao?.id || (meus.length === 1 ? meus[0].id : '') || ultimo?.id || (ativos.length === 1 ? ativos[0].id : '');
     if (!certo) sel.insertAdjacentHTML('afterbegin', '<option value="">Escolha o veículo…</option>');
     sel.value = certo;
-    /* veículo cadastrado para a pessoa (responsável) fica FIXADO ao registrar uma leitura nova; "Usar outro veículo" destrava */
-    const fixar = !r && !doBotao && meus.length === 1 && certo === meus[0].id;
+    /* veículo cadastrado para a pessoa, ou o último dela, fica FIXADO ao registrar uma leitura nova; "Usar outro veículo" destrava */
+    const dele = meus.length === 1 && certo === meus[0].id;
+    const fixar = !r && !doBotao && !!certo && (dele || certo === ultimo?.id);
+    $('km-fixo-txt').textContent = dele ? 'Veículo cadastrado para você.' : 'Último veículo que você registrou.';
     sel.disabled = fixar;
     $('km-veiculo-fixo').style.display = fixar ? 'block' : 'none';
     $('km-data').value = r?.data || hojeDoApp();
@@ -628,6 +631,13 @@ window.Frota = (() => {
     return abrirForm();
   }
 
+  /* leitura nova: este passa a ser o veículo fixado da pessoa, já na próxima abertura, mesmo sem internet */
+  function _lembrarVeiculo(veiculoId) {
+    if ($('km-id').value) return;
+    veiculos.forEach(v => { v.meu_ultimo = v.id === veiculoId; });
+    DB.setMeta('frota_veiculos', veiculos).catch(() => {});
+  }
+
   async function salvar() {
     const id = $('km-id').value || _idNovo || crypto.randomUUID();
     const payload = {
@@ -671,6 +681,7 @@ window.Frota = (() => {
     try {
       if (!navigator.onLine || !sb) {
         await enfileirar(id, payload, foto);
+        _lembrarVeiculo(payload.veiculo_id);
         fecharForm();
         toast('📴 Sem internet: registro guardado no aparelho — sobe sozinho quando voltar o sinal');
         await _aposSalvar();
@@ -681,11 +692,13 @@ window.Frota = (() => {
       } catch (e) {
         if (!e?.status) {                          // caiu a rede no meio: fila
           await enfileirar(id, payload, foto);
+          _lembrarVeiculo(payload.veiculo_id);
           fecharForm(); toast('📴 Conexão falhou: registro guardado no aparelho');
           await _aposSalvar(); return;
         }
         throw e;                                    // 422/403: mostra o motivo
       }
+      _lembrarVeiculo(payload.veiculo_id);
       if (foto) {
         try { await sb.frota.kmFoto(id, foto.blob, foto.ext); }
         catch (e) {

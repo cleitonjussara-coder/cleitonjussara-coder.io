@@ -598,6 +598,20 @@ class HistoricoKmTest extends TestCase
         $this->putJson('/api/km/'.$antiga->id, ['veiculo_id' => $this->v2->id, 'data' => '2026-10-01', 'odometro' => 510])->assertOk();
     }
 
+    public function test_ultimo_veiculo_registrado_pela_pessoa_vem_marcado(): void
+    {
+        Sanctum::actingAs($this->bia);
+        $marcados = fn () => collect($this->getJson('/api/veiculos')->assertOk()->json())->where('meu_ultimo', true)->pluck('id')->all();
+        KmRegistro::where('user_id', $this->bia->id)->delete();
+        $this->assertSame([], $marcados());
+
+        KmRegistro::create(['id' => (string) Str::uuid(), 'veiculo_id' => $this->v1->id, 'user_id' => $this->bia->id, 'data' => '2026-10-01', 'odometro' => 100]);
+        $this->assertSame([$this->v1->id], $marcados());
+
+        KmRegistro::create(['id' => (string) Str::uuid(), 'veiculo_id' => $this->v2->id, 'user_id' => $this->bia->id, 'data' => '2026-10-02', 'odometro' => 100]);
+        $this->assertSame([$this->v2->id], $marcados());
+    }
+
     /* ── Hora do registro ──────────────────────────────────── */
 
     private function novoRegistro(array $extra = []): array

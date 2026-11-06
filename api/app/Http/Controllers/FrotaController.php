@@ -41,8 +41,11 @@ class FrotaController extends Controller
         /* a última leitura de cada veículo vai junto: o formulário de registro compara com ela,
            em qualquer mês, e o aparelho guarda para conferir sem internet */
         $ultimas = KmRegistro::ultimasPorVeiculo();
+        /* o último veículo que a pessoa registrou fica fixado no formulário dela (06/11/2026) */
+        $meuUltimo = KmRegistro::where('user_id', $u->id)->where('deleted', false)
+            ->orderByDesc('data')->orderByDesc('odometro')->value('veiculo_id');
 
-        return response()->json($q->get()->map(fn ($v) => $this->veiculoJson($v, $ultimas[$v->id] ?? null)));
+        return response()->json($q->get()->map(fn ($v) => $this->veiculoJson($v, $ultimas[$v->id] ?? null) + ['meu_ultimo' => $v->id === $meuUltimo]));
     }
 
     public function veiculoUpsert(Request $r, string $id): JsonResponse

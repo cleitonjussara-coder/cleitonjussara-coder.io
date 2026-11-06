@@ -287,6 +287,29 @@ const aviso = w => w.document.getElementById('km-odo-aviso').textContent;
     confere(!d.getElementById('km-vei-btn').disabled && d.getElementById('km-vei-busca').style.display === 'block', 'Usar outro veículo abre a lista');
   }
 
+  console.log('Veículo fixado depois do primeiro registro:');
+  {
+    const cel = celular();
+    VEICULOS.forEach(v => { delete v.meu_ultimo; delete v.responsavel_id; });
+    let w = abrirPagina(cel);
+    await w.Frota.lancar();
+    const d = () => w.document;
+    confere(!d().getElementById('km-veiculo').value && !d().getElementById('km-vei-btn').disabled, 'primeiro registro: campo vazio, pessoa escolhe');
+    digita(w, 'km-veiculo', V2); digita(w, 'km-odometro', '900'); digita(w, 'km-obs', 'Fazenda Teste');
+    await w.Frota.salvar();
+    w = abrirPagina(cel);
+    await w.Frota.lancar();
+    confere(d().getElementById('km-veiculo').value === V2 && d().getElementById('km-vei-btn').disabled, 'próximo registro: veículo preenchido e travado');
+    confere(/Último veículo/.test(d().getElementById('km-fixo-txt').textContent) && d().getElementById('km-veiculo-fixo').style.display === 'block', 'avisa que é o último registrado');
+    w.Frota.destravarVeiculo();
+    digita(w, 'km-veiculo', V1); digita(w, 'km-odometro', '901'); digita(w, 'km-obs', 'Fazenda Teste');
+    await w.Frota.salvar();
+    w = abrirPagina(cel);
+    await w.Frota.lancar();
+    confere(d().getElementById('km-veiculo').value === V1, 'usar outro veículo troca o fixado');
+    VEICULOS.forEach(v => { delete v.meu_ultimo; });
+  }
+
   console.log('Recarga automática de versão nova:');
   {
     const trecho = indexHtml.slice(indexHtml.indexOf("addEventListener('controllerchange'"), indexHtml.indexOf('location.reload();'));
