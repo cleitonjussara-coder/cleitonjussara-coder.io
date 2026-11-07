@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=556">
+  <link rel="manifest" href="manifest.json?v=557">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -714,6 +714,47 @@ select.inp{cursor:pointer}
 .eqp-soma button{border:1.5px solid transparent;background:rgba(0,0,0,.22);color:#fff;border-radius:12px;padding:7px 9px;text-align:left;font:inherit;cursor:pointer;min-width:0}
 .eqp-soma button.on{border-color:#fff;background:rgba(255,255,255,.2)}
 .eqp-soma small{display:block;font-size:12px;opacity:.85}.eqp-soma b{display:block;font-size:15px;overflow-wrap:anywhere}
+/* Início compacto (06/11/2026): as cores seguem o tema de #app-content */
+.ih{display:flex;flex-direction:column;gap:9px;padding:10px 12px 18px;color:var(--text);max-width:640px;margin:0 auto}
+.ih button{font:inherit;cursor:pointer}
+.ih-busca{border:1px solid rgba(185,226,74,.4);background:rgba(0,0,0,.28);color:var(--text2);border-radius:12px;padding:10px 12px;text-align:left;font-size:15px}
+.ih-cta{display:flex;align-items:center;gap:11px;border:0;border-radius:14px;padding:11px 13px;background:linear-gradient(135deg,#d9f5a0,#b9e24a);color:#10321c;text-align:left;box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.ih-cta-mais{width:38px;height:38px;border-radius:50%;background:#10321c;color:#d9f5a0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0}
+.ih-cta-t{flex:1;min-width:0;display:flex;flex-direction:column}.ih-cta b{font-size:18px}.ih-cta small{font-size:12.5px}.ih-cta em,.ih-eq em{font-style:normal;font-size:24px}
+.ih-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.ih-grid button{border:1px solid rgba(185,226,74,.3);border-radius:12px;background:var(--surface);color:var(--text);padding:8px 3px 7px;font-size:12px;font-weight:700;line-height:1.15;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;text-align:center;overflow-wrap:anywhere}
+.ih-grid button span{font-size:21px}
+@media (max-width:380px){.ih-grid button{padding:8px 1px 7px;font-size:11.5px;letter-spacing:-.2px}}
+@media (max-width:340px){.ih-grid button{font-size:10.5px}}
+.ih-grid button:active,.ih-cta:active,.ih-lado:active,.ih-nota:active,.ih-pend button:active{transform:scale(.97)}
+.ih-pend{background:#FFF7E6;color:#3b2a06;border-radius:12px;padding:7px 9px}.ih-pend>b{font-size:13px;color:#8a5a00}
+.ih-pend>div{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.ih-pend button{flex:1 1 30%;min-width:0;border:0;background:#fff;color:#3b2a06;border-radius:9px;padding:5px 6px;font-size:12px;line-height:1.15;text-align:left}.ih-pend strong{display:block;font-size:17px;color:#b45309}
+.ih-card{display:block;width:100%;background:var(--surface);border:1px solid rgba(185,226,74,.3);border-radius:13px;padding:9px 11px;color:var(--text);text-align:left}
+.ih-linha{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px}
+.ih-sub{font-size:12.5px;color:var(--text2)}
+.ih-mes{display:flex;align-items:center;gap:6px;min-width:0}.ih-mes button{border:0;background:none;color:var(--primary-d);font-size:22px;line-height:1;padding:2px 6px}
+.ih-link{border:0;background:none;padding:2px;font-size:13px;font-weight:700;color:var(--primary-d);white-space:nowrap}
+.ih-duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
+.ih-lado{border:0;background:rgba(0,0,0,.25);border-radius:10px;padding:7px 8px;color:var(--text);text-align:left;min-width:0}.ih-lado small{display:block;font-size:12.5px;font-weight:800;color:var(--text2)}.ih-lado strong{display:block;font-size:18px;overflow-wrap:anywhere}
+.ih-tag{display:inline-block;margin-top:3px;font-size:11.5px;font-weight:800;border-radius:9px;padding:1px 6px;overflow-wrap:anywhere}.ih-tag.receber{background:#ffd166;color:#4a3300}.ih-tag.adiantado{background:#b9e24a;color:#10321c}
+.ih-dias{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:6px}
+.ih-dias button{border:0;background:none;color:var(--text2);padding:0;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}.ih-dias button:disabled{opacity:.45;cursor:default}.ih-dias small{font-size:11px}
+.ih-dias i{font-style:normal;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.ih-dias .ok i{background:#b9e24a;color:#10321c}.ih-dias .hoje i{outline:2px solid #fff;outline-offset:1px}.ih-dias .sel i{background:#fff;color:#10321c}
+.ih-dia-info{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
+.ih-eq{display:flex;align-items:center;gap:10px}.ih-eq-i{font-size:22px}.ih-eq-t{flex:1;min-width:0;display:flex;flex-direction:column}.ih-eq b{font-size:14.5px}.ih-eq small{font-size:12.5px;color:var(--text2)}
+.ih-nota{display:flex;align-items:center;gap:9px;width:100%;border-top:1px solid var(--border);padding:6px 0;margin-top:5px;cursor:pointer}.ih-nota+.ih-nota{margin-top:0}
+.ih-nota-i{font-size:19px;width:32px;height:32px;border-radius:8px;background:rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ih-nota-t{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start}.ih-nota-t b{max-width:100%}.ih-nota-t b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ih-nota-t small{font-size:12px;color:var(--text2)}.ih-nota em{font-style:normal;font-weight:800;font-size:14px;white-space:nowrap}
+/* topo menor em todas as telas: antes a foto de 64 px jogava sino e foto para uma segunda linha no celular */
+#barra-usuario{flex-wrap:nowrap}
+#barra-usuario .ini-ola-txt{min-width:0;flex:1 1 auto}
+#barra-usuario-direita{gap:7px}
+#hdr-avatar-slot .avatar{width:42px;height:42px;font-size:17px}
+#hdr-sino{width:40px;height:40px;font-size:20px}
+#hdr-menu{width:42px;height:42px}
+@media (max-width:340px){#barra-usuario .ini-ola-txt h2{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#barra-usuario .ini-ola-data{display:none}}
+.hdr-banner{max-height:48px}
 .eqp-delta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;max-width:44%;text-align:right}.eqp-delta small{font-size:11.5px;opacity:.85;line-height:1.15}
 .eqp-dica{font-size:12.5px;color:var(--text2);font-weight:600}
 .eqp-cat{display:block;width:100%;border:0;border-top:1px solid var(--border);background:none;padding:7px 2px 6px;text-align:left;font:inherit;line-height:1.25;cursor:pointer;color:var(--text)}
@@ -2268,7 +2309,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=556" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=557" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2995,41 +3036,41 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=556"></script>
-<script defer src="js/db.js?v=556"></script>
-<script defer src="js/nfce.js?v=556"></script>
-<script defer src="js/sefaz.js?v=556"></script>
-<script defer src="js/brasilapi.js?v=556"></script>
-<script defer src="js/ocr.js?v=556"></script>
-<script defer src="js/scanner.js?v=556"></script>
-<script defer src="js/foto-branca.js?v=556"></script>
-<script defer src="js/recorte.js?v=556"></script>
-<script defer src="js/excel.js?v=556"></script>
-<script defer src="js/gestor.js?v=556"></script>
-<script defer src="js/frota.js?v=556"></script>
-<script defer src="js/frota-painel.js?v=556"></script>
-<script defer src="js/frota-planilha.js?v=556"></script>
-<script defer src="js/ponto.js?v=556"></script>
-<script defer src="js/rastreio.js?v=556"></script>
-<script defer src="js/repasses-equipe.js?v=556"></script>
-<script defer src="js/fechamento.js?v=556"></script>
-<script defer src="js/busca.js?v=556"></script>
-<script defer src="js/gdrive.js?v=556"></script>
+<script defer src="js/api.js?v=557"></script>
+<script defer src="js/db.js?v=557"></script>
+<script defer src="js/nfce.js?v=557"></script>
+<script defer src="js/sefaz.js?v=557"></script>
+<script defer src="js/brasilapi.js?v=557"></script>
+<script defer src="js/ocr.js?v=557"></script>
+<script defer src="js/scanner.js?v=557"></script>
+<script defer src="js/foto-branca.js?v=557"></script>
+<script defer src="js/recorte.js?v=557"></script>
+<script defer src="js/excel.js?v=557"></script>
+<script defer src="js/gestor.js?v=557"></script>
+<script defer src="js/frota.js?v=557"></script>
+<script defer src="js/frota-painel.js?v=557"></script>
+<script defer src="js/frota-planilha.js?v=557"></script>
+<script defer src="js/ponto.js?v=557"></script>
+<script defer src="js/rastreio.js?v=557"></script>
+<script defer src="js/repasses-equipe.js?v=557"></script>
+<script defer src="js/fechamento.js?v=557"></script>
+<script defer src="js/busca.js?v=557"></script>
+<script defer src="js/gdrive.js?v=557"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=556"></script>
+<script defer src="js/svelte-ajuda.js?v=557"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=556"></script>
+<script defer src="js/svelte-historico.js?v=557"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=556"></script>
+<script defer src="js/svelte-arquivos.js?v=557"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=556"></script>
-<script defer src="js/app.js?v=556"></script>
-<script defer src="js/instalar.js?v=556"></script>
+<script defer src="js/svelte-perfil.js?v=557"></script>
+<script defer src="js/app.js?v=557"></script>
+<script defer src="js/instalar.js?v=557"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=556').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=557').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

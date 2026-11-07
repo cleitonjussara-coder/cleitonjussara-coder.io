@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 556;
+const APP_BUILD = 557;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1133,6 +1133,21 @@ function _pendMenuHTML(lista) {
     <button onclick="fecharMenu();${p.acao}"><b>${p.n}</b>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</li>`;
 }
 
+function _pendInicioHTML(lista) {
+  if (!lista.length) return '<div id="ini-pend" hidden></div>';
+  return `<div class="ih-pend" id="ini-pend"><b>⚠️ Precisa de você</b><div>${lista.map(p => `
+    <button onclick="${p.acao}"><strong>${p.n}</strong>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</div></div>`;
+}
+
+const _PEND_FECHAMENTO = n => ({ n, um: 'nota no fechamento', varios: 'notas no fechamento', acao: 'abrirFechamentoPeloMenu()' });
+
+async function _pendFechamentoInicio(base) {
+  if (!_ehGestorOuAdmin() || !window.Fechamento) return;
+  const n = (await window.Fechamento.aguardando().catch(() => [])).length;
+  const alvo = $('ini-pend');
+  if (n && alvo) alvo.outerHTML = _pendInicioHTML([...base, _PEND_FECHAMENTO(n)]);
+}
+
 function abrirFechamentoPeloMenu() {
   window.Fechamento?.abrirQuadro();
   window.Gestor?.definirAba('rel');
@@ -1145,7 +1160,7 @@ async function _pendFechamentoMenu(base) {
   const n = (await window.Fechamento.aguardando().catch(() => [])).length;
   const alvo = $('menu-pend');
   if (!n || !alvo || !$('menu-drawer-overlay')?.classList.contains('open')) return;
-  alvo.outerHTML = _pendMenuHTML([...base, { n, um: 'nota no fechamento', varios: 'notas no fechamento', acao: 'abrirFechamentoPeloMenu()' }]);
+  alvo.outerHTML = _pendMenuHTML([...base, _PEND_FECHAMENTO(n)]);
 }
 
 function abrirMenu() {
@@ -3974,223 +3989,167 @@ function _faixaLancamentoDiarioHTML() {
     <div class="ini-dica ini-lanc" onclick="switchView('despesas')">📅 Lançamento é diário: sua última nota foi lançada ${quando}. Se teve gasto, lance hoje.</div>`;
 }
 
+/* Início compacto (06/11/2026, pedido do Cleiton): um botão principal e atalhos no lugar dos painéis empilhados, para o resumo, a
+   semana e os lançamentos caberem perto do topo. As contas do resumo são as de sempre; "Lançar nota" é o mesmo texto em todo regime. */
+function _iniAtalhos() {
+  const a = (ico, rot, acao) => ({ ico, rot, acao });
+  if (_ehContabilidade()) {
+    return [a('👥', 'Equipe', "switchView('equipe')"), a('📁', 'Arquivos', "switchView('arquivos')"),
+      a('🏢', 'Notas faturadas', 'abrirNotasFaturadas()'), a('🔎', 'Buscar', 'Busca.abrir()')];
+  }
+  const lista = _usaCartao()
+    ? [a('💵', 'Repasse', "abrirFormRepasse(null, null, null, 'carteira')"), a('💳', 'Recarga', "abrirFormRepasse(null, null, null, 'recarga')")]
+    : [a('💸', 'Pedir repasse', 'abrirFormRepasse()')];
+  if (_veFrota()) lista.push(a('🛣️', 'Lançar KM', 'Frota.lancar()'));
+  if (_ehGestorOuAdmin()) {
+    lista.push(a('🏢', 'Faturamento', 'iniciarFaturamento()'), a('🗂️', 'Notas faturadas', 'abrirNotasFaturadas()'),
+      a('🤝', 'Lançar repasse', 'iniciarRepasseColaborador()'), a('💳', 'Lançar recarga', 'iniciarRecargaColaborador()'));
+    lista.push(user?.role === 'admin' ? a('✏️', 'Editar nota', 'iniciarEdicaoNotaColaborador()') : a('📁', 'Arquivos', "switchView('arquivos')"));
+    lista.push(a('👥', 'Equipe', "switchView('equipe')"));
+    return lista;
+  }
+  lista.push(a('🧾', 'Minhas notas', 'irParaNotas()'));
+  if (lista.length < 4) lista.push(a('📊', 'Painel', "switchView('home')"));
+  return lista;
+}
+
+/* Semana de domingo a sábado no fuso de Brasília. O dia conta pela data da nota, não pelo momento em que ela foi lançada. */
+function _iniDiasDaSemana() {
+  const hoje = FusoBR.hojeISO();
+  const base = new Date(hoje + 'T12:00:00Z');
+  const dow = base.getUTCDay();
+  return ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((letra, i) => {
+    const iso = new Date(base.getTime() + (i - dow) * 86400000).toISOString().slice(0, 10);
+    const doDia = notas.filter(n => !n.deleted && String(n.data || '').slice(0, 10) === iso);
+    return { letra, iso, qtd: doDia.length, valor: _soma(doDia), hoje: iso === hoje, futuro: iso > hoje };
+  });
+}
+
+let _iniDiaSel = null;
+function iniTocarDia(iso) {
+  const c = $('app-content'), y = c?.scrollTop || 0;
+  _iniDiaSel = _iniDiaSel === iso ? null : iso;
+  renderInicio();
+  if (c) c.scrollTop = y;
+}
+
+function _iniSemanaHTML() {
+  const dias = _iniDiasDaSemana();
+  const comNota = dias.filter(d => d.qtd > 0).length;
+  const sel = dias.find(d => d.iso === _iniDiaSel);
+  return `<div class="ih-card">
+    <div class="ih-linha"><b>📅 Esta semana</b><span class="ih-sub">lançou em ${comNota} de 7 dias</span></div>
+    <div class="ih-dias">${dias.map(d => `<button class="${d.qtd ? 'ok' : ''} ${d.hoje ? 'hoje' : ''} ${d.iso === _iniDiaSel ? 'sel' : ''}" ${d.futuro ? 'disabled' : ''} aria-label="${fmtDataBR(d.iso)}: ${d.qtd} nota${d.qtd === 1 ? '' : 's'}" onclick="iniTocarDia('${d.iso}')"><small>${d.letra}</small><i>${d.qtd || '·'}</i></button>`).join('')}</div>
+    ${sel ? `<div class="ih-dia-info">${sel.qtd
+      ? `<span>${fmtDataBR(sel.iso)} · ${sel.qtd} nota${sel.qtd === 1 ? '' : 's'} · ${brl(sel.valor)}</span><button class="ih-link" onclick="irParaNotas('dia:${sel.iso}')">ver ›</button>`
+      : `<span>${fmtDataBR(sel.iso)} · nenhuma nota</span><button class="ih-link" onclick="switchView('despesas')">lançar ›</button>`}</div>` : ''}
+  </div>`;
+}
+
+function _iniUltimosHTML(ultimas) {
+  if (!ultimas.length) return `<div class="ini-dica">👆 Ainda não há lançamentos. Toque em <b>Lançar nota</b>, lá em cima, para começar.</div>`;
+  return `<div class="ih-card">
+    <div class="ih-linha"><b>Últimos lançamentos</b><button class="ih-link" onclick="irParaNotas()">ver todas ›</button></div>
+    ${ultimas.map(n => {
+      const cat = _categoriaCV(_chaveCategoriaDetalhe(n));
+      return `<div class="ih-nota" role="button" tabindex="0" data-nota="${_at(n.id)}" onclick="editarNota(this.dataset.nota)">
+        <span class="ih-nota-i" aria-hidden="true">${cat?.ico || '🧾'}</span>
+        <span class="ih-nota-t"><b>${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</b><small>${esc(cat?.nome || n.tipo)} · ${fmtDataBR(String(n.data || '').slice(0, 10))}</small>${n.sync_status === 'failed' || n.synced === false ? _statusNota(n) : ''}</span>
+        <em>${Number(n.valor) > 0 ? brl(n.valor) : '⚠️ sem valor'}</em>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* Hoje na equipe: vem do servidor, que tem as notas de todos. Sem internet o cartão fica oculto. */
+const _INI_EQUIPE_CACHE_MS = 60000;
+let _iniEquipe = { dono: null, em: 0, dia: null, notas: null };
+async function _pintarEquipeHoje() {
+  const alvo = $('ini-equipe-hoje');
+  if (!alvo || !sb || !navigator.onLine || !_veEquipe()) return;
+  const hoje = FusoBR.hojeISO();
+  try {
+    if (_iniEquipe.dono !== user?.id || _iniEquipe.dia !== hoje || Date.now() - _iniEquipe.em > _INI_EQUIPE_CACHE_MS) {
+      const p = FusoBR.partes();
+      const lista = await sb.notas.list({ ano: p.ano, mes: p.mes, deleted: '0', fields: 'user_id,valor,data,deleted' });
+      _iniEquipe = { dono: user?.id, em: Date.now(), dia: hoje, notas: (lista || []).filter(n => !n.deleted && String(n.data || '').slice(0, 10) === hoje) };
+    }
+  } catch (_) { return; }
+  const ns = _iniEquipe.notas || [];
+  const pessoas = new Set(ns.map(n => n.user_id).filter(Boolean)).size;
+  const fim = $('ini-equipe-hoje');
+  if (!fim) return;
+  fim.innerHTML = `<button class="ih-card ih-eq" onclick="switchView('equipe')">
+    <span class="ih-eq-i" aria-hidden="true">👥</span>
+    <span class="ih-eq-t"><b>Hoje na equipe</b><small>${ns.length
+      ? `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(_soma(ns))} · ${pessoas} ${pessoas === 1 ? 'pessoa lançou' : 'pessoas lançaram'}`
+      : 'Nenhuma nota com a data de hoje'}</small></span>
+    <em aria-hidden="true">›</em>
+  </button>`;
+}
+
 function renderInicio() {
   const A = _agregaPeriodo(filMes, filAno, 'mensal');
-  const hora = FusoBR.partes().hora;
-  const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
-  const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
-  const hojeTxt = new Date().toLocaleDateString('pt-BR', { timeZone: FusoBR.TZ, weekday: 'long', day: '2-digit', month: 'long' });
-
   _recalcularDuplicatas(notas);
-  /* 24/09/2026: os contadores separados (sem anexo, sem valor, sem CNPJ…)
-     saíram daqui. Tudo vem de _notasComPendencia(), que é a MESMA lista que
-     o toque abre — assim o número da faixa, o resumo e a lista nunca
-     divergem, como divergiram quando as notas da equipe entraram. */
-  const _pendNotas = _notasComPendencia();
-  const pendTotal = _pendNotas.length;
-  const _contagem = {};
-  _pendNotas.forEach(({ motivos }) => motivos.forEach(m => { _contagem[m] = (_contagem[m] || 0) + 1; }));
-  const pendTxt = Object.entries(_contagem).map(([m, q]) => q + ' ' + m).join(' · ');
+  const contador = _ehContabilidade();
 
   const ultimas = [...notas].filter(n => !n.deleted)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 3);
 
-  /* Resumo de gastos (26/09/2026, pedido do Cleiton): mesmo total do
-     Painel, só resumido — o donut não é tocável aqui, o cartão inteiro
-     leva pra lá. RDM e RDA (ou Cartão e Carteira, no C.V.) aparecem
-     separados, cada um com gasto do mês + saldo a receber (pedido do
-     Cleiton: "mostrar saldo dos dois separados", "de forma mais resumida
-     possível" — por isso não repete as subcategorias do Painel aqui). */
-  const _ehCartaoIni = _usaCartao();
+  /* Resumo do mês (26/09/2026, pedido do Cleiton): RDM e RDA, ou Cartão e Carteira no C.V., cada um com o gasto do mês e o saldo.
+     São as mesmas contas do Saldo. O saldo do ano anterior segue no Painel e em RDM/RDA e Planilhas. */
   let _tipos = [];
-  if (!_ehContabilidade()) {
-    if (_ehCartaoIni) {
-      /* 16/10/2026 (pedido do Cleiton): o resumo também aparece para o C.V., com gasto do cartão e da carteira, o saldo do
-         cartão e o reembolso a receber — as mesmas contas do Saldo (_saldoCartao e _devedorDe), só leitura. As duas linhas
-         aparecem sempre: o saldo do cartão e o que falta reembolsar valem mesmo num mês sem gasto de um dos lados. */
-      const _nsCv = notas.filter(n => !n.deleted), _rsCv = repasses.filter(r => !r.deleted);
-      /* 04/11/2026: cartão e carteira são os do ANO aberto, os números da ficha e da planilha (no ano corrente, iguais
-         aos de hoje), para fechar com a linha do ano anterior; "acabando" fala de hoje, não acende em ano passado nem
-         para quem nunca teve recarga. O sinal é o da ficha, por isso a frase diz quem deve. */
-      const _sc = _saldosCvDoAno(_nsCv, _rsCv, filAno);
-      const _saldoCart = _sc.cartao;
-      const _acabando = _sc.temRecarga && _saldoCart < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
+  if (!contador) {
+    if (_usaCartao()) {
+      const _sc = _saldosCvDoAno(notas.filter(n => !n.deleted), repasses.filter(r => !r.deleted), filAno);
+      /* "acabando" fala de hoje: não acende em ano passado nem para quem nunca teve recarga */
+      const _acabando = _sc.temRecarga && _sc.cartao < CARTAO_SALDO_MINIMO && filAno >= FusoBR.partes().ano;
       const _aReemb = -_sc.reemb.saldo;
-      const _antReemb = _sc.reemb.ant;
-      /* RDM e RDA lançados no cartão e lançados na carteira (pedido do Cleiton): o gasto de cada lado aberto por aba */
-      const _gasto = (carteira, tipo) => _soma(A.ns.filter(x => _naoEhFaturamento(x) && x.tipo === tipo
-        && (carteira ? x.pagamento === 'carteira' : _notaDoCartao(x))));
-      const _det = carteira => 'RDM ' + brl(_gasto(carteira, 'RDM')) + ' · RDA ' + brl(_gasto(carteira, 'RDA'));
       _tipos = [
-        { sigla: '💳 Cartão', cor: 'var(--accent-d)', gasto: A.gastoCartao,
-          txt: 'saldo ' + brl(_saldoCart) + (_acabando ? ' · acabando' : ''),
-          cls: _acabando ? 'receber' : 'adiantado', det: _det(false),
-          ant: 'Saldo do ano anterior ' + Gestor.brlInteiro(_sc.cartaoAnterior) + _comSentido(_sc.cartaoAnterior) },
-        { sigla: '💵 Carteira', cor: 'var(--primary)', gasto: A.gastoBolso,
+        { k: 'cartao', sigla: '💳 Cartão', gasto: A.gastoCartao, txt: 'saldo ' + brl(_sc.cartao) + (_acabando ? ' · acabando' : ''), cls: _acabando ? 'receber' : 'adiantado' },
+        { k: 'carteira', sigla: '💵 Carteira', gasto: A.gastoBolso,
           txt: _aReemb > 0.004 ? brl(_aReemb) + ' a receber' : _aReemb < -0.004 ? brl(-_aReemb) + ' reembolsado a mais' : 'reembolso em dia',
-          cls: _aReemb > 0.004 ? 'receber' : 'adiantado', det: _det(true),
-          ant: 'Saldo do ano anterior ' + Gestor.brlInteiro(_antReemb) + _comSentido(_antReemb) },
+          cls: _aReemb > 0.004 ? 'receber' : 'adiantado' },
       ];
     } else {
       const _nsAll = notas.filter(n => !n.deleted), _rsAll = repasses.filter(r => !r.deleted);
-      const _antIni = Gestor.saldoAnoAnterior(_nsAll, _rsAll, filAno);
-      const _linhaAnt = v => 'Saldo do ano anterior ' + Gestor.brlInteiro(v) + _comSentido(v);
-      _tipos = [
-        { sigla:'RDM', cor:'var(--accent-d)', gasto:A.rdmG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDM'), ant:_linhaAnt(_antIni.RDM) },
-        { sigla:'RDA', cor:'var(--primary)',  gasto:A.rdaG, saldo:_devedorDe(_nsAll, _rsAll, filMes, filAno, false, 'RDA'), ant:_linhaAnt(_antIni.RDA) },
-      ];
+      const lado = (k, gasto) => {
+        const saldo = _devedorDe(_nsAll, _rsAll, filMes, filAno, false, k);
+        return { k, sigla: k, gasto, txt: saldo > 0 ? brl(saldo) + ' a receber' : saldo < 0 ? brl(-saldo) + ' adiantado' : 'em dia', cls: saldo > 0 ? 'receber' : 'adiantado' };
+      };
+      _tipos = [lado('RDM', A.rdmG), lado('RDA', A.rdaG)];
     }
   }
-  /* 03/11/2026 (pedido do Cleiton, por print): o total único saiu — RDM à esquerda e RDA à direita, cada um com o próprio
-     gasto do mês, saldo e um donut pequeno (fatia dele no gasto do mês). Os dois lados aparecem sempre, mesmo com um deles
-     zerado, para o saldo (adiantado / a receber) não sumir. */
-  const _totTipos = _tipos.reduce((s, t) => s + (t.gasto > 0 ? t.gasto : 0), 0);
-  const _miniDonut = t => {
-    const R = 17, C = 2 * Math.PI * R, len = _totTipos > 0 && t.gasto > 0 ? Math.min(1, t.gasto / _totTipos) * C : 0;
-    return `<svg viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="${R}" fill="none" stroke="var(--border)" stroke-width="7"/>`
-      + (len > 0 ? `<circle cx="23" cy="23" r="${R}" fill="none" stroke="${t.cor}" stroke-width="7" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" transform="rotate(-90 23 23)"/>` : '')
-      + '</svg>';
-  };
-  const resumoGastos = (!_ehContabilidade() && A.gasto > 0) ? `
-    <div class="ini-resumo" onclick="switchView('home')">
-      <div class="ini-resumo-cab">
-        <div class="ini-resumo-duo">${_tipos.map(t => `
-          <div class="ini-resumo-lado">
-            <div class="ini-resumo-donut">${_miniDonut(t)}</div>
-            <div class="ini-resumo-txt">
-              <div class="ini-resumo-sigla">${t.sigla}</div>
-              <div class="ini-resumo-tot">${brl(t.gasto)}</div>
-              <div class="ini-resumo-lbl">gasto em ${MESES[filMes-1]}</div>${t.txt === '' ? '' : `
-              <span class="ini-resumo-saldo ${t.txt != null ? t.cls : (t.saldo > 0 ? 'receber' : t.saldo < 0 ? 'adiantado' : '')}">${
-                t.txt != null ? esc(t.txt)
-                : t.saldo > 0 ? brl(t.saldo) + ' a receber' : t.saldo < 0 ? brl(-t.saldo) + ' adiantado' : 'em dia'
-              }</span>`}${t.ant ? `<span class="ini-resumo-det">${esc(t.ant)}</span>` : ''}${t.det ? `<span class="ini-resumo-det">${esc(t.det)}</span>` : ''}
-            </div>
-          </div>`).join('')}
-        </div>
-        <span class="ini-resumo-seta">›</span>
-      </div>
-    </div>` : '';
-
-  $('app-content').innerHTML = `
-  <div class="db-container">
+  const resumo = contador ? '' : `<div class="ih-card">
+    <div class="ih-linha">
+      <span class="ih-mes"><button onclick="mudarMes(-1)" aria-label="Mês anterior">‹</button><b>${MESES_LONGO_ARQUIVOS[filMes]} ${filAno}</b><button onclick="mudarMes(1)" aria-label="Próximo mês">›</button></span>
+      <button class="ih-link" onclick="switchView('home')">Painel ›</button>
     </div>
-    ${_avisoEquipeDevedoraHTML()}
-    ${_cartaoPedidoAbertoHTML()}
-    ${resumoGastos}
-
-    <!-- 20/09/2026: QR + Nota sem QR + Repasse viraram UM painel que abre a
-         tela com os três. 21/09/2026: virou "Petermann – Despesas" e passou a
-         guardar também Painel, Minhas notas, Saldo, Equipe e Arquivos.
-         26/09/2026: Perfil/Frota/Ponto saíram pro menu ☰ lateral — o
-         "Ir para" da Início não existe mais. -->
-    <div class="ini-paineis">
-      <button class="pnl pnl-grande" onclick="switchView('${_ehContabilidade() ? 'equipe' : 'despesas'}')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">${_ehContabilidade() ? '👥' : '🧾'}</span>
-          ${/* 25/09/2026: o nome "Petermann – Despesas" saiu; quem vira título
-                grande é a ação do cartão, que era o subtítulo miúdo. */''}
-          <span class="pnl-tit pnl-tit-frase">${_ehContabilidade()
-            ? "Equipe e relatórios"
-            : _ehCV()
-              ? 'Postar nota de C.V. e repasse<span style="color:#e6f55a">/reembolso</span>'
-              : "Lançar nota de RDM e RDA"}</span>
-        </span>
-      </button>
-      ${_ehContabilidade() ? `
-      <button class="pnl pnl-grande" onclick="switchView('arquivos')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">📁</span>
-          <span class="pnl-tit pnl-tit-frase">Arquivos e anexos</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="abrirNotasFaturadas()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🏢</span>
-          <span class="pnl-tit pnl-tit-frase">NOTAS FATURADAS</span>
-        </span>
-      </button>` : _usaCartao() ? `
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'carteira')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">💵</span>
-          <span class="pnl-tit">Repasse</span>
-          <span class="pnl-sub">pedir ao gestor</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse(null, null, null, 'recarga')">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">💳</span>
-          <span class="pnl-tit">Recarga do cartão</span>
-          <span class="pnl-sub">${_saldoCartao() != null ? 'saldo hoje: ' + brl(_saldoCartao()) : 'pedir recarga ao gestor'}</span>
-        </span>
-      </button>
-` : `
-      <button class="pnl pnl-grande" onclick="abrirFormRepasse()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">💸</span>
-          <span class="pnl-tit">Repasse</span>
-          <span class="pnl-sub">pedir ao gestor (PIX)</span>
-        </span>
-      </button>`}
-      ${_veFrota() ? `
-      <button class="pnl pnl-grande" onclick="Frota.lancar()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🛣️</span>
-          <span class="pnl-tit">Lançar KM</span>
-          <span class="pnl-sub">leitura do odômetro do veículo</span>
-        </span>
-      </button>` : ''}
-      ${_ehGestorOuAdmin() ? `
-      <button class="pnl pnl-grande" onclick="iniciarFaturamento()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🏢</span>
-          <span class="pnl-tit">Lançar Faturamento</span>
-          <span class="pnl-sub">nota paga direto pela empresa</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="abrirNotasFaturadas()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🗂️</span>
-          <span class="pnl-tit">NOTAS FATURADAS</span>
-          <span class="pnl-sub">ver, corrigir ou excluir as já lançadas</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="iniciarRepasseColaborador()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">🤝</span>
-          <span class="pnl-tit">Lançar repasse</span>
-          <span class="pnl-sub">para um colaborador, entra direto no saldo</span>
-        </span>
-      </button>
-      <button class="pnl pnl-grande" onclick="iniciarRecargaColaborador()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">💳</span>
-          <span class="pnl-tit">Lançar recarga</span>
-          <span class="pnl-sub">cartão corporativo de um colaborador CV</span>
-        </span>
-      </button>` : ''}
-      ${user?.role === 'admin' ? `
-      <button class="pnl pnl-grande" onclick="iniciarEdicaoNotaColaborador()">
-        <span class="pnl-conteudo">
-          <span class="pnl-ico">✏️</span>
-          <span class="pnl-tit">Editar nota de colaborador</span>
-          <span class="pnl-sub">corrigir lançamento de alguém da equipe</span>
-        </span>
-      </button>` : ''}
-    </div>
-    ${_faixaLancamentoDiarioHTML()}
-    ${!_ehContabilidade() && pendTotal ? `
-    <div class="ini-dica" style="cursor:pointer" onclick="abrirPendencias()">${_pendNotas.length === 1
-      ? `⚠️ <b>1 nota para corrigir</b>: ${_ehNotaDeOutroUsuario(_pendNotas[0].nota) ? esc(_pendNotas[0].nota.user_nome || _rotuloProprietario(_pendNotas[0].nota)) + ' · ' : ''}${esc(_pendNotas[0].nota.razao_social || (_pendNotas[0].nota.cnpj ? BrasilAPI.formatar(_pendNotas[0].nota.cnpj) : 'sem empresa'))} · ${fmtDataBR(_pendNotas[0].nota.data)} — <b>${esc(_pendNotas[0].motivos.join(' · '))}</b>. Toque para corrigir.`
-      : `⚠️ <b>${_pendNotas.length} notas para corrigir</b>: ${esc(pendTxt)} — <b>toque para ver e corrigir</b>.`}</div>` : ''}
-
-    ${_ehContabilidade() ? '' : ultimas.length ? `
-    <div class="ini-titulo">Últimos lançamentos</div>
-    <div class="notas-list">${ultimas.map(n => cardNotaHTML(n, 'inithumb-')).join('')}</div>` : `
-    <div class="ini-dica">👆 Ainda não há lançamentos. Toque no <b>painel 🧾 lá em cima</b>, escolha ${_usaCartao() ? "a <b>categoria</b>" : "a aba <b>RDA</b> ou <b>RDM</b>"} e lance pelo <b>QR Code</b> — é o jeito mais rápido.</div>`}
+    <div class="ih-duo">${_tipos.map(t => `<button class="ih-lado" onclick="irParaNotas('grupo:${t.k}')"><small>${t.sigla}</small><strong>${brl(t.gasto)}</strong><span class="ih-tag ${t.cls}">${esc(t.txt)}</span></button>`).join('')}</div>
   </div>`;
 
-  if (ultimas.length) _carregarMiniaturas(ultimas, 'inithumb-').catch(() => {});
+  const pend = _pendenciasMenu();
+  $('app-content').innerHTML = `
+  <div class="ih">
+    <button class="ih-busca" onclick="Busca.abrir()"><span aria-hidden="true">🔎</span> ${_veEquipe() ? 'Buscar nota, pessoa ou tela…' : 'Buscar nota ou tela…'}</button>
+    ${contador ? '' : `<button class="ih-cta" onclick="switchView('despesas')">
+      <span class="ih-cta-mais" aria-hidden="true">＋</span>
+      <span class="ih-cta-t"><b>Lançar nota</b><small>QR, foto ou digitando</small></span>
+      <em aria-hidden="true">›</em>
+    </button>`}
+    <div class="ih-grid">${_iniAtalhos().map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
+    ${_pendInicioHTML(pend)}
+    ${_avisoEquipeDevedoraHTML()}
+    ${_cartaoPedidoAbertoHTML()}
+    ${_faixaLancamentoDiarioHTML()}
+    ${resumo}
+    ${contador ? '' : _iniSemanaHTML()}
+    <div id="ini-equipe-hoje"></div>
+    ${contador ? '' : _iniUltimosHTML(ultimas)}
+  </div>`;
+
+  _pintarEquipeHoje().catch(() => {});
+  _pendFechamentoInicio(pend).catch(() => {});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -5223,7 +5182,20 @@ function _passaFiltroNota(n) {
   if (filtroNotasFlag === 'pendente')      return n.sync_status === 'failed' || n.synced === false;
   if (filtroNotasFlag === 'data-suspeita') return _dataImplausivel(n);
   if (filtroNotasFlag === 'duplicata')     return _dupMapa.has(n.id);
+  const f = String(filtroNotasFlag || '');
+  if (f.startsWith('dia:')) return String(n.data || '').slice(0, 10) === f.slice(4);
+  /* grupo do resumo do Início: mesmo recorte do valor mostrado lá, sem o Faturamento */
+  if (f === 'grupo:cartao')   return _naoEhFaturamento(n) && _notaDoCartao(n);
+  if (f === 'grupo:carteira') return n.pagamento === 'carteira';
+  if (f.startsWith('grupo:')) return _naoEhFaturamento(n) && n.tipo === f.slice(6);
   return true;
+}
+
+function _rotuloFiltroNota() {
+  const f = String(filtroNotasFlag || '');
+  if (f.startsWith('dia:')) return '📅 ' + fmtDataBR(f.slice(4));
+  if (f.startsWith('grupo:')) return ({ cartao: '💳 Cartão', carteira: '💵 Carteira' })[f.slice(6)] || f.slice(6);
+  return _ROTULO_FLAG[f] || '📅 Ano inteiro';
 }
 
 /* "⚠️ falhou ›": mostra o MOTIVO (antes o app só dizia que falhou) e o que fazer. A nota continua guardada no
@@ -5754,13 +5726,14 @@ function renderNotas() {
   _recalcularDuplicatas(notas);
   const el = $('app-content');
   _selNotas.clear();   // lista nova: volta ao modo normal, sem seleção
-  const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO;
+  const soDoDia = String(filtroNotasFlag || '').startsWith('dia:');   // a semana do Início pode cruzar a virada do mês
+  const semPeriodo = filtroNotasFlag === _FLAG_SEM_PERIODO || soDoDia;
   const noPeriodo  = n => semPeriodo || (n.ano === filAno && (filtroNotasAno || n.mes === filMes));
   const ns = notas
     .filter(n => !n.deleted && noPeriodo(n) && _passaFiltroNota(n))
     .sort((a,b) => _dataDe(b).localeCompare(_dataDe(a)));
 
-  const periodo = semPeriodo ? 'Todos os períodos'
+  const periodo = soDoDia ? fmtDataBR(filtroNotasFlag.slice(4)) : semPeriodo ? 'Todos os períodos'
                 : filtroNotasAno ? String(filAno) : `${MESES[filMes-1]} ${filAno}`;
 
   let html = `
@@ -5783,7 +5756,7 @@ function renderNotas() {
 
   if (filtroNotasFlag || filtroNotasAno) {
     html += `<div class="fil-ativo">
-      <span>${_ROTULO_FLAG[filtroNotasFlag] || '📅 Ano inteiro'}${
+      <span>${_rotuloFiltroNota()}${
         filtroNotasFlag && filtroNotasAno ? ' · ano inteiro' : ''} — ${ns.length} nota${
         ns.length === 1 ? '' : 's'}</span>
       <button onclick="limparFiltroNotas()" title="Limpar filtro">✕</button>
@@ -6207,6 +6180,7 @@ function mudarMes(delta) {
   if (viewAtual==='home')  renderHome();
   if (viewAtual==='notas') renderNotas();
   if (viewAtual==='saldo') renderSaldo();
+  if (viewAtual==='inicio') renderInicio();
   _garantirAnoEmFoco();
 }
 

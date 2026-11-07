@@ -1,0 +1,159 @@
+#!/usr/bin/env node
+// Teste do Início compacto (06/11/2026). Sem navegador e sem servidor:
+//   node scripts/testar-inicio.js
+// Roda as funções do Início tiradas do próprio app.js, com jsdom. Sai com código 1 se algum caso falhar.
+const fs = require('fs');
+const path = require('path');
+const { JSDOM } = require(process.env.JSDOM_DIR || path.join(__dirname, '..', 'rda-rdm-app', 'node_modules', 'jsdom'));
+
+const app = fs.readFileSync(path.join(__dirname, '..', 'rda-rdm-app', 'js', 'app.js'), 'utf8');
+const trecho = (de, ate) => { const i = app.indexOf(de); const f = app.indexOf(ate, i); if (i < 0 || f < 0) throw new Error('trecho: ' + de); return app.slice(i, f); };
+const var_ = t => t.replace(/^(const|let) /gm, 'var ');
+const categorias = var_(trecho('const CATEGORIAS_CV = [', '/* ─── Resumo de gastos e saldo devedor'));
+const pendMenu = var_(trecho('function _pendenciasMenu() {', 'function fecharMenu()'));
+const inicio = var_(trecho('function _iniAtalhos() {', '/* ═══════════════════════════════════════════════════════════\n   VIEW: HOME'));
+const filtro = var_(trecho('function _passaFiltroNota(n) {', '/* "⚠️ falhou ›"'));
+
+let falhas = 0;
+const confere = (ok, msg) => { console.log((ok ? '  ok  ' : '  FALHOU  ') + msg); if (!ok) falhas++; };
+
+const dom = new JSDOM('<main id="app-content"></main><div id="menu-drawer-overlay"></div>', { runScripts: 'dangerously', url: 'http://localhost/' });
+const w = dom.window;
+w.eval(`
+  var user = null, sb = null, notas = [], repasses = [], avisos = [], pend = [], cartaoUsa = false, filMes = 11, filAno = 2026, viu = [];
+  var MESES_LONGO_ARQUIVOS = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var CARTAO_SALDO_MINIMO = 100, _dupMapa = new Map(), filtroNotasFlag = null, _ROTULO_FLAG = {};
+  var FusoBR = { hojeISO: () => '2026-11-06', partes: () => ({ ano: 2026, mes: 11, dia: 6 }) };
+  var $ = id => document.getElementById(id);
+  var esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var _at = esc, brl = v => 'R$ ' + Number(v).toFixed(2), fmtDataBR = d => d;
+  var _soma = a => a.reduce((t, x) => t + Number(x.valor || 0), 0);
+  var _ehGestorOuAdmin = () => ['gestor','admin'].includes(user.role);
+  var _ehContabilidade = () => user.role === 'contabilidade';
+  var _veEquipe = () => _ehGestorOuAdmin() || _ehContabilidade();
+  var _veFrota = () => !_ehContabilidade();
+  var _usaCartao = () => cartaoUsa;
+  var _naoEhFaturamento = n => n.pagamento !== 'empresa';
+  var _notaDoCartao = n => n.pagamento !== 'carteira' && n.pagamento !== 'empresa';
+  var _notasComPendencia = () => pend, _notificacoes = () => avisos, _recalcularDuplicatas = () => {};
+  var _agregaPeriodo = () => ({ rdmG: 150, rdaG: 40, gastoCartao: 150, gastoBolso: 40 });
+  var _devedorDe = (ns, rs, m, a, cv, t) => t === 'RDM' ? 25 : -10;
+  var _saldosCvDoAno = () => ({ temRecarga: true, cartao: 50, reemb: { saldo: -30 } });
+  var _avisoEquipeDevedoraHTML = () => '', _cartaoPedidoAbertoHTML = () => '', _faixaLancamentoDiarioHTML = () => '<div class="aviso-dia"></div>';
+  var _statusNota = n => n.sync_status === 'failed' ? '<span class="falhou">falhou</span>' : '';
+  var BrasilAPI = { formatar: x => x };
+  var switchView = v => viu.push(v), Fechamento = { aguardando: async () => window.nFech || [] };
+  window.Fechamento = Fechamento;
+`);
+w.eval(categorias);
+w.eval(pendMenu);
+w.eval(inicio);
+w.eval(filtro);
+const el = w.document.getElementById('app-content');
+const entra = (role, cv = false) => w.eval(`user = { id: 'u1', nome: 'Quem', role: '${role}' }; cartaoUsa = ${cv}`);
+const rotulos = () => [...el.querySelectorAll('.ih-grid button')].map(b => b.lastChild.textContent.trim());
+const nota = (data, extra = {}) => ({ id: 'n' + Math.random(), data, valor: 10, tipo: 'RDM', subtipo: 'Abastecimento', razao_social: 'Posto', deleted: false, created_at: data, ...extra });
+const espera = ms => new Promise(r => setTimeout(r, ms));
+
+(async () => {
+  console.log('Botão principal e atalhos');
+  entra('colaborador');
+  w.renderInicio();
+  confere(el.querySelector('.ih-cta b').textContent === 'Lançar nota', 'RDM/RDA: Lançar nota');
+  confere(rotulos().join() === 'Pedir repasse,Lançar KM,Minhas notas,Painel', `colaborador: ${rotulos()}`);
+  entra('colaborador', true);
+  w.renderInicio();
+  confere(el.querySelector('.ih-cta b').textContent === 'Lançar nota', 'C.V.: o mesmo texto');
+  confere(rotulos().join() === 'Repasse,Recarga,Lançar KM,Minhas notas', `C.V.: ${rotulos()}`);
+  confere(/Cartão/.test(el.textContent) && /Carteira/.test(el.textContent) && /acabando/.test(el.textContent) && /R\$ 30.00 a receber/.test(el.textContent), 'C.V. com cartão, carteira e o saldo da conta certa');
+  entra('admin');
+  w.renderInicio();
+  for (const x of ['Pedir repasse', 'Lançar KM', 'Faturamento', 'Notas faturadas', 'Lançar repasse', 'Lançar recarga', 'Editar nota', 'Equipe']) confere(rotulos().includes(x), `admin: ${x}`);
+  entra('gestor');
+  w.renderInicio();
+  confere(!rotulos().includes('Editar nota') && rotulos().includes('Arquivos') && rotulos().length === 8, 'gestor sem Editar nota, como antes');
+  entra('contabilidade');
+  w.renderInicio();
+  confere(!el.querySelector('.ih-cta') && rotulos().join() === 'Equipe,Arquivos,Notas faturadas,Buscar', `Contador não lança (${rotulos()})`);
+  confere(!/Últimos lançamentos/.test(el.textContent) && !/Esta semana/.test(el.textContent), 'Contador sem semana e sem lançamentos');
+
+  console.log('Resumo');
+  entra('colaborador');
+  w.renderInicio();
+  const lados = [...el.querySelectorAll('.ih-lado')].map(b => b.textContent);
+  confere(/RDM/.test(lados[0]) && /R\$ 150.00/.test(lados[0]) && /R\$ 25.00 a receber/.test(lados[0]), `RDM (${lados[0]})`);
+  confere(/RDA/.test(lados[1]) && /R\$ 10.00 adiantado/.test(lados[1]), `RDA (${lados[1]})`);
+  confere(/Novembro 2026/.test(el.textContent), 'mês por extenso');
+
+  console.log('Semana');
+  w.eval(`notas = ${JSON.stringify([nota('2026-11-01'), nota('2026-11-02'), nota('2026-11-02'), nota('2026-11-06'), nota('2026-10-31'), nota('2026-11-03', { deleted: true }), nota('2026-11-08')])}`);
+  const dias = w._iniDiasDaSemana();
+  confere(dias[0].iso === '2026-11-01' && dias[6].iso === '2026-11-07', 'domingo a sábado');
+  confere(dias[1].qtd === 2 && dias[1].valor === 20 && dias[2].qtd === 0, 'conta por data e ignora apagada');
+  confere(dias[5].hoje && dias[6].futuro, 'hoje e dia futuro');
+  w.renderInicio();
+  confere(/lançou em 3 de 7 dias/.test(el.textContent), 'dias com nota');
+  confere(el.querySelectorAll('.ih-dias button')[6].disabled, 'dia futuro não abre');
+  w.iniTocarDia('2026-11-02');
+  confere(/2 notas · R\$ 20.00/.test(el.textContent) && el.innerHTML.includes("irParaNotas('dia:2026-11-02')"), 'toque no dia mostra as notas');
+  w.iniTocarDia('2026-11-02');
+  confere(!el.querySelector('.ih-dia-info'), 'tocar de novo fecha');
+  w.iniTocarDia('2026-11-03');
+  confere(/nenhuma nota/.test(el.textContent) && el.innerHTML.includes("switchView('despesas')"), 'dia vazio oferece lançar');
+  w.iniTocarDia('2026-11-03');
+
+  console.log('Filtros das notas');
+  const passa = (flag, n) => { w.eval(`filtroNotasFlag = ${JSON.stringify(flag)}`); return w._passaFiltroNota(n); };
+  confere(passa('dia:2026-11-02', nota('2026-11-02')) && !passa('dia:2026-11-02', nota('2026-11-03')), 'filtro do dia');
+  confere(passa('grupo:RDM', nota('2026-11-02')) && !passa('grupo:RDM', nota('2026-11-02', { pagamento: 'empresa' })) && !passa('grupo:RDA', nota('2026-11-02')), 'grupo sem Faturamento, como o valor do resumo');
+  confere(passa('grupo:carteira', nota('x', { pagamento: 'carteira' })) && !passa('grupo:cartao', nota('x', { pagamento: 'carteira' })) && passa('grupo:cartao', nota('x', { pagamento: 'cv' })), 'cartão e carteira');
+  w.eval(`filtroNotasFlag = null`);
+
+  console.log('Pendências e últimos');
+  entra('gestor');
+  w.eval(`avisos = [{ tipo: 'pedido' }]; pend = [{ nota: {}, motivos: ['sem anexo'] }]`);
+  w.nFech = [{}, {}];
+  w.renderInicio();
+  await espera(20);
+  const p = el.querySelector('#ini-pend').textContent.replace(/\s+/g, ' ');
+  confere(/1pedido de repasse/.test(p) && /1nota para corrigir/.test(p) && /2notas no fechamento/.test(p), `Precisa de você (${p})`);
+  w.nFech = [];
+  w.eval(`pend = []; avisos = []`);
+  w.eval(`notas = ${JSON.stringify([nota('2026-11-04', { razao_social: '<b>X</b>', created_at: '3', sync_status: 'failed' }), nota('2026-11-03', { created_at: '2', subtipo: 'Pedágio', valor: 0 }), nota('2026-11-02', { created_at: '1' }), nota('2026-11-01', { created_at: '0' })])}`);
+  w.renderInicio();
+  const linhas = el.querySelectorAll('.ih-nota');
+  confere(linhas.length === 3, 'três lançamentos');
+  confere(!linhas[0].querySelector('b b') && /<b>X<\/b>/.test(linhas[0].textContent), 'nome não vira HTML');
+  confere(!!linhas[0].querySelector('.falhou'), 'status de envio continua visível');
+  confere(/Pedágio/.test(linhas[1].textContent) && /sem valor/.test(linhas[1].textContent), 'categoria certa e nota sem valor');
+  confere(!!el.querySelector('.aviso-dia'), 'aviso de dias sem lançar continua');
+  w.eval(`notas = []`);
+  w.renderInicio();
+  confere(/Ainda não há lançamentos/.test(el.textContent), 'sem nota, orienta');
+
+  console.log('Hoje na equipe');
+  const lista = [{ user_id: 'a', valor: 10, data: '2026-11-06' }, { user_id: 'a', valor: 5, data: '2026-11-06' }, { user_id: 'b', valor: 1, data: '2026-11-06' }, { user_id: null, valor: 100, data: '2026-11-06', deleted: false }, { user_id: 'c', valor: 9, data: '2026-11-05' }];
+  let chamadas = 0;
+  w.pedir = async () => { chamadas++; return lista; };
+  w.eval(`sb = { notas: { list: window.pedir } }`);
+  w.renderInicio();
+  await espera(10);
+  const eq = el.querySelector('#ini-equipe-hoje').textContent.replace(/\s+/g, ' ');
+  confere(/4 notas · R\$ 116.00 · 2 pessoas lançaram/.test(eq), `conta só hoje (${eq})`);
+  w.renderInicio();
+  await espera(10);
+  confere(chamadas === 1, 'não busca de novo a cada desenho');
+  w.eval(`_iniEquipe = { dono: null, em: 0, dia: null, notas: null }`);
+  w.pedir = async () => { throw new Error('fora'); };
+  w.eval(`sb = { notas: { list: window.pedir } }`);
+  w.renderInicio();
+  await espera(10);
+  confere(!el.querySelector('#ini-equipe-hoje').textContent.trim(), 'servidor fora: cartão oculto');
+  entra('colaborador');
+  w.renderInicio();
+  await espera(10);
+  confere(!el.querySelector('#ini-equipe-hoje').textContent.trim(), 'colaborador não vê a equipe');
+
+  console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo');
+  process.exit(falhas ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });
