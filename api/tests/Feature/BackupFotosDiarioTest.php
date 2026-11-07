@@ -591,7 +591,7 @@ class BackupFotosDiarioTest extends TestCase
 
     /* ── rotação no servidor ─────────────────────────────────── */
 
-    public function test_rotacao_das_fotos_guarda_7_por_padrao_e_nao_toca_nos_outros(): void
+    public function test_rotacao_das_fotos_guarda_3_por_padrao_e_nao_toca_nos_outros(): void
     {
         $completos = $this->zipsNaPasta('petermann', 3, '2026-08-02', '0330');
         $this->completoNaPasta();
@@ -603,7 +603,7 @@ class BackupFotosDiarioTest extends TestCase
 
         $this->rodar();
 
-        $this->assertCount(7, $this->naPasta('fotos'));
+        $this->assertCount(3, $this->naPasta('fotos'));
         $this->assertContains(self::ZIP_DO_DIA, $this->naPasta('fotos'));
         $this->assertSame($completos, $this->naPasta('petermann'));
         $this->assertSame($bancos, $this->naPasta('banco'));
@@ -633,6 +633,80 @@ class BackupFotosDiarioTest extends TestCase
         $this->assertCount(14, $this->naPasta('banco'));
         $this->assertCount(2, $this->naPasta('petermann'));
         $this->assertSame($fotos, $this->naPasta('fotos'));
+    }
+
+    /* ── trava: o servidor só apaga o que está no Drive (07/11/2026) ── */
+
+    public function test_servidor_so_apaga_a_copia_antiga_que_ja_esta_no_drive(): void
+    {
+        $this->gravarConexao();
+        $this->completoNaPasta();
+        $this->foto('c/nova.jpg', '2026-11-03 12:00:00');
+        $antigos = $this->zipsNaPasta('fotos', 6, '2026-10-20');
+        $g = $this->driveFalso(array_slice($antigos, 0, 2));   // no Drive só os 2 mais velhos
+
+        $this->assertSame(0, Artisan::call('backup:gerar', ['--fotos-novas' => true]));
+
+        $this->assertContains(self::ZIP_DO_DIA, $g->enviados);
+        /* a regra manda tirar 20 a 23/10; só 20 e 21 estão no Drive, então 22 e 23 ficam */
+        $this->assertSame([$antigos[2], $antigos[3], $antigos[4], $antigos[5], self::ZIP_DO_DIA], $this->naPasta('fotos'));
+    }
+
+    public function test_com_tudo_no_drive_o_servidor_fica_so_com_as_3_mais_novas(): void
+    {
+        $this->gravarConexao();
+        $this->completoNaPasta();
+        $this->foto('c/nova.jpg', '2026-11-03 12:00:00');
+        $antigos = $this->zipsNaPasta('fotos', 6, '2026-10-20');
+        $this->driveFalso($antigos);
+
+        Artisan::call('backup:gerar', ['--fotos-novas' => true]);
+
+        $this->assertSame([$antigos[4], $antigos[5], self::ZIP_DO_DIA], $this->naPasta('fotos'));
+    }
+
+    public function test_drive_desconectado_nao_apaga_nada_no_servidor(): void
+    {
+        Http::fake();
+        $this->completoNaPasta();
+        $this->foto('c/nova.jpg', '2026-11-03 12:00:00');
+        $antigos = $this->zipsNaPasta('fotos', 6, '2026-10-20');
+
+        $this->assertSame(0, Artisan::call('backup:gerar', ['--fotos-novas' => true]));
+
+        $this->assertSame([...$antigos, self::ZIP_DO_DIA], $this->naPasta('fotos'));
+        Http::assertNothingSent();
+    }
+
+    public function test_drive_com_erro_nao_apaga_nada_no_servidor_e_avisa(): void
+    {
+        $this->gravarConexao();
+        Http::fake(['oauth2.googleapis.com/token' => Http::response(['error' => 'invalid_grant'], 400)]);
+        $avisos = $this->anotarAvisos();
+        $this->completoNaPasta();
+        $this->foto('c/nova.jpg', '2026-11-03 12:00:00');
+        $antigos = $this->zipsNaPasta('fotos', 6, '2026-10-20');
+
+        $this->assertSame(0, Artisan::call('backup:gerar', ['--fotos-novas' => true]));
+
+        $this->assertSame([...$antigos, self::ZIP_DO_DIA], $this->naPasta('fotos'));
+        $this->assertCount(1, $avisos);
+        $this->assertStringContainsString('Google Drive', $avisos[0][0]);
+    }
+
+    public function test_completo_tambem_so_sai_do_servidor_se_estiver_no_drive(): void
+    {
+        $this->gravarConexao();
+        $this->anotarAvisos();
+        $velhos = $this->zipsNaPasta('petermann', 4, '2026-10-04', '0330');   // 04, 05, 06 e 07/10
+        $this->zipsNaPasta('banco', 1, '2026-11-05', '0230');
+        $this->driveFalso([$velhos[0]]);
+
+        Artisan::call('backup:gerar');
+
+        $naPasta = $this->naPasta('petermann');
+        $this->assertCount(4, $naPasta, 'novo + 07/10 pela regra; 05 e 06/10 não estão no Drive');
+        $this->assertNotContains($velhos[0], $naPasta);
     }
 
     public function test_para_apagar_com_os_tres_tipos_nunca_cruza(): void

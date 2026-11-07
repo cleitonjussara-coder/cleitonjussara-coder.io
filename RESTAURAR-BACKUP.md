@@ -14,12 +14,13 @@ O que já foi provado está marcado. Leia a seção certa antes de digitar qualq
 | Backup | Horário | Conteúdo | No servidor | No Drive |
 |---|---|---|---|---|
 | `banco-*.zip` | Todo dia, 02:30 | Só o banco | 14 cópias | 30 cópias |
-| `fotos-*.zip` | Todo dia, 02:45 | Anexos novos desde o último completo | 7 cópias | 14 cópias |
+| `fotos-*.zip` | Todo dia, 02:45 | Anexos novos desde o último completo | 3 cópias | 14 cópias |
 | `petermann-*.zip` | Domingo, 03:30 | Banco e todos os anexos | 2 cópias | 12 cópias, mais 1 por mês por 12 meses |
 
 - **No servidor:** `~/api-petermann/storage/app/backups/`
 - **No Drive:** pasta **Backups Petermann App**, na conta conectada em Perfil → Backup. Abra pelo site do Drive; não depende do servidor.
 - **Fora dos backups:** o arquivo `.env` (ver "Chaves do sistema").
+- **Regra das cópias antigas:** o servidor só apaga uma cópia depois de confirmar que ela está no Drive. Com o Drive desconectado ou dando erro, nada é apagado no servidor e o log diz quais cópias ficaram.
 
 Para voltar tudo, são três arquivos: o **banco mais novo**, o **completo mais novo** e o **fotos mais novo**.
 

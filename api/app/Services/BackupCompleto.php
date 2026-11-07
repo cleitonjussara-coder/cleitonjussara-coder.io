@@ -405,11 +405,18 @@ class BackupCompleto
      * novas E a primeira cópia de cada mês nos últimos $meses meses. Assim
      * "a nota que alguém apagou em março" continua recuperável. Devolve
      * quantos apagou. Só mexe no tipo de $prefixo (03/11/2026).
+     *
+     * $soSeEstiverEm (07/11/2026): nomes já confirmados no Drive. Com ele, quem a
+     * regra mandaria apagar e não está na lista fica no servidor.
      */
-    public function podar(int $manter, int $meses = 12, string $prefixo = self::PREFIXO_COMPLETO): int
+    public function podar(int $manter, int $meses = 12, string $prefixo = self::PREFIXO_COMPLETO, ?array $soSeEstiverEm = null): int
     {
         $n = 0;
+        $permitidos = $soSeEstiverEm === null ? null : array_flip($soSeEstiverEm);
         foreach (self::paraApagar($this->listar($prefixo), $manter, $meses, $prefixo) as $b) {
+            if ($permitidos !== null && ! isset($permitidos[$b['nome']])) {
+                continue;
+            }
             if (@unlink($this->pasta().'/'.$b['nome'])) {
                 $n++;
             }

@@ -183,12 +183,12 @@ class DriveBackup
         return ['envio' => $p.'ultimo_envio', 'arquivo' => $p.'ultimo_arquivo', 'erro' => $p.'ultimo_erro'];
     }
 
-    /** Arquivos petermann-*.zip na pasta do Drive, mais novo primeiro. */
-    public function listarNoDrive(): array
+    /** Arquivos do tipo $prefixo (padrão petermann-*.zip) na pasta do Drive, mais novo primeiro. */
+    public function listarNoDrive(string $prefixo = BackupCompleto::PREFIXO_COMPLETO): array
     {
         $tok = $this->accessToken();
 
-        return $this->listar($tok, $this->pastaId($tok), BackupCompleto::PREFIXO_COMPLETO);
+        return $this->listar($tok, $this->pastaId($tok), $prefixo);
     }
 
     /* ── Google ─────────────────────────────────────────────── */

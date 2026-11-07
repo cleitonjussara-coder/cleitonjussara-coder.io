@@ -21,6 +21,10 @@ use Illuminate\Support\Facades\Log;
  * lá o espaço é do próprio Drive e é a cópia que sobrevive se a Locaweb
  * perder o disco. O gestor/admin vê e baixa tudo pelo Perfil.
  *
+ * Ordem (07/11/2026): gera → envia ao Drive → gira o servidor. A cópia antiga só
+ * sai do servidor se estiver no Drive; sem Drive (desconectado ou com erro), o
+ * servidor não apaga nada e avisa no log. Só --sem-drive gira sem conferir.
+ *
  * Com --so-banco (03/11/2026, todo dia): gera banco-AAAA-MM-DD-HHMM.zip, só com
  * o banco, porque o completo de domingo deixava até 7 dias descobertos. Rotação
  * própria: 14 no servidor e 30 no Drive, sem mensal, salvo opção explícita.
@@ -29,7 +33,7 @@ use Illuminate\Support\Facades\Log;
  * Com --fotos-novas (05/11/2026, todo dia): gera fotos-AAAA-MM-DD-HHMM.zip com os
  * anexos novos ou alterados desde o último completo, porque nota nova ficava até
  * 7 dias sem cópia do anexo. Restaurar = último completo + último fotos. Rotação
- * própria: 7 no servidor e 14 no Drive, sem mensal. Sem foto nova não cria zip nem
+ * própria: 3 no servidor (eram 7 até 07/11/2026) e 14 no Drive, sem mensal. Sem foto nova não cria zip nem
  * gira nada; sem completo na pasta é erro.
  *
  * Quem para de rodar não falha, então não avisa: a rodada do completo confere se
@@ -55,7 +59,7 @@ class BackupGerar extends Command
             'titulo' => 'Backup diário do banco', 'opcao' => ' --so-banco', 'zip' => 'O zip do dia (só o banco)', 'chave' => 'backup-banco',
         ],
         'fotos' => [
-            'prefixo' => BackupCompleto::PREFIXO_FOTOS, 'manter' => 7, 'drive_manter' => 14, 'drive_meses' => 0,
+            'prefixo' => BackupCompleto::PREFIXO_FOTOS, 'manter' => 3, 'drive_manter' => 14, 'drive_meses' => 0,
             'titulo' => 'Backup diário das fotos', 'opcao' => ' --fotos-novas', 'zip' => 'O zip do dia (só as fotos novas)', 'chave' => 'backup-fotos',
         ],
     ];
@@ -63,7 +67,7 @@ class BackupGerar extends Command
     protected $signature = 'backup:gerar
         {--so-banco : só o banco, sem fotos (backup diário, banco-*.zip)}
         {--fotos-novas : só os anexos novos desde o último completo (backup diário, fotos-*.zip)}
-        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 14; com --fotos-novas, 7)}
+        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 14; com --fotos-novas, 3)}
         {--meses= : meses com uma cópia mensal no servidor (padrão 0 = nenhuma)}
         {--drive-manter= : cópias guardadas no Google Drive (padrão 12; com --so-banco, 30; com --fotos-novas, 14)}
         {--drive-meses= : meses com uma cópia mensal no Drive (padrão 12; com --so-banco ou --fotos-novas, 0)}
@@ -95,9 +99,8 @@ class BackupGerar extends Command
 
                 return self::SUCCESS;
             }
-            $apagados = $b->podar($manter, $meses, $modo['prefixo']);
-            $msg = sprintf('backup ok: %s (%.1f MB, %s, %.1fs; %d antigo(s) apagado(s))',
-                basename($r['arquivo']), $r['bytes'] / 1048576, $soBanco ? 'só banco' : $r['fotos'].' fotos', microtime(true) - $t, $apagados);
+            $msg = sprintf('backup ok: %s (%.1f MB, %s, %.1fs)',
+                basename($r['arquivo']), $r['bytes'] / 1048576, $soBanco ? 'só banco' : $r['fotos'].' fotos', microtime(true) - $t);
             $this->info($msg);
             Log::info($msg);
         } catch (\Throwable $e) {
@@ -119,16 +122,60 @@ class BackupGerar extends Command
             $this->conferirDiario($b);
         }
 
-        /* Cópia fora da Locaweb. Falha aqui não é falha do backup: avisa e segue. */
-        if ($this->option('sem-drive') || ! $drive->conectado()) {
-            $this->line($drive->conectado() ? 'drive: pulado (--sem-drive)' : 'drive: não conectado — Perfil → Backup → Conectar Google Drive');
-
-            return self::SUCCESS;
+        $semDrive = (bool) $this->option('sem-drive');
+        $conectado = ! $semDrive && $drive->conectado();
+        if ($conectado) {
+            $this->enviarAoDrive($drive, $r['arquivo'], $modo);
+        } else {
+            $this->line($semDrive ? 'drive: pulado (--sem-drive)' : 'drive: não conectado — Perfil → Backup → Conectar Google Drive');
         }
+
+        /* 07/11/2026, pedido do Cleiton: a cópia antiga só sai do servidor depois de confirmada no Drive. Antes a rotação vinha
+           antes do envio e, com o Drive desconectado ou falhando, o servidor seguia apagando o que talvez não existisse em
+           outro lugar. Só --sem-drive (pedido explícito de quem roda) gira sem conferir. */
+        $this->podarServidor($b, $drive, $manter, $meses, $modo['prefixo'], $semDrive, $conectado);
+
+        return self::SUCCESS;
+    }
+
+    private function podarServidor(BackupCompleto $b, DriveBackup $drive, int $manter, int $meses, string $prefixo, bool $semDrive, bool $conectado): void
+    {
+        try {
+            if ($semDrive) {
+                $n = $b->podar($manter, $meses, $prefixo);
+                $this->info("servidor: {$n} antigo(s) apagado(s)");
+                Log::info("backup {$prefixo}: {$n} antigo(s) apagado(s) no servidor (--sem-drive)");
+
+                return;
+            }
+            $sairiam = array_column(BackupCompleto::paraApagar($b->listar($prefixo), $manter, $meses, $prefixo), 'nome');
+            if ($sairiam === []) {
+                return;
+            }
+            $naNuvem = $conectado ? array_column($drive->listarNoDrive($prefixo), 'nome') : [];
+            $n = $b->podar($manter, $meses, $prefixo, $naNuvem);
+            $retidos = array_values(array_diff($sairiam, $naNuvem));
+            $this->info("servidor: {$n} antigo(s) apagado(s), já guardado(s) no Drive");
+            Log::info("backup {$prefixo}: {$n} antigo(s) apagado(s) no servidor, confirmado(s) no Drive");
+            if ($retidos !== []) {
+                $msg = 'servidor: '.count($retidos).' cópia(s) antiga(s) mantida(s) porque não estão no Drive: '.implode(', ', $retidos);
+                $this->warn($msg);
+                Log::warning('backup '.$prefixo.': '.$msg);
+            }
+        } catch (\Throwable $e) {
+            /* sem confirmar o que está no Drive, nada sai do servidor */
+            $this->warn('servidor: nenhuma cópia antiga apagada, não consegui conferir o Drive: '.$e->getMessage());
+            Log::warning("backup {$prefixo}: rotação do servidor suspensa, Drive não conferido: ".$e->getMessage());
+        }
+    }
+
+    /** Cópia fora da Locaweb. Falha aqui não é falha do backup: avisa e segue. */
+    private function enviarAoDrive(DriveBackup $drive, string $arquivo, array $modo): void
+    {
         $t2 = microtime(true);
         try {
             $d = $drive->enviar(
-                $r['arquivo'],
+                $arquivo,
                 max(1, $this->numero('drive-manter', $modo['drive_manter'])),
                 $this->numero('drive-meses', $modo['drive_meses']),
             );
@@ -148,8 +195,6 @@ class BackupGerar extends Command
             } catch (\Throwable) {
             }
         }
-
-        return self::SUCCESS;
     }
 
     /**
