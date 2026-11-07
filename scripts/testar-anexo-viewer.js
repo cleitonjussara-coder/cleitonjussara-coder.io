@@ -66,6 +66,20 @@ const espera = () => new Promise(r => setTimeout(r, 5));
   await w.compartilharFotoViewer();
   confere(/de novo/.test(w.eval('avisos.pop()')), 'iPhone perdeu o gesto: pede outro toque');
 
+  console.log('Sem folha de compartilhar');
+  w.Object.defineProperty(w.navigator, 'canShare', { value: () => false, configurable: true });
+  w.URL.createObjectURL = () => 'blob:y'; w.URL.revokeObjectURL = () => {};
+  let baixou = '';
+  w.HTMLAnchorElement.prototype.click = function () { baixou = this.download; };
+  w._mostrarViewer({ url: 'http://x/d.pdf', ext: 'pdf', nome: 'd.pdf', html: 'RDM' });
+  await espera();
+  await w.compartilharFotoViewer();
+  confere(baixou === 'd.pdf' && /foi baixado/.test(w.eval('avisos.pop()')), 'computador baixa o arquivo e avisa');
+  baixou = '';
+  await w.baixarFotoViewer();
+  confere(baixou === 'd.pdf', 'Baixar salva o arquivo');
+  w.Object.defineProperty(w.navigator, 'canShare', { value: () => true, configurable: true });
+
   console.log('Anexo do aparelho');
   w.Object.defineProperty(w.navigator, 'share', { value: async d => { w.eval('compartilhou').push(d.files[0].name); }, configurable: true });
   w.eval(`window.fetch = () => { throw new Error('não busca'); }`);

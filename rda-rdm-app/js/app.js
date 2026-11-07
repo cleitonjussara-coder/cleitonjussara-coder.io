@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 563;
+const APP_BUILD = 564;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10671,7 +10671,7 @@ function _mostrarViewer({ id = null, url, ext, nome, html, blob = null }) {
   const a = { id, url, nome, blob, falhou: false, baixando: null };
   _fotoViewerAtual = a;
   if (!blob) {
-    a.baixando = fetch(url).then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+    a.baixando = fetch(url, { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
       .then(b => { a.blob = b; return b; })
       .catch(() => { a.falhou = true; return null; });
   }
@@ -10720,7 +10720,11 @@ async function baixarFotoViewer() {
   if (_ehIphone() && navigator.canShare) { compartilharFotoViewer(); return; }
   const blob = await _esperarAnexo(a);
   if (!blob) { toast('Não baixou o anexo. Toque de novo.', 'err'); return; }
-  const obj = URL.createObjectURL(blob);
+  _salvarAnexo(a);
+}
+
+function _salvarAnexo(a) {
+  const obj = URL.createObjectURL(a.blob);
   const el = document.createElement('a');
   el.href = obj; el.download = a.nome;
   document.body.appendChild(el); el.click(); el.remove();
@@ -10741,7 +10745,9 @@ async function compartilharFotoViewer() {
     /* o arquivo chegou depois do toque e o iPhone perdeu a permissão do gesto: agora ele já está pronto */
     if (e?.name === 'NotAllowedError' && !pronto) { toast('Anexo pronto. Toque em Compartilhar de novo.'); return; }
   }
-  toast('Este aparelho não compartilha arquivo — use Baixar', 'err');
+  /* computador ou navegador sem a folha de compartilhar: o arquivo fica salvo para a pessoa anexar onde quiser */
+  _salvarAnexo(a);
+  toast('Este aparelho não compartilha direto. O anexo foi baixado para você enviar.');
 }
 
 /* ── Ajuda / Como usar ───────────────────────────────────── */
