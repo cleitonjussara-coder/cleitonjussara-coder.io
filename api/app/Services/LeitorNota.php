@@ -28,14 +28,14 @@ use Illuminate\Support\Facades\Log;
  */
 class LeitorNota
 {
-    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'portal_nfse'];
+    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'portal_nfse', 'cortado'];
 
     private const UFS = ['11', '12', '13', '14', '15', '16', '17', '21', '22', '23', '24', '25', '26', '27', '28', '29',
         '31', '32', '33', '35', '41', '42', '43', '50', '51', '52', '53'];
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "...", "portal": "..."} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "...", "portal": "...", "cortado": false} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -51,7 +51,12 @@ class LeitorNota
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
         .'Use null em todo campo que não esteja legível com segurança. Não invente, corte nem complete dígitos. '
-        .'Não escreva o CPF do consumidor em nenhum campo.';
+        .'Não escreva o CPF do consumidor em nenhum campo. '
+        /* 07/11/2026 (pedido do Cleiton, DANFE fotografado com o lado de fora): só importa o que permite achar a nota de novo
+           — com a chave tira-se a 2ª via. Texto de endereço, nome ou itens cortado não barra. O app barra quando vem true. */
+        .'cortado = true somente se a borda da foto cortou (ficou pela metade ou fora da imagem) alguma destas informações: '
+        .'a chave de acesso (os dígitos ou o código de barras/QR Code), o valor total/valor pago, ou o número e a série do documento. '
+        .'Qualquer outro texto cortado (nome, endereço, itens, tributos, margem), o papel encostando na borda ou texto mal impresso pela própria impressora NÃO contam: cortado = false. Na dúvida, false.';
 
     public function __construct(private VisaoIa $ia) {}
 
@@ -179,6 +184,12 @@ class LeitorNota
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
         $out['placa'] = $this->placa($j['placa'] ?? null);
         $out['portal_nfse'] = Nota::portalNormalizado($j['portal'] ?? null);
+        /* só true/false de verdade: "sim", 1 ou texto viram null (o app não barra no que não é certeza) */
+        $out['cortado'] = is_bool($j['cortado'] ?? null) ? $j['cortado'] : null;
+        /* a chave conferiu pelo dígito verificador e o valor e o número foram lidos: a nota é achável (2ª via) — não barra */
+        if ($out['cortado'] === true && ($out['chave'] !== null || $out['chave_nfse'] !== null) && $out['valor'] !== null && $out['numero'] !== null) {
+            $out['cortado'] = false;
+        }
 
         return $out;
     }

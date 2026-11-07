@@ -87,6 +87,29 @@ class LeitorNotaTest extends TestCase
         $this->assertSame('1', $r['serie']);
     }
 
+    /** 07/11/2026: a IA diz se a foto cortou texto do documento; só true/false de verdade passam (o app barra no true). */
+    public function test_cortado_so_aceita_verdadeiro_ou_falso(): void
+    {
+        $this->assertTrue($this->leitor()->validar(json_encode(['valor' => 70, 'cortado' => true]))['cortado']);
+        $this->assertFalse($this->leitor()->validar(json_encode(['valor' => 70, 'cortado' => false]))['cortado']);
+        foreach (['sim', 'true', 1, 0, null] as $v) {
+            $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70, 'cortado' => $v]))['cortado'], 'cortado '.json_encode($v));
+        }
+        $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70]))['cortado'], 'sem o campo: null');
+    }
+
+    /** Regra do dono: com a chave conferida, o valor e o número lidos, a nota é achável (2ª via) — "cortado" da IA não barra. */
+    public function test_chave_valor_e_numero_lidos_nao_barram(): void
+    {
+        $chave = $this->chaveValida();
+        $ok = $this->leitor()->validar(json_encode(['chave' => $chave, 'valor' => 70, 'numero' => '31704', 'serie' => '2', 'cortado' => true]));
+        $this->assertFalse($ok['cortado']);
+        $semValor = $this->leitor()->validar(json_encode(['chave' => $chave, 'numero' => '31704', 'cortado' => true]));
+        $this->assertTrue($semValor['cortado'], 'valor cortado: continua barrando');
+        $chaveRuim = $this->leitor()->validar(json_encode(['chave' => substr($chave, 0, 40), 'valor' => 70, 'numero' => '31704', 'cortado' => true]));
+        $this->assertTrue($chaveRuim['cortado'], 'chave pela metade: continua barrando');
+    }
+
     public function test_descarta_cnpj_e_chave_com_digito_errado(): void
     {
         $chaveRuim = substr($this->chaveValida(), 0, 43).'0';

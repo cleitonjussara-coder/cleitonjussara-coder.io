@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 567;
+const APP_BUILD = 568;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2387,7 +2387,10 @@ function _notificacoes() {
   });
   avisoPorNota.forEach(a => {
     const n = _notaPorId(a.nota_id);
-    const faltam = n ? _motivosDaNota(n) : (a.motivos || []);
+    /* motivo de foto (📸, 07/11/2026) o app não detecta: vale até a nota ser alterada depois do aviso */
+    const deFoto = (a.motivos || []).filter(_ehMotivoFoto);
+    const fotoAberta = deFoto.length && !(n && _notaAlteradaDepois(n, a.avisado_em));
+    const faltam = [...(fotoAberta ? deFoto : []), ...(n ? _motivosDaNota(n) : (a.motivos || []).filter(m => !_ehMotivoFoto(m)))];
     if (n && (n.deleted || !faltam.length)) return;
     out.push({
       id: 'corr:' + a.id, tipo: 'correcao', aviso: a, notaId: a.nota_id,
@@ -6060,6 +6063,71 @@ async function avisarCorrecao(notaId) {
   }
 }
 
+/* ─── Pedir correção da FOTO pela edição da nota (07/11/2026, pedido do Cleiton sobre o print do DANFE cortado) ───
+   O app não enxerga texto cortado nem dado ilegível em toda foto, então o gestor/admin que abre a nota de um colaborador
+   escolhe o motivo e o aviso sai pelo mesmo caminho do "🔔 Avisar" (sino, celular, e-mail). Motivo de foto começa com 📸:
+   ele não é pendência que o app detecta, então fica no sino até a nota ser alterada DEPOIS do aviso (ou "OK, vi"). */
+const MOTIVOS_FOTO = ['📸 Texto cortado na foto', '📸 Dados sem visualização (ilegível)', '📸 Foto sem a nota inteira', '📸 Foto tremida ou desfocada', '📸 Foto de outro documento'];
+const _ehMotivoFoto = m => String(m || '').startsWith('📸');
+function _notaAlteradaDepois(n, quando) {
+  const t = Date.parse(n?.updated_at || ''), q = Date.parse(quando || '');
+  return Number.isFinite(t) && Number.isFinite(q) && t > q;
+}
+async function pedirCorrecaoNota(notaId) {
+  const n = _notaPorId(notaId);
+  if (!n || !_podeAvisarCorrecao(n)) { toast('Só dá para pedir correção da nota de um colaborador ativo', 'err'); return; }
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para pedir a correção', 'err'); return; }
+  const dono = equipePorId[n.user_id]?.nome || n.user_nome || 'o colaborador';
+  const titulo = n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa');
+  const automaticos = _motivosDaNota(n).slice(0, 6).map(m => String(m).slice(0, 60));
+  let motivo = MOTIVOS_FOTO[0], mensagem = '';
+  for (;;) {
+    const r = await pedirCampos({
+      titulo: `Pedir correção a ${dono}`,
+      dica: `${titulo} · ${fmtDataBR(n.data)}${Number(n.valor) > 0 ? ' · ' + brl(n.valor) : ''}${automaticos.length ? _NL + 'O app também viu: ' + automaticos.join(', ') : ''}${_NL}${_NL}${dono} recebe o aviso no celular, no sino do app e por e-mail, com o botão para corrigir a nota. O aviso fica até a nota ser corrigida.`,
+      confirmar: 'Enviar pedido',
+      campos: [
+        { id: 'motivo', rotulo: 'O que corrigir', valor: motivo, opcoes: MOTIVOS_FOTO.map(m => ({ valor: m, rotulo: m })) },
+        { id: 'mensagem', rotulo: 'Mensagem (opcional)', valor: mensagem, linhas: 3, maxlength: 500, placeholder: 'Ex.: o lado esquerdo do DANFE ficou de fora — fotografe a nota inteira, com as bordas do papel.' },
+      ],
+    });
+    if (!r) return;
+    motivo = r.motivo; mensagem = r.mensagem;
+    setLoading(true);
+    try {
+      const a = await sb.avisosCorrecao.avisar({ nota_id: notaId, motivos: [motivo, ...automaticos.filter(m => m !== motivo)].slice(0, 8), mensagem });
+      setLoading(false);
+      _guardarAvisoPend(a);
+      _pintarBotaoPedirCorrecao(n);
+      toast(a?.agrupado ? `Pedido enviado a ${dono} — entrou no sino; o celular e o e-mail já tinham sido avisados há pouco 📸`
+        : a?.email_enviado === false ? `Pedido enviado a ${dono} — aparece no sino e no celular (o e-mail não saiu) 📸`
+        : `Pedido de correção enviado a ${dono} 📸`, 'ok', 4500);
+      return;
+    } catch (e) {
+      setLoading(false);
+      if ([403, 404, 422, 503].includes(e.status)) { await mostrarAviso(`Não foi possível pedir a correção${_NL}${e.message || 'O servidor recusou o pedido.'}`); return; }
+      await mostrarAviso(`Não enviou${_NL}${e.message || 'erro de conexão'}${_NL}${_NL}O que você escolheu foi mantido — toque em OK e envie de novo.`);
+    }
+  }
+}
+/* botão no aviso "Correção de gestor" do formulário; mostra também se o pedido já foi feito */
+function _pintarBotaoPedirCorrecao(n) {
+  const alvo = $('nf-pedir-correcao');
+  if (!alvo) return;
+  if (!n || !_podeAvisarCorrecao(n)) { alvo.innerHTML = ''; return; }
+  const a = _avisosPend.get(n.id);
+  alvo.innerHTML = `<button type="button" class="btn btn-sm btn-outline nf-pedir-btn" data-nota="${_at(n.id)}" onclick="pedirCorrecaoNota(this.dataset.nota)">📸 Pedir correção ao colaborador</button>${a
+    ? `<div class="nf-pedir-info">Pedido ${_quandoJust(a.avisado_em)} por ${esc(a.pedido_por_nome || 'gestão')}${a.visto_em ? ' · já viu' : ''}: ${esc((a.motivos || []).join(', '))}</div>` : ''}`;
+  if (!a && sb?.avisosCorrecao && navigator.onLine) {
+    sb.avisosCorrecao.list([n.id]).then(l => { (l || []).forEach(_guardarAvisoPend); if (_avisosPend.has(n.id) && $('nf-id')?.value === n.id) _pintarBotaoPedirCorrecao(n); }).catch(() => {});
+  }
+}
+/* lado do colaborador: o formulário da nota diz o que a gestão pediu */
+function _avisoAbertoDaNota(id) {
+  return (avisosCorrecaoSino || []).filter(a => a.nota_id === id && a.colaborador_id === user?.id && !a.visto_em)
+    .sort((a, b) => String(b.avisado_em).localeCompare(String(a.avisado_em)))[0] || null;
+}
+
 /* 25/09/2026 — a nota que o servidor não tem mais.
    O "apagar em definitivo" antigo tirava a linha sem deixar rastro, e a
    cópia deste aparelho ficava para sempre na faixa de pendências. A lápide
@@ -8319,6 +8387,16 @@ async function _anexoUtilizavel(file, input) {
    (FotoBranca, js/foto-branca.js) é barrada ao anexar e ao salvar. Só barra o CLARAMENTE vazio: PDF/XML nunca são
    medidos, e imagem que o aparelho não decodifica (HEIC no Chrome) ou erro de leitura devolvem "não sei" — que passa.
    Não apaga nada: o que já estava anexado fica como está. Devolve true se barrou (o aviso já foi mostrado). */
+/* Texto cortado na foto (07/11/2026, pedido do Cleiton: "se o texto estiver cortado não deixar fazer o lançamento"). Quem julga é
+   a leitura por IA (servidor, LeitorNota: campo cortado) — medir pixels não separava foto boa de cortada (300 fotos reais e as 5
+   do dono). Sem exceção para ninguém (decisão do dono). Sem internet ou sem IA não dá para conferir: não barra. */
+async function _avisarTextoCortado() {
+  await mostrarAviso({
+    titulo: 'O texto da nota ficou cortado',
+    mensagem: 'A chave de acesso (código de barras ou QR), o valor ou o número da nota ficou cortado na borda da foto — sem eles não dá para conferir nem tirar a 2ª via.\n\nAfaste o celular até a nota inteira aparecer, com as bordas do papel, e tire a foto de novo. Nada foi anexado.',
+    botao: 'Tirar de novo',
+  });
+}
 const _MSG_FOTO_EM_BRANCO = {
   camera: 'A foto não mostra nenhum dado de nota — só papel liso, sem texto.\n\nAponte a câmera para a nota, deixe ela inteira na tela e tire a foto de novo. Nada foi anexado.',
   arquivo: 'A imagem não mostra nenhum dado de nota — só papel liso, sem texto.\n\nEscolha o arquivo certo ou fotografe a nota. Nada foi anexado.',
@@ -8375,6 +8453,7 @@ async function _lerNotaPorIa(blob) {
   try {
     const r = await sb.notas.lerFotoIa(await _imagemParaIa(blob));
     const d = r?.dados;
+    if (d?.cortado === true) return { cortado: true, _ia: true };   // 07/11/2026: texto cortado na foto — o lançamento é barrado, os campos não importam
     if (!d || !(d.valor || d.cnpj || d.chave)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
@@ -8385,6 +8464,7 @@ async function _lerNotaPorIa(blob) {
 
 async function _lerNota(blob) {
   const ia = await _lerNotaPorIa(blob);
+  if (ia?.cortado) return ia;                                // texto cortado: quem chamou barra a foto (07/11/2026)
   if (ia?.valor) return ia;                                  // IA trouxe o valor: basta
   /* 14/10/2026 (pedido do Cleiton: "com internet, IA no lugar do OCR"): a IA respondeu com parte dos dados e há
      internet — não espera o Tesseract (segundos a mais). O que faltar (o valor, em geral) o aviso da tela diz e a pessoa
@@ -8458,6 +8538,7 @@ async function onFotoNota(e) {
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
     const r = await leituraDaNota;
+    if (r?.cortado) { ov.style.display = 'none'; e.target.value = ''; await _avisarTextoCortado(); return; }   // 07/11/2026
     porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
@@ -9162,6 +9243,15 @@ async function abrirFormNota(dados = {}) {
         : `Paga direto pela empresa em nome de ${_rotuloProprietario(dados)} — não entra no saldo nem no cartão dela, só no painel geral da equipe.`)
     : `Você está corrigindo a nota de ${_rotuloProprietario(dados)}. A alteração preserva o lançamento original do colaborador.`;
   $('nf-titulo').textContent = dados.id ? (isGestorEdit ? `Editar nota · ${_rotuloProprietario(dados)}` : 'Editar Nota') : (isFaturamento ? `Faturamento · ${_rotuloProprietario(dados)}` : 'Nova Nota');
+  /* 07/11/2026: gestor/admin pede ao colaborador para corrigir a foto; o colaborador vê, no formulário, o que foi pedido */
+  _pintarBotaoPedirCorrecao(isGestorEdit && !_ehContabilidade() ? dados : null);
+  const _pedido = dados.id && !isGestorEdit && !isFaturamento ? _avisoAbertoDaNota(dados.id) : null;
+  if (_pedido && banner && bannerTitle && bannerText) {
+    banner.style.display = 'flex';
+    bannerTitle.textContent = `📸 ${_pedido.pedido_por_nome || 'A gestão'} pediu para corrigir`;
+    bannerText.textContent = `${(_pedido.motivos || []).join(', ')}${_pedido.mensagem ? ' — “' + _pedido.mensagem + '”' : ''}. `
+      + ((_pedido.motivos || []).some(_ehMotivoFoto) ? 'Tire a foto de novo mostrando a nota inteira, com as bordas do papel, e salve.' : 'Corrija e salve.');
+  }
   window.Fechamento?.abrirForm(dados);   // 06/11/2026: nota de mês fechado abre sem Salvar
 }
 
@@ -9597,6 +9687,14 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       }
       $('ocr-progress').textContent = 'Lendo a nota…';
       ocr = await _lerNota(alvo);
+      if (ocr?.cortado) {   // 07/11/2026: texto cortado na foto — a foto não fica anexada
+        ov.style.display = 'none';
+        if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+        fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null); atualizarPreviewFoto(null);
+        ['f-foto-nota', 'f-foto-ocr'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+        await _avisarTextoCortado();
+        return;
+      }
     }
     const qr = await (qrEmCurso || (qrEmCurso = lerQr()));
 
