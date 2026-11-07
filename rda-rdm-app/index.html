@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=561">
+  <link rel="manifest" href="manifest.json?v=562">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1203,6 +1203,13 @@ html,body{background:#041f0f}                    /* nada de faixa clara fora da 
 #auth-screen{inset:6px;border:8px solid var(--esm-frame);border-radius:18px;
   background:radial-gradient(farthest-corner at 10% 6%,#0f6b34 0%,#0a4d25 50%,#083d1e 72%,#7fcc32 73.5%,#c9ea62 88%,#eaf78f 100%);
   box-shadow:inset 3px 3px 6px rgba(255,255,255,.22),inset -3px -3px 8px rgba(0,0,0,.55)}
+/* 07/11/2026 (print do iPhone): com position:relative o inset só deslocava a tela, a moldura saía pela direita e por baixo e
+   nada rolava. Fixa, com a altura da área visível do Safari, a moldura aparece inteira e o formulário rola por dentro. */
+#auth-screen{position:fixed;inset:auto;top:calc(env(safe-area-inset-top,0px) + 6px);left:6px;right:6px;
+  height:calc(100vh - env(safe-area-inset-top,0px) - 12px);
+  padding-bottom:calc(env(safe-area-inset-bottom,0px) + 90px);
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+@supports (height:100dvh){ #auth-screen{height:calc(100dvh - env(safe-area-inset-top,0px) - 12px)} }
 #auth-screen::before{display:block;position:absolute;inset:0;z-index:0;pointer-events:none;content:"";
   background:url(logo.jpg?v=160) no-repeat center 46% / min(70vmin,480px);opacity:.09;mix-blend-mode:normal}
 #auth-screen>*{position:relative;z-index:1}
@@ -1210,7 +1217,8 @@ html,body{background:#041f0f}                    /* nada de faixa clara fora da 
 #auth-screen .auth-logo img{box-shadow:0 12px 30px rgba(0,0,0,.5)}
 #auth-screen .inp,#auth-screen .auth-social-btn{box-shadow:0 4px 12px rgba(0,0,0,.28)}
 @media (min-width:900px){
-  #auth-screen{inset:10px}
+  #auth-screen{top:10px;left:10px;right:10px;height:calc(100vh - 20px);padding-bottom:0}
+  @supports (height:100dvh){ #auth-screen{height:calc(100dvh - 20px)} }
   #auth-screen::before{background-position:22% 50%;background-size:min(60vmin,520px)}
   #auth-screen .auth-logo{border-right-color:rgba(185,226,74,.22)}
   #auth-screen #auth-body{background:rgba(6,45,22,.55);border:1px solid rgba(185,226,74,.25);border-radius:16px;padding:40px 40px;max-width:440px;backdrop-filter:blur(2px);
@@ -2334,7 +2342,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=561" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=562" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -3061,41 +3069,41 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=561"></script>
-<script defer src="js/db.js?v=561"></script>
-<script defer src="js/nfce.js?v=561"></script>
-<script defer src="js/sefaz.js?v=561"></script>
-<script defer src="js/brasilapi.js?v=561"></script>
-<script defer src="js/ocr.js?v=561"></script>
-<script defer src="js/scanner.js?v=561"></script>
-<script defer src="js/foto-branca.js?v=561"></script>
-<script defer src="js/recorte.js?v=561"></script>
-<script defer src="js/excel.js?v=561"></script>
-<script defer src="js/gestor.js?v=561"></script>
-<script defer src="js/frota.js?v=561"></script>
-<script defer src="js/frota-painel.js?v=561"></script>
-<script defer src="js/frota-planilha.js?v=561"></script>
-<script defer src="js/ponto.js?v=561"></script>
-<script defer src="js/rastreio.js?v=561"></script>
-<script defer src="js/repasses-equipe.js?v=561"></script>
-<script defer src="js/fechamento.js?v=561"></script>
-<script defer src="js/busca.js?v=561"></script>
-<script defer src="js/gdrive.js?v=561"></script>
+<script defer src="js/api.js?v=562"></script>
+<script defer src="js/db.js?v=562"></script>
+<script defer src="js/nfce.js?v=562"></script>
+<script defer src="js/sefaz.js?v=562"></script>
+<script defer src="js/brasilapi.js?v=562"></script>
+<script defer src="js/ocr.js?v=562"></script>
+<script defer src="js/scanner.js?v=562"></script>
+<script defer src="js/foto-branca.js?v=562"></script>
+<script defer src="js/recorte.js?v=562"></script>
+<script defer src="js/excel.js?v=562"></script>
+<script defer src="js/gestor.js?v=562"></script>
+<script defer src="js/frota.js?v=562"></script>
+<script defer src="js/frota-painel.js?v=562"></script>
+<script defer src="js/frota-planilha.js?v=562"></script>
+<script defer src="js/ponto.js?v=562"></script>
+<script defer src="js/rastreio.js?v=562"></script>
+<script defer src="js/repasses-equipe.js?v=562"></script>
+<script defer src="js/fechamento.js?v=562"></script>
+<script defer src="js/busca.js?v=562"></script>
+<script defer src="js/gdrive.js?v=562"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=561"></script>
+<script defer src="js/svelte-ajuda.js?v=562"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=561"></script>
+<script defer src="js/svelte-historico.js?v=562"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=561"></script>
+<script defer src="js/svelte-arquivos.js?v=562"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=561"></script>
-<script defer src="js/app.js?v=561"></script>
-<script defer src="js/instalar.js?v=561"></script>
+<script defer src="js/svelte-perfil.js?v=562"></script>
+<script defer src="js/app.js?v=562"></script>
+<script defer src="js/instalar.js?v=562"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=561').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=562').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
