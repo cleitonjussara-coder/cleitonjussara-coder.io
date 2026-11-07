@@ -136,6 +136,8 @@ window.Gestor = (() => {
     if (!g) return;
     const abrir = g.style.display === 'none';
     g.style.display = abrir ? '' : 'none';
+    const det = document.querySelector('.cdet-kpis-det');   // painéis dos cartões (07/11/2026) somem junto
+    if (det) det.style.display = abrir ? '' : 'none';
     btn.classList.toggle('on', abrir);
     btn.setAttribute('aria-expanded', abrir ? 'true' : 'false');
     btn.querySelector('.txt').textContent = abrir ? 'Esconder resumo do mês' : 'Abrir resumo do mês';
@@ -1107,7 +1109,6 @@ window.Gestor = (() => {
          o `saldo` acima só aparece sem histórico. "A reembolsar" = carteira − reembolsos recebidos, ACUMULADO até o mês aberto,
          igual a _devedorDe() do app do colaborador (a recarga do cartão fica fora). */
       const ehCVcolab = colab.regime === 'cv' && colab.role !== 'contabilidade';
-      const acaoRec = ehCVcolab ? "Gestor.filtrarRepasses('repasse')" : 'Gestor.irParaRepasses()';
       const nCartao = notasProprias.filter(n => n.pagamento !== 'carteira');
       const nCarteira = notasProprias.filter(n => n.pagamento === 'carteira');
       const gastoCartao = soma(nCartao), gastoCarteira = soma(nCarteira);
@@ -1262,6 +1263,81 @@ window.Gestor = (() => {
           </div>`;
       };
 
+      /* Cartões do resumo do mês interativos (07/11/2026, pedido do Cleiton sobre o print), nos dois regimes:
+         Gasto → RDM e RDA separados e as notas do mês; Recebido → repasses e recargas do mês, com corrigir e apagar;
+         Saldo → RDM e RDA separados, cada um com a sua conta; Faturamento → do mês, aberto por categoria. Um painel por vez. */
+      const MES_TXT = `${MESES_LONGO[mes - 1]} de ${ano}`;
+      const pagNota = n => (n.pagamento === 'carteira' ? 'carteira' : n.pagamento === 'empresa' ? 'empresa' : 'cartao');
+      const kpiToque = (painel, titulo, miolo, classe = '') => `<button type="button" class="cdet-kpi link cdet-plan-toque ${classe}" data-painel="${painel}" aria-expanded="false" title="${titulo}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">${miolo}<span class="cdet-kpi-ver">Ver detalhes ›</span></button>`;
+      const kpiDet = (painel, titulo, miolo) => `<div class="cdet-plan-det cdet-kpi-det" data-painel="${painel}" hidden>
+          <div class="cdet-kpi-det-hd"><div class="cdet-plan-det-tit">${titulo}</div><button type="button" class="btn btn-sm btn-outline" data-painel="${painel}" onclick="Gestor.alternarPlanilha(this.dataset.painel)">Fechar ✕</button></div>
+          ${miolo}
+        </div>`;
+      const kpiTotais = linhas => `<div class="cdet-kpi-det-tot">${linhas.map(([rot, v, cls]) => `<div class="${cls || ''}"><span>${rot}</span><b>${brl(v)}</b></div>`).join('')}</div>`;
+      const kpiNotas = lista => lista.length
+        ? [...lista].sort((p, q) => String(q.data || '').localeCompare(String(p.data || ''))).map(n => `
+          <button type="button" class="cdet-plan-rep cdet-plan-nota" title="Abrir esta nota na lista" data-pag="${ehCVcolab ? pagNota(n) : ''}" data-tp="${_at(n.tipo)}" data-mes="${mes}" onclick="Gestor.irParaNotasDoMes(this.dataset.pag,this.dataset.tp,this.dataset.mes)">
+            <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
+            <span class="t"><span class="n">${esc(n.razao_social || 'Sem fornecedor')}</span><span class="s">${fmtData(n.data)}${n.subtipo ? ` · ${esc(n.subtipo)}` : ''}${ehCVcolab ? ` · ${({ carteira: '💵 carteira', cartao: '💳 cartão', empresa: '🏢 empresa' })[pagNota(n)]}` : ''}</span></span>
+            <b class="v">${brl(n.valor)}</b><i aria-hidden="true">›</i>
+          </button>`).join('')
+        : `<div class="cdet-plan-vazio">Nenhuma nota em ${MES_TXT}.</div>`;
+      const kpiReps = (lista, vazio) => lista.length ? planLancamentos(lista) : `<div class="cdet-plan-vazio">${vazio}</div>`;
+      const kpiLancar = destino => podeEditar
+        ? `<button type="button" class="btn btn-sm btn-outline cdet-kpi-det-add" data-uid="${_at(colab.id)}" data-nome="${_at((colab.nome || colab.email || '').replace(/'/g, ''))}" onclick="abrirFormRepasse('received', null, { id: this.dataset.uid, nome: this.dataset.nome }${destino ? `, '${destino}'` : ''})">＋ ${destino === 'recarga' ? 'Lançar recarga' : 'Lançar repasse'}</button>`
+        : '';
+      const gCV = (pag, t) => soma(notasProprias.filter(n => pagNota(n) === pag && n.tipo === t));
+      const detGasto = kpiDet('kpi-gasto', `Gasto em ${MES_TXT} · ${notasProprias.length} nota${notasProprias.length === 1 ? '' : 's'}`,
+        kpiTotais([['RDM · Despesas', g('RDM')], ['RDA · Alimentação', g('RDA')],
+          ...(ehCVcolab ? [['💵 Carteira (RDM / RDA)', gastoCarteira], ['💳 Cartão (RDM / RDA)', gastoCartao]] : []),
+          ['Total', gasto, 'tot']])
+        + (ehCVcolab ? `<div class="cdet-kpi-det-sub">💵 Carteira: RDM ${brl(gCV('carteira', 'RDM'))} · RDA ${brl(gCV('carteira', 'RDA'))}<br>💳 Cartão: RDM ${brl(gCV('cartao', 'RDM'))} · RDA ${brl(gCV('cartao', 'RDA'))}</div>` : '')
+        + (pagoEmpresaMes ? `<div class="cdet-kpi-det-sub">🏢 Pago direto pela empresa: ${brl(pagoEmpresaMes)} (fora do gasto, entra no Faturamento)</div>` : '')
+        + kpiNotas(notasProprias));
+      const repsMes = reps.filter(x => recebido(x) && !ehRecargaR(x));
+      const pedidosMes = reps.filter(x => !recebido(x));
+      const detRec = kpiDet('kpi-rec', `${ehCVcolab ? 'Repasses recebidos' : 'Recebido'} em ${MES_TXT}`,
+        kpiTotais([['RDM', r('RDM')], ['RDA', r('RDA')], ['Total de repasses', rec, 'tot'],
+          ...(ehCVcolab || recargas.length ? [['💳 Recarga do cartão', recargaTotal]] : [])])
+        + `<div class="cdet-plan-det-tit">💰 Repasses · ${repsMes.length}</div>${kpiReps(repsMes, `Nenhum repasse recebido em ${MES_TXT}.`)}`
+        + (ehCVcolab || recargas.length ? `<div class="cdet-plan-det-tit">💳 Recargas do cartão · ${recargas.length}</div>${kpiReps(recargas, `Nenhuma recarga em ${MES_TXT}.`)}` : '')
+        + (pedidosMes.length ? `<div class="cdet-kpi-det-sub">⏳ ${pedidosMes.length} pedido${pedidosMes.length > 1 ? 's' : ''} de repasse no mês: veja em <a href="#" onclick="event.preventDefault();Gestor.irParaRepasses()">Repasses ↓</a></div>` : '')
+        + `<div class="cdet-kpi-det-btns">${kpiLancar(ehCVcolab ? 'carteira' : '')}${ehCVcolab ? kpiLancar('recarga') : ''}</div>`);
+      const detRecarga = ehCVcolab ? kpiDet('kpi-recarga', `Recargas do cartão em ${MES_TXT}`,
+        kpiTotais([['RDM', soma(recargas.filter(x => x.tipo === 'RDM'))], ['RDA', soma(recargas.filter(x => x.tipo === 'RDA'))], ['Total', recargaTotal, 'tot']])
+        + kpiReps(recargas, `Nenhuma recarga em ${MES_TXT}.`)
+        + `<div class="cdet-kpi-det-btns">${kpiLancar('recarga')}</div>`) : '';
+      const sdMes = t => centavos(r(t) - g(t));
+      const sdAcum = t => centavos((t === 'RDM' ? antRDM : antRDA) + r(t) - g(t));
+      const detSaldo = kpiDet('kpi-saldo', `Saldo RDM e RDA · ${MES_TXT}`,
+        `<table class="cdet-plan-meses"><thead><tr><th></th><th>RDM</th><th>RDA</th></tr></thead><tbody>
+          ${acumOk ? `<tr><td>Saldo anterior</td><td>${brl(centavos(antRDM))}</td><td>${brl(centavos(antRDA))}</td></tr>` : ''}
+          <tr><td>+ Recebido no mês</td><td>${brl(r('RDM'))}</td><td>${brl(r('RDA'))}</td></tr>
+          <tr><td>− Gasto no mês</td><td>${brl(g('RDM'))}</td><td>${brl(g('RDA'))}</td></tr>
+          <tr><td><b>= Saldo do mês</b></td><td><b>${brl(sdMes('RDM'))}</b></td><td><b>${brl(sdMes('RDA'))}</b></td></tr>
+          ${acumOk ? `<tr><td><b>= Saldo acumulado</b></td><td><b>${brl(sdAcum('RDM'))}</b></td><td><b>${brl(sdAcum('RDA'))}</b></td></tr>` : ''}
+        </tbody></table>
+        <div class="cdet-kpi-det-sub">${acumOk ? 'Saldo acumulado = saldo anterior + recebido − gasto. Negativo: a empresa ainda deve.' : 'Histórico indisponível: só o mês.'}</div>
+        ${acumOk ? `<div class="cdet-kpi-det-btns">${['RDM', 'RDA'].map(t => `<button type="button" class="btn btn-sm btn-outline" data-painel="reg-${t}" onclick="Gestor.alternarPlanilha(this.dataset.painel);document.querySelector('.cdet-bals-det')?.scrollIntoView({block:'start'})">Conta ${t} no ano ›</button>`).join('')}</div>` : ''}`);
+      /* Faturamento por categoria: TODAS as notas do mês (inclusive o que a empresa pagou), como o valor do cartão. */
+      const fatCats = CATEGORIAS_TODAS.map(c => {
+        const ns2 = notas.filter(n => _chaveCategoriaDetalhe(n) === c.chave);
+        return { rot: `${c.ico} ${c.nome}`, tipo: c.tipo, ns: ns2, v: soma(ns2) };
+      }).filter(c => c.ns.length).sort((p, q) => q.v - p.v);
+      const maxFat = Math.max(1, ...fatCats.map(c => c.v));
+      const fatPor = pag => soma(notas.filter(n => pagNota(n) === pag));
+      const detFat = kpiDet('kpi-fat', `Faturamento de ${MES_TXT} por categoria`,
+        kpiTotais([['RDM', soma(notas.filter(n => n.tipo === 'RDM'))], ['RDA', soma(notas.filter(n => n.tipo === 'RDA'))],
+          ...(ehCVcolab ? [['💵 Carteira', fatPor('carteira')], ['💳 Cartão', fatPor('cartao')]] : [['Pago pelo colaborador', gasto]]),
+          ...(pagoEmpresaMes ? [['🏢 Pago pela empresa', pagoEmpresaMes]] : []),
+          ['Faturamento do mês', faturamentoMes, 'tot']])
+        + (fatCats.length ? fatCats.map(c => `
+          <div class="cdet-cat">
+            <span class="cdet-cat-rot">${c.rot}<small>${c.ns.length} nota${c.ns.length === 1 ? '' : 's'} · ${c.tipo}</small></span>
+            <span class="cdet-cat-bar"><span style="width:${Math.round(c.v / maxFat * 100)}%"></span></span>
+            <span class="cdet-cat-val">${brl(c.v)}</span>
+          </div>`).join('') : `<div class="cdet-plan-vazio">Nenhuma despesa em ${MES_TXT}.</div>`));
+
       if (typeof _voltarRodape === 'function') _voltarRodape('Gestor.fechar()', '‹ Equipe');
       /* 06/11/2026: a ficha mostra o dinheiro real e a planilha fica sem a nota até a conferência; quem compara os dois precisa saber por quê.
          Só até o ano aberto: nota de ano depois deste não mexe na planilha deste ano.
@@ -1301,14 +1377,20 @@ window.Gestor = (() => {
         ${ehContador || !ehCVcolab ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_kpisAbertos ? 'on' : ''}" aria-expanded="${_kpisAbertos}" onclick="Gestor.alternarKpis(this)">📊 <span class="txt">${_kpisAbertos ? 'Esconder resumo do mês' : 'Abrir resumo do mês'}</span></button></div>`}
         ${ehContador ? '' : `<div class="cdet-kpis" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>
           ${ehCVcolab ? `
-          <div class="cdet-kpi link ${aReembolsar > 0.004 ? 'warn' : ''}" role="button" tabindex="0" data-filtro="carteira" title="Listar só as notas de carteira" onclick="Gestor.filtrarNotas('carteira')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('carteira')}"><span class="cdet-kpi-ico">💵</span><span class="cdet-kpi-lbl">A pagar</span><span class="cdet-kpi-val">${brl(Math.max(aReembolsar, 0))}</span><span class="cdet-kpi-sub">${aReembolsar < -0.004 ? 'reembolsado a mais ' + brl(-aReembolsar) + ' · ' : ''}carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'} · ${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} no mês <span aria-hidden="true">↓</span></span></div>` : `
-          <div class="cdet-kpi link" role="button" tabindex="0" title="Ver as notas do mês" onclick="Gestor.irParaNotas()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.irParaNotas()}"><span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notas.length} nota${notas.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span></span></div>`}
-          <div class="cdet-kpi link" role="button" tabindex="0" title="${ehCVcolab ? 'Listar só os repasses' : 'Ver a lista de repasses do mês'}" onclick="${acaoRec}" ${ehCVcolab ? 'data-filtro-rep="repasse"' : ''} onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${acaoRec}}"><span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : 'repasses do mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(r('RDM'), r('RDA'))}</div>
-          ${ehCVcolab ? `<div class="cdet-kpi link" role="button" tabindex="0" data-filtro-rep="recarga" title="Listar só as recargas" onclick="Gestor.filtrarRepasses('recarga')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarRepasses('recarga')}"><span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'} <span aria-hidden="true">↓</span></span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}</div>` : ''}
-          ${planilhaCV ? '' : `<div class="cdet-kpi ${saldo < 0 ? 'neg' : ''}"><span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span></div>`}
-          <div class="cdet-kpi"><span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">soma de todas as despesas</span></div>
+          <div class="cdet-kpi link ${aReembolsar > 0.004 ? 'warn' : ''}" role="button" tabindex="0" data-filtro="carteira" title="Listar só as notas de carteira" onclick="Gestor.filtrarNotas('carteira')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('carteira')}"><span class="cdet-kpi-ico">💵</span><span class="cdet-kpi-lbl">A pagar</span><span class="cdet-kpi-val">${brl(Math.max(aReembolsar, 0))}</span><span class="cdet-kpi-sub">${aReembolsar < -0.004 ? 'reembolsado a mais ' + brl(-aReembolsar) + ' · ' : ''}carteira − reembolsos${acumOk ? ' (acumulado)' : ' do mês'} · ${nCarteira.length} nota${nCarteira.length === 1 ? '' : 's'} no mês <span aria-hidden="true">↓</span></span></div>` : ''}
+          ${kpiToque('kpi-gasto', 'Ver o gasto do mês por RDM e RDA',
+            `<span class="cdet-kpi-ico">💸</span><span class="cdet-kpi-lbl">Gasto no mês</span><span class="cdet-kpi-val">${brl(gasto)}</span><span class="cdet-kpi-sub">${notasProprias.length} nota${notasProprias.length === 1 ? '' : 's'} em ${MESES[mes - 1]}</span>${_splitRDMRDA(g('RDM'), g('RDA'))}`)}
+          ${kpiToque('kpi-rec', 'Ver os repasses e recargas do mês',
+            `<span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : `repasses de ${MESES[mes - 1]}`}</span>${_splitRDMRDA(r('RDM'), r('RDA'))}`)}
+          ${ehCVcolab ? kpiToque('kpi-recarga', 'Ver as recargas do cartão do mês',
+            `<span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'}</span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}`) : ''}
+          ${planilhaCV ? '' : kpiToque('kpi-saldo', 'Ver o saldo RDM e RDA separados',
+            `<span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span>${_splitRDMRDA(sdMes('RDM'), sdMes('RDA'))}`, saldo < 0 ? 'neg' : '')}
+          ${kpiToque('kpi-fat', 'Ver o faturamento do mês por categoria',
+            `<span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento do mês</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">${MESES_LONGO[mes - 1]} · todas as despesas</span>${_splitRDMRDA(soma(notas.filter(n => n.tipo === 'RDM')), soma(notas.filter(n => n.tipo === 'RDA')))}`)}
           <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
-        </div>`}
+        </div>
+        <div class="cdet-kpis-det" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>${detGasto}${detRec}${detRecarga}${planilhaCV ? '' : detSaldo}${detFat}</div>`}
 
         ${ehContador ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_acoesAbertas ? 'on' : ''}" aria-expanded="${_acoesAbertas}" onclick="Gestor.alternarAcoes(this)">⋯ Relatórios e ações</button></div>`}
         <div class="cdet-acoes" style="display:${ehContador || _acoesAbertas ? 'grid' : 'none'}">
