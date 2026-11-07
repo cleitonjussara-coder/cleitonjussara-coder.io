@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 560;
+const APP_BUILD = 561;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3032,15 +3032,10 @@ function _filtrarSeletorColab(termo) {
    nenhum (user_id null no banco), só possível pra pagamento='empresa'. */
 /* 30/10/2026 (pedido do Paulo, áudio): "Lançar Faturamento" abre primeiro três caminhos separados — ver as notas, lançar por
    colaborador ou lançar uma nota independente — e sempre dá para cancelar. */
-function _escolherCaminhoFaturamento() {
+function _janelaOpcoes(titulo, corpo, opcoes) {
   return new Promise(resolve => {
     const { el, caixa, fechar, abrir } = _janelaApp(resolve, null);
-    _cabecalhoJanela(caixa, '🏢 Faturamento', 'O que você quer fazer?', false);
-    const opcoes = [
-      ['ver', '🗂️ Ver notas de Faturamento'],
-      ['colab', '👤 Lançar por colaborador'],
-      ['indep', '🏢 Lançar nota independente (sem colaborador)'],
-    ];
+    _cabecalhoJanela(caixa, titulo, corpo, false);
     opcoes.forEach(([chave, rotulo]) => {
       const b = _botaoJanela(rotulo, true, false);
       b.style.cssText += ';width:100%;display:block;margin-bottom:8px;text-align:left';
@@ -3056,13 +3051,25 @@ function _escolherCaminhoFaturamento() {
   });
 }
 
+/* Lançar nota de Faturamento (06/11/2026, pedido do Cleiton): mesmo recurso do lançamento comum, QR Code ou sem QR.
+   Ver as notas já lançadas ficou no atalho Notas faturadas. */
+const _escolherModoFaturamento = () => _janelaOpcoes('🏢 Lançar nota de Faturamento', 'Como quer lançar?',
+  [['qr', '📷 Nota pelo QR Code'], ['manual', '📝 Nota sem QR']]);
+
+function _lancarFaturamento(alvo, modo) {
+  if (modo === 'qr') { _faturamentoPreEscolhido = alvo; iniciarQR(); }
+  else abrirSeletorTipoLancamento({ ...alvo, _manual: true });
+}
+
 async function iniciarFaturamento() {
-  const escolha = await _escolherCaminhoFaturamento();
-  if (escolha === 'ver') abrirNotasFaturadas();
-  else if (escolha === 'indep') abrirSeletorTipoLancamento({ user_id: null, pagamento: 'empresa', semColaborador: true });
+  const modo = await _escolherModoFaturamento();
+  if (!modo) return;
+  const escolha = await _janelaOpcoes('🏢 Lançar nota de Faturamento', 'De quem é esta nota?',
+    [['colab', '👤 Lançar por colaborador'], ['indep', '🏢 Lançar nota independente (sem colaborador)']]);
+  if (escolha === 'indep') _lancarFaturamento({ user_id: null, pagamento: 'empresa', semColaborador: true }, modo);
   else if (escolha === 'colab') {
     abrirSeletorColaborador('🏢 Faturamento — de qual colaborador?', id => {
-      abrirSeletorTipoLancamento({ user_id: id, pagamento: 'empresa', semColaborador: false });
+      _lancarFaturamento({ user_id: id, pagamento: 'empresa', semColaborador: false }, modo);
     });
   }
 }
@@ -3249,6 +3256,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function switchView(v, voltando = false, avancando = false) {
+  _limparPreEscolhas();
   /* Contador só consulta e baixa (14/10/2026): nada de Painel, Notas, Saldo, lixeira, Frota… */
   if (_ehContabilidade() && !['inicio', 'equipe', 'arquivos', 'perfil'].includes(v)) v = 'inicio';
   /* histórico: não empilha repetição nem o próprio destino (evita laço) */
@@ -3794,6 +3802,14 @@ function alternarResumoHub() {
 /* O QR abre a câmera e só depois monta os dados: a escolha fica guardada
    aqui até o formulário nascer. */
 let _pagamentoPreEscolhido = null;
+let _faturamentoPreEscolhido = null;   // QR de Faturamento: dono e pagamento esperam a leitura terminar
+
+/* Quem desistiu da câmera não pode deixar escolha guardada: a próxima nota comum nasceria como Faturamento. */
+function _limparPreEscolhas() {
+  _abaPreEscolhida = null;
+  _pagamentoPreEscolhido = null;
+  _faturamentoPreEscolhido = null;
+}
 /* Faturamento (25/09/2026): pagamento='empresa' definido de fora do campo
    Pagamento (que só existe pra CV) — ver abrirFormNota/_salvarNotaInterno. */
 let _pagamentoForcado = null;
@@ -3857,6 +3873,7 @@ function abrirAbaDespesa(tipo) {
 /* Lança já na aba escolhida: o modal não pergunta RDA/RDM de novo (o botão
    "Trocar" continua lá, para o caso de a pessoa ter aberto a aba errada). */
 function lancarNaAba(tipo, modo) {
+  _limparPreEscolhas();
   _abaPreEscolhida = tipo;
   if (_pagamentoCV) _pagamentoPreEscolhido = _pagamentoCV;   // C.V.: a forma de pagamento já foi escolhida antes da aba
   if (modo === 'qr') iniciarQR();
@@ -3959,16 +3976,14 @@ function _iniAtalhos() {
   const lista = _usaCartao()
     ? [a('💵', 'Repasse', "abrirFormRepasse(null, null, null, 'carteira')"), a('💳', 'Recarga', "abrirFormRepasse(null, null, null, 'recarga')")]
     : [a('💸', 'Pedir repasse', 'abrirFormRepasse()')];
-  if (_veFrota()) lista.push(a('🛣️', 'Lançar KM', 'Frota.lancar()'));
   if (_ehGestorOuAdmin()) {
-    lista.push(a('🏢', 'Faturamento', 'iniciarFaturamento()'), a('🗂️', 'Notas faturadas', 'abrirNotasFaturadas()'),
+    lista.push(a('🗂️', 'Notas faturadas', 'abrirNotasFaturadas()'),
       a('🤝', 'Lançar repasse', 'iniciarRepasseColaborador()'), a('💳', 'Lançar recarga', 'iniciarRecargaColaborador()'));
     lista.push(a('📁', 'Arquivos', "switchView('arquivos')"));
     lista.push(a('👥', 'Equipe', "switchView('equipe')"));
     return lista;
   }
-  lista.push(a('🧾', 'Minhas notas', 'irParaNotas()'));
-  if (lista.length < 4) lista.push(a('📊', 'Painel', "switchView('home')"));
+  lista.push(a('🧾', 'Minhas notas', 'irParaNotas()'), a('📊', 'Painel', "switchView('home')"));
   return lista;
 }
 
@@ -4088,6 +4103,7 @@ function renderInicio() {
   </div>`;
 
   const pend = _pendenciasMenu();
+  const atalhos = _iniAtalhos();
   $('app-content').innerHTML = `
   <div class="ih"><div class="ih-col">
     <button class="ih-busca" onclick="Busca.abrir()"><span aria-hidden="true">🔎</span> ${_veEquipe() ? 'Buscar nota, pessoa ou tela…' : 'Buscar nota ou tela…'}</button>
@@ -4095,8 +4111,18 @@ function renderInicio() {
       <span class="ih-cta-mais" aria-hidden="true">＋</span>
       <span class="ih-cta-t"><b>Lançar nota</b><small>QR, foto ou digitando</small></span>
       <em aria-hidden="true">›</em>
-    </button>`}
-    <div class="ih-grid">${_iniAtalhos().map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
+    </button>
+    ${_veFrota() ? `<button class="ih-cta ih-cta-km" onclick="Frota.lancar()">
+      <span class="ih-cta-mais" aria-hidden="true">🛣️</span>
+      <span class="ih-cta-t"><b>Lançar KM</b><small>Odômetro do veículo</small></span>
+      <em aria-hidden="true">›</em>
+    </button>` : ''}
+    ${_ehGestorOuAdmin() ? `<button class="ih-cta ih-cta-fat" onclick="iniciarFaturamento()">
+      <span class="ih-cta-mais" aria-hidden="true">🏢</span>
+      <span class="ih-cta-t"><b>Lançar nota de Faturamento</b><small>QR Code ou sem QR</small></span>
+      <em aria-hidden="true">›</em>
+    </button>` : ''}`}
+    <div class="ih-grid ${atalhos.length % 3 === 0 ? 'ih-grid-3' : ''}">${atalhos.map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
     ${_pendInicioHTML(pend)}
     ${_cartaoPedidoAbertoHTML()}
     ${_faixaLancamentoDiarioHTML()}
@@ -7289,6 +7315,7 @@ async function atualizarBanco() {
 /* Sem o botão + (16/09/2026): "lançar" de qualquer tela leva ao Início,
    onde estão as três ações. A folha antiga fica só como reserva. */
 function abrirCaptura() {
+  _limparPreEscolhas();
   switchView('inicio');
 }
 function fecharCaptura() {
@@ -8378,8 +8405,8 @@ function abrirSeletorTipoLancamento(dados = {}) {
   if (!dados.tipo && _abaPreEscolhida) dados = { ...dados, tipo: _abaPreEscolhida };
   /* no CV a forma de pagamento já foi escolhida na tela anterior: pelo caminho do QR ela chega por aqui */
   if (!dados.pagamento && _pagamentoPreEscolhido) dados = { ...dados, pagamento: _pagamentoPreEscolhido };
-  _abaPreEscolhida = null;
-  _pagamentoPreEscolhido = null;
+  if (_faturamentoPreEscolhido) dados = { ...dados, ..._faturamentoPreEscolhido };
+  _limparPreEscolhas();
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
   if (ov) ov.style.display = 'flex';
@@ -10148,7 +10175,9 @@ async function _salvarNotaInterno() {
           mensagem: dono ? `Lançar mais uma nota para ${(equipePorId[dono]?.nome || 'o mesmo colaborador')}?` : 'Lançar mais uma nota sem colaborador?',
           confirmar: 'Lançar mais', cancelar: 'Concluir',
         });
-        if (mais) abrirSeletorTipoLancamento({ user_id: dono, pagamento: 'empresa', semColaborador: !dono });
+        if (!mais) return;
+        const modo = await _escolherModoFaturamento();
+        if (modo) _lancarFaturamento({ user_id: dono, pagamento: 'empresa', semColaborador: !dono }, modo);
       }, 400);
     }
   } finally { setLoading(false); }

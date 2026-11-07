@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=560">
+  <link rel="manifest" href="manifest.json?v=561">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -719,10 +719,14 @@ select.inp{cursor:pointer}
 .ih-col{display:flex;flex-direction:column;gap:9px;min-width:0}
 .ih button{font:inherit;cursor:pointer}
 .ih-busca{border:1px solid rgba(185,226,74,.4);background:rgba(0,0,0,.28);color:var(--text2);border-radius:12px;padding:10px 12px;text-align:left;font-size:15px}
-.ih-cta{display:flex;align-items:center;gap:11px;border:0;border-radius:14px;padding:11px 13px;background:linear-gradient(135deg,#d9f5a0,#b9e24a);color:#10321c;text-align:left;box-shadow:0 6px 14px rgba(0,0,0,.35)}
-.ih-cta-mais{width:38px;height:38px;border-radius:50%;background:#10321c;color:#d9f5a0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0}
-.ih-cta-t{flex:1;min-width:0;display:flex;flex-direction:column}.ih-cta b{font-size:18px}.ih-cta small{font-size:12.5px}.ih-cta em,.ih-eq em{font-style:normal;font-size:24px}
+.ih-cta{display:flex;align-items:center;gap:11px;border:0;border-radius:14px;padding:15px;background:linear-gradient(135deg,#d9f5a0,#b9e24a);color:#10321c;text-align:left;box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.ih-cta-mais{width:46px;height:46px;border-radius:50%;background:#10321c;color:#d9f5a0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;flex-shrink:0}
+.ih-cta-t{flex:1;min-width:0;display:flex;flex-direction:column}.ih-cta b{font-size:20px}.ih-cta small{font-size:13.5px}
+.ih-cta-km{background:linear-gradient(135deg,#c9f1f8,#62d0e6)}.ih-cta-fat{background:linear-gradient(135deg,#ffe8ad,#f5b847)}
+.ih-cta-km .ih-cta-mais,.ih-cta-fat .ih-cta-mais{font-size:23px;background:rgba(16,50,28,.14)}
+.ih-cta em,.ih-eq em{font-style:normal;font-size:24px}
 .ih-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.ih-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ih-grid button{border:1px solid rgba(185,226,74,.3);border-radius:12px;background:var(--surface);color:var(--text);padding:8px 3px 7px;font-size:12px;font-weight:700;line-height:1.15;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;text-align:center;overflow-wrap:anywhere}
 .ih-grid button span{font-size:21px}
 @media (max-width:380px){.ih-grid button{padding:8px 1px 7px;font-size:11.5px;letter-spacing:-.2px}}
@@ -753,6 +757,7 @@ select.inp{cursor:pointer}
   .ih-col{gap:14px}
   .ih-busca{font-size:19px;padding:14px 16px}
   .ih-cta{padding:16px 18px}.ih-cta-mais{width:52px;height:52px;font-size:32px}.ih-cta b{font-size:27px}.ih-cta small{font-size:16px}
+  .ih-cta-km .ih-cta-mais,.ih-cta-fat .ih-cta-mais{font-size:28px}
   .ih-grid{gap:14px}.ih-grid button{font-size:21px;padding:24px 8px;gap:10px;border-radius:16px;min-height:150px;justify-content:center}.ih-grid button span{font-size:48px}
   .ih-pend{padding:12px 14px}.ih-pend>b{font-size:17px}.ih-pend button{font-size:15.5px;padding:9px 10px}.ih-pend strong{font-size:26px}
   .ih-card{padding:14px 16px}.ih-linha{font-size:19px}.ih-sub,.ih-link{font-size:16px}
@@ -2329,7 +2334,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=560" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=561" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2470,7 +2475,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <button type="button" class="btn btn-sm" id="qr-btn-retry" style="display:none;margin-top:8px;background:rgba(255,255,255,.92);color:#222;border:none"
             onclick="iniciarQR()">🔄 Já liberei — tentar de novo</button>
   </div>
-  <button class="btn-overlay-close" onclick="fecharQR();fecharBarcode()">✕</button>
+  <button class="btn-overlay-close" onclick="fecharQR();fecharBarcode();_limparPreEscolhas()">✕</button>
 </div>
 
 <!-- ═══════════ CÂMERA DA NOTA (dentro do app) ═══════════ -->
@@ -3056,41 +3061,41 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=560"></script>
-<script defer src="js/db.js?v=560"></script>
-<script defer src="js/nfce.js?v=560"></script>
-<script defer src="js/sefaz.js?v=560"></script>
-<script defer src="js/brasilapi.js?v=560"></script>
-<script defer src="js/ocr.js?v=560"></script>
-<script defer src="js/scanner.js?v=560"></script>
-<script defer src="js/foto-branca.js?v=560"></script>
-<script defer src="js/recorte.js?v=560"></script>
-<script defer src="js/excel.js?v=560"></script>
-<script defer src="js/gestor.js?v=560"></script>
-<script defer src="js/frota.js?v=560"></script>
-<script defer src="js/frota-painel.js?v=560"></script>
-<script defer src="js/frota-planilha.js?v=560"></script>
-<script defer src="js/ponto.js?v=560"></script>
-<script defer src="js/rastreio.js?v=560"></script>
-<script defer src="js/repasses-equipe.js?v=560"></script>
-<script defer src="js/fechamento.js?v=560"></script>
-<script defer src="js/busca.js?v=560"></script>
-<script defer src="js/gdrive.js?v=560"></script>
+<script defer src="js/api.js?v=561"></script>
+<script defer src="js/db.js?v=561"></script>
+<script defer src="js/nfce.js?v=561"></script>
+<script defer src="js/sefaz.js?v=561"></script>
+<script defer src="js/brasilapi.js?v=561"></script>
+<script defer src="js/ocr.js?v=561"></script>
+<script defer src="js/scanner.js?v=561"></script>
+<script defer src="js/foto-branca.js?v=561"></script>
+<script defer src="js/recorte.js?v=561"></script>
+<script defer src="js/excel.js?v=561"></script>
+<script defer src="js/gestor.js?v=561"></script>
+<script defer src="js/frota.js?v=561"></script>
+<script defer src="js/frota-painel.js?v=561"></script>
+<script defer src="js/frota-planilha.js?v=561"></script>
+<script defer src="js/ponto.js?v=561"></script>
+<script defer src="js/rastreio.js?v=561"></script>
+<script defer src="js/repasses-equipe.js?v=561"></script>
+<script defer src="js/fechamento.js?v=561"></script>
+<script defer src="js/busca.js?v=561"></script>
+<script defer src="js/gdrive.js?v=561"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=560"></script>
+<script defer src="js/svelte-ajuda.js?v=561"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=560"></script>
+<script defer src="js/svelte-historico.js?v=561"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=560"></script>
+<script defer src="js/svelte-arquivos.js?v=561"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=560"></script>
-<script defer src="js/app.js?v=560"></script>
-<script defer src="js/instalar.js?v=560"></script>
+<script defer src="js/svelte-perfil.js?v=561"></script>
+<script defer src="js/app.js?v=561"></script>
+<script defer src="js/instalar.js?v=561"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=560').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=561').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
