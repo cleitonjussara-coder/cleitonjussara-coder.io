@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 566;
+const APP_BUILD = 567;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4099,13 +4099,64 @@ async function _pintarEquipeHoje() {
   const pessoas = new Set(ns.map(n => n.user_id).filter(Boolean)).size;
   const fim = $('ini-equipe-hoje');
   if (!fim) return;
-  fim.innerHTML = `<button class="ih-card ih-eq" onclick="switchView('equipe')">
+  /* 07/11/2026 (pedido do Cleiton sobre o print): tocar abre, logo abaixo, as notas de hoje da equipe com o cartão de nota
+     de sempre (✏️ editar, 🗑 excluir, histórico, anexo) e um filtro por pessoa. Antes levava só para a Equipe. */
+  fim.innerHTML = `<button class="ih-card ih-eq ${_iniEqAberto ? 'on' : ''}" aria-expanded="${_iniEqAberto}" onclick="alternarEquipeHoje()">
     <span class="ih-eq-i" aria-hidden="true">👥</span>
     <span class="ih-eq-t"><b>Hoje na equipe</b><small>${ns.length
       ? `${ns.length} nota${ns.length === 1 ? '' : 's'} · ${brl(_soma(ns))} · ${pessoas} ${pessoas === 1 ? 'pessoa lançou' : 'pessoas lançaram'}`
-      : 'Nenhuma nota com a data de hoje'}</small></span>
-    <em aria-hidden="true">›</em>
-  </button>`;
+      : 'Nenhuma nota com a data de hoje'}</small>${ns.length ? `<span class="ih-eq-ver">${_iniEqAberto ? 'Esconder as notas ▲' : 'Ver e editar as notas ▼'}</span>` : ''}</span>
+    <em aria-hidden="true">${_iniEqAberto ? '▲' : '›'}</em>
+  </button><div id="ini-equipe-hoje-lista"></div>`;
+  if (_iniEqAberto) _pintarListaEquipeHoje();
+}
+
+let _iniEqAberto = false;     // lista das notas de hoje aberta no Início (fica aberta ao corrigir uma nota)
+let _iniEqPessoa = null;      // filtro por pessoa dessa lista
+let _iniEqCompletas = { dia: null, em: 0, notas: null };   // as mesmas notas, com todos os campos para o cartão
+function alternarEquipeHoje() {
+  const ns = _iniEquipe.notas || [];
+  if (!ns.length) { switchView('equipe'); return; }   // sem nota hoje: o toque leva à Equipe, como antes
+  _iniEqAberto = !_iniEqAberto;
+  if (!_iniEqAberto) _iniEqPessoa = null;
+  _pintarEquipeHoje();
+}
+function _invalidarEquipeHoje() { _iniEquipe.em = 0; _iniEqCompletas.em = 0; }   // depois de corrigir/excluir: relê do servidor
+function filtrarEquipeHoje(uid) { _iniEqPessoa = uid === null || _iniEqPessoa === uid ? null : String(uid); _pintarListaEquipeHoje(); }
+async function _pintarListaEquipeHoje() {
+  const alvo = $('ini-equipe-hoje-lista');
+  if (!alvo) return;
+  const hoje = FusoBR.hojeISO();
+  if (_iniEqCompletas.dia !== hoje || Date.now() - _iniEqCompletas.em > _INI_EQUIPE_CACHE_MS || !_iniEqCompletas.notas) {
+    alvo.innerHTML = '<div class="ih-eq-lista"><div class="loading-state" style="padding:16px"><div class="spin"></div><p>Carregando as notas de hoje…</p></div></div>';
+    try {
+      const p = FusoBR.partes();
+      const lista = await sb.notas.list({ ano: p.ano, mes: p.mes, deleted: '0' });
+      _iniEqCompletas = { dia: hoje, em: Date.now(), notas: (lista || []).filter(n => !n.deleted && String(n.data || '').slice(0, 10) === hoje) };
+    } catch (e) {
+      alvo.innerHTML = `<div class="ih-eq-lista"><div class="empty-state" style="padding:14px">Não deu para carregar as notas de hoje (${esc(e.message || 'sem conexão')}).</div></div>`;
+      return;
+    }
+  }
+  if (!$('ini-equipe-hoje-lista')) return;   // a pessoa saiu do Início enquanto carregava
+  garantirNotasNaLista(_iniEqCompletas.notas);
+  /* a nota corrigida ou apagada aqui muda no objeto da lista do app (notasEquipe); a lista do dia usa esse, não a cópia */
+  const todas = _iniEqCompletas.notas.map(n => _notaPorId(n.id) || n)
+    .filter(n => !n.deleted && String(n.data || '').slice(0, 10) === hoje)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const nomeDe = uid => uid ? (equipePorId[uid]?.nome || 'Colaborador') : 'Faturamento geral';
+  const porPessoa = new Map();
+  todas.forEach(n => { const k = n.user_id || ''; const g = porPessoa.get(k) || { n: 0, v: 0 }; g.n++; g.v += Number(n.valor) || 0; porPessoa.set(k, g); });
+  if (_iniEqPessoa !== null && !porPessoa.has(_iniEqPessoa)) _iniEqPessoa = null;
+  const vis = _iniEqPessoa === null ? todas : todas.filter(n => (n.user_id || '') === _iniEqPessoa);
+  const chip = (uid, rot, g) => `<button type="button" class="btn btn-sm ${(_iniEqPessoa ?? null) === uid ? 'btn-primary' : 'btn-outline'}" data-uid="${_at(uid ?? '')}" onclick="filtrarEquipeHoje(${uid === null ? 'null' : 'this.dataset.uid'})">${rot} · ${g.n} · ${brl(g.v)}</button>`;
+  alvo.innerHTML = `<div class="ih-eq-lista">
+    <div class="ih-eq-filtro">${chip(null, 'Todos', { n: todas.length, v: _soma(todas) })}${[...porPessoa.entries()].sort((a, b) => b[1].v - a[1].v)
+      .map(([uid, g]) => chip(uid, esc(nomeDe(uid).split(' ')[0]), g)).join('')}</div>
+    <div class="notas-list">${vis.map(n => cardNotaHTML(n, 'ihthumb-')).join('') || '<div class="empty-state" style="padding:14px">Nenhuma nota.</div>'}</div>
+    <button type="button" class="btn btn-outline btn-full" style="margin-top:8px" onclick="switchView('equipe')">👥 Abrir a Equipe ›</button>
+  </div>`;
+  _carregarMiniaturas(vis, 'ihthumb-').catch(() => {});
 }
 
 function renderInicio() {
@@ -10190,7 +10241,9 @@ async function _salvarNotaInterno() {
     /* 15/10/2026: corrigindo a nota pela ficha do colaborador (Equipe), a pessoa continua NA ficha, no mesmo ponto da tela — antes
        caía na lista de "Minhas notas" (gestor) ou voltava ao topo (Contador). A ficha lê do servidor: manda a fila primeiro. */
     const _naEquipe = viewAtual === 'equipe';
-    if (_naEquipe) await _enviarFilaAntesDaFicha();
+    const _naListaHoje = viewAtual === 'inicio' && _iniEqAberto;   // corrigindo pela lista "Hoje na equipe" (07/11/2026): ela também lê do servidor
+    if (_naEquipe || _naListaHoje) await _enviarFilaAntesDaFicha();
+    if (_naListaHoje) _invalidarEquipeHoje();
     await carregarDadosLocais();
     /* A tela é reconferida DEPOIS da espera (a pessoa pode ter saído da Equipe). Sem rede a ficha não carrega (ela lê do servidor
        e só mostraria "Erro ao carregar"): fica como está, a correção segue na fila e o aviso abaixo diz isso. */
@@ -10426,10 +10479,13 @@ async function excluirNota(id) {
   await syncBadge(false);
   /* excluindo pela ficha do colaborador (Equipe): fica na ficha, no mesmo ponto — e ela lê do servidor, então a fila vai antes */
   const _naEquipe = viewAtual === 'equipe';
-  if (_naEquipe) { setLoading(true, 'Atualizando a ficha…'); try { await _enviarFilaAntesDaFicha(); } finally { setLoading(false); } }
+  const _naListaHoje = viewAtual === 'inicio' && _iniEqAberto;   // excluindo pela lista "Hoje na equipe" do Início (07/11/2026)
+  if (_naEquipe || _naListaHoje) { setLoading(true, _naEquipe ? 'Atualizando a ficha…' : 'Atualizando as notas de hoje…'); try { await _enviarFilaAntesDaFicha(); } finally { setLoading(false); } }
+  if (_naListaHoje) _invalidarEquipeHoje();
   await carregarDadosLocais();
   if (viewAtual === 'lixeira') renderNotasApagadas();
   else if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }   // sem rede a ficha não carrega: fica como está, a exclusão segue na fila
+  else if (viewAtual === 'inicio') renderInicio();   // fica no Início (antes pulava para Minhas notas)
   else renderNotas();
   syncToDrive().catch(() => {});
   if (sb && navigator.onLine) DB.sync(sb, user.id).catch(()=>{});
