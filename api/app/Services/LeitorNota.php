@@ -55,7 +55,8 @@ class LeitorNota
         /* 07/11/2026 (pedido do Cleiton, DANFE fotografado com o lado de fora): só importa o que permite achar a nota de novo
            — com a chave tira-se a 2ª via. Texto de endereço, nome ou itens cortado não barra. O app barra quando vem true. */
         .'cortado = true somente se a borda da foto cortou (ficou pela metade ou fora da imagem) alguma destas informações: '
-        .'a chave de acesso (os dígitos ou o código de barras/QR Code), o valor total/valor pago, ou o número e a série do documento. '
+        .'a chave de acesso, o valor total/valor pago, ou o número e a série do documento. '
+        .'A chave conta como legível se os dígitos impressos OU o QR Code (ou o código de barras) estiverem inteiros na foto: dígito comido pela impressora com o QR inteiro não é corte. '
         .'Qualquer outro texto cortado (nome, endereço, itens, tributos, margem), o papel encostando na borda ou texto mal impresso pela própria impressora NÃO contam: cortado = false. Na dúvida, false.';
 
     public function __construct(private VisaoIa $ia) {}

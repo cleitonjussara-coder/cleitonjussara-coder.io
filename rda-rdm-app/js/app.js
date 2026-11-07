@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 568;
+const APP_BUILD = 569;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -8390,6 +8390,12 @@ async function _anexoUtilizavel(file, input) {
 /* Texto cortado na foto (07/11/2026, pedido do Cleiton: "se o texto estiver cortado não deixar fazer o lançamento"). Quem julga é
    a leitura por IA (servidor, LeitorNota: campo cortado) — medir pixels não separava foto boa de cortada (300 fotos reais e as 5
    do dono). Sem exceção para ninguém (decisão do dono). Sem internet ou sem IA não dá para conferir: não barra. */
+/* Barra só se faltar o que acha a nota de novo: a chave válida (do QR lido no aparelho ou da IA) com o valor e o número */
+function _cortadoBarra(r, chaveQr) {
+  if (!r?.cortado) return false;
+  const chave = _digitos(chaveQr || '').length === 44 && (!window.SEFAZ?.dvValido || SEFAZ.dvValido(_digitos(chaveQr)));
+  return !(chave && r.valor && r.numero);
+}
 async function _avisarTextoCortado() {
   await mostrarAviso({
     titulo: 'O texto da nota ficou cortado',
@@ -8453,12 +8459,12 @@ async function _lerNotaPorIa(blob) {
   try {
     const r = await sb.notas.lerFotoIa(await _imagemParaIa(blob));
     const d = r?.dados;
-    if (d?.cortado === true) return { cortado: true, _ia: true };   // 07/11/2026: texto cortado na foto — o lançamento é barrado, os campos não importam
-    if (!d || !(d.valor || d.cnpj || d.chave)) return null;
+    /* 07/11/2026: cortado vem junto dos campos — quem chamou decide (o QR lido no aparelho ainda pode salvar a nota) */
+    if (!d || !(d.valor || d.cnpj || d.chave || d.cortado === true)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
              chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', portal_nfse: d.portal_nfse || '',
-             uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', _ia: true };
+             uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', cortado: d.cortado === true, _ia: true };
   } catch (_) { return null; }
 }
 
@@ -8538,7 +8544,7 @@ async function onFotoNota(e) {
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
     const r = await leituraDaNota;
-    if (r?.cortado) { ov.style.display = 'none'; e.target.value = ''; await _avisarTextoCortado(); return; }   // 07/11/2026
+    if (_cortadoBarra(r, dados.chave)) { ov.style.display = 'none'; e.target.value = ''; await _avisarTextoCortado(); return; }   // 07/11/2026 (o QR desta foto já foi lido acima)
     porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
@@ -9687,7 +9693,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       }
       $('ocr-progress').textContent = 'Lendo a nota…';
       ocr = await _lerNota(alvo);
-      if (ocr?.cortado) {   // 07/11/2026: texto cortado na foto — a foto não fica anexada
+      if (ocr?.cortado && _cortadoBarra(ocr, (await (qrEmCurso || (qrEmCurso = lerQr())))?.chave || _digitos($('nf-chave').value))) {   // 07/11/2026: chave/valor/número cortados — a foto não fica anexada
         ov.style.display = 'none';
         if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
         fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null); atualizarPreviewFoto(null);
