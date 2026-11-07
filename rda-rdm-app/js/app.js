@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 565;
+const APP_BUILD = 566;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3188,6 +3188,42 @@ function avancarView() {
   const prox = _fwdViews.pop();
   if (prox) switchView(prox, false, true);
 }
+/* Trilha (07/11/2026): tocar numa tela do caminho VOLTA até ela (com o que estava aberto), como vários "voltar" seguidos,
+   e o "Avançar ›" refaz o caminho. Antes abria a tela do zero. */
+function voltarPara(v) {
+  const i = _histViews.lastIndexOf(v);
+  if (v === 'inicio' || i < 0) { switchView(v); return; }
+  const pulados = _histViews.splice(i).slice(1);   // telas entre o destino e a atual
+  if (viewAtual && viewAtual !== v) _fwdViews.push(viewAtual, ...pulados.reverse());
+  switchView(v, true);
+}
+
+/* ─── Cada tela volta como a pessoa deixou (07/11/2026) ──────────
+   Pedido do Cleiton: "algumas não têm como voltar para a aba anterior, voltando para o início da aba". O app lembrava
+   QUAL era a tela anterior, mas a redesenhava do começo: a ficha aberta na Equipe, a pasta e o mês em Arquivos, a aba
+   RDA/RDM de Despesas e a rolagem se perdiam. Agora, ao sair, a tela guarda isso; ao VOLTAR (ou Avançar) para ela, é
+   devolvido. Entrar de novo pelo menu ou por um atalho continua abrindo a tela do começo. */
+const _estadoViews = {};
+function _guardarEstadoView(v) {
+  const el = $('app-content');
+  const interno = v === 'equipe' ? window.Gestor?.estado?.()
+    : v === 'arquivos' ? window.Arquivos?.estado?.()
+    : v === 'despesas' ? { pagamentoCV: _pagamentoCV, aba: _abaDespesa }
+    : null;
+  _estadoViews[v] = { scroll: el ? el.scrollTop : 0, interno };
+}
+/* a tela se desenha aos poucos (vem do servidor): tenta a rolagem até a altura permitir, por no máximo 2,5 s */
+function _restaurarScroll(v, y) {
+  if (!y) return;
+  const fim = Date.now() + 2500;
+  const tenta = () => {
+    const el = $('app-content');
+    if (!el || viewAtual !== v) return;
+    if (el.scrollHeight - el.clientHeight >= y - 4) { el.scrollTop = y; _atualizarBotaoTopo(); return; }
+    if (Date.now() < fim) setTimeout(tenta, 60); else el.scrollTop = y;
+  };
+  setTimeout(tenta, 0);
+}
 
 /* ─── Navegação em todas as telas (29/10/2026) ───────────────────
    Pedido do Paulo/Cleiton: "muitas páginas não voltam". Três ajudas juntas:
@@ -3232,15 +3268,17 @@ function _pintarTrilha() {
   const el = $('trilha-nav');
   if (!el) return;
   if (!viewAtual || viewAtual === 'inicio') { el.style.display = 'none'; return; }
-  const caminho = ['inicio', ..._histViews.filter(x => x !== 'inicio').slice(-1), viewAtual];
+  /* o caminho de verdade, até 3 telas antes da atual (07/11/2026; antes mostrava só a última) */
+  const caminho = ['inicio', ...[...new Set(_histViews.filter(x => x !== 'inicio' && x !== viewAtual))].slice(-3), viewAtual];
   el.innerHTML = caminho.map((v, i) => {
     const nome = esc(NOME_VIEW[v] || v);
     const ultimo = i === caminho.length - 1;
     return (i ? '<span class="trilha-sep" aria-hidden="true">›</span>' : '') +
       (ultimo ? `<span class="trilha-atual" aria-current="page">${nome}</span>`
-              : `<button type="button" class="trilha-item" onclick="switchView('${v}')">${i ? '' : '🏠 '}${nome}</button>`);
+              : `<button type="button" class="trilha-item" title="Voltar para ${nome}" onclick="voltarPara('${v}')">${i ? '' : '🏠 '}${nome}</button>`);
   }).join('');
   el.style.display = '';
+  el.scrollLeft = el.scrollWidth;   // caminho longo no celular: a tela atual fica à vista, o começo rola de lado
 }
 
 function _atualizarBotaoTopo() {
@@ -3259,6 +3297,9 @@ function switchView(v, voltando = false, avancando = false) {
   _limparPreEscolhas();
   /* Contador só consulta e baixa (14/10/2026): nada de Painel, Notas, Saldo, lixeira, Frota… */
   if (_ehContabilidade() && !['inicio', 'equipe', 'arquivos', 'perfil'].includes(v)) v = 'inicio';
+  /* a tela que sai guarda o que estava aberto; só Voltar/Avançar devolve (07/11/2026) */
+  if (viewAtual && viewAtual !== v) _guardarEstadoView(viewAtual);
+  const guardado = (voltando || avancando) && v !== viewAtual ? _estadoViews[v] : null;
   /* histórico: não empilha repetição nem o próprio destino (evita laço) */
   if (!voltando && viewAtual && viewAtual !== v) {
     _histViews = _histViews.filter(x => x !== v);
@@ -3303,9 +3344,14 @@ function switchView(v, voltando = false, avancando = false) {
   { const f = $('btn-avancar'), prox = _fwdViews[_fwdViews.length - 1];
     if (f) { f.style.display = prox ? '' : 'none'; if (prox) { f.textContent = (NOME_VIEW[prox] || 'Avançar') + ' ›'; f.setAttribute('aria-label', 'Avançar para ' + (NOME_VIEW[prox] || 'a próxima tela')); } } }
   if (v !== 'inicio') _armarNav();
+  if (guardado) {
+    if (v === 'equipe') window.Gestor?.restaurar?.(guardado.interno, guardado.scroll);   // a Equipe devolve a rolagem sozinha
+    else if (v === 'arquivos') window.Arquivos?.restaurar?.(guardado.interno);
+    if (v !== 'equipe') _restaurarScroll(v, guardado.scroll);
+  }
   if (v==='home')    renderHome();
   else if (v==='inicio') renderInicio();
-  else if (v==='despesas') { _pagamentoCV = null; _abaDespesa = null; renderDespesas(); }
+  else if (v==='despesas') { _pagamentoCV = guardado?.interno?.pagamentoCV ?? null; _abaDespesa = guardado?.interno?.aba ?? null; renderDespesas(); }
   else if (v==='frota')  { if (_veFrota()) window.Frota?.render(); else switchView('inicio'); }
   else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
   else if (v==='arquivos') _montarArquivos();

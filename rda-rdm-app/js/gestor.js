@@ -527,6 +527,16 @@ window.Gestor = (() => {
   function irParaRepasses() {
     document.getElementById('cdet-repasses')?.scrollIntoView({ block: 'start' });   // direto, como as setas da lista (sem animação: não depende do aparelho)
   }
+  /* Voltar para a Equipe reabre a ficha que estava aberta, na mesma rolagem (07/11/2026, pedido do Cleiton). switchView()
+     guarda isto ao sair (antes do reset) e devolve ao voltar, antes de desenhar. */
+  function estado()   { return { id: _detalheId, filtros: { ..._eqF }, busca: _buscaTxt }; }
+  function restaurar(e, rolagem) {
+    if (!e) return;
+    if (e.filtros) Object.assign(_eqF, e.filtros);
+    _buscaTxt = e.busca || '';
+    _detalheId = e.id || null;
+    _evoScroll = typeof rolagem === 'number' ? rolagem : null;   // a ficha e a lista devolvem a rolagem depois de desenhar
+  }
   function reset()    { _detalheId = null; _fichaSeq++; _desarmarFicha(); Object.assign(_eqF, _EQ_FILTROS); _buscaTxt = ''; }
   /* o que um redesenho da ficha deixou "armado" para o próximo (rolagem guardada, rolar até os repasses, faixa do mês aberta)
      não vale mais quando a ficha é fechada antes de ele terminar */
@@ -1921,5 +1931,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, estado, restaurar, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

@@ -159,7 +159,7 @@ async function renderMeses(s) {
     ? { ...FAT, ...(resumo.faturamento || { qtd: 0, total: 0, com_anexo: 0, meses: [] }) }
     : (resumo.colaboradores || []).find(x => x.user_id === colab.user_id) || { ...colab, qtd: 0, total: 0, com_anexo: 0, meses: [] };
   colab = c;
-  dep.voltarRodape(dep.veEquipe() ? 'Arquivos.voltarColabs()' : "switchView('inicio')");
+  dep.voltarRodape(dep.veEquipe() ? 'Arquivos.voltarColabs()' : null, '‹ Pastas');   // quem só vê a própria pasta volta pelo "Voltar para" do rodapé, para a tela de onde veio (07/11/2026: antes ia ao Início)
   mostrar('carregando', null);
   const { brl, esc } = dep;
   const porMes = {};
@@ -242,7 +242,7 @@ async function carregarAno() {
 function guardarFiltro(f) { if (mes) filtroMes = f; else filtroAno = f; }
 
 async function renderMes(s) {
-  dep.voltarRodape('Arquivos.voltarMeses()');
+  dep.voltarRodape('Arquivos.voltarMeses()', `‹ ${colab.faturamento ? 'Faturamento' : (colab.nome || 'Meses').split(' ')[0]}`);
   mostrar('carregando', null);
   const l = await dep.sb.arquivos.notas(colab.user_id, ano, mes, colab.faturamento);
   if (s !== seq) return;
@@ -389,8 +389,18 @@ async function baixarRelatorioFat(formato) {
 
 function reset() { colab = null; mes = null; lista = null; mesesAbertos = false; graficosAbertos = false; limparBuscas(); }
 
+/* Voltar para Arquivos reabre a pasta e o mês onde a pessoa estava (07/11/2026, pedido do Cleiton: "voltando para início da
+   aba"). switchView() guarda isto ao sair e devolve ao voltar, antes de montar. */
+function estado() { return { colab, mes, ano, mesesAbertos, graficosAbertos }; }
+function restaurar(e) {
+  if (!e) return;
+  colab = e.colab || null; mes = e.mes || null; lista = null;
+  if (e.ano) ano = e.ano;
+  mesesAbertos = !!e.mesesAbertos; graficosAbertos = !!e.graficosAbertos;
+}
+
 /* MESMO NOME do módulo original (window.Arquivos) — substitui o
    arquivos.js de antes, não convive com ele. gestor.js chama
    Arquivos.abrirColab(id) direto; switchView() chama Arquivos.reset() ao
    sair e Arquivos.montar(el, deps) ao entrar (ver app.js). */
-window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset, recarregar };
+window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset, recarregar, estado, restaurar };

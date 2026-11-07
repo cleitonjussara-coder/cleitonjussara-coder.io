@@ -127,6 +127,19 @@ const txt = n => (n ? n.textContent.replace(/\s+/g, '') : '');   // sem espaço:
     confere(det.style.display === '', 'e aparecem ao abrir o resumo');
   }
 
+  console.log('Voltar para a Equipe reabre a ficha (07/11/2026)');
+  {
+    const colab = { id: 'u1', nome: 'Ana', email: 'a@x', role: 'colaborador', regime: 'rdm_rda' };
+    const { w, el } = await ficha(colab, [nota('u1', 10)], []);
+    const e = w.Gestor.estado();
+    confere(e.id === 'u1', 'estado guarda a ficha aberta');
+    w.Gestor.reset();
+    w.Gestor.restaurar(e, 0);
+    const sb = { notas: { list: async () => [] }, repasses: { list: async () => [] }, colaboradores: { get: async () => colab } };
+    await w.Gestor.renderDashboard(el, sb, { id: 'g1', role: 'admin', nome: 'Cleiton' }, () => {}, { mes: 11, ano: 2026 });
+    confere(!!el.querySelector('.cdet .cdet-nome') && /Ana/.test(el.querySelector('.cdet-nome').textContent), 'depois de sair e voltar, a ficha da Ana abre de novo');
+  }
+
   console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo');
   process.exit(falhas ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
