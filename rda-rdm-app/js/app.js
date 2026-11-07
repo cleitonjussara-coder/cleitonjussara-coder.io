@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 569;
+const APP_BUILD = 570;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1363,6 +1363,8 @@ async function onLogin(authUser) {
     setLoading(false);
     /* a página recarregou no meio de um registro de KM: volta ao formulário em vez de ficar no Início */
     if (_veFrota()) window.Frota?.restaurarRascunho?.().catch(() => {});
+    /* 07/11/2026: avisos no celular e câmera para todos os papéis — reinscreve calado ou oferece liberar */
+    setTimeout(() => _permissoesAoEntrar().catch(() => {}), 1500);
 
     // perfil oficial em background (não bloqueia a tela)
     if (!DEMO_MODE && sb) {
@@ -6903,20 +6905,32 @@ async function salvarCpfDoPerfil(campo) {
   }
 }
 
+/* O que chega para cada papel (07/11/2026) — gestor/admin também recebem os do colaborador quando a nota/repasse é deles. */
+function _textoAvisosDoPapel() {
+  return _ehGestorOuAdmin()
+    ? 'Pedido de repasse e recarga, justificativa respondida, cadastro novo, foto em branco e cartão acabando'
+    : 'Justificativa pedida, correção de nota, repasse e recarga do cartão';
+}
+
 async function _pintarCartaoPush() {
   const el = $('perfil-push');
   if (!el) return;
   if (!_pushDisponivel()) {
-    el.innerHTML = '<p style="font-size:14px;color:var(--text2)">Este navegador não trabalha com notificação.</p>';
+    el.innerHTML = _ehIOS() && !_jaInstalado()
+      ? `<div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:10px 12px;color:#7C2D12">
+          <b style="color:#9A3412">🔕 Avisos no celular desligados</b>
+          <p style="margin-top:4px;line-height:1.5;color:inherit;font-size:14.5px">No iPhone, os avisos só chegam com o app instalado na Tela de Início.</p>
+          <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="_modalInstalarIOS()">📲 Como instalar</button></div>`
+      : '<p style="font-size:14px;color:var(--text2)">Este navegador não trabalha com notificação.</p>';
     return;
   }
   const inscrito = !!(await _inscricaoAtual());
   const bloqueado = Notification.permission === 'denied';
   if (inscrito) {
     el.innerHTML = `
-      <div style="background:rgba(185,226,74,.14);border:1px solid rgba(185,226,74,.45);border-radius:10px;padding:10px 12px">
-        <b>🔔 Notificações ligadas neste aparelho</b>
-        <p style="margin-top:4px;line-height:1.5;font-size:14.5px">Pedido de repasse, repasse pago, cadastro novo e cartão acabando chegam aqui — e o número aparece no ícone do app.</p>
+      <div style="background:#F0FBF4;border:1.5px solid #74C69D;border-radius:10px;padding:10px 12px;color:#1B4332">
+        <b style="color:#1B4332">🔔 Notificações ligadas neste aparelho</b>
+        <p style="margin-top:4px;line-height:1.5;font-size:14.5px;color:#1B4332">${_textoAvisosDoPapel()} chegam aqui com toque e no painel do celular — e o número aparece no ícone do app.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
           <button class="btn btn-sm btn-outline" onclick="sb?.push.testar().then(()=>toast('Aviso de teste enviado')).catch(()=>toast('Não deu','err'))">Enviar um teste</button>
           <button class="btn btn-sm btn-danger-outline" onclick="desligarNotificacoes(this)">Desligar aqui</button>
@@ -6929,7 +6943,7 @@ async function _pintarCartaoPush() {
       <b style="color:#9A3412">🔕 Notificações desligadas neste aparelho</b>
       <p style="margin-top:4px;line-height:1.5;color:inherit;font-size:14.5px">${bloqueado
         ? 'Você bloqueou as notificações para este site. Libere nas configurações do navegador e volte aqui.'
-        : 'Ligue para receber no celular o pedido de repasse, o repasse pago, o cadastro novo e o aviso de cartão acabando. É o que faz o número aparecer no ícone do app.'}</p>
+        : 'Ligue para receber no celular, com toque: ' + _textoAvisosDoPapel().toLowerCase() + '. É o que faz o número aparecer no ícone do app.'}</p>
       ${bloqueado ? '' : '<button class="btn btn-primary btn-full" style="margin-top:8px" onclick="ativarNotificacoes(this)">🔔 Ligar notificações neste aparelho</button>'}
     </div>`;
 }
@@ -6961,6 +6975,7 @@ function renderPerfil() {
   <div class="perfil-actions">
     <div class="install-slot"></div>
     <button class="btn btn-outline" onclick="abrirAjuda()">❓ Como usar o app</button>
+    ${sb && !DEMO_MODE ? '<div id="perfil-push"></div>' : ''}
     ${_ehGestorOuAdmin() && window.GDrive?.isConfigured() ? `
     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
       <p class="lbl" style="margin-bottom:12px">☁️ Google Drive</p>
@@ -7011,7 +7026,6 @@ function renderPerfil() {
       </p>
       <button class="btn btn-primary btn-full" id="btn-backup-completo" onclick="baixarBackupCompleto()">⬇️ Baixar backup completo (banco + fotos)</button>
       <div id="backups-auto" style="margin-top:10px;font-size:15px;color:var(--text2)">Carregando backups automáticos…</div>
-      <div id="perfil-push" style="margin-top:12px"></div>
       <div id="backup-drive" style="margin-top:12px;font-size:15px;color:var(--text2)">Conferindo a cópia no Google Drive…</div>
       <button class="btn btn-outline btn-full" id="btn-backup" style="margin-top:8px" onclick="baixarBackupBanco()">⬇️ Só o banco (.sqlite)</button>
       <button class="btn btn-outline btn-full" id="btn-migrar" style="margin-top:8px" onclick="atualizarBanco()">🛠️ Atualizar estrutura do banco</button>
@@ -7024,6 +7038,7 @@ function renderPerfil() {
   </div>`);
   _pintarBotaoInstalar();
   _mostrarAvatar();
+  _pintarCartaoPush().catch(() => {});      // 07/11/2026: para todos os papéis, não só no bloco de backup do gestor
   _listarBackupsAuto();
   _mostrarArmazenamento();
   _mostrarBackupDrive();
@@ -7038,7 +7053,6 @@ async function _mostrarBackupDrive() {
   if (!el0 || !_ehGestorOuAdmin() || !sb || !navigator.onLine) { if (el0) el0.textContent = ''; return; }
   try {
     const s = await sb.backup.drive();
-    _pintarCartaoPush().catch(() => {});
     const el = $('backup-drive');
     if (!el) return;
     const q = d => d ? new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -11503,41 +11517,41 @@ async function _inscricaoAtual() {
   } catch (_) { return null; }
 }
 
+/* Inscreve ESTE aparelho para a pessoa logada. Com a autorização já dada, não pergunta nada.
+   07/11/2026: o pedido de autorização vem ANTES de qualquer chamada ao servidor — no iPhone ele só abre se for
+   a primeira coisa depois do toque; esperando a rede antes, o Safari recusava em silêncio. */
+async function _inscreverPush() {
+  const permissao = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (permissao !== 'granted') return { ok: false, permissao };
+  const { chave, ativo } = await sb.push.chave();
+  if (!ativo || !chave) return { ok: false, motivo: 'servidor' };
+  const reg = await navigator.serviceWorker.ready;
+  let inscricao = await reg.pushManager.getSubscription();
+  if (!inscricao) {
+    inscricao = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64ParaBytes(chave) });
+  }
+  const j = inscricao.toJSON();
+  /* sempre manda: se outra pessoa entrou antes neste aparelho, o servidor passa o endereço para quem está agora */
+  await sb.push.inscrever({ endpoint: inscricao.endpoint, p256dh: j.keys?.p256dh, auth: j.keys?.auth, aparelho: _nomeDoAparelho() });
+  return { ok: true, permissao };
+}
+
 async function ativarNotificacoes(btn) {
   if (!_pushDisponivel()) {
+    if (_ehIOS() && !_jaInstalado()) { _modalInstalarIOS(); return; }
     toast('Este navegador não trabalha com notificação', 'err');
     return;
   }
   if (!sb || !user) { toast('Entre na sua conta primeiro', 'err'); return; }
   if (btn) btn.disabled = true;
   try {
-    const { chave, ativo } = await sb.push.chave();
-    if (!ativo || !chave) {
-      toast('O servidor ainda não está configurado para notificações', 'err');
-      return;
-    }
-    const permissao = await Notification.requestPermission();
-    if (permissao !== 'granted') {
-      toast(permissao === 'denied'
-        ? 'Você bloqueou as notificações — libere nas configurações do navegador'
+    const r = await _inscreverPush();
+    if (!r.ok) {
+      toast(r.motivo === 'servidor' ? 'O servidor ainda não está configurado para notificações'
+        : r.permissao === 'denied' ? 'Você bloqueou as notificações — libere nas configurações do celular'
         : 'Autorização não concedida', 'err');
       return;
     }
-    const reg = await navigator.serviceWorker.ready;
-    let inscricao = await reg.pushManager.getSubscription();
-    if (!inscricao) {
-      inscricao = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: _b64ParaBytes(chave),
-      });
-    }
-    const j = inscricao.toJSON();
-    await sb.push.inscrever({
-      endpoint: inscricao.endpoint,
-      p256dh: j.keys?.p256dh,
-      auth: j.keys?.auth,
-      aparelho: _nomeDoAparelho(),
-    });
     toast('Notificações ligadas neste aparelho ✅');
     await sb.push.testar().catch(() => {});
     if (viewAtual === 'perfil') switchView('perfil');
@@ -11546,6 +11560,91 @@ async function ativarNotificacoes(btn) {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PERMISSÕES AO ENTRAR (07/11/2026)
+   Pedido do Cleiton: colaborador também recebe aviso no celular (justificativa pedida, correção de nota, repasse e
+   recarga), e as permissões já ficam liberadas. Nenhum navegador deixa o site se dar permissão sozinho — a pessoa
+   precisa tocar em "Permitir" uma vez. Então o app faz o máximo possível:
+     • autorização já dada → reinscreve calado a cada entrada (aparelho trocado de dono, inscrição que caducou);
+     • ainda não perguntado → logo depois do login abre UMA janela "Permitir avisos e câmera", um toque pede as
+       duas autorizações do sistema em seguida;
+     • "Agora não" → volta a oferecer só depois de 1 dia; bloqueado → não insiste (o Perfil explica como liberar).
+   No iPhone a notificação só existe com o app instalado na Tela de Início: fora dele, a janela ensina a instalar.
+═══════════════════════════════════════════════════════════ */
+const _PERM_ADIA_MS = 24 * 60 * 60 * 1000;
+const _permChave = () => 'pm_perm_adiado_' + (user?.id || '');
+
+async function _estadoCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) return 'sem';
+  try { return (await navigator.permissions.query({ name: 'camera' })).state; }   // granted | denied | prompt
+  catch (_) { return 'desconhecido'; }                                            // navegador não informa: não incomoda
+}
+
+/* Abre e fecha a câmera na hora: é o que faz o sistema perguntar agora, e não no meio de uma nota. */
+async function _pedirCamera() {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    s.getTracks().forEach(t => t.stop());
+    return true;
+  } catch (_) { return false; }
+}
+
+async function _permissoesAoEntrar() {
+  if (DEMO_MODE || !sb || !user || !navigator.onLine) return;
+  const push = _pushDisponivel();
+  if (push && Notification.permission === 'granted') {
+    _inscreverPush().catch(e => console.warn('[push] reinscrição falhou:', e?.message));
+  }
+  const faltaAviso = push && Notification.permission === 'default';
+  const faltaCamera = !_ehContabilidade() && (await _estadoCamera()) === 'prompt';
+  const iosSemInstalar = !push && _ehIOS() && !_jaInstalado();
+  if (!faltaAviso && !faltaCamera && !iosSemInstalar) return;
+  try { if (Date.now() - Number(localStorage.getItem(_permChave()) || 0) < _PERM_ADIA_MS) return; } catch (_) {}
+  _modalPermissoes({ faltaAviso, faltaCamera, iosSemInstalar });
+}
+
+function _modalPermissoes({ faltaAviso, faltaCamera, iosSemInstalar }) {
+  document.getElementById('modal-perm')?.remove();
+  const item = (ic, t, d) => `<li style="display:flex;gap:10px;align-items:flex-start;margin:0 0 12px">
+      <span style="flex:none;font-size:22px;line-height:1.1">${ic}</span><span><b>${t}</b><br><span style="opacity:.85">${d}</span></span></li>`;
+  const el = document.createElement('div');
+  el.id = 'modal-perm';
+  el.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  el.innerHTML = `<div style="background:linear-gradient(160deg,#0f6b34,#083d1e);color:#eef9f0;width:100%;max-width:480px;
+      border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <h3 style="margin:0 0 4px;font-size:19px">🔔 Deixe o app pronto</h3>
+    <p style="margin:0 0 14px;opacity:.85;font-size:14px">Um toque libera tudo. O celular vai perguntar — responda <b>Permitir</b>.</p>
+    <ul style="list-style:none;padding:0;margin:0;font-size:15px;line-height:1.4">
+      ${faltaAviso || iosSemInstalar ? item('🔔', 'Avisos no celular', 'Toca e aparece no painel quando pedirem justificativa ou correção de nota, e quando cair repasse ou recarga.') : ''}
+      ${faltaCamera ? item('📷', 'Câmera', 'Para fotografar as notas sem o celular perguntar toda hora.') : ''}
+    </ul>
+    ${iosSemInstalar ? `<p style="margin:0 0 12px;font-size:14px;background:rgba(255,255,255,.1);border-radius:10px;padding:10px 12px">
+      No iPhone, os avisos só chegam com o app <b>instalado na Tela de Início</b>: Compartilhar ${_SVG_COMPARTILHAR} → <b>Adicionar à Tela de Início</b>. Depois abra pelo ícone.</p>` : ''}
+    <button class="btn btn-primary btn-full" id="btn-perm-ok" style="margin-top:6px">${faltaAviso || faltaCamera ? '✅ Permitir' : 'Ver como instalar'}</button>
+    <button class="btn btn-outline btn-full" id="btn-perm-nao" style="margin-top:8px;color:#eef9f0;border-color:rgba(238,249,240,.5)">Agora não</button>
+  </div>`;
+  document.body.appendChild(el);
+  const adiar = () => { try { localStorage.setItem(_permChave(), String(Date.now())); } catch (_) {} el.remove(); };
+  el.onclick = e => { if (e.target === el) adiar(); };
+  $('btn-perm-nao').onclick = adiar;
+  $('btn-perm-ok').onclick = async () => {
+    if (!faltaAviso && !faltaCamera) { adiar(); _modalInstalarIOS(); return; }
+    $('btn-perm-ok').disabled = true;
+    const feito = [];
+    if (faltaAviso) {
+      try {
+        const r = await _inscreverPush();
+        if (r.ok) { feito.push('avisos'); sb.push.testar().catch(() => {}); }
+      } catch (e) { console.warn('[push] não ligou:', e?.message); }
+    }
+    if (faltaCamera && await _pedirCamera()) feito.push('câmera');
+    el.remove();
+    if (feito.length) toast('Liberado: ' + feito.join(' e ') + ' ✅');
+    else { adiar(); toast('Sem permissão — dá para liberar depois em Perfil', 'err'); }
+    if (viewAtual === 'perfil') switchView('perfil');
+  };
 }
 
 async function desligarNotificacoes(btn) {

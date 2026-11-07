@@ -684,4 +684,41 @@ class RepasseIntegridadeTest extends TestCase
         $this->assertCount(0, $this->recebidosDe($pedido));
         $this->assertNull(Repasse::findOrFail($pedido->id)->atendido_em);
     }
+
+    /* ---------- 07/11/2026: repasse/recarga lançados pelo gestor tocam no celular do colaborador ---------- */
+    public function test_recarga_lancada_pelo_gestor_avisa_o_colaborador(): void
+    {
+        $push = $this->espiaoDePush();
+        $colab = $this->pessoa('colaborador');
+        $gestor = $this->pessoa('gestor');
+
+        $this->lancar($gestor, $colab, ['destino' => 'recarga', 'valor' => 300]);
+
+        $push->shouldHaveReceived('enviar')->once()->withArgs(fn ($destino, $titulo, $corpo) => $destino === $colab->id
+            && str_contains($titulo, 'Recarga do cartão') && str_contains($corpo, '300'));
+    }
+
+    public function test_repasse_lancado_pelo_gestor_avisa_e_reenvio_nao_repete(): void
+    {
+        $push = $this->espiaoDePush();
+        $colab = $this->pessoa('colaborador');
+        $admin = $this->pessoa('admin');
+
+        $rep = $this->lancar($admin, $colab, ['valor' => 250]);
+        $this->putJson("/api/repasses/{$rep->id}", $this->payload($rep))->assertOk();   // reenvio da fila
+
+        $push->shouldHaveReceived('enviar')->once()->withArgs(fn ($destino, $titulo) => $destino === $colab->id
+            && str_contains($titulo, 'Repasse registrado'));
+    }
+
+    public function test_pedido_do_colaborador_avisa_so_a_gestao(): void
+    {
+        $push = $this->espiaoDePush();
+        $colab = $this->pessoa('colaborador');
+
+        $this->pedido($colab, ['valor' => 80]);
+
+        $push->shouldNotHaveReceived('enviar');
+        $push->shouldHaveReceived('avisarGestores')->once();
+    }
 }

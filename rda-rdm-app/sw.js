@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v569';
+const CACHE   = 'petermann-v570';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -118,6 +118,9 @@ self.addEventListener('push', e => {
        sobre o mesmo assunto (ex.: o mesmo cartão avisado de novo) */
     tag: d.tag || undefined,
     renotify: !!d.tag,
+    /* 07/11/2026: toca e vibra (o som é o padrão de notificação do celular; no modo silencioso só vibra) */
+    silent: false,
+    vibrate: [200, 100, 200],
   };
   e.waitUntil(self.registration.showNotification(titulo, opcoes));
 });

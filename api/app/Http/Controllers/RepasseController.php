@@ -165,6 +165,23 @@ class RepasseController extends Controller
             );
         }
 
+        /* 07/11/2026: o gestor lançou repasse ou recarga direto para outra pessoa → toca no celular DELA. Antes só o
+           "Marcar como pago" do pedido avisava; o lançamento direto (que também encerra o pedido aberto) chegava calado. */
+        if ($novo && $rep->kind === 'received' && ! $rep->deleted && $rep->user_id !== $u->id && $u->gerencia()) {
+            try {
+                $oque = $rep->destino === 'recarga' ? 'Recarga do cartão registrada' : 'Repasse registrado';
+                $this->push->enviar(
+                    $rep->user_id,
+                    $oque . ' ✅',
+                    $this->emReais($rep->valor) . ' (' . $rep->tipo . ') — já está no seu saldo.',
+                    '/',
+                    'repasse-' . $rep->id
+                );
+            } catch (\Throwable $e) {
+                Log::warning('push de repasse lançado pelo gestor falhou: ' . $e->getMessage());
+            }
+        }
+
         return response()->json($rep->fresh());
     }
 
