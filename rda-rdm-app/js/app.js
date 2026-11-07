@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 557;
+const APP_BUILD = 558;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3303,14 +3303,13 @@ function switchView(v, voltando = false, avancando = false) {
    guardada em _abaDespesa; quem já escolheu não precisa escolher de novo
    no modal — o tipo vai junto e o app pula direto para o comprovante. */
 const ABAS_DESPESA = {
-  RDA: { ico: '🍽️', nome: 'Alimentação',
-         sub: 'Refeição, lanche, café e água — a nota do restaurante ou do mercado.' },
-  RDM: { ico: '💼', nome: 'Despesas corporativas',
-         sub: 'Abastecimento, hospedagem e outros gastos de serviço.' },
+  RDA: { ico: '🍽️', nome: 'Relatório de Despesa de Alimentação',
+         sub: 'Refeição, lanche, café e água.' },
+  RDM: { ico: '💼', nome: 'Relatório de Despesas Mensais',
+         sub: 'Todas as outras despesas: abastecimento, hospedagem, pedágio e mais.' },
 };
-let _abaDespesa = null;          // 'RDA' | 'RDM' | chave de categoria (CV) | null
+let _abaDespesa = null;          // 'RDA' | 'RDM' | null
 let _abaPreEscolhida = null;     // tipo já escolhido na aba, consumido pelo seletor
-let _subtipoPreEscolhido = null; // categoria já escolhida junto (regime CV)
 let _pagamentoCV = null;         // 'cv' | 'carteira' — escolhido na página nova
 
 /* 24/09/2026 — pedido do Cleiton: no regime de cartão, antes de escolher a
@@ -3774,64 +3773,6 @@ function alternarResumoHub() {
   document.querySelector('#resumo-hub .res-cab')?.focus({ preventScroll: true });
 }
 
-/* Cartão de categoria no hub (CV) — mesma cara do cartão de aba, mas
-   contando só as notas daquela categoria. */
-function _catCardCV(chave) {
-  const c = _categoriaCV(chave);
-  if (!c) return '';
-  const aberta = _abaDespesa === chave;
-  const doMes = notas.filter(n => !n.deleted && n.mes === filMes && n.ano === filAno
-    && _chaveCategoriaDaNota(n) === chave);
-  const total = doMes.reduce((s, n) => s + _n(n.valor), 0);
-  const mesTxt = doMes.length
-    ? `${MESES[filMes - 1]}: ${brlCurto(total)} · ${doMes.length} nota${doMes.length === 1 ? '' : 's'}`
-    : `${MESES[filMes - 1]}: nenhuma nota`;
-  return `
-    <div class="aba-hero aba-hero-${c.tipo.toLowerCase()} ${aberta ? 'aberta' : ''}" id="aba-${chave}">
-      <span class="aba-hero-mes">${esc(mesTxt)}</span>
-      <button class="aba-hero-cab" aria-expanded="${aberta}" onclick="abrirAbaDespesa('${chave}')">
-        <span class="aba-hero-ico">${c.ico}</span>
-        <span class="aba-hero-txt">
-          <span class="aba-hero-sigla">${esc(c.nome)}</span>
-          <span class="aba-hero-nome">${esc(c.sub)}</span>
-          <span class="aba-hero-sub">${aberta ? 'Escolha como quer lançar 👇' : ''}</span>
-        </span>
-        <span class="aba-hero-seta">${aberta ? '▲' : '▼'}</span>
-      </button>
-      ${aberta ? `
-      <div class="aba-hero-acoes">
-        <button class="aba-acao aba-acao-destaque" onclick="lancarNaCategoriaCV('${chave}','qr')">
-          <span class="aba-acao-ico">📷</span>
-          <span class="aba-acao-txt">
-            <span class="aba-acao-tit">Nota pelo QR Code</span>
-            <span class="aba-acao-sub">Aponte a câmera: empresa, valor e data entram sozinhos.</span>
-          </span>
-        </button>
-        <button class="aba-acao" onclick="lancarNaCategoriaCV('${chave}','manual')">
-          <span class="aba-acao-ico">📝</span>
-          <span class="aba-acao-txt">
-            <span class="aba-acao-tit">Nota sem QR</span>
-            <span class="aba-acao-sub">Recibo, DANFE ou NFS-e: foto ou arquivo.</span>
-          </span>
-        </button>
-      </div>` : ''}
-    </div>`;
-}
-
-function lancarNaCategoriaCV(chave, modo) {
-  const c = _categoriaCV(chave);
-  if (!c) return;
-  _lancarCategoria(c, modo, _pagamentoCV || 'cv');
-}
-
-function _lancarCategoria(c, modo, pag) {
-  _abaPreEscolhida = c.tipo;
-  _subtipoPreEscolhido = c.subtipo;
-  _pagamentoPreEscolhido = pag;
-  if (modo === 'qr') iniciarQR();
-  else abrirSeletorTipoLancamento({ _manual: true, tipo: c.tipo, subtipo: c.subtipo, pagamento: pag });
-}
-
 /* O QR abre a câmera e só depois monta os dados: a escolha fica guardada
    aqui até o formulário nascer. */
 let _pagamentoPreEscolhido = null;
@@ -3847,7 +3788,9 @@ let _semColaboradorForcado = false;
 function _abaCard(tipo) {
   const a = ABAS_DESPESA[tipo];
   const aberta = _abaDespesa === tipo;
-  const doMes = notas.filter(n => !n.deleted && n.tipo === tipo && n.mes === filMes && n.ano === filAno);
+  /* no C.V. a aba conta só a forma de pagamento escolhida antes: cartão ou repasse */
+  const doPag = n => !_pagamentoCV || (_pagamentoCV === 'carteira' ? n.pagamento === 'carteira' : _notaDoCartao(n));
+  const doMes = notas.filter(n => !n.deleted && n.tipo === tipo && n.mes === filMes && n.ano === filAno && doPag(n));
   const total = doMes.reduce((s, n) => s + _n(n.valor), 0);
   const mesTxt = doMes.length
     ? `${MESES[filMes - 1]}: ${brlCurto(total)} · ${doMes.length} nota${doMes.length === 1 ? '' : 's'}`
@@ -3897,6 +3840,7 @@ function abrirAbaDespesa(tipo) {
    "Trocar" continua lá, para o caso de a pessoa ter aberto a aba errada). */
 function lancarNaAba(tipo, modo) {
   _abaPreEscolhida = tipo;
+  if (_pagamentoCV) _pagamentoPreEscolhido = _pagamentoCV;   // C.V.: a forma de pagamento já foi escolhida antes da aba
   if (modo === 'qr') iniciarQR();
   else abrirSeletorTipoLancamento({ _manual: true, tipo });
 }
@@ -3923,15 +3867,12 @@ function renderDespesas() {
           <span class="pnl-sub">${esc(p.sub)}</span>
         </span>
       </button>`).join('')}
-    ` : _usaCartao() ? `
+    ` : `
     ${_ehCV() ? `
     <div class="pag-cv-escolhido">
       <span>${_pagamentoCVInfo(_pagamentoCV)?.ico || ''} <b>${esc(_pagamentoCVInfo(_pagamentoCV)?.nome || '')}</b></span>
       <button class="btn btn-sm btn-outline" onclick="trocarPagamentoCV()">Trocar</button>
     </div>` : ''}
-    <div class="ini-titulo">Escolha a categoria e lance a nota</div>
-    ${CATEGORIAS_CV.map(c => _catCardCV(c.chave)).join('')}
-    ` : `
     <div class="ini-titulo">Escolha a aba e lance a nota</div>
     ${_abaCard('RDA') + _abaCard('RDM')}`}
     ${_resumoHub()}`}
@@ -8417,12 +8358,9 @@ function abrirSeletorTipoLancamento(dados = {}) {
   /* Veio de uma aba do hub (22/09/2026): o tipo já está escolhido, então o
      passo 1 é pulado. O aviso de sugestão passa a aparecer no passo 2. */
   if (!dados.tipo && _abaPreEscolhida) dados = { ...dados, tipo: _abaPreEscolhida };
-  /* 24/09/2026: no CV a categoria e a forma de pagamento já foram escolhidas
-     nas telas anteriores — pelo caminho do QR elas chegam por aqui. */
-  if (!dados.subtipo && _subtipoPreEscolhido) dados = { ...dados, subtipo: _subtipoPreEscolhido };
+  /* no CV a forma de pagamento já foi escolhida na tela anterior: pelo caminho do QR ela chega por aqui */
   if (!dados.pagamento && _pagamentoPreEscolhido) dados = { ...dados, pagamento: _pagamentoPreEscolhido };
   _abaPreEscolhida = null;
-  _subtipoPreEscolhido = null;
   _pagamentoPreEscolhido = null;
   _dadosLancamentoPendentes = dados || {};
   const ov = $('tipo-lancamento-overlay');
