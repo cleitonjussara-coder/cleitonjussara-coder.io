@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 562;
+const APP_BUILD = 563;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5699,10 +5699,9 @@ async function _verArquivoCompartilhado(n) {
   try {
     const url = await sb.fotos.url(n.foto_path);
     if (!url) { toast('Anexo não encontrado', 'err'); return; }
-    if (n.ext === 'pdf' || n.ext === 'xml') { window.open(url, '_blank'); return; }
-    $('foto-viewer-img').src = url;
-    $('foto-viewer-info').innerHTML = `<b style="font-size:18px;color:#fff">${esc(n.razao_social || 'Sem fornecedor')}</b><br>${esc(n.grupo)} · ${fmtData(n.data)} · ${brl(n.valor)}<br><small style="opacity:.7">${esc(n.pasta)}/${esc(n.arquivo || '')}</small>`;
-    $('foto-viewer-overlay').style.display = 'flex';
+    const ext = n.ext || _extDeUrl(n.foto_path);
+    _mostrarViewer({ url, ext, nome: _nomeDoAnexo(n.arquivo || n.razao_social || n.grupo, ext),
+      html: `<b style="font-size:18px;color:#fff">${esc(n.razao_social || 'Sem fornecedor')}</b><br>${esc(n.grupo)} · ${fmtData(n.data)} · ${brl(n.valor)}<br><small style="opacity:.7">${esc(n.pasta)}/${esc(n.arquivo || '')}</small>` });
   } catch (e) { toast('Não abriu: ' + (e.message || 'erro'), 'err'); }
   finally { setLoading(false); }
 }
@@ -10620,7 +10619,7 @@ async function fotoViewerVizinha(dir) {
   let i = _fotoSeq.indexOf(atual);
   if (i < 0) return;
   for (i += dir; i >= 0 && i < _fotoSeq.length; i += dir) {
-    if (await verFoto(_fotoSeq[i], true)) return;       // pula PDF/XML e anexos sem imagem
+    if (await verFoto(_fotoSeq[i], true)) return;       // pula só o que não tem anexo
   }
 }
 
@@ -10629,11 +10628,11 @@ async function verFoto(id, navegando) {
   if (!n) return false;
   if (!navegando) _fotoSeq = _sequenciaDeAnexosVisiveis();
 
-  let url = null, ext = null;
+  let url = null, ext = null, blob = null;
 
   // 1. anexo local (IndexedDB)
   const local = await DB.getFotoLocal(id);
-  if (local?.blob) { url = URL.createObjectURL(local.blob); ext = local.ext || _extDoArquivo(local.blob); }
+  if (local?.blob) { blob = local.blob; url = URL.createObjectURL(local.blob); ext = local.ext || _extDoArquivo(local.blob); }
 
   /* 2. Servidor (URL assinada) — ANTES do Drive. A URL do Drive leva o
      token na query (?alt=media&access_token=…), formato que a API do Google
@@ -10652,28 +10651,48 @@ async function verFoto(id, navegando) {
 
   if (!url) { if (!navegando) toast('Anexo não encontrado', 'err'); return false; }
 
-  // PDF/XML → abre em nova aba (o navegador renderiza/baixa); ao navegar, só pula
-  if (_kindDoExt(ext) && !_ehImagemExt(ext)) { if (!navegando) window.open(url, '_blank'); return false; }
-
-  // imagem (ou tipo desconhecido) → visualizador
-  _fotoViewerAtual = {
-    id,
-    url,
-    nome: `${n.tipo}_${String(n.data || '').slice(0, 10)}_${Math.round((Number(n.valor) || 0) * 100)}.${ext || 'jpg'}`
-      .replace(/[^\w.-]+/g, '_'),
-  };
-  $('foto-viewer-img').src = url;
-  $('foto-viewer-info').textContent =
-    `${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`;
-  $('foto-viewer-overlay').style.display = 'flex';
+  _mostrarViewer({ id, url, ext, blob,
+    nome: _nomeDoAnexo(`${n.tipo}_${String(n.data || '').slice(0, 10)}_${Math.round((Number(n.valor) || 0) * 100)}`, ext),
+    html: esc(`${n.tipo}${n.subtipo ? ' · ' + n.subtipo : ''} · ${fmtData(n.data)} · ${brl(n.valor)}`) });
   _atualizarSetasFoto(id);
   return true;
+}
+
+function _nomeDoAnexo(base, ext) {
+  const semExt = String(base || 'anexo').replace(/[.](jpe?g|png|webp|heic|heif|pdf|xml)$/i, '');
+  return `${semExt}.${ext || 'jpg'}`.replace(/[^\w.-]+/g, '_');
+}
+
+/* Um visualizador para foto, PDF e XML (07/11/2026, print do iPhone). PDF abria com window.open depois de esperar a rede: o
+   Safari trata isso como janela indesejada e bloqueia sem avisar, e a nota "não abria". Agora o documento abre por um link
+   tocado pela pessoa. O arquivo já começa a baixar aqui porque o iPhone só aceita Compartilhar logo depois do toque. */
+function _mostrarViewer({ id = null, url, ext, nome, html, blob = null }) {
+  const doc = ['pdf', 'xml'].includes(String(ext || '').toLowerCase());
+  const a = { id, url, nome, blob, falhou: false, baixando: null };
+  _fotoViewerAtual = a;
+  if (!blob) {
+    a.baixando = fetch(url).then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+      .then(b => { a.blob = b; return b; })
+      .catch(() => { a.falhou = true; return null; });
+  }
+  const img = $('foto-viewer-img'), painel = $('foto-viewer-doc');
+  img.style.display = doc ? 'none' : '';
+  img.src = doc ? '' : url;
+  painel.style.display = doc ? 'flex' : 'none';
+  if (doc) {
+    $('foto-viewer-doc-tipo').textContent = `Documento ${String(ext).toUpperCase()}`;
+    $('foto-viewer-abrir').href = url;
+  }
+  $('foto-viewer-info').innerHTML = html;
+  $('foto-viewer-overlay').style.display = 'flex';
 }
 
 function fecharFotoViewer() {
   const ov = $('foto-viewer-overlay');
   ov.style.display = 'none';
   $('foto-viewer-img').src = '';
+  $('foto-viewer-img').style.display = '';
+  $('foto-viewer-doc').style.display = 'none';
   _fotoViewerAtual = null;
   _fotoSeq = [];
   _atualizarSetasFoto(null);
@@ -10682,41 +10701,45 @@ function fecharFotoViewer() {
 /* Baixar / compartilhar o anexo aberto (pedido do Paulo, 14/10/2026). */
 let _fotoViewerAtual = null;
 
-async function _blobDoViewer() {
-  const a = _fotoViewerAtual;
-  if (!a) return null;
-  const r = await fetch(a.url);
-  if (!r.ok) throw new Error('http ' + r.status);
-  return r.blob();
+const _ehIphone = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function _arquivoDoViewer(a) {
+  return new File([a.blob], a.nome, { type: a.blob.type || 'application/octet-stream' });
+}
+
+async function _esperarAnexo(a) {
+  if (!a.blob && a.baixando) await a.baixando;
+  return a.blob;
 }
 
 async function baixarFotoViewer() {
   const a = _fotoViewerAtual;
   if (!a) return;
-  try {
-    const blob = await _blobDoViewer();
-    const obj = URL.createObjectURL(blob);
-    const el = document.createElement('a');
-    el.href = obj; el.download = a.nome;
-    document.body.appendChild(el); el.click(); el.remove();
-    setTimeout(() => URL.revokeObjectURL(obj), 10000);
-  } catch (e) {
-    window.open(a.url, '_blank');   // sem CORS/sem rede para o blob: abre a imagem, daí segura e salva
-  }
+  if (a.falhou) { window.open(a.url, '_blank'); return; }   // sem rede ou sem CORS para o arquivo: abre, daí segura e salva
+  /* no iPhone o download pelo app instalado abre o arquivo sem caminho de volta: a folha de compartilhar tem Salvar em Arquivos */
+  if (_ehIphone() && navigator.canShare) { compartilharFotoViewer(); return; }
+  const blob = await _esperarAnexo(a);
+  if (!blob) { toast('Não baixou o anexo. Toque de novo.', 'err'); return; }
+  const obj = URL.createObjectURL(blob);
+  const el = document.createElement('a');
+  el.href = obj; el.download = a.nome;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(obj), 10000);
 }
 
 async function compartilharFotoViewer() {
   const a = _fotoViewerAtual;
   if (!a) return;
+  const pronto = !!a.blob;
+  const blob = await _esperarAnexo(a);
+  if (!blob) { toast('O anexo não carregou. Use Abrir ou tente de novo.', 'err'); return; }
   try {
-    const blob = await _blobDoViewer();
-    const file = new File([blob], a.nome, { type: blob.type || 'image/jpeg' });
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: $('foto-viewer-info').textContent });
-      return;
-    }
+    const file = _arquivoDoViewer(a);
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file] }); return; }
   } catch (e) {
     if (e?.name === 'AbortError') return;   // usuário fechou a folha de compartilhar
+    /* o arquivo chegou depois do toque e o iPhone perdeu a permissão do gesto: agora ele já está pronto */
+    if (e?.name === 'NotAllowedError' && !pronto) { toast('Anexo pronto. Toque em Compartilhar de novo.'); return; }
   }
   toast('Este aparelho não compartilha arquivo — use Baixar', 'err');
 }
