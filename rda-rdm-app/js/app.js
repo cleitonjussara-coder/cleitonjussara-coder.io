@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 558;
+const APP_BUILD = 559;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1123,6 +1123,10 @@ function _pendenciasMenu() {
     lista.unshift({ n: conta('pedido'), um: 'pedido de repasse', varios: 'pedidos de repasse', acao: 'abrirNotificacoes()' });
     lista.push({ n: conta('novo'), um: 'cadastro para liberar', varios: 'cadastros para liberar', acao: 'abrirNotificacoes()' });
   }
+  if (_ehGestorOuAdmin()) {
+    const rot = `com RDM acima de ${brl(LIMITE_DEVEDOR)}`;
+    lista.unshift({ n: _equipeDevedora().filter(c => c.id !== user?.id).length, um: `colaborador ${rot}`, varios: `colaboradores ${rot}`, acao: 'abrirAvisoDevedores()' });
+  }
   lista.push({ n: conta('justificativa'), um: 'justificativa pedida', varios: 'justificativas pedidas', acao: 'abrirNotificacoes()' });
   return lista.filter(p => p.n > 0);
 }
@@ -1137,6 +1141,31 @@ function _pendInicioHTML(lista) {
   if (!lista.length) return '<div id="ini-pend" hidden></div>';
   return `<div class="ih-pend" id="ini-pend"><b>⚠️ Precisa de você</b><div>${lista.map(p => `
     <button onclick="${p.acao}"><strong>${p.n}</strong>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</div></div>`;
+}
+
+function _repintarPendInicio() {
+  const alvo = $('ini-pend');
+  if (!alvo) return;
+  const lista = _pendenciasMenu();
+  alvo.outerHTML = _pendInicioHTML(lista);
+  _pendFechamentoInicio(lista).catch(() => {});
+}
+
+/* O aviso de RDM acima do limite saiu do Início (06/11/2026, pedido do Cleiton): lá fica o número, e o toque abre esta janela. */
+function abrirAvisoDevedores() {
+  const conteudo = _avisoEquipeDevedoraHTML();
+  if (!conteudo) { toast('Nenhum colaborador acima do limite agora'); return; }
+  document.getElementById('aviso-devedores-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'aviso-devedores-overlay';
+  ov.innerHTML = `<div class="modal-card" style="max-width:640px">
+    <div class="modal-hd"><h3>🔔 RDM acima de ${brl(LIMITE_DEVEDOR)}</h3><button class="btn-icon-sm" aria-label="Fechar">✕</button></div>
+    <div class="modal-bd">${conteudo}</div>
+  </div>`;
+  /* cada botão da janela abre outra tela: a janela sai junto */
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('button')) ov.remove(); });
+  document.body.appendChild(ov);
 }
 
 const _PEND_FECHAMENTO = n => ({ n, um: 'nota no fechamento', varios: 'notas no fechamento', acao: 'abrirFechamentoPeloMenu()' });
@@ -3038,16 +3067,6 @@ async function iniciarFaturamento() {
   }
 }
 
-/* Atalho direto na Início pro Admin editar nota de colaborador sem passar
-   pela Equipe primeiro — o fluxo de edição em si é o mesmo de sempre
-   (Gestor.abrir → cardNotaHTML → editarNota → abrirFormNota). */
-function iniciarEdicaoNotaColaborador() {
-  abrirSeletorColaborador('✏️ Editar nota — de qual colaborador?', id => {
-    switchView('equipe');
-    setTimeout(() => Gestor.abrir(id), 400);
-  });
-}
-
 /* Atalhos da Início pro gestor/admin lançar repasse/recarga direto num
    colaborador, sem passar por Equipe → abrir o colaborador → achar o
    botão (28/09/2026, pedido do Cleiton). Mesma ação que já existe no
@@ -3483,10 +3502,9 @@ function _histEquipeServidor() {
       .finally(() => {
         _histEq.buscando = false; _histEq.em = Date.now();
         atualizarNotificacoes().catch(() => {});   // o sino também sai do número do servidor
-        if (viewAtual !== 'inicio') return;
-        const el = document.getElementById('aviso-equipe-topo');
+        const el = document.getElementById('aviso-equipe-topo');   // a janela do aviso aberta troca "carregando" pelos números
         if (el) el.outerHTML = _avisoEquipeDevedoraHTML();
-        else { const h = _avisoEquipeDevedoraHTML(); if (h) document.querySelector('#app-content .db-container')?.insertAdjacentHTML('afterbegin', h); }
+        if (viewAtual === 'inicio') _repintarPendInicio();
       });
   }
   return _histEq.dados;
@@ -3945,7 +3963,7 @@ function _iniAtalhos() {
   if (_ehGestorOuAdmin()) {
     lista.push(a('🏢', 'Faturamento', 'iniciarFaturamento()'), a('🗂️', 'Notas faturadas', 'abrirNotasFaturadas()'),
       a('🤝', 'Lançar repasse', 'iniciarRepasseColaborador()'), a('💳', 'Lançar recarga', 'iniciarRecargaColaborador()'));
-    lista.push(user?.role === 'admin' ? a('✏️', 'Editar nota', 'iniciarEdicaoNotaColaborador()') : a('📁', 'Arquivos', "switchView('arquivos')"));
+    lista.push(a('📁', 'Arquivos', "switchView('arquivos')"));
     lista.push(a('👥', 'Equipe', "switchView('equipe')"));
     return lista;
   }
@@ -4071,7 +4089,7 @@ function renderInicio() {
 
   const pend = _pendenciasMenu();
   $('app-content').innerHTML = `
-  <div class="ih">
+  <div class="ih"><div class="ih-col">
     <button class="ih-busca" onclick="Busca.abrir()"><span aria-hidden="true">🔎</span> ${_veEquipe() ? 'Buscar nota, pessoa ou tela…' : 'Buscar nota ou tela…'}</button>
     ${contador ? '' : `<button class="ih-cta" onclick="switchView('despesas')">
       <span class="ih-cta-mais" aria-hidden="true">＋</span>
@@ -4080,14 +4098,14 @@ function renderInicio() {
     </button>`}
     <div class="ih-grid">${_iniAtalhos().map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
     ${_pendInicioHTML(pend)}
-    ${_avisoEquipeDevedoraHTML()}
     ${_cartaoPedidoAbertoHTML()}
     ${_faixaLancamentoDiarioHTML()}
+    </div><div class="ih-col">
     ${resumo}
     ${contador ? '' : _iniSemanaHTML()}
     <div id="ini-equipe-hoje"></div>
     ${contador ? '' : _iniUltimosHTML(ultimas)}
-  </div>`;
+  </div></div>`;
 
   _pintarEquipeHoje().catch(() => {});
   _pendFechamentoInicio(pend).catch(() => {});

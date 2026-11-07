@@ -30,6 +30,7 @@ w.eval(`
   var _veEquipe = () => _ehGestorOuAdmin() || _ehContabilidade();
   var _veFrota = () => !_ehContabilidade();
   var _usaCartao = () => false, _ehCV = () => false;
+  var LIMITE_DEVEDOR = 1500, _equipeDevedora = () => [], _avisoEquipeDevedoraHTML = () => '', toast = () => {};
   var _notasComPendencia = () => pendentes;
   var _notificacoes = () => avisos;
   var fecharMenu = () => document.getElementById('menu-drawer-overlay').classList.remove('open');
