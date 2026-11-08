@@ -33,6 +33,8 @@ window.Campo = (() => {
   const mapa = (lat, lng) => (lat != null && lng != null) ? `https://www.google.com/maps?q=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}` : null;
 
   let lista = [];          // atividades do mês (minhas; do gestor: todas)
+  let camposEquipe = null; // GET /atividades-campo/campos: fazendas e campos já registrados (buscador)
+  const KEY_CAMPOS = 'campo_campos_equipe';
   let equipe = [];         // gestor: último registro de cada pessoa ligada
   let _offline = false, _cacheEm = null;
   let _filtroPessoa = null;
@@ -101,8 +103,10 @@ window.Campo = (() => {
     if (!sb || !navigator.onLine) throw new Error('offline');
     await subirFila();
     const gestor = _ehGestorOuAdmin();
-    const [l, e] = await Promise.all([sb.atividadesCampo.list(_periodo()), gestor ? sb.atividadesCampo.equipe() : Promise.resolve([])]);
+    const [l, e, c] = await Promise.all([sb.atividadesCampo.list(_periodo()), gestor ? sb.atividadesCampo.equipe() : Promise.resolve([]),
+      _registraCampo() ? sb.atividadesCampo.campos().catch(() => null) : Promise.resolve(null)]);
     lista = l || []; equipe = e || [];
+    if (c) { camposEquipe = c; try { await DB.setMeta(KEY_CAMPOS, c); } catch (_) {} }   // guardado para buscar sem internet
     _offline = false; _cacheEm = new Date().toISOString();
     try { await DB.setMeta(KEY_CACHE(), { lista, equipe, em: _cacheEm }); } catch (_) {}
   }
@@ -453,27 +457,86 @@ window.Campo = (() => {
     try { await DB.setMeta(KEY_HIST(), h.slice(0, HIST_MAX)); } catch (_) {}
   }
 
-  /* Escolhe fazenda e campo: primeiro a lista do histórico; "Digitar outro" abre o formulário. Devolve {fazenda, campo} ou null. */
-  async function _escolherCampo(aberta) {
-    const dica = aberta ? `O campo ${aberta.campo} será finalizado agora.` : 'A localização do aparelho é gravada neste toque.';
-    const hist = (await _historico()).filter(h => !aberta || _chave(h.fazenda, h.campo) !== _chave(aberta.fazenda, aberta.campo));
-    if (hist.length) {
-      const r = await pedirCampos({
-        titulo: 'Início das atividades', dica, confirmar: 'Registrar início',
-        campos: [{ id: 'escolha', rotulo: 'Fazenda e campo (já usados)', valor: '0',
-          opcoes: [...hist.map((h, i) => ({ valor: String(i), rotulo: `${_faz(h.fazenda)} · ${h.campo}` })), { valor: 'novo', rotulo: '➕ Digitar outro campo' }] }],
-      });
-      if (!r) return null;
-      if (r.escolha !== 'novo') return hist[Number(r.escolha)] || null;
-    }
-    const r = await pedirCampos({
-      titulo: 'Início das atividades', dica, confirmar: 'Registrar início',
+  /* Campos para o buscador: os meus (histórico do aparelho + mês) primeiro, depois os que a equipe já registrou. */
+  async function _camposParaBuscar() {
+    if (!camposEquipe) { try { camposEquipe = (await DB.getMeta(KEY_CAMPOS)) || []; } catch (_) { camposEquipe = []; } }
+    const meus = await _historico();
+    const mapa = new Map();
+    meus.forEach(h => mapa.set(_chave(h.fazenda, h.campo), { fazenda: h.fazenda, campo: String(h.campo).toUpperCase(), meu: true, em: h.em || '', usos: 0 }));
+    (camposEquipe || []).forEach(c => {
+      const k = _chave(c.fazenda, c.campo), ja = mapa.get(k);
+      if (ja) { ja.usos = Math.max(ja.usos, c.usos || 0); return; }
+      mapa.set(k, { fazenda: c.fazenda, campo: String(c.campo).toUpperCase(), meu: (c.meus || 0) > 0, em: c.ultimo_uso || '', usos: c.usos || 0 });
+    });
+    return [...mapa.values()].sort((a, b) => (b.meu - a.meu) || String(b.em).localeCompare(String(a.em)));
+  }
+  const _semAcento = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+  /* Formulário de campo novo (o ➕ do buscador vai direto para cá). */
+  async function _novoCampo(dica, sugestao = {}) {
+    return pedirCampos({
+      titulo: 'Novo campo', dica, confirmar: 'Registrar início',
       campos: [
-        { id: 'fazenda', rotulo: 'Fazenda', valor: hist[0]?.fazenda || aberta?.fazenda || '', placeholder: 'ex.: São José', maxlength: 120, validar: t => (t.trim() ? '' : 'Informe a fazenda.') },
-        { id: 'campo', rotulo: 'Campo', valor: '', placeholder: 'ex.: BRCB147A-B', maxlength: 60, validar: t => (t.trim() ? '' : 'Informe o código do campo.') },
+        { id: 'fazenda', rotulo: 'Fazenda', valor: sugestao.fazenda || '', placeholder: 'ex.: São José', maxlength: 120, validar: t => (t.trim() ? '' : 'Informe a fazenda.') },
+        { id: 'campo', rotulo: 'Campo', valor: sugestao.campo || '', placeholder: 'ex.: BRCB147A-B', maxlength: 60, validar: t => (t.trim() ? '' : 'Informe o código do campo.') },
       ],
     });
-    return r;
+  }
+
+  /* Buscador (08/11/2026): procura nos campos já registrados por fazenda ou código; ➕ Novo campo vai direto ao cadastro.
+     Devolve {fazenda, campo} ou null. */
+  async function _escolherCampo(aberta) {
+    const dica = aberta ? `O campo ${aberta.campo} será finalizado agora.` : 'A localização do aparelho é gravada neste toque.';
+    const todos = (await _camposParaBuscar()).filter(h => !aberta || _chave(h.fazenda, h.campo) !== _chave(aberta.fazenda, aberta.campo));
+    if (!todos.length) return _novoCampo(dica);
+
+    const escolha = await new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'modal-overlay open cp-busca-ov';
+      ov.innerHTML = `
+        <div class="modal-card cp-busca" role="dialog" aria-label="Escolher campo">
+          <div class="modal-hd"><h3>Início das atividades</h3><button class="btn-close-modal" aria-label="Fechar">✕</button></div>
+          <div class="modal-bd">
+            <p class="cp-busca-dica">${esc(dica)}</p>
+            <button class="btn btn-primary btn-full" data-acao="novo">➕ Novo campo</button>
+            <input class="inp cp-busca-inp" type="search" placeholder="🔎 Buscar fazenda ou campo" autocomplete="off" autocapitalize="characters" enterkeyhint="search">
+            <div class="cp-busca-lista" role="list"></div>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      const inp = ov.querySelector('.cp-busca-inp'), listaEl = ov.querySelector('.cp-busca-lista');
+      const fechar = v => { ov.remove(); resolve(v); };
+      const pintar = () => {
+        const q = _semAcento(inp.value.trim());
+        const termos = q.split(/\s+/).filter(Boolean);
+        const achados = todos.filter(h => { const t = _semAcento(`${_faz(h.fazenda)} ${h.campo}`); return termos.every(x => t.includes(x)); });
+        listaEl.innerHTML = achados.length ? achados.slice(0, 60).map(h => `
+          <button class="cp-busca-item" role="listitem" data-i="${todos.indexOf(h)}">
+            <span class="cp-busca-campo">${esc(h.campo)}</span>
+            <span class="cp-busca-faz">${esc(_faz(h.fazenda))}</span>
+            <span class="cp-busca-sub">${h.meu ? '⭐ já usado por você' : '👥 registrado pela equipe'}${h.em ? ' · último ' + dataBR(h.em) : ''}</span>
+          </button>`).join('') + (achados.length > 60 ? `<p class="muted-p">+ ${achados.length - 60} — refine a busca</p>` : '')
+          : `<p class="muted-p">Nenhum campo encontrado${q ? ` para “${esc(inp.value.trim())}”` : ''}.</p>
+             ${q ? `<button class="btn btn-outline btn-full" data-acao="novo-busca">➕ Cadastrar “${esc(inp.value.trim().toUpperCase())}” como novo campo</button>` : ''}`;
+      };
+      /* tocar fora da caixa fecha; dentro dela, só os botões agem */
+      ov.addEventListener('click', e => {
+        if (e.target === ov || e.target.closest('.btn-close-modal')) return fechar(null);
+        if (!e.target.closest('.cp-busca')) return;
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.acao === 'novo') return fechar({ novo: true });
+        if (b.dataset.acao === 'novo-busca') return fechar({ novo: true, campo: inp.value.trim().toUpperCase() });
+        if (b.dataset.i != null) return fechar(todos[Number(b.dataset.i)]);
+      });
+      inp.addEventListener('input', pintar);
+      ov.addEventListener('keydown', e => { if (e.key === 'Escape') fechar(null); });
+      pintar();
+      setTimeout(() => inp.focus(), 50);
+    });
+    if (!escolha) return null;
+    if (escolha.novo) return _novoCampo(dica, { fazenda: todos.find(h => h.meu)?.fazenda || '', campo: escolha.campo || '' });
+    const ok = await pedirConfirmacao({ mensagem: `Iniciar atividade agora?\n${_faz(escolha.fazenda)} · ${escolha.campo}`, confirmar: 'Registrar início' });
+    return ok ? { fazenda: escolha.fazenda, campo: escolha.campo } : null;
   }
 
   async function iniciar() {

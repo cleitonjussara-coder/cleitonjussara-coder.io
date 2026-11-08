@@ -155,6 +155,26 @@ class AtividadeCampoTest extends TestCase
         $this->assertTrue($gestor->fresh()->registraAtividadeCampo());
     }
 
+    public function test_buscador_lista_campos_da_equipe_sem_repetir(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        $joao = $this->pessoa('Joao', 'colaborador', true);
+        Sanctum::actingAs($joao);
+        $this->iniciar(['fazenda' => 'Arco Verde', 'campo' => 'BRAE4305', 'hora' => Carbon::now()->subHours(5)->toIso8601String()]);
+        Sanctum::actingAs($romario);
+        $this->iniciar(['fazenda' => 'Faz. São José', 'campo' => 'BRCB147A-B', 'hora' => Carbon::now()->subHours(3)->toIso8601String()]);
+        $this->iniciar(['fazenda' => 'São José', 'campo' => 'brcb147a-b']);   // mesmo campo escrito de outro jeito
+
+        $r = collect($this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(2)->json())->keyBy('campo');
+        $this->assertSame(2, $r['BRCB147A-B']['usos']);
+        $this->assertSame(2, $r['BRCB147A-B']['meus']);
+        $this->assertSame(0, $r['BRAE4305']['meus']);      // do colega: aparece, sem dizer quem foi
+        $this->assertArrayNotHasKey('lat_inicio', $r['BRAE4305']);
+
+        Sanctum::actingAs($this->pessoa('Sem Funcao'));
+        $this->getJson('/api/atividades-campo/campos')->assertForbidden();
+    }
+
     public function test_contador_nao_registra(): void
     {
         Sanctum::actingAs($this->pessoa('Contador', 'contabilidade', true));

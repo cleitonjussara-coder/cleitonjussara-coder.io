@@ -425,6 +425,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
   const atividadesCampo = {
     list: params => req('GET', '/atividades-campo', { query: params }),
     equipe: () => req('GET', '/atividades-campo/equipe'),
+    campos: () => req('GET', '/atividades-campo/campos'),   // buscador do início: fazendas e campos já registrados pela equipe
     iniciar: item => req('POST', '/atividades-campo/iniciar', { body: item }),
     finalizar: (id, item) => req('POST', `/atividades-campo/${id}/finalizar`, { body: item }),
   };

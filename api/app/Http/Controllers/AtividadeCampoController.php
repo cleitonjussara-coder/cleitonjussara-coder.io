@@ -145,6 +145,34 @@ class AtividadeCampoController extends Controller
         return response()->json($q->limit(5000)->get()->map(fn ($a) => $this->json($a)));
     }
 
+    /**
+     * GET /atividades-campo/campos — fazendas e campos já registrados (buscador do início, 08/11/2026).
+     * Da equipe inteira no último ano: o campo que um colega já cadastrou aparece para os outros, sem redigitar.
+     * Só nomes de fazenda e campo, quantas vezes e quando; nada de localização nem de quem foi.
+     */
+    public function campos(Request $r): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->registraAtividadeCampo() || $u->gerencia(), 403, 'A atividade em campo não está liberada para a sua conta.');
+
+        $desde = Carbon::now(self::TZ)->subYear()->format('Y-m-d H:i:s');
+        $chave = fn (string $f, string $c) => mb_strtoupper(preg_replace('/^faz(enda)?\.?\s*/iu', '', trim($f))).'|'.mb_strtoupper(trim($c));
+        $lista = [];
+        AtividadeCampo::query()->where('inicio', '>=', $desde)->orderByDesc('inicio')->limit(20000)
+            ->get(['user_id', 'fazenda', 'campo', 'inicio'])
+            ->each(function (AtividadeCampo $a) use (&$lista, $chave, $u) {
+                $k = $chave($a->fazenda, $a->campo);
+                $lista[$k] ??= ['fazenda' => $a->fazenda, 'campo' => mb_strtoupper($a->campo), 'usos' => 0, 'meus' => 0,
+                    'ultimo_uso' => $this->br($a->inicio)?->toIso8601String()];
+                $lista[$k]['usos']++;
+                if ($a->user_id === $u->id) {
+                    $lista[$k]['meus']++;
+                }
+            });
+
+        return response()->json(array_values(array_slice($lista, 0, 1000)));
+    }
+
     /** GET /atividades-campo/equipe — último registro de cada pessoa com a função ligada. */
     public function equipe(Request $r): JsonResponse
     {

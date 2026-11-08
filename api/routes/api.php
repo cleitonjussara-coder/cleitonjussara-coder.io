@@ -165,6 +165,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     /* atividade em campo (08/11/2026): início/fim por fazenda e campo, com localização; o gestor liga por pessoa */
     Route::get('/atividades-campo', [\App\Http\Controllers\AtividadeCampoController::class, 'index']);
     Route::get('/atividades-campo/equipe', [\App\Http\Controllers\AtividadeCampoController::class, 'equipe']);
+    Route::get('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'campos']);   // buscador do início (08/11/2026)
     Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
     Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
 
