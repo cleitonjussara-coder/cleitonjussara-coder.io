@@ -8,7 +8,7 @@ import js from "@eslint/js";
 // Definidos no topo do app.js e usados nos outros arquivos.
 const doApp = [
   "$", "MESES", "PAPEL_NOME", "_at", "_selNotas", "brl", "esc", "fmtData",
-  "_carregarMiniaturas", "_comprimirImagem", "_ehGestorOuAdmin", "_imagemParaIa", "_normalizarOrientacao",
+  "_carregarMiniaturas", "_comprimirImagem", "_ehGestorOuAdmin", "_registraCampo", "_imagemParaIa", "_normalizarOrientacao",
   "_repasseEhRecebido", "_selNotasAtualizar", "_voltarRodape", "abrirCameraNota", "cardNotaHTML",
   "excluirRepassesDeOutro", "fmtDataBR", "garantirNotasNaLista", "irParaMesAtualEquipe", "irParaMesEquipe",
   "mostrarAviso", "mudarMesEquipe", "pedirCampos", "pedirConfirmacao", "pedirPalavra", "renderInicio",

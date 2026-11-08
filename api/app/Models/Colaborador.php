@@ -38,7 +38,7 @@ class Colaborador extends Authenticatable
      */
     public const REGIMES = ['rdm_rda', 'cv'];
 
-    protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via'];
+    protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via', 'atividade_campo'];
 
     protected $hidden = ['password', 'remember_token', 'google_id'];
 
@@ -55,7 +55,15 @@ class Colaborador extends Authenticatable
             'desativado_em' => 'datetime',
             'exclusao_pedida_em' => 'datetime',
             'confirmado_em' => 'datetime',
+            'atividade_campo' => 'boolean',
         ];
+    }
+
+    /* Atividade em campo (08/11/2026): o gestor liga por pessoa; quem não tem, nem vê a função. O gestor e o admin
+       sempre veem a tela (é deles o acompanhamento), mas só registram se a própria conta estiver ligada. */
+    public function registraAtividadeCampo(): bool
+    {
+        return (bool) ($this->getAttributes()['atividade_campo'] ?? false);
     }
 
     /* A coluna existe no banco? (memorizado). Protege o período entre

@@ -790,6 +790,25 @@ window.Excel = (() => {
     XLSX.writeFile(wb, `Petermann_Ponto_${MESES[resumo.mes-1]}${resumo.ano}.csv`);
   }
 
+  /* Atividade em campo (08/11/2026): uma linha por atividade, com o link do mapa de início e fim. */
+  function exportarCampo(lista, mes, ano) {
+    const TZ = FusoBR.TZ;
+    const d = iso => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: TZ }) : '';
+    const h = iso => iso ? new Date(iso).toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
+    const m = (la, lo) => (la != null && lo != null) ? `https://www.google.com/maps?q=${Number(la).toFixed(6)},${Number(lo).toFixed(6)}` : '';
+    const rows = [[`PETERMANN — ATIVIDADE EM CAMPO`, `${MESES[mes-1]}/${ano}`], [''],
+      ['Data','Colaborador','Fazenda','Campo','Início','Fim','Duração','Fim automático','Latitude início','Longitude início','Precisão início (m)','Mapa início','Latitude fim','Longitude fim','Precisão fim (m)','Mapa fim']];
+    [...lista].sort((a,b) => a.inicio.localeCompare(b.inicio)).forEach(a => rows.push([
+      d(a.inicio), a.user_nome||'', a.fazenda, a.campo, h(a.inicio), a.fim ? h(a.fim) : 'em campo', a.minutos != null ? hmx(a.minutos) : '',
+      a.fim_automatico ? 'sim' : '', a.lat_inicio ?? '', a.lng_inicio ?? '', a.precisao_inicio ?? '', m(a.lat_inicio, a.lng_inicio),
+      a.lat_fim ?? '', a.lng_fim ?? '', a.precisao_fim ?? '', m(a.lat_fim, a.lng_fim)]));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [12,22,24,14,8,10,9,10,12,12,10,40,12,12,10,40].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, MESES[mes-1]);
+    XLSX.writeFile(wb, `Petermann_AtividadeCampo_${MESES[mes-1]}${ano}.xlsx`);
+  }
+
   /* ── SheetJS sob demanda (21/09/2026) ────────────────────
      A lib (~900 kB) não vem no index.html: baixa na primeira exportação.
      Antes só os botões da aba Saldo garantiam isso; Equipe, Frota e Ponto
@@ -820,6 +839,7 @@ window.Excel = (() => {
     exportarFrotaPlanilha: comLib(exportarFrotaPlanilha),
     exportarPonto:   comLib(exportarPonto),
     exportarPontoCSV: comLib(exportarPontoCSV),
+    exportarCampo:   comLib(exportarCampo),
     buildResumo, buildRDM, buildRDA, buildRepasses, buildEquipe,
   };
 })();

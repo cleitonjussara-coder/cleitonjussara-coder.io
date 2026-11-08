@@ -1795,6 +1795,8 @@ window.Gestor = (() => {
        próprio papel. O servidor repete a mesma regra. */
     const podeEditar = !souEu && (ehAdmin || eu.role === 'gestor');
     const podeRegime = podeEditar;
+    /* Atividade em campo (08/11/2026): gestor/admin ligam para qualquer um, inclusive para si. */
+    const podeCampo = (ehAdmin || eu.role === 'gestor') && colab.role !== 'contabilidade';
     const papeis = ROLES;
     const inativo = colab.ativo === false;
     const ov = document.createElement('div');
@@ -1820,6 +1822,12 @@ window.Gestor = (() => {
             <option value="cv"${colab.regime==='cv'?' selected':''}>💳 CV — cartão corporativo; repasse do que sai do bolso; gera Planilha CV</option>
           </select>
           <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mudar o regime troca as telas e os relatórios da pessoa. As notas já lançadas continuam como estão.</p>
+          ${podeCampo ? `
+          <label class="lbl" style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">
+            <input type="checkbox" id="g-campo" style="width:22px;height:22px;flex:none;margin-top:1px" ${colab.atividade_campo ? 'checked' : ''}>
+            <span>📍 Registra atividade em campo</span>
+          </label>
+          <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mostra para a pessoa o botão de início e fim de atividade (fazenda, campo e localização no toque). Quem não tem não vê a função.</p>` : ''}
           ${!podeEditar ? '' : `
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl">Situação</label>
@@ -1841,7 +1849,7 @@ window.Gestor = (() => {
         </div>
         <div class="modal-ft">
           <button class="btn btn-outline" id="g-cancel">Fechar</button>
-          ${podeEditar || (ehAdmin && souEu) ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
+          ${podeEditar || (ehAdmin && souEu) || podeCampo ? '<button class="btn btn-primary" id="g-save">Salvar</button>' : ''}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -1857,6 +1865,8 @@ window.Gestor = (() => {
       const role   = ov.querySelector('#g-role').value;
       const regime = ov.querySelector('#g-regime')?.value;
       const dados  = { nome, role, regime };   // o servidor filtra o que este papel pode gravar
+      const chkCampo = ov.querySelector('#g-campo');
+      if (chkCampo) dados.atividade_campo = chkCampo.checked;
       /* Entrar ou sair de "administrador" mexe em quem mantém o sistema:
          confirma antes, dos dois lados. */
       const quem = colab.nome || colab.email;
@@ -1866,6 +1876,8 @@ window.Gestor = (() => {
       }
       try { await sb.colaboradores.update(colab.id, dados); }
       catch (e) { await mostrarAviso('Erro: ' + e.message); return; }
+      /* ligou/desligou para si: o menu já mostra (ou esconde) a Atividade em campo sem precisar sair e entrar */
+      if (souEu && chkCampo && typeof user !== 'undefined' && user) user.atividade_campo = chkCampo.checked;
       close(); onSaved();
     };
 

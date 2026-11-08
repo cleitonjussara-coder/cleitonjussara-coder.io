@@ -421,6 +421,14 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     feriadoDelete: data => req('DELETE', `/feriados/${data}`),
   };
 
+  /* Atividade em campo (08/11/2026): início/fim por fazenda e campo, com localização. */
+  const atividadesCampo = {
+    list: params => req('GET', '/atividades-campo', { query: params }),
+    equipe: () => req('GET', '/atividades-campo/equipe'),
+    iniciar: item => req('POST', '/atividades-campo/iniciar', { body: item }),
+    finalizar: (id, item) => req('POST', `/atividades-campo/${id}/finalizar`, { body: item }),
+  };
+
   /* Backup do banco (SQLite) — só admin. Devolve o arquivo como Blob. */
   const backup = {
     banco: () => req('GET', '/backup/banco', { blob: true, timeout: 300_000 }),
@@ -515,5 +523,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, busca, backup, admin, frota, ponto, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, busca, backup, admin, frota, ponto, atividadesCampo, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
 })();

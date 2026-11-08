@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 572;
+const APP_BUILD = 573;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1106,6 +1106,7 @@ function _itensMenu() {
   }
   if (!_ehContabilidade()) itens.push({ g: _ehGestorOuAdmin() ? 'controle' : 'dia', view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
   if (_veFrota()) itens.push({ g:'dia', view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
+  if (_veCampo()) itens.push({ g: _registraCampo() ? 'dia' : 'equipe', view:'campo', ico:'📍', lbl:'Atividade em campo', sub: _registraCampo() ? 'início e fim no campo' : 'quem está em campo e onde' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
     itens.push({ g:'controle', view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
   }
@@ -1412,6 +1413,10 @@ function _ehCV(u = user) { return u?.role !== 'contabilidade' && (u?.regime || '
    do regime CV (09/10/2026); colaborador RDM/RDA ficava de fora. O servidor também fecha o módulo ao Contador
    (middleware SomenteLeitura). Ponto segue só do gestor/admin. */
 function _veFrota() { return MODULOS_EXTRAS && !_ehContabilidade(); }
+/* Atividade em campo (08/11/2026): o gestor liga por pessoa (colaboradores.atividade_campo). Quem não tem não vê nada.
+   Gestor/admin sempre veem a tela, para acompanhar a equipe; registram só se a própria conta estiver ligada. */
+function _veCampo() { return !_ehContabilidade() && (!!user?.atividade_campo || _ehGestorOuAdmin()); }
+function _registraCampo() { return !_ehContabilidade() && !!user?.atividade_campo; }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
    separado de propósito: é por ele que passam saldo do cartão, repasse e
    resumo por categoria, que são do cartão e não do nome do regime. */
@@ -3223,7 +3228,7 @@ const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
   perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
-  repasses: 'Repasses e recargas',
+  repasses: 'Repasses e recargas', campo: 'Atividade em campo',
 };
 let _histViews = [];
 
@@ -3404,6 +3409,7 @@ function switchView(v, voltando = false, avancando = false) {
   else if (v==='despesas') { _pagamentoCV = guardado?.interno?.pagamentoCV ?? null; _abaDespesa = guardado?.interno?.aba ?? null; renderDespesas(); }
   else if (v==='frota')  { if (_veFrota()) window.Frota?.render(); else switchView('inicio'); }
   else if (v==='ponto')  { if (MODULOS_EXTRAS && _ehGestorOuAdmin()) window.Ponto?.render(); else switchView('inicio'); }
+  else if (v==='campo')  { if (_veCampo()) window.Campo?.render(); else switchView('inicio'); }
   else if (v==='arquivos') _montarArquivos();
   else if (v==='notas')  renderNotas();
   else if (v==='lixeira') renderNotasApagadas();

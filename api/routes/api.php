@@ -162,6 +162,12 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::put('/feriados', [PontoController::class, 'feriadoUpsert']);
     Route::delete('/feriados/{data}', [PontoController::class, 'feriadoDelete']);
 
+    /* atividade em campo (08/11/2026): início/fim por fazenda e campo, com localização; o gestor liga por pessoa */
+    Route::get('/atividades-campo', [\App\Http\Controllers\AtividadeCampoController::class, 'index']);
+    Route::get('/atividades-campo/equipe', [\App\Http\Controllers\AtividadeCampoController::class, 'equipe']);
+    Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
+    Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
+
     /* pedido de justificativa (19/10/2026): gestor pede pelo Rastreio, colaborador responde */
     Route::get('/justificativas', [JustificativaController::class, 'index']);
     Route::get('/justificativas/sino', [JustificativaController::class, 'sino']);

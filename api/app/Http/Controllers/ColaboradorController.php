@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -71,7 +72,13 @@ class ColaboradorController extends Controller
             'role' => ['sometimes', Rule::in(Colaborador::ROLES)],
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
+            'atividade_campo' => ['sometimes', 'boolean'],   // 08/11/2026: só gestor/admin liga (inclusive para si)
         ]);
+        if (! $u->gerencia() || ! Schema::hasColumn('colaboradores', 'atividade_campo')) {
+            unset($d['atividade_campo']);
+        } elseif (array_key_exists('atividade_campo', $d)) {
+            $d['atividade_campo'] = (bool) $d['atividade_campo'];
+        }
         /* 04/11/2026: ninguém muda o próprio papel direto, nem o admin. Núcleo e regime o admin segue mudando em si mesmo,
            para testar os dois regimes. Limite conhecido: o admin edita papéis de outros, então pode promover outra conta
            e ela mudar o papel dele; isso só some quando ele for rebaixado em produção. */
@@ -101,14 +108,15 @@ class ColaboradorController extends Controller
            como ver quem trocou o papel ou o regime de alguém sem entrar no
            servidor. Uma linha por campo mudado, junto do Histórico de nota
            e repasse (build 287). */
-        foreach (['role', 'regime'] as $campo) {
-            if (isset($d[$campo]) && $d[$campo] !== $alvo->$campo) {
+        $txt = fn ($v) => is_bool($v) ? ($v ? 'sim' : 'não') : $v;
+        foreach (['role', 'regime', 'atividade_campo'] as $campo) {
+            if (isset($d[$campo]) && $txt($d[$campo]) !== $txt($alvo->$campo)) {
                 DB::table('colaboradores_historico')->insert([
                     'id' => (string) Str::uuid(),
                     'colaborador_id' => $alvo->id,
                     'campo' => $campo,
-                    'de' => $alvo->$campo,
-                    'para' => $d[$campo],
+                    'de' => $txt($alvo->$campo),
+                    'para' => $txt($d[$campo]),
                     'alterado_por' => $u->id,
                     'alterado_em' => now(),
                 ]);
@@ -266,6 +274,7 @@ class ColaboradorController extends Controller
                 'repasses' => Repasse::where('user_id', $alvo->id)->delete(),
                 'km' => KmRegistro::where('user_id', $alvo->id)->delete(),
                 'pontos' => Ponto::where('user_id', $alvo->id)->delete(),
+            'atividades_campo' => \App\Models\AtividadeCampo::tabelaExiste() ? \App\Models\AtividadeCampo::where('user_id', $alvo->id)->delete() : 0,   // 08/11/2026
                 'justificativas' => \App\Models\Justificativa::tabelaExiste() ? \App\Models\Justificativa::where('colaborador_id', $alvo->id)->delete() : 0,   // 19/10/2026
                 'avisos_correcao' => $avisosDasNotas + (\App\Models\AvisoCorrecao::tabelaExiste() ? \App\Models\AvisoCorrecao::where('colaborador_id', $alvo->id)->delete() : 0),   // 24/10/2026
             ];
