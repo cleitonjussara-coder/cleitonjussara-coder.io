@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 575;
+const APP_BUILD = 576;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4272,7 +4272,7 @@ function renderInicio() {
     </button>` : ''}
     ${_registraCampo() ? `<button class="ih-cta ih-cta-campo" onclick="switchView('campo')">
       <span class="ih-cta-mais" aria-hidden="true">📍</span>
-      <span class="ih-cta-t"><b>Atividade em campo</b><small>Início e fim no campo</small></span>
+      <span class="ih-cta-t"><b>Em campo</b><small>Início e fim da atividade</small></span>
       <em aria-hidden="true">›</em>
     </button>` : ''}
     ${_ehGestorOuAdmin() ? `<button class="ih-cta ih-cta-fat" onclick="iniciarFaturamento()">
