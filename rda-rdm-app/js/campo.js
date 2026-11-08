@@ -21,7 +21,11 @@ window.Campo = (() => {
 
   const KEY_FILA = 'campo_fila';
   const KEY_CACHE = () => `campo_cache_${filAno}_${filMes}`;
-  const KEY_ULTIMOS = 'campo_ultimos';      // fazendas/campos usados por último (sugestão)
+  /* Histórico de fazenda + campo (08/11/2026, pedido do Cleiton): cada início guarda o par no aparelho, por conta, para
+     escolher na próxima visita em vez de digitar. Mais recente primeiro; os registros do mês vindos do servidor
+     também entram, então trocar de celular não zera a lista. */
+  const KEY_HIST = () => `campo_historico_${user?.id || 'anon'}`;
+  const HIST_MAX = 30;
   const _atG = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const hm = min => { min = Math.max(0, Math.round(Number(min) || 0)); return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`; };
   const horaBR = iso => iso ? FusoBR.hora(new Date(iso), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '—';
@@ -248,21 +252,53 @@ window.Campo = (() => {
   }
 
   /* ── Registrar ─────────────────────────────────────────── */
-  async function _ultimos() { try { return (await DB.getMeta(KEY_ULTIMOS)) || {}; } catch (_) { return {}; } }
+  const _chave = (f, c) => `${String(f || '').trim().replace(/^faz(enda)?\.?\s*/i, '').toUpperCase()}|${String(c || '').trim().toUpperCase()}`;
+  async function _historico() {
+    let salvo = [];
+    try { salvo = (await DB.getMeta(KEY_HIST())) || []; } catch (_) {}
+    const doServidor = lista.filter(a => a.user_id === user?.id).map(a => ({ fazenda: a.fazenda, campo: a.campo, em: a.inicio }));
+    const vistos = new Map();
+    [...salvo, ...doServidor].forEach(h => {
+      if (!h?.fazenda || !h?.campo) return;
+      const k = _chave(h.fazenda, h.campo), ja = vistos.get(k);
+      if (!ja || String(h.em || '') > String(ja.em || '')) vistos.set(k, { fazenda: h.fazenda, campo: String(h.campo).toUpperCase(), em: h.em || '' });
+    });
+    return [...vistos.values()].sort((a, b) => String(b.em).localeCompare(String(a.em))).slice(0, HIST_MAX);
+  }
+  async function _guardarNoHistorico(fazenda, campo) {
+    const k = _chave(fazenda, campo);
+    const h = (await _historico()).filter(x => _chave(x.fazenda, x.campo) !== k);
+    h.unshift({ fazenda, campo: campo.toUpperCase(), em: new Date().toISOString() });
+    try { await DB.setMeta(KEY_HIST(), h.slice(0, HIST_MAX)); } catch (_) {}
+  }
+
+  /* Escolhe fazenda e campo: primeiro a lista do histórico; "Digitar outro" abre o formulário. Devolve {fazenda, campo} ou null. */
+  async function _escolherCampo(aberta) {
+    const dica = aberta ? `O campo ${aberta.campo} será finalizado agora.` : 'A localização do aparelho é gravada neste toque.';
+    const hist = (await _historico()).filter(h => !aberta || _chave(h.fazenda, h.campo) !== _chave(aberta.fazenda, aberta.campo));
+    if (hist.length) {
+      const r = await pedirCampos({
+        titulo: 'Início das atividades', dica, confirmar: 'Registrar início',
+        campos: [{ id: 'escolha', rotulo: 'Fazenda e campo (já usados)', valor: '0',
+          opcoes: [...hist.map((h, i) => ({ valor: String(i), rotulo: `${_faz(h.fazenda)} · ${h.campo}` })), { valor: 'novo', rotulo: '➕ Digitar outro campo' }] }],
+      });
+      if (!r) return null;
+      if (r.escolha !== 'novo') return hist[Number(r.escolha)] || null;
+    }
+    const r = await pedirCampos({
+      titulo: 'Início das atividades', dica, confirmar: 'Registrar início',
+      campos: [
+        { id: 'fazenda', rotulo: 'Fazenda', valor: hist[0]?.fazenda || aberta?.fazenda || '', placeholder: 'ex.: São José', maxlength: 120, validar: t => (t.trim() ? '' : 'Informe a fazenda.') },
+        { id: 'campo', rotulo: 'Campo', valor: '', placeholder: 'ex.: BRCB147A-B', maxlength: 60, validar: t => (t.trim() ? '' : 'Informe o código do campo.') },
+      ],
+    });
+    return r;
+  }
 
   async function iniciar() {
     if (!_registraCampo()) { toast('A atividade em campo não está liberada para a sua conta', 'err'); return; }
     const aberta = await _aberta();
-    const ult = await _ultimos();
-    const r = await pedirCampos({
-      titulo: 'Início das atividades',
-      dica: aberta ? `O campo ${aberta.campo} será finalizado agora.` : 'A localização do aparelho é gravada neste toque.',
-      confirmar: 'Registrar início',
-      campos: [
-        { id: 'fazenda', rotulo: 'Fazenda', valor: ult.fazenda || '', placeholder: 'ex.: São José', maxlength: 120, validar: t => (t.trim() ? '' : 'Informe a fazenda.') },
-        { id: 'campo', rotulo: 'Campo', valor: '', placeholder: 'ex.: BRCB147A-B', maxlength: 60, validar: t => (t.trim() ? '' : 'Informe o código do campo.') },
-      ],
-    });
+    const r = await _escolherCampo(aberta);
     if (!r) return;
     setLoading(true, 'Pegando a localização…');
     let depois = null;   // oferta de compartilhar só depois de fechar o "carregando"
@@ -272,7 +308,7 @@ window.Campo = (() => {
       if (!loc.erro) Object.assign(dados, { lat: loc.lat, lng: loc.lng, precisao: Math.round(loc.precisao) });
       /* Iniciar sem fechar: o servidor fecha o anterior sozinho; na fila, o fim automático acontece quando subir. */
       await _registrar({ tipo: 'iniciar', dados }, () => sb.atividadesCampo.iniciar(dados));
-      try { await DB.setMeta(KEY_ULTIMOS, { fazenda: dados.fazenda }); } catch (_) {}
+      await _guardarNoHistorico(dados.fazenda, dados.campo);
       if (loc.erro) toast('Registrado sem localização: ' + loc.erro, 'err', 6000);
       await render();
       depois = { ...dados, lat_inicio: dados.lat, lng_inicio: dados.lng };
