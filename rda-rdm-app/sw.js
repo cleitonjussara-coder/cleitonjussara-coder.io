@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v571';
+const CACHE   = 'petermann-v572';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -135,6 +135,8 @@ self.addEventListener('notificationclick', e => {
     for (const j of janelas) {
       if (j.url.indexOf(self.registration.scope) === 0) {
         await j.focus();
+        /* 08/11/2026: com o app já aberto o link era ignorado — o app recebe e abre o que o aviso aponta (?abrir=...) */
+        j.postMessage({ tipo: 'notif-abrir', url: destino });
         return;
       }
     }

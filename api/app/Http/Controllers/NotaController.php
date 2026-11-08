@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Colaborador;
 use App\Models\Nota;
 use App\Models\NotaHistorico;
+use App\Services\DuplicataNota;
 use App\Services\FechamentoMes;
 use App\Services\FotoEmBrancoAviso;
 use App\Services\FotoStorage;
@@ -29,7 +30,7 @@ use Illuminate\Validation\ValidationException;
  */
 class NotaController extends Controller
 {
-    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca, private HistoricoNota $historico, private FechamentoMes $fechamento) {}
+    public function __construct(private FotoStorage $fotos, private FotoEmBrancoAviso $fotoBranca, private HistoricoNota $historico, private FechamentoMes $fechamento, private DuplicataNota $duplicata) {}
 
     /**
      * GET /notas?since=…&ano=…&mes=…&user_id=…&deleted=0|1|all&fields=a,b
@@ -286,6 +287,8 @@ class NotaController extends Controller
         }
 
         $anexoTrocado = false;
+        /* 08/11/2026: nota que ENTRA agora (nova, ou tirada da lixeira) é conferida contra a equipe; ver o aviso abaixo */
+        $entrando = $nota ? ($nota->deleted && ! $d['deleted']) : ! $d['deleted'];
         if ($nota) {
             unset($d['created_at']);
             $donoAntes = $nota->user_id;
@@ -351,6 +354,13 @@ class NotaController extends Controller
         /* Foto em branco (21/10/2026): mede o anexo se ainda não foi medido (nota nova, ou antiga que acabou de ser
            editada). Só marca e avisa a gestão; nunca recusa nem apaga, e erro aqui nunca derruba o envio. */
         $this->fotoBranca->avaliar($nota, $u, refazer: $anexoTrocado);
+
+        /* Nota duplicada (08/11/2026): o app só pergunta "Lançar assim mesmo?" e a nota entra. Quando ela repete outra nota
+           viva da equipe, gestor e admin recebem push. Só na entrada (reenvio da fila ou edição não avisam de novo); nunca
+           recusa nem apaga, e erro aqui nunca derruba o envio. */
+        if ($entrando) {
+            $this->duplicata->avisarSeDuplicada($nota, $u);
+        }
 
         return response()->json($nota->fresh());
     }
@@ -694,48 +704,7 @@ class NotaController extends Controller
         ]);
         $u = $r->user();
 
-        $chave = preg_replace('/\D/', '', (string) ($d['chave'] ?? ''));
-        $chave = strlen($chave) === 44 ? $chave : '';
-        $qrUrl = trim((string) ($d['qr_url'] ?? ''));
-        $cand = [
-            'tipo' => $d['tipo'] ?? null,
-            'cnpj' => self::cnpjValido($d['cnpj'] ?? null),
-            'razao' => self::razaoNormalizada($d['razao_social'] ?? null),
-            'numero' => self::numeroNormalizado($d['numero'] ?? null),
-            'serie' => trim((string) ($d['serie'] ?? '')),
-            'centavos' => isset($d['valor']) ? (int) round(((float) $d['valor']) * 100) : 0,
-            'data' => $d['data'] ?? null,
-        ];
-
-        /* Candidatas: tudo que casa por chave, link da NFS-e, número ou dia+valor.
-           O resto (fornecedor, série, grupo) é conferido em PHP, com a mesma
-           lógica do app, em cima de um conjunto pequeno. */
-        $q = Nota::query()->where('deleted', false)
-            ->when($d['ignore_id'] ?? null, fn ($q, $ig) => $q->where('id', '<>', $ig))
-            ->where(function ($q) use ($chave, $qrUrl, $cand) {
-                $q->whereRaw('0 = 1');
-                if ($chave !== '') {
-                    $q->orWhere('chave_nfce', $chave);
-                }
-                if ($qrUrl !== '') {
-                    $q->orWhere('qr_url', $qrUrl);
-                }
-                if ($cand['numero'] !== '') {
-                    $q->orWhereRaw("ltrim(numero, '0') = ?", [$cand['numero']]);
-                }
-                if ($cand['centavos'] > 0 && $cand['data']) {
-                    $q->orWhere(fn ($q) => $q->where('data', $cand['data'])->whereRaw('abs(valor - ?) < 0.005', [$cand['centavos'] / 100]));
-                }
-            });
-
-        $achada = null;
-        $motivo = null;
-        foreach ($q->orderBy('created_at')->limit(200)->get() as $n) {
-            $m = $this->motivoDuplicata($n, $chave, $qrUrl, $cand);
-            if ($m !== null && ($motivo === null || self::FORCA_MOTIVO[$m] > self::FORCA_MOTIVO[$motivo])) {
-                [$achada, $motivo] = [$n, $m];
-            }
-        }
+        [$achada, $motivo] = $this->duplicata->achar($d, $d['ignore_id'] ?? null) ?? [null, null];
 
         if (! $achada) {
             return response()->json(['existe' => false, 'motivo' => null, 'origem' => null]);
@@ -754,86 +723,6 @@ class NotaController extends Controller
         }
 
         return response()->json($resp);
-    }
-
-    /** Do mais forte para o mais fraco: quando várias notas casam, vale o melhor motivo. */
-    private const FORCA_MOTIVO = ['chave' => 4, 'nfse' => 3, 'numero' => 2, 'igual' => 1];
-
-    private function motivoDuplicata(Nota $n, string $chave, string $qrUrl, array $cand): ?string
-    {
-        if ($chave !== '' && preg_replace('/\D/', '', (string) $n->chave_nfce) === $chave) {
-            return 'chave';
-        }
-        if ($qrUrl !== '' && trim((string) $n->qr_url) === $qrUrl) {
-            return 'nfse';
-        }
-        if (! $this->mesmoFornecedor($n, $cand)) {
-            return null;
-        }
-        $num = self::numeroNormalizado($n->numero);
-        $serieDaNota = trim((string) $n->serie);
-        if ($num !== '' && $num === $cand['numero'] && ($cand['serie'] === '' || $serieDaNota === '' || $cand['serie'] === $serieDaNota)) {
-            return 'numero';
-        }
-        if ($cand['centavos'] > 0 && (int) round(((float) $n->valor) * 100) === $cand['centavos']
-            && $cand['data'] && $n->data?->format('Y-m-d') === $cand['data']
-            && $cand['tipo'] !== null && $n->tipo === $cand['tipo']
-            && ! self::chavesDiferentes($n, $chave, $qrUrl)) {
-            return 'igual';
-        }
-
-        return null;
-    }
-
-    /* Duas chaves diferentes são dois documentos, mesmo com fornecedor, dia e valor iguais: NFS-e 214 e 215 de
-       duas sessões de R$ 80 emitidas juntas acusavam duplicata (06/11/2026). Só vale quando os DOIS lados têm chave do
-       mesmo tipo. O motivo 'numero' não passa por aqui: chave lida do texto pode vir com um dígito errado. */
-    private static function chavesDiferentes(Nota $n, string $chave, string $qrUrl): bool
-    {
-        $daNota = preg_replace('/\D/', '', (string) $n->chave_nfce);
-        if ($chave !== '' && strlen($daNota) === 44 && $daNota !== $chave) {
-            return true;
-        }
-        $nfseNota = self::chaveNfse($n->qr_url);
-        $nfseCand = self::chaveNfse($qrUrl);
-
-        return $nfseNota !== '' && $nfseCand !== '' && $nfseNota !== $nfseCand;
-    }
-
-    /** Chave de 50 dígitos da NFS-e nacional dentro do link da consulta; vazio se não houver. */
-    private static function chaveNfse(?string $url): string
-    {
-        return preg_match('/(?<!\d)\d{50}(?!\d)/', (string) $url, $m) ? $m[0] : '';
-    }
-
-    /* CNPJ igual quando os dois têm; senão razão social igual (um recibo lido
-       por OCR pode ter só o nome, e a nota antiga só o CNPJ). */
-    private function mesmoFornecedor(Nota $n, array $cand): bool
-    {
-        $cnpjDaNota = self::cnpjValido($n->cnpj);
-        if ($cnpjDaNota !== '' && $cand['cnpj'] !== '') {
-            return $cnpjDaNota === $cand['cnpj'];
-        }
-
-        return $cand['razao'] !== '' && $cand['razao'] === self::razaoNormalizada($n->razao_social);
-    }
-
-    /** CNPJ só com dígitos; vazio e "00000000000000" não são CNPJ. */
-    private static function cnpjValido(?string $v): string
-    {
-        $c = preg_replace('/\D/', '', (string) $v);
-
-        return (strlen($c) === 14 && ! preg_match('/^0+$/', $c)) ? $c : '';
-    }
-
-    private static function razaoNormalizada(?string $v): string
-    {
-        return preg_replace('/\s+/', ' ', mb_strtoupper(trim((string) $v)));
-    }
-
-    private static function numeroNormalizado(?string $v): string
-    {
-        return ltrim(trim((string) $v), '0');
     }
 
     /**

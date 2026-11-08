@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 571;
+const APP_BUILD = 572;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1487,7 +1487,7 @@ async function carregarDadosLocais() {
     }
   }
 
-  atualizarNotificacoes({ esperarJust: true }).then(_abrirSinoPelaUrl).catch(() => {});
+  atualizarNotificacoes({ esperarJust: true }).then(() => _abrirSinoPelaUrl()).catch(() => {});
 
   // uma vez por aparelho: libera o espaço dos anexos duplicados no IndexedDB
   if (!_reparoAnexosFeito) {
@@ -2455,6 +2455,28 @@ function _notificacoes() {
       });
     });
   }
+  /* Nota duplicada (08/11/2026, pedido do Cleiton): o app só pergunta "Lançar assim mesmo?" e a nota entra; o servidor
+     manda push à gestão (DuplicataNota). Aqui o aviso fica no sino até o "OK, vi" — mesma regra das listas
+     (_mapaDuplicatas), sobre as notas da equipe e as próprias. Aparece a nota MAIS NOVA do par, lançada nos últimos 30 dias
+     por outra pessoa (a que o próprio gestor lançou ele já viu na tela). Nada é apagado nem marcado. */
+  if (_ehGestorOuAdmin()) {
+    const limDup = Date.now() - 30 * 86400_000;
+    const quando = n => new Date(n.created_at || n.data).getTime() || 0;
+    const todas = notasEquipe.concat(notas);
+    _mapaDuplicatas(todas).forEach(({ nota: outra, motivo }, id) => {
+      const n = _notaPorId(id);
+      if (!n || !outra) return;
+      if (quando(n) < quando(outra) || (quando(n) === quando(outra) && String(n.id) < String(outra.id))) return;   // só a mais nova
+      const nid = 'dup:' + n.id;
+      if ((n.created_by || n.user_id) === user.id || vistos.has(nid) || quando(n) < limDup) return;
+      const quemOutra = outra.user_id ? (outra.user_id === n.user_id ? 'a mesma pessoa' : (outra.user_nome || equipePorId[outra.user_id]?.nome || 'outro colaborador')) : 'Faturamento';
+      out.push({
+        id: nid, tipo: 'duplicada', notaId: n.id, outraId: outra.id,
+        titulo: `${n.user_nome || _rotuloProprietario(n)} lançou uma nota que já existe`,
+        sub: `${n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa')} · ${n.tipo} · ${fmtDataBR(n.data)} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'} — ${_MOTIVO_DUP[motivo] || 'parece repetida'}; já lançada por ${quemOutra}.`,
+      });
+    });
+  }
   /* Cartão corporativo acabando (24/09/2026): quem recarrega é o gestor, e
      sem saldo o colaborador passa a pagar do bolso. O id carrega a faixa de
      centenas, então o aviso volta se o saldo cair mais (ou for dispensado e
@@ -2571,7 +2593,7 @@ function abrirNotificacoes() {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'correcao' ? '✏️' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'correcao' ? '✏️' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : it.tipo === 'duplicada' ? '🔁' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
@@ -2587,6 +2609,10 @@ function abrirNotificacoes() {
         </div>` : it.tipo === 'fotobranca' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); verFoto(this.dataset.nota)">📎 Ver foto</button>
           <button class="btn btn-sm btn-outline" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); editarNota(this.dataset.nota)">✏️ Corrigir a nota</button>
+          <button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif)">OK, vi</button>
+        </div>` : it.tipo === 'duplicada' ? `<div class="notif-acoes">
+          <button class="btn btn-sm btn-primary" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); editarNota(this.dataset.nota)">📄 Abrir a nota nova</button>
+          <button class="btn btn-sm btn-outline" data-nota="${_at(it.outraId)}" onclick="document.getElementById('notif-overlay')?.remove(); editarNota(this.dataset.nota)">📄 Ver a que já existia</button>
           <button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif)">OK, vi</button>
         </div>` : it.tipo === 'cartao' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" data-uid="${_at(it.userId)}" data-nome="${_at((it.nome || '').replace(/'/g, ''))}" onclick="const d=this.dataset; document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('received', null, { id: d.uid, nome: d.nome }, 'recarga')">💳 Registrar recarga</button>
@@ -2735,20 +2761,39 @@ async function dispensarAvisoCorrecao(id, btn) {
 }
 
 /* Tocar na notificação do celular com o app FECHADO abre ./?abrir=sino: abre o sino direto, uma vez só.
-   ./?abrir=fechamento (06/11/2026): nota chegou em mês fechado; abre a Equipe com o quadro aberto. */
-function _abrirSinoPelaUrl() {
+   ./?abrir=fechamento (06/11/2026): nota chegou em mês fechado; abre a Equipe com o quadro aberto.
+   ./?abrir=nota&id=... (08/11/2026): nota duplicada; a gestão cai direto na nota. Se ela ainda não chegou ao aparelho
+   (a sincronização vem logo depois), abre o sino, onde o aviso aparece quando ela chegar.
+   Com o app JÁ aberto, o service worker manda o link por mensagem ('notif-abrir') e a mesma rotina roda. */
+function _abrirSinoPelaUrl(urlDoAviso) {
   try {
-    const q = new URLSearchParams(location.search);
+    const daMensagem = !!urlDoAviso;
+    const q = daMensagem ? new URL(urlDoAviso, location.href).searchParams : new URLSearchParams(location.search);
     const alvo = q.get('abrir');
-    if (alvo !== 'sino' && alvo !== 'fechamento') return;
-    q.delete('abrir');
-    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    if (alvo !== 'sino' && alvo !== 'fechamento' && alvo !== 'nota') return;
+    const notaId = q.get('id');
+    if (!daMensagem) {
+      q.delete('abrir'); q.delete('id');
+      history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    }
     if (alvo === 'fechamento') {
       if (user && _ehGestorOuAdmin()) { window.Fechamento?.abrirQuadro(); window.Gestor?.definirAba('rel'); switchView('equipe'); }
       return;
     }
-    if (user && !_ehContabilidade()) abrirNotificacoes();
+    if (alvo === 'nota' && user && _ehGestorOuAdmin() && notaId && _notaPorId(notaId)) {
+      document.getElementById('notif-overlay')?.remove();
+      editarNota(notaId);
+      return;
+    }
+    if (user && !_ehContabilidade()) { document.getElementById('notif-overlay')?.remove(); abrirNotificacoes(); }
   } catch (_) {}
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.tipo === 'notif-abrir' && e.data.url) {
+      atualizarNotificacoes({ esperarJust: true }).catch(() => {}).then(() => _abrirSinoPelaUrl(e.data.url));
+    }
+  });
 }
 
 /* Voltou ao app (aba/janela em primeiro plano): confere se chegou pedido ou resposta nova — a notificação do
@@ -10062,16 +10107,22 @@ function _acharDuplicata(candidata, ignoreId = null) {
    render; para o volume de um ano isso é instantâneo. */
 let _dupMapa = new Map();
 function _recalcularDuplicatas(lista) {
+  _dupMapa = _mapaDuplicatas(lista || notas);
+  return _dupMapa;
+}
+/* 08/11/2026: a conta virou função pura — o sino da gestão usa a mesma regra sobre as notas da EQUIPE sem mexer em _dupMapa
+   (que é das listas de "Minhas notas"). */
+function _mapaDuplicatas(lista) {
   /* 20/09/2026: era par a par (n²) — com 20 mil notas no aparelho do gestor
      eram 200 milhões de comparações a cada render. Agora agrupa em baldes
      (mesma chave; mesmo fornecedor+número; mesmo fornecedor+dia+valor+tipo)
      e só compara dentro do balde: linear. As regras são as de
      _motivoDuplicata, que continua valendo para o aviso na hora do lançamento. */
-  _dupMapa = new Map();
-  const vivas = (lista || notas).filter(n => !n.deleted);
+  const mapa = new Map();
+  const vivas = (lista || []).filter(n => n && !n.deleted);
   const marcar = (a, b, m) => {
-    if (!_dupMapa.has(a.id)) _dupMapa.set(a.id, { nota: b, motivo: m });
-    if (!_dupMapa.has(b.id)) _dupMapa.set(b.id, { nota: a, motivo: m });
+    if (!mapa.has(a.id)) mapa.set(a.id, { nota: b, motivo: m });
+    if (!mapa.has(b.id)) mapa.set(b.id, { nota: a, motivo: m });
   };
   const fornDe = n => {
     const c = _digitos(n.cnpj || '');
@@ -10102,7 +10153,7 @@ function _recalcularDuplicatas(lista) {
       }
     }
   }
-  return _dupMapa;
+  return mapa;
 }
 function _resumoNota(n) {
   return [n.tipo, n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : null),

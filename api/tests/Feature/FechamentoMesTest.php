@@ -631,7 +631,8 @@ class FechamentoMesTest extends TestCase
         $this->assertCount(0, $this->envios, 'ninguém para avisar: nada sai');
 
         Carbon::setTestNow(now()->addMinutes(10));
-        $this->lancar($this->pessoa('colaborador'));
+        /* valor diferente: com tudo igual seria nota duplicada, que tem aviso próprio (08/11/2026) */
+        $this->lancar($this->pessoa('colaborador'), ['valor' => 55]);
         $this->assertCount(1, $this->envios, 'a nota do colaborador toca o celular do gestor que lançou a dele');
         $this->assertTrue($this->envios[0][0]->contains('id', $gestor->id));
         $this->assertStringContainsString('2 notas', $this->envios[0][2]);
