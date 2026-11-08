@@ -36,6 +36,11 @@ window.Campo = (() => {
   let equipe = [];         // gestor: último registro de cada pessoa ligada
   let _offline = false, _cacheEm = null;
   let _filtroPessoa = null;
+  /* Planilha dinâmica do gestor (08/11/2026) */
+  let _aba = 'painel';           // 'painel' | 'registros'
+  let _filtroFazenda = null;     // nome da fazenda já com "Faz."
+  let _filtroDia = null;         // 'AAAA-MM-DD' (só na aba Registros)
+  let _filtroPend = null;        // 'abertas' | 'auto' | 'semloc' (só na aba Registros)
 
   /* ── Fila offline ──────────────────────────────────────────
      Igual à do ponto: a fila é do aparelho e cada item guarda a conta (uid).
@@ -169,19 +174,20 @@ window.Campo = (() => {
         </div>
       </div>`;
 
-    const vis = (_filtroPessoa ? lista.filter(a => a.user_id === _filtroPessoa) : (gestor ? lista : lista.filter(a => a.user_id === user?.id)));
-    html += `
-      <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <span>${gestor ? 'Registros da equipe' : 'Meus registros'} (${vis.length})</span>
-        <span style="display:flex;gap:6px;flex-wrap:wrap">
-          ${_filtroPessoa ? '<button class="btn btn-sm btn-outline" onclick="Campo.filtrarPessoa(null)">Todos</button>' : ''}
-          ${vis.length ? `<button class="btn btn-sm btn-primary" onclick="Campo.exportarExcel()">📗 Planilha ${MESES[filMes - 1]}</button>` : ''}
-        </span>
+    if (gestor) {
+      /* Planilha dinâmica (08/11/2026): só gestor e admin. Painel = dashboard no padrão do Painel das Notas; Registros = lista filtrada. */
+      const regs = _filtrados();
+      html += `
+      <div class="cp-abas">
+        <button class="chip ${_aba === 'painel' ? 'active' : ''}" onclick="Campo.aba('painel')">📊 Painel</button>
+        <button class="chip ${_aba === 'registros' ? 'active' : ''}" onclick="Campo.aba('registros')">📋 Registros (${_registrosVisiveis(regs).length})</button>
       </div>
-      <div class="notas-list">
-        ${vis.length ? vis.map(a => _cartao(a, gestor)).join('') : '<p class="muted-p">Nenhum registro neste mês.</p>'}
-      </div>
-    </div>`;
+      ${_filtrosHTML()}`;
+      html += _aba === 'painel' ? _painelHTML(regs) : _registrosHTML(regs, true);
+    } else {
+      html += _registrosHTML(lista.filter(a => a.user_id === user?.id), false);
+    }
+    html += '</div>';
     el.innerHTML = html;
   }
 
@@ -234,8 +240,183 @@ window.Campo = (() => {
       </div>`;
   }
 
+  /* ── Planilha dinâmica (gestor/admin) ──────────────────── */
+  const _diaDe = iso => new Date(iso).toLocaleDateString('sv-SE', { timeZone: FusoBR.TZ });
+  const _semLoc = a => a.lat_inicio == null || (!!a.fim && !a.fim_automatico && a.lat_fim == null);
+  const PEND = {
+    abertas: { ico: '🟢', txt: 'Em campo, sem fim registrado', f: a => a.em_campo },
+    auto:    { ico: '⏱️', txt: 'Fechadas sozinhas (esqueceu o fim)', f: a => a.fim_automatico },
+    semloc:  { ico: '📍', txt: 'Sem localização no início ou no fim', f: _semLoc },
+  };
+
+  /* pessoa e fazenda valem para o painel e para a lista; dia e pendência só para a lista */
+  function _filtrados() {
+    return lista.filter(a => (!_filtroPessoa || a.user_id === _filtroPessoa) && (!_filtroFazenda || _faz(a.fazenda) === _filtroFazenda));
+  }
+  function _registrosVisiveis(regs) {
+    return regs.filter(a => (!_filtroDia || _diaDe(a.inicio) === _filtroDia) && (!_filtroPend || PEND[_filtroPend].f(a)));
+  }
+
+  /* Números do dashboard e da planilha. Horas = só atividades fechadas; a aberta aparece em Pendências. */
+  function agregar(regs, ano = filAno, mes = filMes) {
+    const nd = new Date(ano, mes, 0).getDate();
+    const P = new Map(), F = new Map(), porDia = Array(nd).fill(0), gente = Array.from({ length: nd }, () => new Set());
+    let min = 0;
+    for (const a of regs) {
+      const m = Number(a.minutos) || 0, d = _diaDe(a.inicio), i = Number(d.slice(8)) - 1;
+      min += m;
+      if (d.slice(0, 7) === `${ano}-${String(mes).padStart(2, '0')}`) { porDia[i] += m; gente[i].add(a.user_id); }
+      const p = P.get(a.user_id) || { user_id: a.user_id, nome: a.user_nome || '?', min: 0, visitas: 0, dias: new Set(), abertas: 0, auto: 0, semloc: 0, porDia: Array(nd).fill(null) };
+      p.min += m; p.visitas++; p.dias.add(d); if (a.em_campo) p.abertas++; if (a.fim_automatico) p.auto++; if (_semLoc(a)) p.semloc++;
+      if (d.slice(0, 7) === `${ano}-${String(mes).padStart(2, '0')}`) p.porDia[i] = (p.porDia[i] || 0) + m;
+      P.set(a.user_id, p);
+      const fz = _faz(a.fazenda);
+      const f = F.get(fz) || { fazenda: fz, min: 0, visitas: 0, pessoas: new Set(), campos: new Map() };
+      f.min += m; f.visitas++; f.pessoas.add(a.user_id);
+      const c = f.campos.get(a.campo) || { campo: a.campo, min: 0, visitas: 0 };
+      c.min += m; c.visitas++; f.campos.set(a.campo, c); F.set(fz, f);
+    }
+    const pessoas = [...P.values()].map(p => ({ ...p, dias: p.dias.size })).sort((a, b) => b.min - a.min || a.nome.localeCompare(b.nome));
+    const fazendas = [...F.values()].map(f => ({ ...f, pessoas: f.pessoas.size, campos: [...f.campos.values()].sort((a, b) => b.min - a.min) }))
+      .sort((a, b) => b.min - a.min || b.visitas - a.visitas);
+    const pend = Object.fromEntries(Object.entries(PEND).map(([k, v]) => [k, regs.filter(v.f)]));
+    return { ano, mes, nd, min, visitas: regs.length, pessoas, fazendas, porDia, gentePorDia: gente.map(s => s.size),
+      diasPessoa: pessoas.reduce((s, p) => s + p.dias, 0), campos: fazendas.reduce((s, f) => s + f.campos.length, 0), pend };
+  }
+
+  function _filtrosHTML() {
+    const pessoas = [...new Map(lista.map(a => [a.user_id, a.user_nome || '?'])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const fazendas = [...new Set(lista.map(a => _faz(a.fazenda)))].sort((a, b) => a.localeCompare(b));
+    const chipsLista = [
+      _filtroDia ? `<button class="chip active" onclick="Campo.filtrarDia(null)">📅 ${fmtData(_filtroDia)} ✕</button>` : '',
+      _filtroPend ? `<button class="chip active" onclick="Campo.filtrarPend(null)">${PEND[_filtroPend].ico} ${esc(PEND[_filtroPend].txt)} ✕</button>` : '',
+    ].join('');
+    return `
+      <div class="cp-filtros">
+        <select class="inp" aria-label="Colaborador" onchange="Campo.filtrarPessoa(this.value || null)">
+          <option value="">👥 Todos os colaboradores</option>
+          ${pessoas.map(([id, nome]) => `<option value="${_atG(id)}" ${id === _filtroPessoa ? 'selected' : ''}>${esc(nome)}</option>`).join('')}
+        </select>
+        <select class="inp" aria-label="Fazenda" onchange="Campo.filtrarFazenda(this.value || null)">
+          <option value="">🌾 Todas as fazendas</option>
+          ${fazendas.map(f => `<option value="${_atG(f)}" ${f === _filtroFazenda ? 'selected' : ''}>${esc(f)}</option>`).join('')}
+        </select>
+      </div>
+      ${_aba === 'registros' && chipsLista ? `<div class="cp-chips">${chipsLista}</div>` : ''}`;
+  }
+
+  function _painelHTML(regs) {
+    if (!regs.length) return '<div class="db-card"><p class="muted-p">Nenhuma atividade neste mês com esses filtros.</p></div>';
+    const A = agregar(regs);
+    const nPend = A.pend.abertas.length + A.pend.auto.length + A.pend.semloc.length;
+    const kpi = (lbl, val, sub, extra = '', acao = '') => `<button class="ini-kpi ${extra}" ${acao ? `onclick="${acao}"` : 'style="cursor:default"'}><div class="ini-kpi-lbl">${lbl}</div><div class="ini-kpi-val">${val}</div><div class="ini-kpi-sub">${sub}</div></button>`;
+    const umaPessoa = !!_filtroPessoa;
+    let html = `
+      <div class="cp-kpis">
+        ${kpi('Horas em campo', hm(A.min), `${A.visitas} atividade${A.visitas === 1 ? '' : 's'} no mês`, '', "Campo.aba('registros')")}
+        ${kpi('Dias em campo', String(umaPessoa ? (A.pessoas[0]?.dias || 0) : A.diasPessoa), umaPessoa ? 'dias com atividade' : `soma de ${A.pessoas.length} pessoa${A.pessoas.length === 1 ? '' : 's'}`)}
+        ${kpi('Fazendas · campos', `${A.fazendas.length} · ${A.campos}`, 'visitados no mês')}
+        ${kpi('Pendências', String(nPend), nPend ? 'toque para ver' : 'tudo em ordem', nPend ? 'alerta' : '', nPend ? "Campo.filtrarPend('" + (A.pend.abertas.length ? 'abertas' : A.pend.auto.length ? 'auto' : 'semloc') + "')" : '')}
+      </div>`;
+
+    /* Horas por dia: barra por dia do mês; tocar abre os registros do dia */
+    const max = Math.max(1, ...A.porDia);
+    const hojeISO = FusoBR.hojeISO();
+    html += `
+      <div class="db-card">
+        <div class="db-card-title"><span>Horas em campo por dia</span><span style="font-size:13px;color:var(--text2)">toque no dia</span></div>
+        <div class="cp-barras" role="list">
+          ${A.porDia.map((m, i) => {
+            const ds = `${A.ano}-${String(A.mes).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+            return `<button class="cp-barra ${ds === hojeISO ? 'hoje' : ''}" role="listitem" title="${fmtData(ds)} · ${hm(m)}" aria-label="${fmtData(ds)}: ${hm(m)}" ${m ? `data-dia="${ds}" onclick="Campo.filtrarDia(this.dataset.dia)"` : 'disabled'}>
+              <span class="cp-barra-fill" style="height:${m ? Math.max(6, Math.round(m / max * 100)) : 0}%"></span>
+              <small>${(i + 1) % 5 === 0 || i === 0 ? i + 1 : ''}</small></button>`;
+          }).join('')}
+        </div>
+      </div>`;
+
+    if (!umaPessoa && A.pessoas.length) {
+      const maxP = Math.max(1, ...A.pessoas.map(p => p.min));
+      html += `
+      <div class="db-card">
+        <div class="db-card-title"><span>Por colaborador</span><span style="font-size:13px;color:var(--text2)">toque para filtrar</span></div>
+        <div class="db-rank">
+          ${A.pessoas.map((p, i) => `
+          <div class="db-rank-item" style="cursor:pointer" data-uid="${_atG(p.user_id)}" onclick="Campo.filtrarPessoa(this.dataset.uid)">
+            <div class="db-rank-meta"><span class="db-rank-pos">${i + 1}º</span><span class="db-rank-name">${esc(p.nome)}</span>
+              <span class="db-rank-val">${hm(p.min)}</span></div>
+            <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(3, Math.round(p.min / maxP * 100))}%"></div></div>
+            <div class="cp-rank-sub">${p.dias} dia${p.dias === 1 ? '' : 's'} · ${p.visitas} atividade${p.visitas === 1 ? '' : 's'}${p.abertas ? ' · 🟢 em campo' : ''}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    const maxF = Math.max(1, ...A.fazendas.map(f => f.min));
+    html += `
+      <div class="db-card">
+        <div class="db-card-title"><span>Por fazenda e campo</span><span style="font-size:13px;color:var(--text2)">toque para filtrar</span></div>
+        <div class="db-rank">
+          ${A.fazendas.map(f => `
+          <div class="db-rank-item" style="cursor:pointer" data-faz="${_atG(f.fazenda)}" onclick="Campo.filtrarFazenda(this.dataset.faz)">
+            <div class="db-rank-meta"><span class="db-rank-name">${esc(f.fazenda)}</span><span class="db-rank-val">${hm(f.min)}</span></div>
+            <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(3, Math.round(f.min / maxF * 100))}%"></div></div>
+            <div class="cp-rank-sub">${f.visitas} visita${f.visitas === 1 ? '' : 's'} · ${f.pessoas} pessoa${f.pessoas === 1 ? '' : 's'} · ${f.campos.slice(0, 4).map(c => `<b>${esc(c.campo)}</b> ${hm(c.min)}`).join(' · ')}${f.campos.length > 4 ? ` · +${f.campos.length - 4}` : ''}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+
+    html += `
+      <div class="db-card">
+        <div class="db-card-title"><span>Pendências</span></div>
+        <div class="db-pend">
+          ${nPend ? Object.entries(PEND).map(([k, v]) => A.pend[k].length ? `
+          <button class="db-pend-item" onclick="Campo.filtrarPend('${k}')">
+            <span class="db-pend-ico">${v.ico}</span><span class="db-pend-txt">${esc(v.txt)}</span>
+            <span class="db-pend-n">${A.pend[k].length}</span><span class="db-pend-seta">›</span>
+          </button>` : '').join('') : '<div class="db-pend-item ok"><span class="db-pend-ico">✅</span><span class="db-pend-txt">Nenhuma pendência no mês</span></div>'}
+        </div>
+      </div>`;
+
+    /* Dias em campo: calendário do mês; com uma pessoa, as horas dela; com a equipe, quantas pessoas foram ao campo */
+    const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    html += `
+      <div class="db-card">
+        <div class="db-card-title"><span>Dias em campo</span><span style="font-size:13px;color:var(--text2)">${umaPessoa ? 'horas por dia' : 'pessoas por dia'}</span></div>
+        <div class="ponto-cal">
+          ${DIAS.map(d => `<span class="ponto-cal-h">${d}</span>`).join('')}
+          ${Array(new Date(A.ano, A.mes - 1, 1).getDay()).fill('<span></span>').join('')}
+          ${A.porDia.map((m, i) => {
+            const ds = `${A.ano}-${String(A.mes).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+            const n = A.gentePorDia[i];
+            return `<span class="ponto-cal-d ${n ? 'ok' : ''} ${ds === hojeISO ? 'hoje' : ''}" ${n ? `style="cursor:pointer" data-dia="${ds}" onclick="Campo.filtrarDia(this.dataset.dia)"` : ''}><b>${i + 1}</b>${n ? `<small>${umaPessoa ? hm(m) : n + ' 👤'}</small>` : ''}</span>`;
+          }).join('')}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="Campo.exportarExcel()">📗 Planilha de atividade em campo — ${MESES[filMes - 1]}/${filAno}</button>`;
+    return html;
+  }
+
+  function _registrosHTML(regs, gestor) {
+    const vis = gestor ? _registrosVisiveis(regs) : regs;
+    return `
+      <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>${gestor ? 'Registros da equipe' : 'Meus registros'} (${vis.length})</span>
+        ${gestor && vis.length ? `<button class="btn btn-sm btn-primary" onclick="Campo.exportarExcel()">📗 Planilha ${MESES[filMes - 1]}</button>` : ''}
+      </div>
+      <div class="notas-list">
+        ${vis.length ? vis.map(a => _cartao(a, gestor)).join('') : '<p class="muted-p">Nenhum registro neste mês.</p>'}
+      </div>`;
+  }
+
+  function aba(qual) { _aba = qual === 'registros' ? 'registros' : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } render(); }
+  function filtrarFazenda(f) { _filtroFazenda = f || null; render(); }
+  function filtrarDia(d) { _filtroDia = d || null; if (d) _aba = 'registros'; render(); }
+  function filtrarPend(k) { _filtroPend = PEND[k] ? k : null; if (k) _aba = 'registros'; render(); }
+
   function filtrarPessoa(id) { _filtroPessoa = id; render(); }
   function mudarMes(delta) {
+    _filtroDia = null;
     filMes += delta;
     if (filMes > 12) { filMes = 1; filAno++; }
     if (filMes < 1) { filMes = 12; filAno--; }
@@ -379,14 +560,20 @@ window.Campo = (() => {
   }
 
   /* ── Planilha do mês ───────────────────────────────────── */
+  /* Só gestor/admin (pedido de 08/11/2026). Leva os filtros de colaborador e fazenda que estão na tela. */
   async function exportarExcel() {
-    const vis = _filtroPessoa ? lista.filter(a => a.user_id === _filtroPessoa) : (_ehGestorOuAdmin() ? lista : lista.filter(a => a.user_id === user?.id));
+    if (!_ehGestorOuAdmin()) { toast('A planilha é do gestor', 'err'); return; }
+    const vis = _filtrados();
     if (!vis.length) { toast('Nada para exportar neste mês', 'err'); return; }
+    const filtro = [
+      _filtroPessoa ? `Colaborador: ${vis[0]?.user_nome || ''}` : 'Todos os colaboradores',
+      _filtroFazenda ? `Fazenda: ${_filtroFazenda}` : 'todas as fazendas',
+    ].join(' · ');
     setLoading(true, 'Gerando a planilha…');
-    try { await Excel.exportarCampo(vis, filMes, filAno); toast('Planilha gerada 📗'); }
+    try { await Excel.exportarCampo(vis, filMes, filAno, agregar(vis), filtro); toast('Planilha gerada 📗'); }
     catch (e) { toast('Planilha: ' + e.message, 'err'); }
     finally { setLoading(false); }
   }
 
-  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, reenviar, descartarRecusados, subirFila, compartilharId, exportarExcel, _texto };
+  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, exportarExcel, _texto };
 })();

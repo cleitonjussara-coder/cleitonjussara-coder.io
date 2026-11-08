@@ -790,22 +790,125 @@ window.Excel = (() => {
     XLSX.writeFile(wb, `Petermann_Ponto_${MESES[resumo.mes-1]}${resumo.ano}.csv`);
   }
 
-  /* Atividade em campo (08/11/2026): uma linha por atividade, com o link do mapa de início e fim. */
-  function exportarCampo(lista, mes, ano) {
-    const TZ = FusoBR.TZ;
-    const d = iso => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: TZ }) : '';
-    const h = iso => iso ? new Date(iso).toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
-    const m = (la, lo) => (la != null && lo != null) ? `https://www.google.com/maps?q=${Number(la).toFixed(6)},${Number(lo).toFixed(6)}` : '';
-    const rows = [[`PETERMANN — ATIVIDADE EM CAMPO`, `${MESES[mes-1]}/${ano}`], [''],
-      ['Data','Colaborador','Fazenda','Campo','Início','Fim','Duração','Fim automático','Latitude início','Longitude início','Precisão início (m)','Mapa início','Latitude fim','Longitude fim','Precisão fim (m)','Mapa fim']];
-    [...lista].sort((a,b) => a.inicio.localeCompare(b.inicio)).forEach(a => rows.push([
-      d(a.inicio), a.user_nome||'', a.fazenda, a.campo, h(a.inicio), a.fim ? h(a.fim) : 'em campo', a.minutos != null ? hmx(a.minutos) : '',
-      a.fim_automatico ? 'sim' : '', a.lat_inicio ?? '', a.lng_inicio ?? '', a.precisao_inicio ?? '', m(a.lat_inicio, a.lng_inicio),
-      a.lat_fim ?? '', a.lng_fim ?? '', a.precisao_fim ?? '', m(a.lat_fim, a.lng_fim)]));
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [12,22,24,14,8,10,9,10,12,12,10,40,12,12,10,40].map(w => ({ wch: w }));
+  /* ── Atividade em campo (08/11/2026) ─────────────────────
+     Só gestor/admin. A = Campo.agregar(lista): mesmos números do Painel da tela.
+     RESUMO (dashboard) · DIAS (colaborador × dia) · REGISTROS (uma linha por atividade, com links do mapa). */
+  const _campoTZ = () => FusoBR.TZ;
+  const _campoData = iso => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: _campoTZ() }) : '';
+  const _campoHora = iso => iso ? new Date(iso).toLocaleTimeString('pt-BR', { timeZone: _campoTZ(), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
+  const _campoMapa = (la, lo) => (la != null && lo != null) ? `https://www.google.com/maps?q=${Number(la).toFixed(6)},${Number(lo).toFixed(6)}` : '';
+  const _campoFaz = f => { f = String(f || '').trim(); return /^faz/i.test(f) ? f : `Faz. ${f}`; };
+  const _c = (ws, r, c, cell) => { ws[XLSX.utils.encode_cell({ r, c })] = cell; };
+  const _rotTot = v => ({ t:'s', v, s:{ font:FONT_TOT, border:BORDER_BOTTOM, alignment:ALIGN_L } });
+  const _secao = v => ({ t:'s', v, s:{ font:{ bold:true, sz:12, color:{rgb:COR.verde}, name:'Calibri' }, border:BORDER_BOTTOM, alignment:ALIGN_L } });
+
+  function buildCampoResumo(A, filtro) {
+    const ws = {}; ws['!merges'] = []; let r = 0;
+    ws['!cols'] = [{wch:30},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:16}];
+    merge(ws, r, 0, r, 6); _c(ws, r, 0, titCell(`PETERMANN — ATIVIDADE EM CAMPO — ${MESES[A.mes-1]}/${A.ano}`)); r++;
+    merge(ws, r, 0, r, 6); _c(ws, r, 0, subCell(`${filtro} · horas contam só atividades com início e fim; a que está em andamento aparece em Pendências.`)); r += 2;
+
+    /* indicadores */
+    const nPend = A.pend.abertas.length + A.pend.auto.length + A.pend.semloc.length;
+    hdrRow(ws, r, ['Indicador', 'Valor']); r++;
+    [['Horas em campo', horaCell(A.min, true)], ['Atividades', intCell(A.visitas)], ['Dias em campo (soma por pessoa)', intCell(A.diasPessoa)],
+     ['Colaboradores', intCell(A.pessoas.length)], ['Fazendas', intCell(A.fazendas.length)], ['Campos', intCell(A.campos)], ['Pendências', intCell(nPend, nPend > 0)]]
+      .forEach(([k, cell]) => { _c(ws, r, 0, strCell(k)); _c(ws, r, 1, cell); r++; });
+    r++;
+
+    /* por colaborador */
+    _c(ws, r, 0, _secao('POR COLABORADOR')); r++;
+    hdrRow(ws, r, ['Colaborador', 'Horas', 'Dias', 'Atividades', 'Em campo agora', 'Fim automático', 'Sem localização']); r++;
+    A.pessoas.forEach(p => {
+      _c(ws, r, 0, strCell(p.nome)); _c(ws, r, 1, horaCell(p.min)); _c(ws, r, 2, intCell(p.dias)); _c(ws, r, 3, intCell(p.visitas));
+      _c(ws, r, 4, intCell(p.abertas)); _c(ws, r, 5, intCell(p.auto)); _c(ws, r, 6, intCell(p.semloc)); r++;
+    });
+    _c(ws, r, 0, _rotTot('TOTAL')); _c(ws, r, 1, horaCell(A.min, true)); _c(ws, r, 2, intCell(A.diasPessoa, true)); _c(ws, r, 3, intCell(A.visitas, true));
+    _c(ws, r, 4, intCell(A.pend.abertas.length, true)); _c(ws, r, 5, intCell(A.pend.auto.length, true)); _c(ws, r, 6, intCell(A.pend.semloc.length, true)); r += 2;
+
+    /* por fazenda e campo */
+    _c(ws, r, 0, _secao('POR FAZENDA E CAMPO')); r++;
+    hdrRow(ws, r, ['Fazenda / campo', 'Horas', 'Visitas', 'Pessoas']); r++;
+    A.fazendas.forEach(f => {
+      const fill = { fgColor:{rgb:COR.verdeFundo}, patternType:'solid' };
+      const comFundo = cell => ({ ...cell, s:{ ...cell.s, fill, font:{ ...cell.s.font, bold:true } } });
+      _c(ws, r, 0, comFundo(strCell(f.fazenda))); _c(ws, r, 1, comFundo(horaCell(f.min))); _c(ws, r, 2, comFundo(intCell(f.visitas))); _c(ws, r, 3, comFundo(intCell(f.pessoas))); r++;
+      f.campos.forEach(c => { _c(ws, r, 0, strCell('    ' + c.campo)); _c(ws, r, 1, horaCell(c.min)); _c(ws, r, 2, intCell(c.visitas)); _c(ws, r, 3, strCell('')); r++; });
+    });
+    r++;
+
+    /* pendências */
+    _c(ws, r, 0, _secao('PENDÊNCIAS')); r++;
+    hdrRow(ws, r, ['Tipo', 'Colaborador', 'Data', 'Fazenda', 'Campo', 'Início', 'Fim']); r++;
+    const tipos = [['abertas', 'Em campo, sem fim'], ['auto', 'Fim automático'], ['semloc', 'Sem localização']];
+    let algum = false;
+    tipos.forEach(([k, rot]) => A.pend[k].forEach(a => {
+      algum = true;
+      _c(ws, r, 0, { ...strCell(rot), s:{ ...strCell(rot).s, fill:FILL_RDM } }); _c(ws, r, 1, strCell(a.user_nome || '')); _c(ws, r, 2, strCenter(_campoData(a.inicio)));
+      _c(ws, r, 3, strCell(_campoFaz(a.fazenda))); _c(ws, r, 4, strCell(a.campo)); _c(ws, r, 5, strCenter(_campoHora(a.inicio))); _c(ws, r, 6, strCenter(a.fim ? _campoHora(a.fim) : 'em campo')); r++;
+    }));
+    if (!algum) { _c(ws, r, 0, strCell('Nenhuma pendência no mês')); r++; }
+
+    ws['!freeze'] = { xSplit:0, ySplit:2 };
+    ws['!ref'] = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:Math.max(r - 1, 3), c:6} });
+    return ws;
+  }
+
+  function buildCampoDias(A) {
+    const nd = A.nd, ws = {}; ws['!merges'] = []; let r = 0;
+    const DIAS = ['D','S','T','Q','Q','S','S'];
+    ws['!cols'] = [{wch:26}, ...Array(nd).fill({wch:6}), {wch:9}, {wch:7}];
+    merge(ws, r, 0, r, nd + 2); _c(ws, r, 0, titCell(`HORAS EM CAMPO POR DIA — ${MESES[A.mes-1]}/${A.ano}`)); r += 2;
+    hdrRow(ws, r, ['Colaborador', ...Array.from({ length: nd }, (_, i) => `${i + 1} ${DIAS[new Date(A.ano, A.mes - 1, i + 1).getDay()]}`), 'Total', 'Dias']); r++;
+    A.pessoas.forEach(p => {
+      _c(ws, r, 0, strCell(p.nome));
+      for (let i = 0; i < nd; i++) {
+        const m = p.porDia[i];
+        _c(ws, r, 1 + i, m == null ? strCenter('') : { ...horaCell(m), s:{ ...horaCell(m).s, fill:FILL_RDA, alignment:ALIGN_C } });
+      }
+      _c(ws, r, 1 + nd, horaCell(p.min, true)); _c(ws, r, 2 + nd, intCell(p.dias, true)); r++;
+    });
+    _c(ws, r, 0, _rotTot('TOTAL'));
+    for (let i = 0; i < nd; i++) _c(ws, r, 1 + i, A.porDia[i] ? horaCell(A.porDia[i], true) : strCenter(''));
+    _c(ws, r, 1 + nd, horaCell(A.min, true)); _c(ws, r, 2 + nd, intCell(A.diasPessoa, true));
+    ws['!freeze'] = { xSplit:1, ySplit:3 };
+    ws['!ref'] = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r, c:nd + 2} });
+    return ws;
+  }
+
+  function buildCampoRegistros(lista, A) {
+    const ws = {}; ws['!merges'] = []; let r = 0;
+    const H = ['Data','Colaborador','Fazenda','Campo','Início','Fim','Duração','Situação','Lat. início','Long. início','Precisão início (m)','Mapa início','Lat. fim','Long. fim','Precisão fim (m)','Mapa fim'];
+    ws['!cols'] = [12,24,26,14,8,10,9,16,12,12,10,42,12,12,10,42].map(w => ({ wch: w }));
+    merge(ws, r, 0, r, H.length - 1); _c(ws, r, 0, titCell(`REGISTROS — ATIVIDADE EM CAMPO — ${MESES[A.mes-1]}/${A.ano}`)); r += 2;
+    hdrRow(ws, r, H); r++;
+    const ini = r;
+    const num = v => (v == null || v === '') ? strCenter('') : { t:'n', v:Number(v), s:{ font:FONT_BODY, border:BORDER_THIN, alignment:ALIGN_R, numFmt:'0.000000' } };
+    const link = u => u ? { t:'s', v:u, l:{ Target:u }, s:{ font:{ ...FONT_BODY, color:{rgb:'1D4ED8'}, underline:true }, border:BORDER_THIN, alignment:ALIGN_L } } : strCell('');
+    [...lista].sort((a, b) => a.inicio.localeCompare(b.inicio) || String(a.user_nome).localeCompare(String(b.user_nome))).forEach(a => {
+      const sit = a.em_campo ? 'em campo' : a.fim_automatico ? 'fim automático' : 'finalizada';
+      const fill = a.em_campo || a.fim_automatico ? FILL_RDM : null;
+      const f = cell => fill ? { ...cell, s:{ ...cell.s, fill } } : cell;
+      _c(ws, r, 0, f(strCenter(_campoData(a.inicio)))); _c(ws, r, 1, f(strCell(a.user_nome || ''))); _c(ws, r, 2, f(strCell(_campoFaz(a.fazenda))));
+      _c(ws, r, 3, f(strCell(a.campo))); _c(ws, r, 4, f(strCenter(_campoHora(a.inicio)))); _c(ws, r, 5, f(strCenter(a.fim ? _campoHora(a.fim) : '—')));
+      _c(ws, r, 6, f(a.minutos != null ? horaCell(a.minutos) : strCenter(''))); _c(ws, r, 7, f(strCenter(sit)));
+      _c(ws, r, 8, num(a.lat_inicio)); _c(ws, r, 9, num(a.lng_inicio)); _c(ws, r, 10, a.precisao_inicio != null ? intCell(a.precisao_inicio) : strCenter(''));
+      _c(ws, r, 11, link(_campoMapa(a.lat_inicio, a.lng_inicio)));
+      _c(ws, r, 12, num(a.lat_fim)); _c(ws, r, 13, num(a.lng_fim)); _c(ws, r, 14, a.precisao_fim != null ? intCell(a.precisao_fim) : strCenter(''));
+      _c(ws, r, 15, link(_campoMapa(a.lat_fim, a.lng_fim)));
+      r++;
+    });
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:ini - 1,c:0}, e:{r:Math.max(ini, r - 1), c:H.length - 1} }) };
+    ws['!freeze'] = { xSplit:0, ySplit:3 };
+    ws['!ref'] = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:Math.max(ini, r - 1), c:H.length - 1} });
+    return ws;
+  }
+
+  function exportarCampo(lista, mes, ano, A, filtro = 'Todos os colaboradores · todas as fazendas') {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, MESES[mes-1]);
+    XLSX.utils.book_append_sheet(wb, buildCampoResumo(A, filtro), 'RESUMO');
+    XLSX.utils.book_append_sheet(wb, buildCampoDias(A), 'DIAS');
+    XLSX.utils.book_append_sheet(wb, buildCampoRegistros(lista, A), 'REGISTROS');
     XLSX.writeFile(wb, `Petermann_AtividadeCampo_${MESES[mes-1]}${ano}.xlsx`);
   }
 
