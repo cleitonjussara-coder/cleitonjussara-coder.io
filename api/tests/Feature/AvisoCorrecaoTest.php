@@ -209,6 +209,40 @@ class AvisoCorrecaoTest extends TestCase
         $this->assertNull(AvisoCorrecao::first()->mensagem, 'mensagem só com espaços não vira texto');
     }
 
+    /** 07/11/2026 — botão 📣 do cartão da nota: motivos escolhidos à mão; "📝 Outro" exige a mensagem. */
+    public function test_pedido_pelo_cartao_com_motivo_manual_e_outro_exige_mensagem(): void
+    {
+        $pushes = [];
+        $this->canais($pushes);
+        $paulo = $this->pessoa('Paulo', 'gestor');
+        $ana = $this->pessoa('Ana');
+        $nota = $this->nota($ana);
+
+        $this->avisar($paulo, $nota, ['motivos' => ['📝 Outro (explico na mensagem)'], 'mensagem' => '  '])
+            ->assertStatus(422)->assertJsonPath('message', 'Escolheu "Outro": escreva na mensagem o que precisa corrigir.');
+        $this->avisar($paulo, $nota, ['motivos' => ['📝 Outro (explico na mensagem)'], 'mensagem' => null])->assertStatus(422);
+        $this->assertSame(0, AvisoCorrecao::count());
+        $this->assertCount(0, $pushes, 'pedido recusado não avisa ninguém');
+
+        $this->avisar($paulo, $nota, ['motivos' => ['💲 Valor errado'], 'mensagem' => 'O cupom é de R$ 205,90'])
+            ->assertCreated()->assertJsonPath('motivos', ['💲 Valor errado']);
+        $this->assertCount(1, $pushes);
+        $this->assertStringContainsString('💲 Valor errado', $pushes[0]['corpo']);
+        $this->assertStringContainsString('O cupom é de R$ 205,90', $pushes[0]['corpo']);
+        $this->assertSame('./?abrir=sino', $pushes[0]['url'], 'o celular leva ao sino, que tem o botão Corrigir a nota');
+        $this->assertStringContainsString('O que falta: 💲 Valor errado', $this->resendFalso->enviados[0]['text']);
+
+        Sanctum::actingAs($ana);
+        $this->getJson('/api/avisos-correcao/sino')->assertOk()
+            ->assertJsonPath('0.nota_id', $nota->id)
+            ->assertJsonPath('0.motivos', ['💲 Valor errado'])
+            ->assertJsonPath('0.mensagem', 'O cupom é de R$ 205,90');
+
+        $outra = $this->nota($ana);
+        $this->avisar($paulo, $outra, ['motivos' => ['📝 Outro (explico na mensagem)'], 'mensagem' => 'Lançou no grupo errado'])->assertCreated();
+        $this->avisar($this->pessoa('Bia'), $this->nota($ana), ['motivos' => ['💲 Valor errado']])->assertForbidden();
+    }
+
     public function test_a_mesma_nota_so_e_avisada_de_novo_depois_do_intervalo(): void
     {
         $paulo = $this->pessoa('Paulo', 'gestor');
@@ -333,7 +367,7 @@ class AvisoCorrecaoTest extends TestCase
         $this->assertSame('segundo', $porNota[$a->id]['mensagem'], 'vale o aviso mais recente');
         $this->assertFalse($porNota->has($semAviso->id));
         $this->assertSame('Paulo', $porNota[$b->id]['pedido_por_nome']);
-        $this->getJson('/api/avisos-correcao')->assertOk()->assertExactJson([]);
+        $this->getJson('/api/avisos-correcao/sino')->assertOk()->assertExactJson([]);
 
         Sanctum::actingAs($ana);
         $this->getJson('/api/avisos-correcao?nota_ids='.$a->id)->assertForbidden();

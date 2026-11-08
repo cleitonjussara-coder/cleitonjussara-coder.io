@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 570;
+const APP_BUILD = 571;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -974,7 +974,7 @@ function _ensureSb() {
          entrada. Durante a troca de senha pelo link não há sessão mesmo. */
       if (ev === 'SIGNED_OUT' && !_recuperandoSenha && _telaAtual !== 'auth') {
         user = null;
-        avisosCorrecaoSino = []; _avisosPend.clear();                // sessão derrubada (401): os avisos dessa conta não ficam para a próxima
+        avisosCorrecaoSino = []; _avisosPend.clear(); _avisosCartaoVistos.clear();                // sessão derrubada (401): os avisos dessa conta não ficam para a próxima
         try { window.FrotaPlanilha?.esquecer(); } catch (_) {}
         try { window.FrotaPainel?.esquecer(); } catch (_) {}      // sessão derrubada (401): o histórico/painel de KM dessa conta não fica para a próxima
         _telaAtual = 'auth';
@@ -2079,7 +2079,7 @@ async function logout() {
      aba. Notas/repasses da equipe só eram refeitos no login de gestor/admin
      (colaborador herdava a lista) e o Drive seguia conectado com o token do
      anterior. O token não é revogado — só esquecido aqui. */
-  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = []; try { localStorage.removeItem(K_DEVEDORA); } catch (_) {}
+  notasEquipe = []; repassesEquipe = []; justificativasSino = []; avisosCorrecaoSino = []; _avisosPend.clear(); _avisosCartaoVistos.clear(); _histEq.dados = null; _histEq.em = 0; _devedoraUltima = []; try { localStorage.removeItem(K_DEVEDORA); } catch (_) {}
   driveOk = false;
   try { window.GDrive?.esquecer(); } catch (_) {}
   try { window.FrotaPlanilha?.esquecer(); } catch (_) {}
@@ -2390,9 +2390,9 @@ function _notificacoes() {
   avisoPorNota.forEach(a => {
     const n = _notaPorId(a.nota_id);
     /* motivo de foto (📸, 07/11/2026) o app não detecta: vale até a nota ser alterada depois do aviso */
-    const deFoto = (a.motivos || []).filter(_ehMotivoFoto);
+    const deFoto = (a.motivos || []).filter(_ehMotivoManual);   // 📸 e, desde 07/11/2026, os do botão 📣 (💲 📅 🔀 📝)
     const fotoAberta = deFoto.length && !(n && _notaAlteradaDepois(n, a.avisado_em));
-    const faltam = [...(fotoAberta ? deFoto : []), ...(n ? _motivosDaNota(n) : (a.motivos || []).filter(m => !_ehMotivoFoto(m)))];
+    const faltam = [...(fotoAberta ? deFoto : []), ...(n ? _motivosDaNota(n) : (a.motivos || []).filter(m => !_ehMotivoManual(m)))];
     if (n && (n.deleted || !faltam.length)) return;
     out.push({
       id: 'corr:' + a.id, tipo: 'correcao', aviso: a, notaId: a.nota_id,
@@ -5939,7 +5939,7 @@ function _fmtEnvioServidor(n) {
 function abrirPendencias() {
   const lista = _notasComPendencia();
   if (!lista.length) { toast('Nenhuma pendência 🎉'); return; }
-  _avisosPend.clear();
+  _avisosPend.clear(); _avisosCartaoVistos.clear();
   const vejoEquipe = _ehGestorOuAdmin();
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
@@ -6071,43 +6071,59 @@ async function avisarCorrecao(notaId) {
    ele não é pendência que o app detecta, então fica no sino até a nota ser alterada DEPOIS do aviso (ou "OK, vi"). */
 const MOTIVOS_FOTO = ['📸 Texto cortado na foto', '📸 Dados sem visualização (ilegível)', '📸 Foto sem a nota inteira', '📸 Foto tremida ou desfocada', '📸 Foto de outro documento'];
 const _ehMotivoFoto = m => String(m || '').startsWith('📸');
+/* 07/11/2026 (botão 📣 do cartão): motivos escolhidos à mão que o app não detecta — valem como os de foto, até a nota
+   ser alterada depois do pedido. "📝 Outro" exige mensagem (o servidor confere de novo). */
+const MOTIVOS_DADOS = ['💲 Valor errado', '📅 Data errada', '🔀 Categoria ou grupo errado'];
+const MOTIVO_OUTRO = '📝 Outro (explico na mensagem)';
+const _ehMotivoManual = m => _ehMotivoFoto(m) || MOTIVOS_DADOS.includes(m) || String(m || '').startsWith('📝');
 function _notaAlteradaDepois(n, quando) {
   const t = Date.parse(n?.updated_at || ''), q = Date.parse(quando || '');
   return Number.isFinite(t) && Number.isFinite(q) && t > q;
 }
-async function pedirCorrecaoNota(notaId) {
+/* origem 'form' = botão 📸 dentro da edição (começa nos motivos de foto); 'cartao' = botão 📣 do cartão da nota (07/11/2026) */
+async function pedirCorrecaoNota(notaId, origem = 'form') {
   const n = _notaPorId(notaId);
   if (!n || !_podeAvisarCorrecao(n)) { toast('Só dá para pedir correção da nota de um colaborador ativo', 'err'); return; }
   if (!sb || !navigator.onLine) { toast('Precisa de internet para pedir a correção', 'err'); return; }
   const dono = equipePorId[n.user_id]?.nome || n.user_nome || 'o colaborador';
   const titulo = n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa');
   const automaticos = _motivosDaNota(n).slice(0, 6).map(m => String(m).slice(0, 60));
-  let motivo = MOTIVOS_FOTO[0], mensagem = '';
+  /* ordem da lista: o que o app viu → dados → foto → Outro (no formulário a foto vem primeiro, como antes) */
+  const manuais = origem === 'cartao' ? [...MOTIVOS_DADOS, ...MOTIVOS_FOTO] : [...MOTIVOS_FOTO, ...MOTIVOS_DADOS];
+  const opcoes = [...automaticos, ...manuais, MOTIVO_OUTRO];
+  let motivo = origem === 'cartao' ? (automaticos[0] || MOTIVOS_DADOS[0]) : MOTIVOS_FOTO[0], mensagem = '';
   for (;;) {
     const r = await pedirCampos({
       titulo: `Pedir correção a ${dono}`,
-      dica: `${titulo} · ${fmtDataBR(n.data)}${Number(n.valor) > 0 ? ' · ' + brl(n.valor) : ''}${automaticos.length ? _NL + 'O app também viu: ' + automaticos.join(', ') : ''}${_NL}${_NL}${dono} recebe o aviso no celular, no sino do app e por e-mail, com o botão para corrigir a nota. O aviso fica até a nota ser corrigida.`,
+      dica: `${titulo} · ${fmtDataBR(n.data)}${Number(n.valor) > 0 ? ' · ' + brl(n.valor) : ''}${automaticos.length ? _NL + 'O app viu: ' + automaticos.join(', ') : ''}${_NL}${_NL}${dono} recebe o aviso no celular, no sino do app e por e-mail, com o botão para abrir e corrigir a nota. O aviso fica até a nota ser corrigida.`,
       confirmar: 'Enviar pedido',
       campos: [
-        { id: 'motivo', rotulo: 'O que corrigir', valor: motivo, opcoes: MOTIVOS_FOTO.map(m => ({ valor: m, rotulo: m })) },
-        { id: 'mensagem', rotulo: 'Mensagem (opcional)', valor: mensagem, linhas: 3, maxlength: 500, placeholder: 'Ex.: o lado esquerdo do DANFE ficou de fora — fotografe a nota inteira, com as bordas do papel.' },
+        { id: 'motivo', rotulo: 'O que corrigir', valor: motivo, opcoes: opcoes.map(m => ({ valor: m, rotulo: m })) },
+        { id: 'mensagem', rotulo: 'Mensagem (obrigatória em “Outro”)', valor: mensagem, linhas: 3, maxlength: 500, placeholder: 'Ex.: o cupom é de R$ 205,90, não 250,90 — confere e corrige?' },
       ],
     });
     if (!r) return;
     motivo = r.motivo; mensagem = r.mensagem;
+    if (motivo === MOTIVO_OUTRO && !String(mensagem || '').trim()) { await mostrarAviso(`Escreva o motivo${_NL}Escolheu “Outro”: diga na mensagem o que ${dono} precisa corrigir.`); continue; }
     setLoading(true);
     try {
       const a = await sb.avisosCorrecao.avisar({ nota_id: notaId, motivos: [motivo, ...automaticos.filter(m => m !== motivo)].slice(0, 8), mensagem });
       setLoading(false);
       _guardarAvisoPend(a);
       _pintarBotaoPedirCorrecao(n);
-      toast(a?.agrupado ? `Pedido enviado a ${dono} — entrou no sino; o celular e o e-mail já tinham sido avisados há pouco 📸`
-        : a?.email_enviado === false ? `Pedido enviado a ${dono} — aparece no sino e no celular (o e-mail não saiu) 📸`
-        : `Pedido de correção enviado a ${dono} 📸`, 'ok', 4500);
+      _pintarPedirCartao(notaId);
+      const ic = _ehMotivoFoto(motivo) ? '📸' : '📣';
+      toast(a?.agrupado ? `Pedido enviado a ${dono} — entrou no sino; o celular e o e-mail já tinham sido avisados há pouco ${ic}`
+        : a?.email_enviado === false ? `Pedido enviado a ${dono} — aparece no sino e no celular (o e-mail não saiu) ${ic}`
+        : `Pedido de correção enviado a ${dono} ${ic}`, 'ok', 4500);
       return;
     } catch (e) {
       setLoading(false);
-      if ([403, 404, 422, 503].includes(e.status)) { await mostrarAviso(`Não foi possível pedir a correção${_NL}${e.message || 'O servidor recusou o pedido.'}`); return; }
+      if ([403, 404, 422, 503].includes(e.status)) {
+        await mostrarAviso(`Não foi possível pedir a correção${_NL}${e.message || 'O servidor recusou o pedido.'}`);
+        _carregarAvisosCartao([notaId], true);   // já avisada há pouco? o 📣 vira 📣✓
+        return;
+      }
       await mostrarAviso(`Não enviou${_NL}${e.message || 'erro de conexão'}${_NL}${_NL}O que você escolheu foi mantido — toque em OK e envie de novo.`);
     }
   }
@@ -6122,6 +6138,38 @@ function _pintarBotaoPedirCorrecao(n) {
     ? `<div class="nf-pedir-info">Pedido ${_quandoJust(a.avisado_em)} por ${esc(a.pedido_por_nome || 'gestão')}${a.visto_em ? ' · já viu' : ''}: ${esc((a.motivos || []).join(', '))}</div>` : ''}`;
   if (!a && sb?.avisosCorrecao && navigator.onLine) {
     sb.avisosCorrecao.list([n.id]).then(l => { (l || []).forEach(_guardarAvisoPend); if (_avisosPend.has(n.id) && $('nf-id')?.value === n.id) _pintarBotaoPedirCorrecao(n); }).catch(() => {});
+  }
+}
+/* ─── Botão 📣 no cartão da nota (07/11/2026, print do Cleiton no "Hoje na equipe") ───
+   Mesmo pedido do 📸 da edição, sem precisar abrir a nota. Só gestor/admin, só nota de colaborador ativo e liberado
+   (_podeAvisarCorrecao). Por 12 h depois do pedido vira 📣✓ (o servidor é quem segura o intervalo). O estado vem do
+   GET /avisos-correcao em UM pedido por lista desenhada (lotes de 100), não um por cartão. */
+function _botaoPedirCartaoHTML(notaId) {
+  const a = _avisosPend.get(notaId);
+  const agora = sb?.horaServidorMs?.() ?? Date.now();
+  const recente = a && agora < new Date(a.avisado_em).getTime() + AVISO_CORRECAO_INTERVALO_H * 3600_000;
+  const dica = recente ? `Correção pedida ${_quandoJust(a.avisado_em)} por ${a.pedido_por_nome || 'gestão'}${a.visto_em ? ' · já viu' : ''} — toque para ver` : 'Pedir correção ao colaborador';
+  return `<button class="btn-icon-sm${recente ? ' pedir-ok' : ''}" data-nota="${_at(notaId)}" onclick="pedirCorrecaoNota(this.dataset.nota,'cartao')" title="${_at(dica)}" aria-label="${_at(dica)}">📣${recente ? '<small>✓</small>' : ''}</button>`;
+}
+function _pintarPedirCartao(notaId) {
+  document.querySelectorAll('[data-pedir-cartao]').forEach(el => { if (el.dataset.pedirCartao === notaId) el.innerHTML = _botaoPedirCartaoHTML(notaId); });
+}
+const _pedirCartaoFila = new Set();
+let _pedirCartaoTimer = 0;
+function _agendarAvisosCartao(id) {
+  _pedirCartaoFila.add(id);
+  clearTimeout(_pedirCartaoTimer);
+  _pedirCartaoTimer = setTimeout(() => { const ids = [..._pedirCartaoFila]; _pedirCartaoFila.clear(); _carregarAvisosCartao(ids); }, 300);
+}
+const _avisosCartaoVistos = new Set();   // já perguntados nesta sessão: redesenhar a lista não refaz o pedido
+async function _carregarAvisosCartao(ids, forcar = false) {
+  if (!sb?.avisosCorrecao || !navigator.onLine) return;
+  const faltam = ids.filter(id => forcar || !_avisosCartaoVistos.has(id));
+  for (let i = 0; i < faltam.length; i += 100) {
+    const lote = faltam.slice(i, i + 100);
+    lote.forEach(id => _avisosCartaoVistos.add(id));
+    try { ((await sb.avisosCorrecao.list(lote)) || []).forEach(_guardarAvisoPend); } catch (_) { lote.forEach(id => _avisosCartaoVistos.delete(id)); continue; }
+    lote.forEach(_pintarPedirCartao);
   }
 }
 /* lado do colaborador: o formulário da nota diz o que a gestão pediu */
@@ -6236,6 +6284,7 @@ function cardNotaHTML(n, pref = 'thumb-', opts = {}) {
         <div class="nota-foot">
           <span class="nota-valor">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</span>
           <div class="nota-actions">
+            ${!_ehContabilidade() && _podeAvisarCorrecao(n) ? `<span data-pedir-cartao="${_at(n.id)}">${(_agendarAvisosCartao(n.id), _botaoPedirCartaoHTML(n.id))}</span>` : ''}
             ${n.chave_nfce || /^https?:/i.test(n.qr_url || '') ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="consultarNota(this.dataset.nota)" title="Consultar a nota no portal">🔗</button>` : ''}
             ${_ehReciboPedagio(n) ? `<button class="btn-icon-sm" data-nota="${_at(n.id)}" onclick="emitirNfsePedagio(this.dataset.nota)" title="Emitir a NFS-e do pedágio no site da concessionária">🧾</button>` : ''}
             ${_corrigeNotaDeOutro() && _ehNotaDeOutroUsuario(n)
@@ -9268,7 +9317,7 @@ async function abrirFormNota(dados = {}) {
   const _pedido = dados.id && !isGestorEdit && !isFaturamento ? _avisoAbertoDaNota(dados.id) : null;
   if (_pedido && banner && bannerTitle && bannerText) {
     banner.style.display = 'flex';
-    bannerTitle.textContent = `📸 ${_pedido.pedido_por_nome || 'A gestão'} pediu para corrigir`;
+    bannerTitle.textContent = `${(_pedido.motivos || []).some(_ehMotivoFoto) ? '📸' : '📣'} ${_pedido.pedido_por_nome || 'A gestão'} pediu para corrigir`;
     bannerText.textContent = `${(_pedido.motivos || []).join(', ')}${_pedido.mensagem ? ' — “' + _pedido.mensagem + '”' : ''}. `
       + ((_pedido.motivos || []).some(_ehMotivoFoto) ? 'Tire a foto de novo mostrando a nota inteira, com as bordas do papel, e salve.' : 'Corrija e salve.');
   }

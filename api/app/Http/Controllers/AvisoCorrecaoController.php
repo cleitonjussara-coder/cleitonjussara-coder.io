@@ -84,6 +84,9 @@ class AvisoCorrecaoController extends Controller
             'motivos.*.max' => 'Um dos motivos passou de 60 letras.',
             'mensagem.max' => 'A mensagem passou de 500 letras.',
         ]);
+        /* 07/11/2026 (botão 📣 do cartão): o motivo "📝 Outro" não diz nada sozinho — a mensagem é o pedido */
+        $temOutro = collect($d['motivos'])->contains(fn ($m) => str_starts_with(trim((string) $m), '📝'));
+        abort_if($temOutro && trim((string) ($d['mensagem'] ?? '')) === '', 422, 'Escolheu "Outro": escreva na mensagem o que precisa corrigir.');
 
         $nota = Nota::find($d['nota_id']);
         abort_unless($nota, 404, 'Nota não encontrada');
