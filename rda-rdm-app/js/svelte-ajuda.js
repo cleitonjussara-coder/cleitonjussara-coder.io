@@ -278,7 +278,7 @@
 \r
     <div class="ajuda-sec">\r
       <h4>📍 Atividade em campo (08/11/2026)</h4>\r
-      <p>Substitui a mensagem "Início das atividades / Faz. … / campo" no grupo do WhatsApp. Só aparece no menu ☰ para quem o <b>gestor liberou</b>: <b>Equipe → editar colaborador → 📍 Registra atividade em campo</b>.</p>\r
+      <p>Substitui a mensagem "Início das atividades / Faz. … / campo" no grupo do WhatsApp. Só aparece para quem o <b>gestor liberou</b>: <b>Equipe → editar colaborador → 📍 Registra atividade em campo</b>. Quem tem a função vê o painel <b>📍 Atividade em campo</b> no Início, logo abaixo de Lançar KM, e o item no menu ☰.</p>\r
       <p>Ao chegar no campo, toque em <b>🟢 Início das atividades</b> e informe a <b>fazenda</b> e o <b>código do campo</b> (ex.: BRCB147A-B). Ao sair, <b>🔴 Fim das atividades</b>. O app guarda cada fazenda e campo usados: na próxima visita é só <b>escolher na lista</b> (o mais recente vem primeiro); para um campo novo, <b>➕ Digitar outro campo</b>. Em cada toque o app grava a hora e a <b>localização do aparelho</b>; não há rastreamento fora desses toques. Se a localização estiver bloqueada, o registro é feito sem ela.</p>\r
       <p>Esqueceu de finalizar? Ao iniciar outro campo, o anterior fecha sozinho (aparece "fim automático"). Sem internet o registro fica guardado com a hora do aparelho e sobe depois (⏳).</p>\r
       <p><b>📤 Compartilhar</b>: depois de registrar (ou no cartão do registro), o app monta a mensagem no padrão do grupo, com o link do mapa, e abre o WhatsApp ou o menu de compartilhar do celular. Enviar é escolha sua.</p>\r
