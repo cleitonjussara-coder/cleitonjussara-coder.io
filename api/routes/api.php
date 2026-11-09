@@ -168,6 +168,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'campos']);   // buscador do início (08/11/2026)
     Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
     Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
+    Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1');   // corrigir registro (09/11/2026)
 
     /* pedido de justificativa (19/10/2026): gestor pede pelo Rastreio, colaborador responde */
     Route::get('/justificativas', [JustificativaController::class, 'index']);

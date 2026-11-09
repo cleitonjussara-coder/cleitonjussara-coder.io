@@ -123,6 +123,70 @@ class AtividadeCampoController extends Controller
         return response()->json($this->json($a->fresh('colaborador:id,nome')));
     }
 
+    /**
+     * PATCH /atividades-campo/{id} {fazenda?, campo?, observacao?, inicio?, fim?} — corrigir registro (09/11/2026).
+     * Dono e gestor/admin corrigem fazenda, campo e observação; só gestor/admin mexem na hora. A localização nunca muda.
+     * O registro fica marcado como editado (quando e por quem) e o antes/depois vai para o log.
+     */
+    public function editar(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless(AtividadeCampo::temEdicao(), 503, 'Falta atualizar a estrutura do banco para corrigir registros. Avise o administrador.');
+        $a = AtividadeCampo::query()->visiveisPara($u)->findOrFail($id);
+        $d = $r->validate([
+            'fazenda' => ['sometimes', 'required', 'string', 'max:120'],
+            'campo' => ['sometimes', 'required', 'string', 'max:60'],
+            'observacao' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'inicio' => ['sometimes', 'required', 'date'],
+            'fim' => ['sometimes', 'nullable', 'date'],
+        ]);
+        $mexeHora = array_key_exists('inicio', $d) || array_key_exists('fim', $d);
+        abort_if($mexeHora && ! $u->gerencia(), 403, 'Só o gestor corrige a hora. Peça a ele.');
+
+        $novo = [];
+        if (array_key_exists('fazenda', $d)) {
+            $novo['fazenda'] = trim($d['fazenda']);
+        }
+        if (array_key_exists('campo', $d)) {
+            $novo['campo'] = mb_strtoupper(trim($d['campo']));
+        }
+        if (array_key_exists('observacao', $d)) {
+            $novo['observacao'] = ($o = trim((string) $d['observacao'])) === '' ? null : $o;
+        }
+        $inicio = $this->br($a->inicio);
+        $fim = $this->br($a->fim);
+        /* hora igual à gravada não passa pela checagem de "futuro" de novo: só o que mudou é conferido */
+        $igual = fn (?string $iso, ?Carbon $atual) => $iso && $atual && Carbon::parse($iso)->eq($atual);
+        if (array_key_exists('inicio', $d) && ! $igual($d['inicio'], $inicio)) {
+            $inicio = $this->hora($d['inicio']);
+        }
+        if (array_key_exists('fim', $d)) {
+            abort_if($d['fim'] === null && $a->fim !== null, 422, 'Não dá para reabrir uma atividade já encerrada.');
+            if (! $igual($d['fim'], $fim)) {
+                $fim = $d['fim'] === null ? null : $this->hora($d['fim']);
+            }
+        }
+        abort_if($fim && $fim->lt($inicio), 422, 'O fim ficou antes do início. Confira as horas.');
+        if (array_key_exists('inicio', $d) && ! $inicio->eq($this->br($a->inicio))) {
+            $novo['inicio'] = $inicio;
+        }
+        if (array_key_exists('fim', $d) && $fim && (! $a->fim || ! $fim->eq($this->br($a->fim)))) {
+            $novo['fim'] = $fim;
+            $novo['fim_automatico'] = false;   // o gestor conferiu a hora
+        }
+
+        /* só marca "editado" se algo mudou de verdade */
+        $mudou = array_filter($novo, fn ($v, $k) => $k === 'fim_automatico' || $k === 'inicio' || $k === 'fim' || $a->{$k} !== $v, ARRAY_FILTER_USE_BOTH);
+        if ($mudou) {
+            $antes = array_intersect_key($a->only(array_keys($mudou)), $mudou);
+            $a->update($mudou + ['editado_em' => Carbon::now(self::TZ), 'editado_por' => $u->id]);
+            \Illuminate\Support\Facades\Log::info('atividade_campo.editada', ['id' => $a->id, 'por' => $u->id, 'antes' => $antes,
+                'depois' => array_map(fn ($v) => $v instanceof Carbon ? $v->format('Y-m-d H:i:s') : $v, $mudou)]);
+        }
+
+        return response()->json($this->json($a->fresh(['colaborador:id,nome', 'editor:id,nome'])));
+    }
+
     /** GET /atividades-campo?de=AAAA-MM-DD&ate=AAAA-MM-DD&user_id= */
     public function index(Request $r): JsonResponse
     {
@@ -136,7 +200,7 @@ class AtividadeCampoController extends Controller
         abort_if($de->gt($ate), 422, 'A data inicial é depois da final.');
         abort_if($de->diffInDays($ate) > 400, 422, 'Período longo demais: escolha até um ano.');
 
-        $q = AtividadeCampo::query()->visiveisPara($u)->with('colaborador:id,nome')
+        $q = AtividadeCampo::query()->visiveisPara($u)->with(AtividadeCampo::temEdicao() ? ['colaborador:id,nome', 'editor:id,nome'] : ['colaborador:id,nome'])
             ->whereBetween('inicio', [$de, $ate])->orderByDesc('inicio');
         if (! empty($d['user_id'])) {
             $q->where('user_id', $d['user_id']);
@@ -202,6 +266,8 @@ class AtividadeCampoController extends Controller
             'lat_inicio' => $a->lat_inicio, 'lng_inicio' => $a->lng_inicio, 'precisao_inicio' => $a->precisao_inicio,
             'lat_fim' => $a->lat_fim, 'lng_fim' => $a->lng_fim, 'precisao_fim' => $a->precisao_fim,
             'observacao' => $a->observacao,
+            'editado_em' => $iso($a->editado_em),
+            'editado_por_nome' => $a->editado_por ? ($a->relationLoaded('editor') ? $a->editor : $a->editor()->first(['id', 'nome']))?->nome : null,
             'updated_at' => $a->updated_at?->toIso8601String(),
         ];
     }

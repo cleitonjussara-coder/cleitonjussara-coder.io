@@ -17,12 +17,12 @@ class AtividadeCampo extends Model
     public $incrementing = false;
 
     protected $fillable = ['id', 'user_id', 'fazenda', 'campo', 'inicio', 'fim', 'fim_automatico',
-        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao'];
+        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao', 'editado_em', 'editado_por'];
 
     protected function casts(): array
     {
         return [
-            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_automatico' => 'boolean',
+            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_automatico' => 'boolean', 'editado_em' => 'datetime',
             'lat_inicio' => 'float', 'lng_inicio' => 'float', 'lat_fim' => 'float', 'lng_fim' => 'float',
             'precisao_inicio' => 'integer', 'precisao_fim' => 'integer',
         ];
@@ -43,9 +43,29 @@ class AtividadeCampo extends Model
         return $tem;
     }
 
+    /* Colunas da correção (09/11/2026): a API nova pode chegar antes da migração rodar. */
+    public static function temEdicao(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('atividades_campo', 'editado_em');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
     public function colaborador(): BelongsTo
     {
         return $this->belongsTo(Colaborador::class, 'user_id');
+    }
+
+    public function editor(): BelongsTo
+    {
+        return $this->belongsTo(Colaborador::class, 'editado_por');
     }
 
     /* Dono vê as próprias; gestor e admin veem todas. O Contador não entra: é controle de segurança, não despesa. */

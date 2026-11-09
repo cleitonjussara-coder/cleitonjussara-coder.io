@@ -180,4 +180,58 @@ class AtividadeCampoTest extends TestCase
         Sanctum::actingAs($this->pessoa('Contador', 'contabilidade', true));
         $this->iniciar()->assertForbidden();
     }
+
+    /* 09/11/2026 — corrigir registro: dono corrige texto, gestor também a hora; localização nunca muda */
+    public function test_dono_corrige_fazenda_e_campo_mas_nao_a_hora(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        Sanctum::actingAs($romario);
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+
+        $this->patchJson("/api/atividades-campo/{$id}", ['fazenda' => 'Faz. Santa Rita', 'campo' => 'brcb150', 'lat_inicio' => 0])
+            ->assertOk()->assertJsonPath('fazenda', 'Faz. Santa Rita')->assertJsonPath('campo', 'BRCB150')
+            ->assertJsonPath('lat_inicio', -16.7654321)->assertJsonPath('editado_por_nome', 'Romario');
+        $this->assertNotNull(AtividadeCampo::find($id)->editado_em);
+
+        $this->patchJson("/api/atividades-campo/{$id}", ['inicio' => Carbon::now()->subHour()->toIso8601String()])->assertForbidden();
+    }
+
+    public function test_sem_mudanca_nao_marca_editado(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+        $this->patchJson("/api/atividades-campo/{$id}", ['fazenda' => 'Faz. São José', 'campo' => 'BRCB147A-B'])
+            ->assertOk()->assertJsonPath('editado_em', null);
+    }
+
+    public function test_colega_nao_edita_registro_dos_outros(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+
+        Sanctum::actingAs($this->pessoa('Joao', 'colaborador', true));
+        $this->patchJson("/api/atividades-campo/{$id}", ['campo' => 'XXX'])->assertNotFound();
+        $this->assertSame('BRCB147A-B', AtividadeCampo::find($id)->campo);
+    }
+
+    public function test_gestor_corrige_a_hora_e_o_fim_automatico(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id, 'hora' => '2026-11-08T07:00:00-03:00'])->assertCreated();
+        $this->iniciar(['campo' => 'BRCB148', 'hora' => '2026-11-08T15:00:00-03:00'])->assertCreated();   // fecha o 1º sozinho às 15:00
+        $this->assertTrue(AtividadeCampo::find($id)->fim_automatico);
+
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->patchJson("/api/atividades-campo/{$id}", ['inicio' => '2026-11-08T07:30:00-03:00', 'fim' => '2026-11-08T11:45:00-03:00'])
+            ->assertOk()->assertJsonPath('fim_automatico', false)->assertJsonPath('minutos', 255)
+            ->assertJsonPath('inicio', '2026-11-08T07:30:00-03:00')->assertJsonPath('editado_por_nome', 'Paulo');
+
+        $this->patchJson("/api/atividades-campo/{$id}", ['fim' => '2026-11-08T06:00:00-03:00'])->assertStatus(422);
+        $this->patchJson("/api/atividades-campo/{$id}", ['fim' => Carbon::now()->addDay()->toIso8601String()])->assertStatus(422);
+        $this->patchJson("/api/atividades-campo/{$id}", ['fim' => null])->assertStatus(422);
+    }
 }
