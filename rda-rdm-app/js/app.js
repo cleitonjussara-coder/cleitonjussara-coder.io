@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 588;
+const APP_BUILD = 589;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10040,14 +10040,16 @@ function _motivoDuplicata(a, b) {
   const na = String(a.numero || '').replace(/^0+/, ''), nb = String(b.numero || '').replace(/^0+/, '');
   /* Pedágio (09/11/2026): a mesma praça cobra a mesma tarifa várias vezes no dia — quem separa os recibos é o número (SEQ)
      e a data. Número igual em outro dia não é duplicata; número diferente nunca é. Mesma regra de DuplicataNota no servidor. */
-  const pedagio = a.subtipo === 'Pedágio' || b.subtipo === 'Pedágio';
+  /* recibo com placa também é pedágio (09/11/2026, caso do Pedro): os lançados antes da categoria Pedágio ficaram em Outros */
+  const pedagio = a.subtipo === 'Pedágio' || b.subtipo === 'Pedágio' || !!String(a.placa || '').trim() || !!String(b.placa || '').trim();
   const da = String(a.data || '').slice(0, 10), db = String(b.data || '').slice(0, 10);
   if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))
       && !(pedagio && da && db && da !== db)) return 'numero';
   if (pedagio && na && nb && na !== nb) return null;
-  /* hora impressa no recibo (09/11/2026): só a hora e o minuto (segundo lido errado pelo OCR não separa passagens) */
+  /* hora impressa no recibo (09/11/2026): só a hora e o minuto (segundo lido errado pelo OCR não separa passagens).
+     A hora só é gravada em recibo (documento Outro): vale em qualquer categoria. */
   const ha = String(a.hora || '').slice(0, 5), hb = String(b.hora || '').slice(0, 5);
-  if (pedagio && /^\d{2}:\d{2}$/.test(ha) && /^\d{2}:\d{2}$/.test(hb) && ha !== hb) return null;
+  if (/^\d{2}:\d{2}$/.test(ha) && /^\d{2}:\d{2}$/.test(hb) && ha !== hb) return null;
   const va =Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
   if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo && !_chavesDiferentes(a, b)) return 'igual';
   return null;
@@ -10109,6 +10111,7 @@ function _candidataDeNota(n) {
     serie: String(n.serie || '').trim() || null,
     subtipo: n.subtipo || null,
     hora: _horaLimpa(n.hora),
+    placa: String(n.placa || '').trim() || null,
   };
 }
 /* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */

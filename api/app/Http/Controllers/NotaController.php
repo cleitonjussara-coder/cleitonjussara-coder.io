@@ -708,6 +708,7 @@ class NotaController extends Controller
             'serie' => ['nullable', 'string', 'max:20'],
             'subtipo' => ['nullable', 'string', 'max:40'],
             'hora' => ['nullable', 'string', 'max:8'],
+            'placa' => ['nullable', 'string', 'max:10'],
             'ignore_id' => ['nullable', 'string', 'size:36'],
         ]);
         $u = $r->user();
