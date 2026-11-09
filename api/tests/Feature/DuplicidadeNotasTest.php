@@ -200,6 +200,51 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('origem', 'faturamento');
     }
 
+    /* ── colaboradores diferentes e placa (09/11/2026, EPR Triângulo R$ 14,50) ── */
+
+    public function test_mesmo_fornecedor_dia_e_valor_de_colaboradores_diferentes_nao_e_duplicata(): void
+    {
+        $pedro = $this->pessoa('colaborador', 'Pedro');
+        $joao = $this->pessoa('colaborador', 'Joao');
+        $epr = ['tipo' => 'RDM', 'subtipo' => 'Pedágio', 'valor' => 14.5, 'data' => '2026-11-05',
+            'cnpj' => '48127012000108', 'razao_social' => 'EPR TRIANGULO MINEIRO', 'numero' => null, 'serie' => null];
+        $this->nota($pedro, $epr);
+        Sanctum::actingAs($joao);
+        $cand = array_replace($epr, ['cnpj' => '48.127.012/0001-08']);
+
+        // de outra pessoa: só fornecedor + dia + valor não junta
+        $this->postJson('/api/notas/duplicada', $cand + ['user_id' => $joao->id])->assertOk()->assertJsonPath('existe', false);
+        // da mesma pessoa continua perguntando
+        $this->postJson('/api/notas/duplicada', $cand + ['user_id' => $pedro->id])->assertOk()->assertJsonPath('motivo', 'igual');
+        // sem dono informado (app antigo) segue a regra de sempre
+        $this->postJson('/api/notas/duplicada', $cand)->assertOk()->assertJsonPath('motivo', 'igual');
+        // número igual entre pessoas continua valendo
+        Nota::query()->update(['numero' => 'L3GIA8IJ82NA']);
+        $this->postJson('/api/notas/duplicada', array_replace($cand, ['user_id' => $joao->id, 'numero' => 'L3GIA8IJ82NA']))
+            ->assertOk()->assertJsonPath('motivo', 'numero');
+    }
+
+    public function test_faturamento_sem_colaborador_continua_conferido_contra_qualquer_pessoa(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $this->faturamento(['numero' => null]);
+        Sanctum::actingAs($colab);
+
+        $this->postJson('/api/notas/duplicada', $this->candidata(['numero' => '', 'user_id' => $colab->id]))
+            ->assertOk()->assertJsonPath('motivo', 'igual')->assertJsonPath('origem', 'faturamento');
+    }
+
+    public function test_placa_diferente_nos_dois_lados_separa(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $this->nota($colab, ['valor' => 14.5, 'data' => '2026-11-05', 'numero' => null, 'placa' => 'TXI1F14']);
+        Sanctum::actingAs($colab);
+        $cand = $this->candidata(['valor' => 14.5, 'data' => '2026-11-05', 'numero' => '', 'user_id' => $colab->id]);
+
+        $this->postJson('/api/notas/duplicada', $cand + ['placa' => 'ABC1D23'])->assertOk()->assertJsonPath('existe', false);
+        $this->postJson('/api/notas/duplicada', $cand + ['placa' => 'txi-1f14'])->assertOk()->assertJsonPath('motivo', 'igual');
+    }
+
     /* ── lixeira e exclusão ─────────────────────────────────────────── */
 
     public function test_nota_na_lixeira_nao_barra(): void

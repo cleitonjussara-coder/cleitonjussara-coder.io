@@ -55,7 +55,9 @@ class DuplicataNota
             'data' => $d['data'] ?? null,
             'subtipo' => $d['subtipo'] ?? null,
             'hora' => self::horaMinuto($d['hora'] ?? null),
-            'placa' => trim((string) ($d['placa'] ?? '')),
+            'placa' => self::placaNormalizada($d['placa'] ?? null),
+            /* dono da nota candidata; vazio = não informado ou Faturamento sem colaborador (aí não separa nada) */
+            'dono' => trim((string) ($d['user_id'] ?? '')),
         ];
 
         /* Candidatas: tudo que casa por chave, link da NFS-e, número ou dia+valor. O resto (fornecedor, série, grupo)
@@ -105,6 +107,7 @@ class DuplicataNota
                 'cnpj' => $nota->cnpj, 'razao_social' => $nota->razao_social, 'valor' => $nota->valor,
                 'data' => $nota->data?->format('Y-m-d'), 'numero' => $nota->numero, 'serie' => $nota->serie,
                 'subtipo' => $nota->subtipo, 'hora' => $nota->hora, 'placa' => $nota->placa,
+                'user_id' => $nota->user_id,
             ], $nota->id);
             if (! $achou) {
                 return;
@@ -158,6 +161,11 @@ class DuplicataNota
         if (! $this->mesmoFornecedor($n, $cand)) {
             return null;
         }
+        /* Placa diferente nos dois lados = veículos diferentes, passagens diferentes (09/11/2026, EPR Triângulo R$ 14,50). */
+        $placaDaNota = self::placaNormalizada($n->placa);
+        if ($placaDaNota !== '' && $cand['placa'] !== '' && $placaDaNota !== $cand['placa']) {
+            return null;
+        }
         $num = self::numeroDe($n->numero, $n->chave_nfce);
         $serieDaNota = trim((string) $n->serie);
         /* Recibo com placa também é pedágio (09/11/2026, caso do Pedro): os recibos lançados antes da categoria Pedágio
@@ -184,6 +192,13 @@ class DuplicataNota
            recibo (documento "Outro"), então vale em qualquer categoria: dois recibos com hora impressa diferente são dois. */
         $horaDaNota = self::horaMinuto($n->hora);
         if ($horaDaNota !== '' && $cand['hora'] !== '' && $horaDaNota !== $cand['hora']) {
+            return null;
+        }
+        /* Colaboradores diferentes (09/11/2026, pedido do Cleiton, EPR Triângulo R$ 14,50 no mesmo dia): duas pessoas passam
+           na mesma praça, almoçam no mesmo lugar e pagam o mesmo valor no mesmo dia — fornecedor + dia + valor sozinho não
+           diz que é a mesma nota. Só o motivo 'igual' cai; chave, NFS-e e número continuam valendo entre pessoas, e a
+           nota de Faturamento sem colaborador (dono nulo) continua sendo conferida contra todos. */
+        if ($cand['dono'] !== '' && $n->user_id !== null && $n->user_id !== $cand['dono']) {
             return null;
         }
         if ($cand['centavos'] > 0 && (int) round(((float) $n->valor) * 100) === $cand['centavos']
@@ -246,6 +261,12 @@ class DuplicataNota
     private static function horaMinuto(?string $v): string
     {
         return preg_match('/^(\d{2}:\d{2})/', trim((string) $v), $m) ? $m[1] : '';
+    }
+
+    /** "txi-1f14" → "TXI1F14"; vazio quando não há placa. */
+    private static function placaNormalizada(?string $v): string
+    {
+        return preg_replace('/[^A-Z0-9]/', '', mb_strtoupper(trim((string) $v)));
     }
 
     private static function numeroNormalizado(?string $v): string

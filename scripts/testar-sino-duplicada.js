@@ -81,8 +81,13 @@ confere(dups().length === 0, 'número diferente separa fora do pedágio, mesmo c
 poe([nota('a', { ...balanca, numero: '0000031703', chave_nfce: '31261125654468000120550020000317031547533851' }),
      nota('b', { ...balanca, user_id: 'joao', created_by: 'joao', numero: '', chave_nfce: '31261125654468000120550020000317041658', created_at: iso(1) })]);
 confere(dups().length === 0, 'sem número gravado, o número sai de dentro da chave cortada');
+poe([nota('a', { ...balanca, numero: '' }), nota('b', { ...balanca, numero: '', created_at: iso(1) })]);
+confere(dups().length === 1, 'sem número nenhum, mesmo fornecedor, dia e valor ainda avisa (mesma pessoa)');
+/* 09/11/2026 (EPR Triângulo R$ 14,50 em 05/11): fornecedor + dia + valor de pessoas diferentes não é duplicata */
 poe([nota('a', { ...balanca, numero: '' }), nota('b', { ...balanca, user_id: 'joao', created_by: 'joao', numero: '', created_at: iso(1) })]);
-confere(dups().length === 1, 'sem número nenhum, mesmo fornecedor, dia e valor ainda avisa');
+confere(dups().length === 0, 'sem número, fornecedor + dia + valor de colaboradores diferentes não avisa');
+poe([nota('a', { ...balanca, numero: '', placa: 'TXI1F14' }), nota('b', { ...balanca, numero: '', placa: 'ABC1D23', created_at: iso(1) })]);
+confere(dups().length === 0, 'placa diferente nos dois lados separa');
 
 poe([nota('a', { deleted: true }), nota('b', { user_id: 'joao', created_by: 'joao', created_at: iso(1) })]);
 confere(dups().length === 0, 'nota na lixeira não conta');
