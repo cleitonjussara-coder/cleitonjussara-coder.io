@@ -1908,6 +1908,7 @@ button.arq-lin-abrir:active{background:rgba(201,234,98,.16)}
 .tipo-lancamento-icon{font-size:29px;line-height:1}
 .tipo-lancamento-title{font-size:21.5px;font-weight:800;letter-spacing:.3px}
 .tipo-lancamento-subtitle{font-size:14px;font-weight:600;text-align:center;line-height:1.4;color:var(--text2)}
+.tipo-lancamento-sem-nota{display:block;width:100%;margin-top:14px;padding:10px 6px;background:none;border:0;font:inherit;font-size:14px;font-weight:600;line-height:1.4;color:var(--text2);text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:center}
 .nota-aba-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:#f7fbff;border:1px solid #dbe9f7;margin-bottom:12px}
 .nota-aba-pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:14px;font-weight:800;letter-spacing:.3px}
 .nota-aba-pill.rda{background:#e8f5ee;color:#2d6a4f}
@@ -2692,22 +2693,23 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p style="margin:0 0 14px;font-size:15.5px;line-height:1.5;color:var(--text2)">
         <span id="tipo-lancamento-passo2-aba" class="nota-aba-pill rda">RDA</span>
         <button type="button" id="tipo-lancamento-trocar" class="btn btn-outline btn-sm" style="margin-left:6px" onclick="voltarEscolhaAba()">Trocar</button>
-        &nbsp;Agora o comprovante — a nota não é salva sem ele.</p>
+        &nbsp;Comece pelo comprovante: o app <b>lê valor, data, CNPJ e número</b> e abre os campos já preenchidos para você conferir.</p>
       <p id="tipo-lancamento-dica2" style="margin:-6px 0 12px;font-size:15px;line-height:1.4;color:#b45309;font-weight:700"></p>
       <div class="tipo-lancamento-grid">
         <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="lancarManualComAnexo('foto')">
           <div class="tipo-lancamento-icon">📷</div>
           <div class="tipo-lancamento-title">Tirar foto</div>
-          <div class="tipo-lancamento-subtitle">Abre a câmera</div>
+          <div class="tipo-lancamento-subtitle">Abre a câmera e lê a nota</div>
         </button>
         <button class="tipo-lancamento-card tipo-lancamento-card-rdm" onclick="lancarManualComAnexo('arquivo')">
           <div class="tipo-lancamento-icon">📎</div>
           <div class="tipo-lancamento-title">Anexar arquivo</div>
-          <div class="tipo-lancamento-subtitle">PDF, XML ou imagem</div>
+          <div class="tipo-lancamento-subtitle">PDF, XML ou imagem — lê a nota</div>
         </button>
       </div>
-      <button type="button" class="btn btn-outline btn-sm btn-full" style="margin-top:12px" onclick="lancarManualComAnexo(null)">
-        Preencher primeiro, anexar depois
+      <!-- Caminho secundário: quem está sem a nota na mão preenche à mão e anexa depois (sem leitura automática) -->
+      <button type="button" class="tipo-lancamento-sem-nota" onclick="lancarManualComAnexo(null)">
+        Estou sem a nota agora — preencher e anexar depois
       </button>
     </div>
   </div>
