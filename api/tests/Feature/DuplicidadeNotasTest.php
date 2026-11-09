@@ -282,6 +282,44 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', false);
     }
 
+    /* ── pedágio (09/11/2026): número do recibo e data separam um do outro ── */
+
+    public function test_pedagio_diferencia_pelo_numero_do_recibo_e_pela_data(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $praca = ['tipo' => 'RDM', 'subtipo' => 'Pedágio', 'valor' => 12.4, 'data' => '2026-11-05',
+            'cnpj' => '02509491000126', 'razao_social' => 'ECOVIAS DO CERRADO', 'serie' => null];
+        $this->nota($colab, $praca + ['numero' => 'a1b2c3d4-0000-4000-8000-000000000001']);
+        Sanctum::actingAs($colab);
+        $cand = fn (array $t) => array_replace(array_diff_key($praca, ['serie' => 1]), $t);
+
+        // mesma praça, mesmo dia e tarifa, outro recibo: não é duplicata
+        $this->postJson('/api/notas/duplicada', $cand(['numero' => 'a1b2c3d4-0000-4000-8000-000000000002']))
+            ->assertOk()->assertJsonPath('existe', false);
+        // mesmo número de recibo em outro dia: não é a mesma passagem
+        $this->postJson('/api/notas/duplicada', $cand(['numero' => 'a1b2c3d4-0000-4000-8000-000000000001', 'data' => '2026-11-06']))
+            ->assertOk()->assertJsonPath('existe', false);
+        // mesmo número e mesma data: é o mesmo recibo
+        $this->postJson('/api/notas/duplicada', $cand(['numero' => 'a1b2c3d4-0000-4000-8000-000000000001']))
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'numero');
+        // sem número lido: segue a regra de sempre e pergunta
+        $this->postJson('/api/notas/duplicada', $cand(['numero' => null]))
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+        // a candidata sem subtipo também é separada quando a nota gravada é pedágio
+        $this->postJson('/api/notas/duplicada', array_diff_key($cand(['numero' => 'a1b2c3d4-0000-4000-8000-000000000003']), ['subtipo' => 1]))
+            ->assertOk()->assertJsonPath('existe', false);
+    }
+
+    public function test_fora_do_pedagio_numero_diferente_ainda_pergunta_por_dia_e_valor(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $this->faturamento(['tipo' => 'RDM', 'subtipo' => 'Outros']);
+        Sanctum::actingAs($colab);
+
+        $this->postJson('/api/notas/duplicada', $this->candidata(['tipo' => 'RDM', 'subtipo' => 'Outros', 'numero' => '9999']))
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
     /* ── privacidade ────────────────────────────────────────────────── */
 
     public function test_colaborador_comum_nao_recebe_dado_de_outra_pessoa(): void

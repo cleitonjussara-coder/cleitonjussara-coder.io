@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 579;
+const APP_BUILD = 580;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10025,8 +10025,14 @@ function _motivoDuplicata(a, b) {
   if (ka.length === 44 && ka === kb) return 'chave';
   if (!_mesmoFornecedor(a, b)) return null;
   const na = String(a.numero || '').replace(/^0+/, ''), nb = String(b.numero || '').replace(/^0+/, '');
-  if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))) return 'numero';
-  const va = Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
+  /* Pedágio (09/11/2026): a mesma praça cobra a mesma tarifa várias vezes no dia — quem separa os recibos é o número (SEQ)
+     e a data. Número igual em outro dia não é duplicata; número diferente nunca é. Mesma regra de DuplicataNota no servidor. */
+  const pedagio = a.subtipo === 'Pedágio' || b.subtipo === 'Pedágio';
+  const da = String(a.data || '').slice(0, 10), db = String(b.data || '').slice(0, 10);
+  if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))
+      && !(pedagio && da && db && da !== db)) return 'numero';
+  if (pedagio && na && nb && na !== nb) return null;
+  const va =Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
   if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo && !_chavesDiferentes(a, b)) return 'igual';
   return null;
 }
@@ -10067,6 +10073,7 @@ function _candidataDoFormulario() {
     data: $('nf-data').value || null,
     numero: ($('nf-numero').value || '').trim() || null,
     serie: ($('nf-serie').value || '').trim() || null,
+    subtipo: $('nf-tipo').value === 'RDM' ? ($('nf-subtipo').value || null) : null,
   };
 }
 /* o mesmo recorte, a partir de uma nota já gravada (restaurar da lixeira) */
@@ -10083,6 +10090,7 @@ function _candidataDeNota(n) {
     data: String(n.data || '').slice(0, 10) || null,
     numero: String(n.numero || '').trim() || null,
     serie: String(n.serie || '').trim() || null,
+    subtipo: n.subtipo || null,
   };
 }
 /* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */
@@ -10178,6 +10186,7 @@ function _avisarDuplicataAposLeitura() {
     tipo: $('nf-tipo').value, data: $('nf-data').value, valor: parseFloat($('nf-valor').value),
     cnpj: _digitos($('nf-cnpj').value), razao_social: $('nf-razao').value,
     chave_nfce: $('nf-chave').value, qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
+    subtipo: $('nf-tipo').value === 'RDM' ? $('nf-subtipo').value : null,
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
   if (!d) { _avisarDuplicataDaEquipeAposLeitura().catch(() => {}); return false; }   // as do aparelho não casaram: confere a equipe/Faturamento
@@ -10334,6 +10343,7 @@ async function _salvarNotaInterno() {
     const dup = _acharDuplicata({
       tipo, cnpj: cnpjRaw, razao_social: $('nf-razao').value, valor, data,
       qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
+      subtipo: tipo === 'RDM' ? $('nf-subtipo').value : null,
     }, $('nf-id').value || null);
     const igual = dup?.nota || null;
     /* DESLIGADO: a remocao automatica estava mandando notas para a lixeira em

@@ -668,7 +668,7 @@ class NotaController extends Controller
     }
 
     /**
-     * POST /notas/duplicada {chave?, qr_url?, tipo?, cnpj?, razao_social?, valor?, data?, numero?, serie?, ignore_id?}
+     * POST /notas/duplicada {chave?, qr_url?, tipo?, cnpj?, razao_social?, valor?, data?, numero?, serie?, subtipo?, ignore_id?}
      *   → {existe, motivo, origem} (+ nota, só para quem pode ver a nota)
      *
      * Trava anti-duplicata de EQUIPE com as mesmas regras do app (21/10/2026):
@@ -700,6 +700,7 @@ class NotaController extends Controller
             'data' => ['nullable', 'date_format:Y-m-d'],
             'numero' => ['nullable', 'string', 'max:40'],
             'serie' => ['nullable', 'string', 'max:20'],
+            'subtipo' => ['nullable', 'string', 'max:40'],
             'ignore_id' => ['nullable', 'string', 'size:36'],
         ]);
         $u = $r->user();

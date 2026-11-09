@@ -14,6 +14,8 @@ use Throwable;
  *   nfse   → mesma consulta pública da NFS-e (chave de 50 dígitos)
  *   numero → mesmo fornecedor + mesmo número (série igual quando as duas têm)
  *   igual  → mesmo fornecedor + mesmo dia + mesmo valor + mesmo grupo (RDA/RDM)
+ * Pedágio: o número do recibo (SEQ) e a data separam um do outro — número diferente nunca é duplicata, e número igual
+ * só é quando o dia também é (09/11/2026).
  * "Fornecedor" é o CNPJ quando os dois têm; senão a razão social. Roda sobre TODAS as notas vivas; lixeira não conta.
  *
  * Aviso (08/11/2026, pedido do Cleiton): o app só PERGUNTA ao colaborador ("Lançar assim mesmo?") e a nota entra.
@@ -51,6 +53,7 @@ class DuplicataNota
             'serie' => trim((string) ($d['serie'] ?? '')),
             'centavos' => isset($d['valor']) && is_numeric($d['valor']) ? (int) round(((float) $d['valor']) * 100) : 0,
             'data' => $d['data'] ?? null,
+            'subtipo' => $d['subtipo'] ?? null,
         ];
 
         /* Candidatas: tudo que casa por chave, link da NFS-e, número ou dia+valor. O resto (fornecedor, série, grupo)
@@ -99,6 +102,7 @@ class DuplicataNota
                 'chave' => $nota->chave_nfce, 'qr_url' => $nota->qr_url, 'tipo' => $nota->tipo,
                 'cnpj' => $nota->cnpj, 'razao_social' => $nota->razao_social, 'valor' => $nota->valor,
                 'data' => $nota->data?->format('Y-m-d'), 'numero' => $nota->numero, 'serie' => $nota->serie,
+                'subtipo' => $nota->subtipo,
             ], $nota->id);
             if (! $achou) {
                 return;
@@ -154,8 +158,18 @@ class DuplicataNota
         }
         $num = self::numeroNormalizado($n->numero);
         $serieDaNota = trim((string) $n->serie);
-        if ($num !== '' && $num === $cand['numero'] && ($cand['serie'] === '' || $serieDaNota === '' || $cand['serie'] === $serieDaNota)) {
+        $pedagio = $n->subtipo === 'Pedágio' || $cand['subtipo'] === 'Pedágio';
+        $dataDaNota = $n->data?->format('Y-m-d');
+        if ($num !== '' && $num === $cand['numero'] && ($cand['serie'] === '' || $serieDaNota === '' || $cand['serie'] === $serieDaNota)
+            && ! ($pedagio && $cand['data'] && $dataDaNota && $cand['data'] !== $dataDaNota)) {
             return 'numero';
+        }
+        /* Pedágio (09/11/2026, pedido do Cleiton): a mesma praça cobra a mesma tarifa várias vezes no mesmo dia, então
+           fornecedor + dia + valor não diz nada. Quem separa um recibo do outro é o número (SEQ) e a data: número igual em
+           dia diferente não é a mesma passagem, e número diferente no mesmo dia também não. Sem número em um dos lados,
+           segue a regra de sempre (pergunta). */
+        if ($pedagio && $num !== '' && $cand['numero'] !== '' && $num !== $cand['numero']) {
+            return null;
         }
         if ($cand['centavos'] > 0 && (int) round(((float) $n->valor) * 100) === $cand['centavos']
             && $cand['data'] && $n->data?->format('Y-m-d') === $cand['data']
