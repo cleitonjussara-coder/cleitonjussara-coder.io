@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 585;
+const APP_BUILD = 586;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -467,18 +467,24 @@ function _atualizarNumeroSerieAuto() {
    cima de escolha manual. */
 /* Recibo não tem número nem série: os rótulos dizem isso, em vez de a pessoa
    ficar procurando o que preencher (24/09/2026). */
+/* 09/11/2026: placa e link da NFS-e só no recibo da categoria Pedágio (antes apareciam em todo Documento = Outro). */
+function _ehPedagioNoForm() {
+  return $('nf-tipo')?.value === 'RDM' && $('nf-subtipo')?.value === CATEGORIA_PEDAGIO.subtipo;
+}
 function _ajustarRotulosDoDocumento() {
   const ehRecibo = String($('nf-documento')?.value || '') === 'outro';
+  const pedagio = ehRecibo && _ehPedagioNoForm();
   const num = $('nf-numero-lbl'), ser = $('nf-serie-lbl'), campoNum = $('nf-numero');
-  if (num) num.innerHTML = ehRecibo
-    ? 'Número do recibo <span style="font-weight:400;color:var(--text2)">— o SEQ No ou DFE do recibo, se houver</span>'
-    : 'Número da nota';
+  const opc = txt => `Número do recibo <span style="font-weight:400;color:var(--text2)">— ${txt}</span>`;
+  if (num) num.innerHTML = !ehRecibo ? 'Número da nota'
+    : pedagio ? opc('opcional; o SEQ No ou DFE do recibo, se houver') : opc('opcional, se o recibo tiver');
   if (ser) ser.textContent = 'Série';
-  if (campoNum) campoNum.placeholder = ehRecibo ? 'SEQ ou DFE do recibo (deixe em branco se não houver)' : 'Automático pela chave';
-  const campoPlaca = $('nf-placa-campo');   // placa só no recibo (pedágio); o valor é gravado só quando Documento = Outro
-  if (campoPlaca) campoPlaca.style.display = ehRecibo ? '' : 'none';
+  if (campoNum) campoNum.placeholder = !ehRecibo ? 'Automático pela chave'
+    : pedagio ? 'SEQ ou DFE do recibo (deixe em branco se não houver)' : 'Opcional — deixe em branco se não houver';
+  const campoPlaca = $('nf-placa-campo');   // placa só no recibo de pedágio; o valor é gravado só nesse caso
+  if (campoPlaca) campoPlaca.style.display = pedagio ? '' : 'none';
   const campoPortal = $('nf-portal-campo');   // mesma regra da placa
-  if (campoPortal) campoPortal.style.display = ehRecibo ? '' : 'none';
+  if (campoPortal) campoPortal.style.display = pedagio ? '' : 'none';
 }
 /* Placa do veículo: só letras e números, maiúscula; vazia vira null. */
 /* Hora do recibo: "09:44:18" ou "09:44"; o resto vira null (mesma regra de LeitorNota::hora). */
@@ -9300,6 +9306,7 @@ async function abrirFormNota(dados = {}) {
   _pagamentoForcado = dados.pagamento === 'empresa' ? 'empresa' : null;
   _oferecerSoFaturamento(!!_pagamentoForcado || _ehSoFaturamento(dados.subtipo));   // Locação de Veículos e Contabilidade: só Faturamento
   $('nf-subtipo').value = dados.subtipo || 'Abastecimento';
+  _ajustarRotulosDoDocumento();   // de novo, agora com a categoria certa: placa e link da NFS-e só no Pedágio
   /* Pagamento: só para colaborador CV (dono da nota); RDM/RDA não vê o campo */
   { const donoCV = _usaCartaoDe(dados.user_id);
     const g = $('nf-pagamento-group'); if (g) g.style.display = (donoCV && !_pagamentoForcado) ? '' : 'none';
@@ -9475,6 +9482,7 @@ function aplicarCategoriaCV() {
   $('nf-tipo').value = c.tipo;
   $('nf-subtipo').value = c.subtipo || 'Abastecimento';
   atualizarBannerTipoLancamento(c.tipo);
+  _ajustarRotulosDoDocumento();   // placa e link da NFS-e só no Pedágio
 }
 
 /* Põe ou tira as categorias só do Faturamento das duas listas. Tira de verdade: o Safari do iPhone ignora `hidden` em
@@ -9523,6 +9531,7 @@ function toggleSubtipo() {
   }
   atualizarBannerTipoLancamento(tipo);
   _ajustarCamposDeCategoria();   // regime C.V.: a Categoria na tela tem de ser a que será gravada
+  _ajustarRotulosDoDocumento();
 }
 
 let _cnpjTimer;
@@ -10416,11 +10425,11 @@ async function _salvarNotaInterno() {
     serie          : ($('nf-serie').value  || '').trim() || null,
     /* documento efetivo: select vazio sem chave nem QR também vira 'outro' mais abaixo */
     placa          : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
-      ? _placaLimpa($('nf-placa').value) : null,
+      && _ehPedagioNoForm() ? _placaLimpa($('nf-placa').value) : null,
     hora           : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
       ? _horaLimpa($('nf-hora').value) : null,
     portal_nfse    : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
-      ? _portalLimpo($('nf-portal').value) : null,
+      && _ehPedagioNoForm() ? _portalLimpo($('nf-portal').value) : null,
     qr_url         : $('nf-qr-url').value       || null,
     consumidor     : $('nf-consumidor').value   || null,
     uf             : $('nf-uf').value           || null,
