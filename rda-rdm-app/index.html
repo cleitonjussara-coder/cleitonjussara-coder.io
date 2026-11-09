@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=580">
+  <link rel="manifest" href="manifest.json?v=581">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -2428,7 +2428,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=580" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=581" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2796,6 +2796,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <label class="lbl" for="nf-placa">Placa do veículo <span style="font-weight:400;color:var(--text2)">— recibo de pedágio</span></label>
       <input class="inp" id="nf-placa" type="text" maxlength="8" autocapitalize="characters" autocomplete="off" placeholder="ABC1D23" style="text-transform:uppercase">
     </div>
+    <!-- 09/11/2026: hora da passagem lida do recibo de pedágio (OCR/IA); separa duas passagens do mesmo dia na conferência de duplicata. Oculta a pedido do Cleiton: o app lê, ninguém digita. -->
+    <input type="hidden" id="nf-hora">
     <!-- 05/11/2026: link para gerar a NFS-e, impresso no recibo de pedágio; muda por concessionária. Controle: _ajustarRotulosDoDocumento(). -->
     <div class="field" id="nf-portal-campo" style="display:none">
       <label class="lbl" for="nf-portal">Link da NFS-e <span style="font-weight:400;color:var(--text2)">— impresso no recibo de pedágio</span></label>
@@ -3155,42 +3157,42 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=580"></script>
-<script defer src="js/db.js?v=580"></script>
-<script defer src="js/nfce.js?v=580"></script>
-<script defer src="js/sefaz.js?v=580"></script>
-<script defer src="js/brasilapi.js?v=580"></script>
-<script defer src="js/ocr.js?v=580"></script>
-<script defer src="js/scanner.js?v=580"></script>
-<script defer src="js/foto-branca.js?v=580"></script>
-<script defer src="js/recorte.js?v=580"></script>
-<script defer src="js/excel.js?v=580"></script>
-<script defer src="js/gestor.js?v=580"></script>
-<script defer src="js/frota.js?v=580"></script>
-<script defer src="js/frota-painel.js?v=580"></script>
-<script defer src="js/frota-planilha.js?v=580"></script>
-<script defer src="js/ponto.js?v=580"></script>
-<script defer src="js/campo.js?v=580"></script>
-<script defer src="js/rastreio.js?v=580"></script>
-<script defer src="js/repasses-equipe.js?v=580"></script>
-<script defer src="js/fechamento.js?v=580"></script>
-<script defer src="js/busca.js?v=580"></script>
-<script defer src="js/gdrive.js?v=580"></script>
+<script defer src="js/api.js?v=581"></script>
+<script defer src="js/db.js?v=581"></script>
+<script defer src="js/nfce.js?v=581"></script>
+<script defer src="js/sefaz.js?v=581"></script>
+<script defer src="js/brasilapi.js?v=581"></script>
+<script defer src="js/ocr.js?v=581"></script>
+<script defer src="js/scanner.js?v=581"></script>
+<script defer src="js/foto-branca.js?v=581"></script>
+<script defer src="js/recorte.js?v=581"></script>
+<script defer src="js/excel.js?v=581"></script>
+<script defer src="js/gestor.js?v=581"></script>
+<script defer src="js/frota.js?v=581"></script>
+<script defer src="js/frota-painel.js?v=581"></script>
+<script defer src="js/frota-planilha.js?v=581"></script>
+<script defer src="js/ponto.js?v=581"></script>
+<script defer src="js/campo.js?v=581"></script>
+<script defer src="js/rastreio.js?v=581"></script>
+<script defer src="js/repasses-equipe.js?v=581"></script>
+<script defer src="js/fechamento.js?v=581"></script>
+<script defer src="js/busca.js?v=581"></script>
+<script defer src="js/gdrive.js?v=581"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=580"></script>
+<script defer src="js/svelte-ajuda.js?v=581"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=580"></script>
+<script defer src="js/svelte-historico.js?v=581"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=580"></script>
+<script defer src="js/svelte-arquivos.js?v=581"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=580"></script>
-<script defer src="js/app.js?v=580"></script>
-<script defer src="js/instalar.js?v=580"></script>
+<script defer src="js/svelte-perfil.js?v=581"></script>
+<script defer src="js/app.js?v=581"></script>
+<script defer src="js/instalar.js?v=581"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=580').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=581').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

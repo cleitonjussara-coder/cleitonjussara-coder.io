@@ -28,14 +28,14 @@ use Illuminate\Support\Facades\Log;
  */
 class LeitorNota
 {
-    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'portal_nfse', 'cortado'];
+    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'hora', 'portal_nfse', 'cortado'];
 
     private const UFS = ['11', '12', '13', '14', '15', '16', '17', '21', '22', '23', '24', '25', '26', '27', '28', '29',
         '31', '32', '33', '35', '41', '42', '43', '50', '51', '52', '53'];
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "dfe": "...", "portal": "...", "cortado": false} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "hora": "HH:MM:SS", "dfe": "...", "portal": "...", "cortado": false} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -47,6 +47,7 @@ class LeitorNota
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
         .'dfe = somente em recibo de pedágio que traga "DFE N:" (ex.: "DFE N: JLEE546J82JK"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
         .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
+        .'hora = somente em recibo de pedágio: o horário da passagem impresso ao lado da data (ex.: "04.11.2026 09:44:18" → "09:44:18"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
         .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
@@ -184,6 +185,7 @@ class LeitorNota
         }
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
         $out['placa'] = $this->placa($j['placa'] ?? null);
+        $out['hora'] = self::hora($j['hora'] ?? null);
         $out['portal_nfse'] = Nota::portalNormalizado($j['portal'] ?? null);
         /* só true/false de verdade: "sim", 1 ou texto viram null (o app não barra no que não é certeza) */
         $out['cortado'] = is_bool($j['cortado'] ?? null) ? $j['cortado'] : null;
@@ -193,6 +195,16 @@ class LeitorNota
         }
 
         return $out;
+    }
+
+    /** Hora do recibo de pedágio: "09:44:18" ou "09:44"; qualquer outra coisa vira null. */
+    public static function hora(mixed $v): ?string
+    {
+        if (! is_string($v)) {
+            return null;
+        }
+
+        return preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/', trim($v)) ? trim($v) : null;
     }
 
     /** Placa antiga (ABC1234) ou Mercosul (ABC1D23); hífen e espaço saem. Qualquer outra coisa vira null. */

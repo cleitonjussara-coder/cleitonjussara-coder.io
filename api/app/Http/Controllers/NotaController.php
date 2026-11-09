@@ -138,6 +138,7 @@ class NotaController extends Controller
             // 24/09/2026: séries com mais de 6 dígitos existem (NFS-e); o limite era 5.
             'serie' => ['nullable', 'string', 'max:20'],
             'placa' => ['nullable', 'string', 'max:10', 'regex:/^[A-Za-z0-9]+$/'],   // recibo de pedágio (27/10/2026)
+            'hora' => ['nullable', 'string', 'regex:/^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/'],   // hora do recibo de pedágio (09/11/2026)
             'portal_nfse' => ['nullable', 'string', 'max:300'],   // normalizado em upsert(); link ruim vira null, sem travar a fila
             'foto_path' => ['nullable', 'string', 'max:255'],
             'qr_url' => ['nullable', 'string'],
@@ -264,6 +265,11 @@ class NotaController extends Controller
             if (! Nota::temPlaca()) {
                 unset($d['placa']);
             }
+        }
+
+        /* hora do recibo de pedágio (09/11/2026): mesma proteção da placa até a migração rodar */
+        if (! Nota::temHora()) {
+            unset($d['hora']);
         }
 
         /* link da NFS-e do pedágio: se o recibo não trouxe, usa o último já lido dessa concessionária (mesmo CNPJ) */
@@ -668,7 +674,7 @@ class NotaController extends Controller
     }
 
     /**
-     * POST /notas/duplicada {chave?, qr_url?, tipo?, cnpj?, razao_social?, valor?, data?, numero?, serie?, subtipo?, ignore_id?}
+     * POST /notas/duplicada {chave?, qr_url?, tipo?, cnpj?, razao_social?, valor?, data?, numero?, serie?, subtipo?, hora?, ignore_id?}
      *   → {existe, motivo, origem} (+ nota, só para quem pode ver a nota)
      *
      * Trava anti-duplicata de EQUIPE com as mesmas regras do app (21/10/2026):
@@ -701,6 +707,7 @@ class NotaController extends Controller
             'numero' => ['nullable', 'string', 'max:40'],
             'serie' => ['nullable', 'string', 'max:20'],
             'subtipo' => ['nullable', 'string', 'max:40'],
+            'hora' => ['nullable', 'string', 'max:8'],
             'ignore_id' => ['nullable', 'string', 'size:36'],
         ]);
         $u = $r->user();
@@ -869,6 +876,9 @@ class NotaController extends Controller
             return false;
         }
         if (Nota::temPlaca() && array_key_exists('placa', $d) && strtoupper((string) $d['placa']) !== strtoupper((string) $nota->placa)) {
+            return false;
+        }
+        if (Nota::temHora() && array_key_exists('hora', $d) && (string) $d['hora'] !== (string) $nota->hora) {
             return false;
         }
         if (Nota::temPortalNfse() && ($portal = Nota::portalNormalizado($d['portal_nfse'] ?? null)) !== null && $portal !== $nota->portal_nfse) {

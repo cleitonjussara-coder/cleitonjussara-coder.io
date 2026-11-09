@@ -18,7 +18,7 @@ class HistoricoNota
     /** Campos acompanhados. Fica de fora o que é técnico (updated_at, mes/ano que seguem a data, chave, QR, foto_em_branco). */
     public const CAMPOS = [
         'valor', 'data', 'tipo', 'subtipo', 'pagamento', 'cnpj', 'razao_social', 'numero', 'serie',
-        'observacao', 'documento', 'placa', 'deleted', 'user_id',
+        'observacao', 'documento', 'placa', 'hora', 'deleted', 'user_id',
     ];
 
     public const LIMITE = 200;
@@ -26,7 +26,7 @@ class HistoricoNota
     private const ROTULO_CAMPO = [
         'valor' => 'Valor', 'data' => 'Data', 'tipo' => 'Grupo', 'subtipo' => 'Categoria', 'pagamento' => 'Pagamento',
         'cnpj' => 'CNPJ', 'razao_social' => 'Razão social', 'numero' => 'Número', 'serie' => 'Série',
-        'observacao' => 'Observação', 'documento' => 'Documento', 'placa' => 'Placa', 'deleted' => 'Situação',
+        'observacao' => 'Observação', 'documento' => 'Documento', 'placa' => 'Placa', 'hora' => 'Hora do recibo', 'deleted' => 'Situação',
         'user_id' => 'Colaborador', 'anexo' => 'Anexo', 'fechamento' => 'Fechamento',
     ];
 
@@ -66,6 +66,7 @@ class HistoricoNota
                 'observacao' => $texto($n->observacao),
                 'documento' => $texto($n->documento),
                 'placa' => $texto($n->placa),
+                'hora' => $texto($n->hora),
                 'deleted' => (bool) $n->deleted,
                 'user_id' => $texto($n->user_id),
             ];

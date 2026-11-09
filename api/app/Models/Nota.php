@@ -48,7 +48,7 @@ class Nota extends Model
        pelo controller (auditoria), nunca pelo cliente. */
     protected $fillable = [
         'id', 'user_id', 'tipo', 'subtipo', 'pagamento', 'cnpj', 'consumidor', 'razao_social', 'valor',
-        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'placa', 'portal_nfse',
+        'data', 'mes', 'ano', 'metodo_captura', 'chave_nfce', 'uf', 'modelo', 'documento', 'numero', 'serie', 'placa', 'hora', 'portal_nfse',
         'foto_path', 'qr_url', 'observacao', 'deleted', 'created_at',
     ];
 
@@ -87,6 +87,21 @@ class Nota extends Model
         if ($tem === null) {
             try {
                 $tem = Schema::hasColumn('notas', 'placa');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
+    /* Mesma proteção para a hora do recibo de pedágio (09/11/2026). */
+    public static function temHora(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('notas', 'hora');
             } catch (\Throwable) {
                 $tem = false;
             }

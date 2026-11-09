@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 580;
+const APP_BUILD = 581;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -481,6 +481,8 @@ function _ajustarRotulosDoDocumento() {
   if (campoPortal) campoPortal.style.display = ehRecibo ? '' : 'none';
 }
 /* Placa do veículo: só letras e números, maiúscula; vazia vira null. */
+/* Hora do recibo: "09:44:18" ou "09:44"; o resto vira null (mesma regra de LeitorNota::hora). */
+function _horaLimpa(v) { const m = String(v || '').trim().match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/); return m ? m[0] : null; }
 function _placaLimpa(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null; }
 /* Link da NFS-e do pedágio: a mesma regra de Nota::portalNormalizado. Só site .br que não seja do governo; o resto vira null. */
 function _portalLimpo(v) {
@@ -8582,7 +8584,7 @@ async function _lerNotaPorIa(blob) {
     if (!d || !(d.valor || d.cnpj || d.chave || d.cortado === true)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
-             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', portal_nfse: d.portal_nfse || '',
+             chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', hora: d.hora || '', portal_nfse: d.portal_nfse || '',
              uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', cortado: d.cortado === true, _ia: true };
   } catch (_) { return null; }
 }
@@ -9283,6 +9285,7 @@ async function abrirFormNota(dados = {}) {
   $('nf-documento').value = (dados.documento && DOC_LABEL[dados.documento]) ? dados.documento
     : (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '');
   $('nf-placa').value = dados.placa || '';
+  $('nf-hora').value = _horaLimpa(dados.hora) || '';
   $('nf-portal').value = dados.portal_nfse || '';
   _ajustarRotulosDoDocumento();
   $('nf-numero').value   = dados.numero   || '';
@@ -9870,6 +9873,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (ocr.razao_social && !$('nf-razao').value) { $('nf-razao').value = ocr.razao_social; }
       if (ocr.numero && !$('nf-numero').value) { _preencherNumeroSerie(ocr.numero, ocr.serie); preencheu.push('número'); }
       if (ocr.placa && !$('nf-placa').value) { $('nf-placa').value = _placaLimpa(ocr.placa) || ''; preencheu.push('placa'); }
+      if (_horaLimpa(ocr.hora) && !$('nf-hora').value) { $('nf-hora').value = _horaLimpa(ocr.hora); }   // oculto: não entra no aviso do que foi preenchido
       { const link = _portalLimpo(ocr.portal_nfse) || (ocr.placa ? _portalDoCnpj(ocr.cnpj || $('nf-cnpj').value) : null);
         if (link && !$('nf-portal').value) { $('nf-portal').value = link; preencheu.push('link da NFS-e'); } }
       if (ocr.data && (!$('nf-data').value || $('nf-data').value === hoje())) {
@@ -10032,6 +10036,9 @@ function _motivoDuplicata(a, b) {
   if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))
       && !(pedagio && da && db && da !== db)) return 'numero';
   if (pedagio && na && nb && na !== nb) return null;
+  /* hora impressa no recibo (09/11/2026): só a hora e o minuto (segundo lido errado pelo OCR não separa passagens) */
+  const ha = String(a.hora || '').slice(0, 5), hb = String(b.hora || '').slice(0, 5);
+  if (pedagio && /^\d{2}:\d{2}$/.test(ha) && /^\d{2}:\d{2}$/.test(hb) && ha !== hb) return null;
   const va =Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
   if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo && !_chavesDiferentes(a, b)) return 'igual';
   return null;
@@ -10074,6 +10081,7 @@ function _candidataDoFormulario() {
     numero: ($('nf-numero').value || '').trim() || null,
     serie: ($('nf-serie').value || '').trim() || null,
     subtipo: $('nf-tipo').value === 'RDM' ? ($('nf-subtipo').value || null) : null,
+    hora: _horaLimpa($('nf-hora').value),
   };
 }
 /* o mesmo recorte, a partir de uma nota já gravada (restaurar da lixeira) */
@@ -10091,6 +10099,7 @@ function _candidataDeNota(n) {
     numero: String(n.numero || '').trim() || null,
     serie: String(n.serie || '').trim() || null,
     subtipo: n.subtipo || null,
+    hora: _horaLimpa(n.hora),
   };
 }
 /* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */
@@ -10187,6 +10196,7 @@ function _avisarDuplicataAposLeitura() {
     cnpj: _digitos($('nf-cnpj').value), razao_social: $('nf-razao').value,
     chave_nfce: $('nf-chave').value, qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
     subtipo: $('nf-tipo').value === 'RDM' ? $('nf-subtipo').value : null,
+    hora: $('nf-hora').value,
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
   if (!d) { _avisarDuplicataDaEquipeAposLeitura().catch(() => {}); return false; }   // as do aparelho não casaram: confere a equipe/Faturamento
@@ -10343,7 +10353,7 @@ async function _salvarNotaInterno() {
     const dup = _acharDuplicata({
       tipo, cnpj: cnpjRaw, razao_social: $('nf-razao').value, valor, data,
       qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
-      subtipo: tipo === 'RDM' ? $('nf-subtipo').value : null,
+      subtipo: tipo === 'RDM' ? $('nf-subtipo').value : null, hora: $('nf-hora').value,
     }, $('nf-id').value || null);
     const igual = dup?.nota || null;
     /* DESLIGADO: a remocao automatica estava mandando notas para a lixeira em
@@ -10407,6 +10417,8 @@ async function _salvarNotaInterno() {
     /* documento efetivo: select vazio sem chave nem QR também vira 'outro' mais abaixo */
     placa          : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
       ? _placaLimpa($('nf-placa').value) : null,
+    hora           : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
+      ? _horaLimpa($('nf-hora').value) : null,
     portal_nfse    : ($('nf-documento').value || (_semChaveNemQr($('nf-chave').value, $('nf-qr-url').value) ? 'outro' : '')) === 'outro'
       ? _portalLimpo($('nf-portal').value) : null,
     qr_url         : $('nf-qr-url').value       || null,

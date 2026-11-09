@@ -100,7 +100,7 @@ window.OCR = (() => {
     const oneLine = raw.replace(/\r?\n/g, ' ');
     const lines   = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
 
-    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null, placa:null, portal_nfse:null };
+    const r = { cnpj:null, valor:null, data:null, razao_social:null, chave:null, uf:null, numero:null, serie:null, placa:null, hora:null, portal_nfse:null };
 
     /* 0. Número e série impressos — cupom ("Nº 123456 Série 1", "NFC-e nº"),
        DANFE ("Nº 000.001.234  SÉRIE 001") e NFS-e ("Número da NFS-e: 2026123").
@@ -138,6 +138,13 @@ window.OCR = (() => {
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
     const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
     if (mp) r.placa = (mp[1] + mp[2]).toUpperCase();
+    /* Hora da passagem no recibo de pedágio (09/11/2026): "04.11.2026 09:44:18" (EPR) ou "Hora: 09:44". Só em recibo de
+       pedágio: cupom comum também imprime hora, e lá ela não serve para nada. */
+    if (/ped[áa]gio|\bDFE\b|SEQ\.?\s*N|Registro\s+de\s+Passagem|Pra[çc]a\s*:|Placa\s*:/i.test(oneLine)) {
+      const mh = oneLine.match(/\d{2}[/.-]\d{2}[/.-]\d{4}\s+([01]\d|2[0-3])[:.h]([0-5]\d)(?:[:.]([0-5]\d))?/)
+              || oneLine.match(/Hora\s*[:.]?\s*([01]\d|2[0-3])[:.h]([0-5]\d)(?:[:.]([0-5]\d))?/i);
+      if (mh) r.hora = `${mh[1]}:${mh[2]}` + (mh[3] ? `:${mh[3]}` : '');
+    }
     /* Link para gerar a NFS-e, impresso no recibo de pedágio (05/11/2026): cada concessionária tem o seu.
        Só em recibo de pedágio: cupom comum imprime site da SEFAZ e da loja. Pode vir partido em duas linhas. */
     if (/ped[áa]gio|\bDFE\b|SEQ\.?\s*N|Registro\s+de\s+Passagem|Pra[çc]a\s*:/i.test(oneLine)) {

@@ -310,6 +310,36 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', false);
     }
 
+    public function test_pedagio_sem_numero_diferencia_pela_hora_do_recibo(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $praca = ['tipo' => 'RDM', 'subtipo' => 'Pedágio', 'valor' => 14.5, 'data' => '2026-11-04',
+            'cnpj' => '48127012000108', 'razao_social' => 'EPR TRIANGULO MINEIRO', 'numero' => null, 'serie' => null];
+        $this->nota($colab, $praca + ['hora' => '09:44:18']);
+        Sanctum::actingAs($colab);
+
+        // mesma praça, dia e tarifa, outra hora: outra passagem
+        $this->postJson('/api/notas/duplicada', array_replace($praca, ['hora' => '17:02:40']))
+            ->assertOk()->assertJsonPath('existe', false);
+        // mesma hora (segundos lidos diferente não separam): pergunta
+        $this->postJson('/api/notas/duplicada', array_replace($praca, ['hora' => '09:44:13']))
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+        // sem hora de um lado: regra de sempre
+        $this->postJson('/api/notas/duplicada', $praca)
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
+    public function test_hora_do_recibo_e_gravada_e_recusada_quando_invalida(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $n = $this->nota($colab, ['tipo' => 'RDM', 'subtipo' => 'Pedágio', 'hora' => '09:44:18']);
+        $this->assertSame('09:44:18', $n->hora);
+        $this->assertSame('09:44:18', \App\Services\LeitorNota::hora(' 09:44:18 '));
+        $this->assertSame('09:44', \App\Services\LeitorNota::hora('09:44'));
+        $this->assertNull(\App\Services\LeitorNota::hora('25:10'));
+        $this->assertNull(\App\Services\LeitorNota::hora('9h44'));
+    }
+
     public function test_fora_do_pedagio_numero_diferente_ainda_pergunta_por_dia_e_valor(): void
     {
         $colab = $this->pessoa('colaborador');
