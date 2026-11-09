@@ -55,6 +55,7 @@ class DuplicataNota
             'data' => $d['data'] ?? null,
             'subtipo' => $d['subtipo'] ?? null,
             'hora' => self::horaMinuto($d['hora'] ?? null),
+            'placa' => trim((string) ($d['placa'] ?? '')),
         ];
 
         /* Candidatas: tudo que casa por chave, link da NFS-e, número ou dia+valor. O resto (fornecedor, série, grupo)
@@ -103,7 +104,7 @@ class DuplicataNota
                 'chave' => $nota->chave_nfce, 'qr_url' => $nota->qr_url, 'tipo' => $nota->tipo,
                 'cnpj' => $nota->cnpj, 'razao_social' => $nota->razao_social, 'valor' => $nota->valor,
                 'data' => $nota->data?->format('Y-m-d'), 'numero' => $nota->numero, 'serie' => $nota->serie,
-                'subtipo' => $nota->subtipo, 'hora' => $nota->hora,
+                'subtipo' => $nota->subtipo, 'hora' => $nota->hora, 'placa' => $nota->placa,
             ], $nota->id);
             if (! $achou) {
                 return;
@@ -159,7 +160,10 @@ class DuplicataNota
         }
         $num = self::numeroNormalizado($n->numero);
         $serieDaNota = trim((string) $n->serie);
-        $pedagio = $n->subtipo === 'Pedágio' || $cand['subtipo'] === 'Pedágio';
+        /* Recibo com placa também é pedágio (09/11/2026, caso do Pedro): os recibos lançados antes da categoria Pedágio
+           (05/11) ficaram em "Outros", mas o OCR já gravava a placa desde 27/10. */
+        $pedagio = $n->subtipo === 'Pedágio' || $cand['subtipo'] === 'Pedágio'
+            || trim((string) $n->placa) !== '' || $cand['placa'] !== '';
         $dataDaNota = $n->data?->format('Y-m-d');
         if ($num !== '' && $num === $cand['numero'] && ($cand['serie'] === '' || $serieDaNota === '' || $cand['serie'] === $serieDaNota)
             && ! ($pedagio && $cand['data'] && $dataDaNota && $cand['data'] !== $dataDaNota)) {
@@ -173,9 +177,10 @@ class DuplicataNota
             return null;
         }
         /* Horário impresso no recibo (09/11/2026): duas passagens na mesma praça, no mesmo dia e com a mesma tarifa só se
-           distinguem pela hora quando o número não foi lido. Hora diferente = passagem diferente. */
+           distinguem pela hora quando o número não foi lido. Hora diferente = passagem diferente. A hora só é gravada em
+           recibo (documento "Outro"), então vale em qualquer categoria: dois recibos com hora impressa diferente são dois. */
         $horaDaNota = self::horaMinuto($n->hora);
-        if ($pedagio && $horaDaNota !== '' && $cand['hora'] !== '' && $horaDaNota !== $cand['hora']) {
+        if ($horaDaNota !== '' && $cand['hora'] !== '' && $horaDaNota !== $cand['hora']) {
             return null;
         }
         if ($cand['centavos'] > 0 && (int) round(((float) $n->valor) * 100) === $cand['centavos']

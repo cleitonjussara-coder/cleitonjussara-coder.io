@@ -329,6 +329,31 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
     }
 
+    /* Caso do Pedro (09/11/2026): dois recibos da EPR Triângulo de 04/11, lançados antes da categoria Pedágio (ficaram em
+       Outros), com placa, DFE e hora diferentes. */
+    public function test_recibo_em_outros_com_placa_separa_pelo_numero_e_pela_hora(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $recibo = ['tipo' => 'RDM', 'subtipo' => 'Outros', 'valor' => 14.5, 'data' => '2026-11-04', 'serie' => null,
+            'cnpj' => '48127012000108', 'razao_social' => 'EPR TRIANGULO MINEIRO', 'placa' => 'REM8H68'];
+        $this->nota($colab, $recibo + ['numero' => 'JM5I10EJ8220', 'hora' => '08:16:22']);
+        Sanctum::actingAs($colab);
+        $semSerie = array_diff_key($recibo, ['serie' => 1]);
+
+        // DFE diferente: outra passagem
+        $this->postJson('/api/notas/duplicada', $semSerie + ['numero' => 'SJBEDCEJ82J4'])
+            ->assertOk()->assertJsonPath('existe', false);
+        // sem número, hora diferente: outra passagem (vale até sem placa)
+        $this->postJson('/api/notas/duplicada', array_diff_key($semSerie, ['placa' => 1]) + ['hora' => '11:51:45'])
+            ->assertOk()->assertJsonPath('existe', false);
+        // mesmo DFE no mesmo dia: é o mesmo recibo
+        $this->postJson('/api/notas/duplicada', $semSerie + ['numero' => 'JM5I10EJ8220'])
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'numero');
+        // sem número nem hora: regra de sempre, pergunta
+        $this->postJson('/api/notas/duplicada', $semSerie)
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
     public function test_hora_do_recibo_e_gravada_e_recusada_quando_invalida(): void
     {
         $colab = $this->pessoa('colaborador');
