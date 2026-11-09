@@ -604,7 +604,15 @@ window.Campo = (() => {
     return [qual === 'fim' ? 'Fim das atividades' : 'Início das atividades', _faz(a.fazenda), String(a.campo || '').toUpperCase(), m ? `📍 ${m}` : null]
       .filter(Boolean).join('\n');
   }
+  /* Pedido de 09/11/2026: com o OK do registro, já abrir o compartilhar (postar sozinho no grupo
+     não dá: a API oficial do WhatsApp não entra em grupo existente). O celular só deixa abrir o
+     menu de compartilhar logo depois de um toque; se o GPS demorou e esse "crédito" do toque
+     acabou, cai na pergunta de antes, cujo botão vale como toque novo. */
   async function _oferecerCompartilhar(qual, a) {
+    if (navigator.share && navigator.userActivation?.isActive) {
+      try { await navigator.share({ text: _texto(qual, a) }); return; }
+      catch (e) { if (e?.name === 'AbortError') return; }
+    }
     if (await pedirConfirmacao({ mensagem: `${qual === 'fim' ? 'Fim' : 'Início'} registrado ✅\nQuer compartilhar no grupo?`, confirmar: '📤 Compartilhar', cancelar: 'Agora não' })) {
       await compartilhar(_texto(qual, a));
     }
