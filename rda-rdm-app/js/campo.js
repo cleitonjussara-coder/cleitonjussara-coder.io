@@ -130,10 +130,30 @@ window.Campo = (() => {
   }
 
   /* ── Tela ──────────────────────────────────────────────── */
+  /* Abrir rápido (09/11/2026, "página demorando abrir"): antes cada abertura E cada clique em aba/filtro
+     apagava a tela e esperava fila + 3 consultas ao servidor. Agora: com cópia do mês no aparelho, desenha na
+     hora e atualiza por trás; abas e filtros só redesenham com o que já está na memória (_desenhar). */
+  let _seq = 0, _atualizando = false;
   async function render() {
-    const el = $('app-content');
-    el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando atividade em campo…</p></div>';
+    const el = $('app-content'), seq = ++_seq, chave = KEY_CACHE();
+    const c = navigator.onLine ? await DB.getMeta(chave).catch(() => null) : null;
+    if (c) {
+      lista = c.lista || []; equipe = c.equipe || []; _cacheEm = c.em || null; _offline = false; _atualizando = true;
+      if (!camposEquipe) { try { camposEquipe = (await DB.getMeta(KEY_CAMPOS)) || null; } catch (_) {} }
+      await _desenhar();
+    } else {
+      el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando atividade em campo…</p></div>';
+    }
     try { await carregar(); } catch (_) { await carregarDoCache(); }
+    _atualizando = false;
+    if (seq !== _seq || viewAtual !== 'campo' || chave !== KEY_CACHE()) return;   // saiu da tela ou mudou de mês no meio
+    const y = window.scrollY;
+    await _desenhar();
+    if (c) window.scrollTo(0, y);
+  }
+
+  async function _desenhar() {
+    const el = $('app-content');
     const gestor = _acompanhaCampo();   // gestor, admin e focal (09/11/2026)
     const registra = _registraCampo();
     const aberta = registra ? await _aberta() : null;
@@ -142,6 +162,7 @@ window.Campo = (() => {
     const periodo = `${MESES[filMes - 1]} ${filAno}`;
 
     let html = `<div class="db-container">
+      ${_atualizando ? '<div class="nota-cnpj" style="text-align:center;opacity:.75">🔄 atualizando…</div>' : ''}
       ${_offline ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">📴 <b>Sem internet</b> — pode registrar normalmente: fica guardado com a hora do aparelho e sobe sozinho.</div>` : ''}
       ${fila.length ? `<div class="ini-dica" style="border-left:3px solid var(--warning)">⏳ <b>${fila.length} registro${fila.length > 1 ? 's' : ''} aguardando envio</b>. ${navigator.onLine ? '<a class="link" onclick="Campo.reenviar()">Enviar agora</a>' : ''}
         ${comErro.map(x => `<div style="margin-top:4px;color:var(--danger)">⚠️ ${esc(x.erro)}</div>`).join('')}
@@ -418,7 +439,7 @@ window.Campo = (() => {
       </div>`;
   }
 
-  function aba(qual) { _aba = ['registros', 'campos'].includes(qual) ? qual : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } render(); }
+  function aba(qual) { _aba = ['registros', 'campos'].includes(qual) ? qual : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } _desenhar(); }
 
   /* ── Cadastro de campos (09/11/2026) ────────────────────
      Gestor, admin e focal cadastram fazenda + campo sem registrar atividade e corrigem o nome de um campo. A lista junta
@@ -496,11 +517,11 @@ window.Campo = (() => {
     finally { setLoading(false); }
     await render();
   }
-  function filtrarFazenda(f) { _filtroFazenda = f || null; render(); }
-  function filtrarDia(d) { _filtroDia = d || null; if (d) _aba = 'registros'; render(); }
-  function filtrarPend(k) { _filtroPend = PEND[k] ? k : null; if (k) _aba = 'registros'; render(); }
+  function filtrarFazenda(f) { _filtroFazenda = f || null; _desenhar(); }
+  function filtrarDia(d) { _filtroDia = d || null; if (d) _aba = 'registros'; _desenhar(); }
+  function filtrarPend(k) { _filtroPend = PEND[k] ? k : null; if (k) _aba = 'registros'; _desenhar(); }
 
-  function filtrarPessoa(id) { _filtroPessoa = id; render(); }
+  function filtrarPessoa(id) { _filtroPessoa = id; _desenhar(); }
   function mudarMes(delta) {
     _filtroDia = null;
     filMes += delta;
