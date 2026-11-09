@@ -248,8 +248,9 @@ class LeitorNotaTest extends TestCase
     public function test_chave_de_nfse_de_50_digitos_so_com_estrutura_valida(): void
     {
         $ano = (int) now("America/Sao_Paulo")->format("y");
-        $ok = substr(str_pad("52000"."0".self::CNPJ, 36, "0"), 0, 36).sprintf("%02d", $ano)."09".str_repeat("1", 10);
+        $ok = substr(str_pad("52000"."0".self::CNPJ, 36, "0"), 0, 36).sprintf("%02d", $ano)."09".str_repeat("1", 9);
         $ok = substr_replace($ok, "2", 8, 1);
+        $ok .= $this->dvNfse($ok);
         $this->assertSame(50, strlen($ok));
         $this->assertSame($ok, $this->leitor()->validar(json_encode(["chave_nfse" => $ok]))["chave_nfse"]);
 
@@ -259,6 +260,32 @@ class LeitorNotaTest extends TestCase
         foreach ([$ufRuim, $mesRuim, $tpRuim, substr($ok, 0, 49)] as $mau) {
             $this->assertNull($this->leitor()->validar(json_encode(["chave_nfse" => $mau]))["chave_nfse"]);
         }
+    }
+
+    /** DANFSe reais do Hotel Surmano (Cássia/MG, 03/11/2026): a chave lida com um dígito trocado é recusada. */
+    public function test_chave_de_nfse_com_digito_trocado_e_recusada(): void
+    {
+        foreach (['31151022262296557000179000000000000526110141558263', '31151022262296557000179000000000000626114980190515'] as $real) {
+            $this->assertSame($real, $this->leitor()->validar(json_encode(["chave_nfse" => $real]))["chave_nfse"]);
+        }
+        $trocado = '31151022262296557000179000000000000626114980190525';   // um 1 virou 2 perto do fim
+        $sumiuZero = '3115102226229655700017900000000000062611498019051';  // 49 dígitos
+        foreach ([$trocado, $sumiuZero] as $mau) {
+            $this->assertNull($this->leitor()->validar(json_encode(["chave_nfse" => $mau]))["chave_nfse"]);
+        }
+    }
+
+    private function dvNfse(string $c49): string
+    {
+        $soma = 0;
+        $peso = 2;
+        for ($i = 48; $i >= 0; $i--) {
+            $soma += (int) $c49[$i] * $peso;
+            $peso = $peso === 9 ? 2 : $peso + 1;
+        }
+        $r = $soma % 11;
+
+        return (string) ($r < 2 ? 0 : 11 - $r);
     }
 
     public function test_endpoint_le_a_nota_e_nao_devolve_cpf_nem_campos_extras(): void

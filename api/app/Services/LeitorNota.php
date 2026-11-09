@@ -352,6 +352,18 @@ class LeitorNota
         if (strlen($c) !== 50 || ! in_array(substr($c, 0, 2), self::UFS, true) || ! in_array($c[8], ['1', '2'], true)) {
             return false;
         }
+        /* build 585 (09/11/2026): DV módulo 11 sobre os 49 primeiros dígitos, como na NF-e. A IA trocava um dígito
+           da chave longa e o app gravava uma chave que não existe. */
+        $soma = 0;
+        $peso = 2;
+        for ($i = 48; $i >= 0; $i--) {
+            $soma += (int) $c[$i] * $peso;
+            $peso = $peso === 9 ? 2 : $peso + 1;
+        }
+        $r = $soma % 11;
+        if ((int) $c[49] !== ($r < 2 ? 0 : 11 - $r)) {
+            return false;
+        }
         $ano = 2000 + (int) substr($c, 36, 2);
         $mes = (int) substr($c, 38, 2);
         $hoje = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));

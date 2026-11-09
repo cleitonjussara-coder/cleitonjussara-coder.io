@@ -62,11 +62,19 @@ window.NFCE = (() => {
 
   /* Chave de 50 dígitos da NFS-e nacional (DANFSe v2) → CNPJ, UF, número, mês/ano.
      Layout: cLocEmi(7) ambiente(1) tpInsc(1) inscrição(14) nNFSe(13) AAMM(4) cNum(9) DV(1).
-     Conferido com a Udi Star (03/10/2026). Não confere DV: o cálculo não é público
-     o bastante para arriscar recusar uma chave boa. Devolve null se não fizer sentido. */
+     Conferido com a Udi Star (03/10/2026). Desde o build 585 (09/11/2026) confere o DV: módulo 11 sobre os
+     49 primeiros dígitos, pesos 2..9 da direita para a esquerda (igual à NF-e), conferido em 4 chaves reais
+     (Cássia/MG e Goiás). Sem isso, a IA ou o OCR trocavam um dígito e o app gravava uma chave que não existe.
+     Devolve null se não fizer sentido. */
+  function dvNfse50Ok(c) {
+    let soma = 0, peso = 2;
+    for (let i = 48; i >= 0; i--) { soma += +c[i] * peso; peso = peso === 9 ? 2 : peso + 1; }
+    const r = soma % 11;
+    return +c[49] === (r < 2 ? 0 : 11 - r);
+  }
   function parseChaveNfse50(raw) {
     const c = digits(raw);
-    if (c.length !== 50) return null;
+    if (c.length !== 50 || !dvNfse50Ok(c)) return null;
     const tpInsc = c.slice(8, 9);
     const ano = 2000 + parseInt(c.slice(36, 38), 10);
     const mes = parseInt(c.slice(38, 40), 10);

@@ -118,7 +118,10 @@ window.OCR = (() => {
       for (const m of oneLine.matchAll(/(?<!\d)((?:\d ?){49}\d)(?!\d)/g)) {
         const c = m[1].replace(/\D/g, '');
         const uf = c.slice(0, 2), mes = +c.slice(38, 40);
-        if (c.length === 50 && /^[12]$/.test(c.slice(8, 9)) && /^(1[1-7]|2[1-9]|3[1-3]|35|4[1-3]|5[0-3])$/.test(uf) && mes >= 1 && mes <= 12) return [m[0], c];
+        /* build 585: só aceita com o dígito verificador certo — o DANFSe imprime a chave duas vezes (topo e rodapé);
+           se o OCR errou um dígito numa, a outra ainda pode servir */
+        if (c.length === 50 && /^[12]$/.test(c.slice(8, 9)) && /^(1[1-7]|2[1-9]|3[1-3]|35|4[1-3]|5[0-3])$/.test(uf) && mes >= 1 && mes <= 12
+            && (!window.NFCE?.parseChaveNfse50 || window.NFCE.parseChaveNfse50(c))) return [m[0], c];
       }
       return null;
     })();
