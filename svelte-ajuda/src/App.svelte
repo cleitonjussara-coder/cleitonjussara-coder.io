@@ -4,7 +4,7 @@
   // errar um parágrafo de ajuda real da equipe.
   import conteudo from './ajuda-conteudo.html?raw';
 
-  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {}, perguntar = null,
+  let { vejoEquipe = false, ehContador = false, veFrota = false, ehCV = false, veCampo = false, onFechar = () => {}, perguntar = null,
         secao = '', focar = false, atalhos = [] } = $props();
 
   /* Botão ❓ Ajuda do cabeçalho (09/11/2026): a ajuda abre no assunto da tela em que a pessoa está (`secao` = começo do
@@ -61,7 +61,8 @@
     <button class="btn-voltar" aria-label="Voltar" onclick={onFechar}>‹ Voltar</button>
     <h3>Como usar o app</h3>
   </div>
-  <div class="form-body" bind:this={corpo} class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}>
+  <div class="form-body" bind:this={corpo} class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}
+       class:eh-cv={ehCV} class:ve-campo={veCampo}>
     {#if perguntar}
       <form class="ajuda-assist" onsubmit={enviar}>
         <label for="ajuda-pergunta"><b>🤖 Pergunte ao assistente</b></label>
@@ -109,6 +110,12 @@
   .form-body.eh-contador :global(.ajuda-sec.ajuda-contador),
   .form-body.eh-contador :global(.ajuda-sec.ajuda-so-contador),
   .form-body.eh-contador :global(p.ajuda-contador) { display: block; }
+  /* Regime e função (09/11/2026): o colaborador vê só o que usa. ajuda-cv = cartão corporativo; ajuda-rdm = dinheiro em
+     conta (RDM/RDA); ajuda-campo = quem o gestor liberou para Atividade em campo. Gestor, admin e Contador veem os dois
+     regimes. A mesma regra está em api/app/Services/AjudaRag.php (o assistente). */
+  .form-body:not(.ve-equipe):not(.eh-contador):not(.eh-cv) :global(.ajuda-cv),
+  .form-body.eh-cv:not(.ve-equipe) :global(.ajuda-rdm),
+  .form-body:not(.ve-equipe):not(.ve-campo) :global(.ajuda-campo) { display: none !important; }
   .ajuda-assist { margin: 0 0 16px; padding: 12px; border: 1px solid var(--border, #d9d9d9); border-radius: 12px; background: var(--card, transparent); }
   .ajuda-assist-linha { display: flex; gap: 8px; margin-top: 8px; }
   .ajuda-assist-linha input { flex: 1; min-width: 0; font-size: 16px; padding: 10px; border: 1px solid var(--border, #ccc); border-radius: 10px; background: transparent; color: inherit; }

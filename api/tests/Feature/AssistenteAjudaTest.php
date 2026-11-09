@@ -55,7 +55,7 @@ class AssistenteAjudaTest extends TestCase
         $this->assertStringContainsString('Avisar', implode(' ', array_column($r, 'texto')));
 
         $textoColab = implode(' ', array_column($rag->buscar('como avisar o dono da nota para corrigir', $colab, 10), 'texto'));
-        $this->assertStringNotContainsString('Avisar o dono da nota (24/10/2026)', $textoColab, 'bloco do gestor vazou para o colaborador');
+        $this->assertStringNotContainsString('Avisar o dono da nota:', $textoColab, 'bloco do gestor vazou para o colaborador');
 
         $textoContador = implode(' ', array_column($rag->buscar('lançar nota', $contador, 10), 'texto'));
         $this->assertStringNotContainsString('Lançamento diário', $textoContador);

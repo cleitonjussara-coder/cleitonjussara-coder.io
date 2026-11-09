@@ -98,10 +98,14 @@ class AjudaRag
     /** Classes de audiência do elemento e de todos os ancestrais. */
     private function audiencia(DOMElement $e): array
     {
-        $aud = ['gestor' => false, 'contador' => false, 'so_contador' => false, 'frota' => false, 'sec_contador' => false, 'p_contador' => false];
+        $aud = ['gestor' => false, 'contador' => false, 'so_contador' => false, 'frota' => false, 'sec_contador' => false, 'p_contador' => false,
+            'cv' => false, 'rdm' => false, 'campo' => false];
         for ($n = $e; $n instanceof DOMElement; $n = $n->parentNode) {
             $cls = ' '.$n->getAttribute('class').' ';
             $aud['gestor'] = $aud['gestor'] || str_contains($cls, ' ajuda-gestor ');
+            $aud['cv'] = $aud['cv'] || str_contains($cls, ' ajuda-cv ');
+            $aud['rdm'] = $aud['rdm'] || str_contains($cls, ' ajuda-rdm ');
+            $aud['campo'] = $aud['campo'] || str_contains($cls, ' ajuda-campo ');
             $aud['so_contador'] = $aud['so_contador'] || str_contains($cls, ' ajuda-so-contador ');
             $aud['frota'] = $aud['frota'] || str_contains($cls, ' ajuda-frota ');
             if (str_contains($cls, ' ajuda-contador ')) {
@@ -130,6 +134,18 @@ class AjudaRag
 
         if ($aud['so_contador']) {
             return $contador;
+        }
+        /* regime e função: o colaborador só lê o que usa (gestor, admin e Contador leem os dois regimes) */
+        if (! $equipe && ! $contador) {
+            if ($aud['cv'] && ! $u->ehCV()) {
+                return false;
+            }
+            if ($aud['rdm'] && $u->ehCV()) {
+                return false;
+            }
+            if ($aud['campo'] && ! ($u->registraAtividadeCampo() || $u->acompanhaCampo())) {
+                return false;
+            }
         }
         if ($contador) {
             if (! $aud['sec_contador']) {
