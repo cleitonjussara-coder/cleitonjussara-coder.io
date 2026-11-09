@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 597;
+const APP_BUILD = 598;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -276,18 +276,38 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
    2. CNAE principal do CNPJ (BrasilAPI, guardado no cache de CNPJ);
    3. palavras no nome (posto, hotel, restaurante, peças…).
    Só SUGERE: a pessoa vê a aba escolhida e troca com um toque. */
+/* 09/11/2026 (pedido do Cleiton, "no RDM reconhecimento de categoria automática"): as regras passam a conhecer
+   Pedágio, Manutenção de Veículos e Exames (antes caíam em Outros) e, no Faturamento, Locação de Veículos e
+   Contabilidade. Dentro do RDM a categoria reconhecida entra sozinha enquanto a pessoa não escolheu uma à mão
+   (_sugerirAbaNoFormulario); trocar RDA↔RDM continua sendo só sugestão (reunião de 21/09/2026). */
 const _CNAE_ABA = [
   [/^4731/,                         { tipo:'RDM', subtipo:'Abastecimento', rotulo:'posto de combustível' }],
   [/^(5510|5590)/,                  { tipo:'RDM', subtipo:'Hospedagem',    rotulo:'hotel/pousada' }],
+  [/^5221/,                         { tipo:'RDM', subtipo:'Pedágio',       rotulo:'concessionária de rodovia' }],
+  [/^(4520|4530|4541|4543|2212)/,   { tipo:'RDM', subtipo:'Manutenção de Veículos', rotulo:'oficina/autopeças' }],
+  [/^(8610|8630|8640)/,             { tipo:'RDM', subtipo:'Exames',        rotulo:'clínica/laboratório' }],
+  [/^7711/,                         { tipo:'RDM', subtipo:'Locação de Veículos', rotulo:'locadora de veículos' }],
+  [/^6920/,                         { tipo:'RDM', subtipo:'Contabilidade', rotulo:'contabilidade' }],
   [/^(5611|5612|5620|4721|4722|4723|4729|1091|1092|4711|4712)/, { tipo:'RDA', subtipo:null, rotulo:'alimentação' }],
-  [/^(4530|4520|4541|4744|2219|4763|4789|4751|4752|4753|4754|4755|4759|4771|4772|4773|4774|4781|4782|4783|4784|4785|3314|9529)/, { tipo:'RDM', subtipo:'Outros', rotulo:'peças/serviços/loja' }],
+  [/^(4744|2219|4763|4789|4751|4752|4753|4754|4755|4759|4771|4772|4773|4774|4781|4782|4783|4784|4785|3314|9529)/, { tipo:'RDM', subtipo:'Outros', rotulo:'loja/serviços' }],
 ];
 const _NOME_ABA = [
+  [/(ped[áa]gio|\brodovias?\b|autoban|ecovias|ecorodovias|arteris|\bccr\b|rota dos gr[ãa]os|entrevias|viapar|econorte|rodonorte|ecosul|concebra|\bepr\b|via brasil)/i, { tipo:'RDM', subtipo:'Pedágio', rotulo:'pedágio' }],
   [/\b(auto\s*posto|posto|combust[íi]ve)/i,                        { tipo:'RDM', subtipo:'Abastecimento', rotulo:'posto' }],
   [/\b(hotel|pousada|hospedagem|motel|hostel)/i,                    { tipo:'RDM', subtipo:'Hospedagem',    rotulo:'hospedagem' }],
+  [/\b(cl[íi]nica|laborat[óo]rio|medicina\s+(do\s+trabalho|ocupacional)|sa[úu]de\s+ocupacional|exames|hospital)/i, { tipo:'RDM', subtipo:'Exames', rotulo:'clínica/laboratório' }],
+  [/\b(locadora|loca[çc][ãa]o\s+de\s+ve[íi]culos|rent\s*a\s*car|localiza|movida|unidas\s+(rent|loca))/i, { tipo:'RDM', subtipo:'Locação de Veículos', rotulo:'locadora' }],
+  [/\b(contabilidade|cont[áa]bil|contadores|escrit[óo]rio\s+cont)/i, { tipo:'RDM', subtipo:'Contabilidade', rotulo:'contabilidade' }],
+  [/\b(auto\s*pe[çc]as|pe[çc]as|oficina|borracharia|pneus?|auto\s*center|centro\s+automotivo|mec[âa]nica|funilaria|ret[íi]fica|auto\s*el[ée]trica|lava\s*(jato|car|r[áa]pido)|troca\s+de\s+[óo]leo|lubrificantes|recapagem)/i, { tipo:'RDM', subtipo:'Manutenção de Veículos', rotulo:'oficina/autopeças' }],
   [/\b(restaurante|lanchonete|churrascaria|panificadora|padaria|pizzaria|bar\b|espetinho|marmita|sorveteria|supermercado|mercado|alimentos|refei[çc])/i, { tipo:'RDA', subtipo:null, rotulo:'alimentação' }],
-  [/\b(pe[çc]as|oficina|borracharia|pneus?|auto\s*center|ferragens|el[ée]trica|mec[âa]nica)/i, { tipo:'RDM', subtipo:'Outros', rotulo:'peças/serviços' }],
+  [/\b(ferragens|el[ée]trica|materiais\s+de\s+constru)/i,          { tipo:'RDM', subtipo:'Outros', rotulo:'loja/serviços' }],
 ];
+/* Locação e Contabilidade só existem no Faturamento: fora dele a sugestão vira Outros, para não oferecer uma categoria
+   que a pessoa não pode usar. */
+function _ajustarSugestaoAoRegime(s, faturamento) {
+  if (!s || faturamento || !(s.tipo === 'RDM' && _ehSoFaturamento(s.subtipo))) return s;
+  return { ...s, subtipo: 'Outros' };
+}
 function _sugestaoPorHistorico(cnpj) {
   const c = _digitos(cnpj);
   if (c.length !== 14 || /^0+$/.test(c)) return null;
@@ -316,18 +336,24 @@ function _sugestaoPorNome(nome) {
 }
 /* Assíncrona só quando precisa do CNAE (BrasilAPI); histórico e nome são
    instantâneos. Devolve {tipo, subtipo, rotulo, fonte} ou null. */
-async function sugerirAba({ cnpj, razao_social, chave } = {}) {
+async function sugerirAba({ cnpj, razao_social, chave, placa, faturamento = false } = {}) {
   const c = _digitos(cnpj) || (_digitos(chave).length === 44 ? _digitos(chave).slice(6, 20) : '');
-  let s = _sugestaoPorHistorico(c) || _sugestaoPorNome(razao_social);
-  if (s) return s;
+  /* histórico que diz "Outros" é fraco: até 05/11/2026 pedágio, oficina e exames não tinham categoria própria e
+     entravam em Outros — aí o nome/CNAE do fornecedor decide, e o histórico só vale se nada mais reconhecer. */
+  const hist = _sugestaoPorHistorico(c);
+  const histFraco = hist && hist.tipo === 'RDM' && hist.subtipo === 'Outros';
+  let s = (!histFraco && hist) || _sugestaoPorNome(razao_social);
+  if (s) return _ajustarSugestaoAoRegime(s, faturamento);
   if (c.length === 14 && navigator.onLine) {
     try {
       const info = await Promise.race([BrasilAPI.consultar(c, sb), new Promise(r => setTimeout(() => r(null), 5000))]);
-      s = _sugestaoPorCnae(info?.cnae) || _sugestaoPorNome(info?.razao_social || info?.nome_fantasia);
+      s = _sugestaoPorCnae(info?.cnae) || _sugestaoPorNome(info?.razao_social) || _sugestaoPorNome(info?.nome_fantasia);
       if (s && info?.cnae_descricao && s.fonte === 'cnae') s.rotulo = info.cnae_descricao.toLowerCase().slice(0, 40);
     } catch (_) {}
   }
-  return s || null;
+  /* recibo com placa lida e nada mais reconhecido: é recibo de pedágio (a placa só sai impressa no da praça) */
+  if (!s && (!hist || histFraco) && _placaLimpa(placa)) s = { tipo: 'RDM', subtipo: 'Pedágio', rotulo: 'recibo com placa', fonte: 'placa' };
+  return _ajustarSugestaoAoRegime(s || hist || null, faturamento);
 }
 function _aplicarSugestaoNoForm(s) {
   if (!s) return;
@@ -335,22 +361,52 @@ function _aplicarSugestaoNoForm(s) {
   if (s.tipo === 'RDM' && s.subtipo) $('nf-subtipo').value = s.subtipo;
   toggleSubtipo();
 }
-/* Depois que o OCR/QR revelou o fornecedor com o formulário já aberto: mostra
-   a sugestão no banner da aba, sem trocar sozinho (a pessoa já escolheu). */
+/* Depois que o OCR/QR revelou o fornecedor com o formulário já aberto.
+   09/11/2026: dentro do RDM a categoria reconhecida entra SOZINHA enquanto a pessoa não escolheu uma à mão
+   (_categoriaManual) — a faixa mostra o que mudou e oferece "Desfazer". Aba diferente (RDA↔RDM) ou categoria já
+   escolhida à mão (nota em edição, cartão do C.V., select mexido): só a faixa com "Aplicar", como antes. */
 let _sugestaoPendente = null;
-async function _sugerirAbaNoFormulario() {
-  const s = await sugerirAba({ cnpj: $('nf-cnpj').value, razao_social: $('nf-razao').value, chave: $('nf-chave').value });
+let _categoriaManual = false;        // a pessoa escolheu a categoria (select, cartão do C.V. ou nota já salva)
+let _categoriaAntesDaAuto = null;    // para o "Desfazer" da troca automática
+function _subtipoDisponivel(sub) { return [...($('nf-subtipo')?.options || [])].some(o => (o.value || o.text) === sub); }
+function _marcarCategoriaManual() {
+  _categoriaManual = true; _categoriaAntesDaAuto = null;
+  const box = $('nota-aba-sugestao'); if (box && !_sugestaoPendente) box.style.display = 'none';
+}
+function _mostrarFaixaSugestao(texto, botao) {
   const box = $('nota-aba-sugestao');
   if (!box) return;
+  box.style.display = 'flex';
+  $('nota-aba-sugestao-txt').textContent = texto;
+  const b = $('nota-aba-sugestao-btn'); if (b) b.textContent = botao;
+}
+async function _sugerirAbaNoFormulario() {
+  const s = await sugerirAba({ cnpj: $('nf-cnpj').value, razao_social: $('nf-razao').value, chave: $('nf-chave').value,
+                               placa: $('nf-placa').value, faturamento: _pagamentoForcado === 'empresa' });
+  const box = $('nota-aba-sugestao');
+  if (!box || $('nota-form-overlay')?.style.display === 'none' && !_formEsperandoLeitura) return;   // formulário fechado no meio
   const atualTipo = $('nf-tipo').value, atualSub = $('nf-subtipo').value;
   const igual = s && s.tipo === atualTipo && (s.tipo !== 'RDM' || !s.subtipo || s.subtipo === atualSub);
-  if (!s || igual) { box.style.display = 'none'; _sugestaoPendente = null; return; }
+  if (!s || igual) { if (!_categoriaAntesDaAuto) box.style.display = 'none'; _sugestaoPendente = null; return; }
+  if (s.tipo === 'RDM' && atualTipo === 'RDM' && s.subtipo && !_categoriaManual && _subtipoDisponivel(s.subtipo)) {
+    _categoriaAntesDaAuto = atualSub;
+    _sugestaoPendente = null;
+    $('nf-subtipo').value = s.subtipo;
+    toggleSubtipo();                 // regime C.V.: a Categoria na tela acompanha; placa/link só no Pedágio
+    _mostrarFaixaSugestao(`✨ Categoria reconhecida: ${s.subtipo} (${s.fonte === 'nome' ? 'pelo nome do fornecedor' : s.rotulo})`, 'Desfazer');
+    return;
+  }
   _sugestaoPendente = s;
-  box.style.display = 'flex';
-  $('nota-aba-sugestao-txt').textContent = `Sugestão: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo})`;
+  _categoriaAntesDaAuto = null;
+  _mostrarFaixaSugestao(`Sugestão: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo})`, 'Aplicar');
 }
 function aplicarSugestaoAba() {
   if (_sugestaoPendente) _aplicarSugestaoNoForm(_sugestaoPendente);
+  else if (_categoriaAntesDaAuto) {  // "Desfazer": volta a categoria de antes e não troca mais sozinho nesta nota
+    $('nf-subtipo').value = _categoriaAntesDaAuto;
+    toggleSubtipo();
+  }
+  _marcarCategoriaManual();
   const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none';
   _sugestaoPendente = null;
 }
@@ -8733,12 +8789,12 @@ function abrirSeletorTipoLancamento(dados = {}) {
   const d = _dadosLancamentoPendentes;
   const dica = $('tipo-lancamento-dica'); if (dica) dica.textContent = '';
   if (d.cnpj || d.chave || d.razao_social) {
-    sugerirAba(d).then(s => {
+    sugerirAba({ ...d, faturamento: d.pagamento === 'empresa' }).then(s => {
       if (!s || _dadosLancamentoPendentes !== d) return;                // já escolheu/fechou
       d._sugestao = s;
       /* aba já escolhida: só aproveita a categoria se a sugestão for da MESMA
          aba — senão um "Abastecimento" (RDM) entraria numa nota de RDA */
-      if (!d.tipo || s.tipo === d.tipo) d.subtipo = s.subtipo || d.subtipo;
+      if (!d._categoriaEscolhida && (!d.tipo || s.tipo === d.tipo)) d.subtipo = s.subtipo || d.subtipo;   // cartão do C.V. tocado: fica o que a pessoa escolheu
       const txt = `Sugestão para este fornecedor: ${s.tipo}${s.tipo === 'RDM' && s.subtipo ? ' · ' + s.subtipo : ''} (${s.rotulo}). Você decide.`;
       if (dica) dica.textContent = txt;
       /* aba já escolhida e a sugestão aponta para a outra: avisa no passo 2 */
@@ -8797,7 +8853,7 @@ function selecionarTipoLancamento(tipo, subtipo = null) {
      instante da abertura — uma cópia aqui descartaria a sugestão que ainda
      está a caminho, e o aviso "a sugestão é a outra aba" nunca apareceria. */
   const dados = Object.assign(_dadosLancamentoPendentes || {}, { tipo, _tipoSelecionado: true });
-  if (subtipo) dados.subtipo = subtipo;   // regime CV: a categoria vem junto (24/09/2026)
+  if (subtipo) { dados.subtipo = subtipo; dados._categoriaEscolhida = true; }   // regime CV: a categoria vem junto (24/09/2026) e é escolha da pessoa
   /* Lançamento MANUAL: em vez de abrir o formulário vazio, pergunta já o
      comprovante (pedido em 16/09/2026). O anexo é obrigatório de qualquer
      jeito, e a câmera só abre em gesto do usuário — por isso um toque a mais
@@ -8831,7 +8887,7 @@ function voltarEscolhaAba() {
   $('tipo-lancamento-passo2').style.display = 'none';
   $('tipo-lancamento-passo1').style.display = '';
   const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
-  if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; }
+  if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; delete _dadosLancamentoPendentes._categoriaEscolhida; }
 }
 function lancarManualComAnexo(modo, opts = {}) {
   const dados = { ...(_dadosLancamentoPendentes || {}) };
@@ -9316,7 +9372,8 @@ async function abrirFormNota(dados = {}) {
     const g = $('nf-pagamento-group'); if (g) g.style.display = (donoCV && !_pagamentoForcado) ? '' : 'none';
   _ajustarCamposDeCategoria();
     const p = $('nf-pagamento'); if (p) p.value = dados.pagamento || 'cv'; }
-  _valorEditadoManual = false; _sugestaoPendente = null;
+  _valorEditadoManual = false; _sugestaoPendente = null; _categoriaAntesDaAuto = null;
+  _categoriaManual = !!dados.id || !!dados._categoriaEscolhida;   // nota salva ou cartão do C.V.: a categoria não troca sozinha
   { const box = $('nota-aba-sugestao'); if (box) box.style.display = 'none'; }
   /* nota já com URL do QR e sem valor (ex.: importada antes do 141): busca o oficial */
   if (dados.qr_url && dados.chave_nfce && !(Number(dados.valor) > 0)) _sefazPorQr(dados.qr_url, dados.chave_nfce);
@@ -9674,6 +9731,10 @@ function toggleSubtipo() {
     if (!$('nf-subtipo').value) $('nf-subtipo').value = 'Abastecimento';
   } else {
     $('nf-subtipo').value = 'Abastecimento';
+    if (_categoriaAntesDaAuto) {   // a faixa "Categoria reconhecida… Desfazer" não vale mais no RDA
+      _categoriaAntesDaAuto = null;
+      const box = $('nota-aba-sugestao'); if (box && !_sugestaoPendente) box.style.display = 'none';
+    }
   }
   atualizarBannerTipoLancamento(tipo);
   _ajustarCamposDeCategoria();   // regime C.V.: a Categoria na tela tem de ser a que será gravada
@@ -9683,7 +9744,8 @@ function toggleSubtipo() {
 let _cnpjTimer;
 function onCNPJChange() {
   clearTimeout(_cnpjTimer);
-  _cnpjTimer = setTimeout(() => buscarRazaoSocial($('nf-cnpj').value), 800);
+  /* 09/11/2026: CNPJ digitado à mão também reconhece a categoria (no RDM ela entra sozinha, se ninguém escolheu) */
+  _cnpjTimer = setTimeout(async () => { await buscarRazaoSocial($('nf-cnpj').value); _sugerirAbaNoFormulario().catch(() => {}); }, 800);
 }
 
 async function buscarRazaoSocial(raw) {
@@ -10056,7 +10118,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     const _k = _digitos($('nf-chave').value);
     if (_k && _sefazQrCache.has(_k)) { const r = _sefazQrCache.get(_k); if (r && typeof r.then !== 'function') _aplicarSefazNoForm(r, _k); }
     else if (_k && $('nf-qr-url').value) _sefazPorQr($('nf-qr-url').value, _k);
-    // aba/categoria pelo fornecedor (só sugere; a pessoa já escolheu)
+    // aba/categoria pelo fornecedor: no RDM a categoria entra sozinha se ninguém a escolheu; a aba só é sugerida
     _sugerirAbaNoFormulario().catch(() => {});
 
     // já lançada? avisa agora, com o que o OCR leu (número, fornecedor, valor, dia)

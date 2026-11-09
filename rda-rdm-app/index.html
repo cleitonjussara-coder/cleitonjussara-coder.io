@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=597">
+  <link rel="manifest" href="manifest.json?v=598">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -2445,7 +2445,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=597" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=598" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2748,14 +2748,14 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     </div>
     <div id="nota-aba-sugestao" style="display:none;align-items:center;gap:8px;font-size:14px;color:var(--text2);margin:-4px 0 8px">
       <span id="nota-aba-sugestao-txt"></span>
-      <button type="button" class="btn btn-sm btn-outline" onclick="aplicarSugestaoAba()">Aplicar</button>
+      <button type="button" id="nota-aba-sugestao-btn" class="btn btn-sm btn-outline" onclick="aplicarSugestaoAba()">Aplicar</button>
     </div>
   
     <!-- 24/09/2026: quem é do cartão corporativo escolhe direto a categoria;
          o RDA/RDM continua no banco, montado a partir dela. -->
     <div class="field" id="nf-cat-cv-group" style="display:none">
       <label class="lbl">Categoria *</label>
-      <select class="inp" id="nf-cat-cv" onchange="aplicarCategoriaCV()">
+      <select class="inp" id="nf-cat-cv" onchange="_marcarCategoriaManual(); aplicarCategoriaCV()">
         <option value="alimentacao">🍽️ Alimentação</option>
         <option value="abastecimento">⛽ Abastecimento</option>
         <option value="hospedagem">🏨 Hospedagem</option>
@@ -2775,7 +2775,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       </div>
       <div class="field" id="nf-subtipo-group">
         <label class="lbl">Categoria</label>
-        <select class="inp" id="nf-subtipo" onchange="_ajustarRotulosDoDocumento()">
+        <select class="inp" id="nf-subtipo" onchange="_marcarCategoriaManual(); _ajustarRotulosDoDocumento()">
           <option>Abastecimento</option>
           <option>Hospedagem</option>
           <option>Pedágio</option>
@@ -3191,42 +3191,42 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=597"></script>
-<script defer src="js/db.js?v=597"></script>
-<script defer src="js/nfce.js?v=597"></script>
-<script defer src="js/sefaz.js?v=597"></script>
-<script defer src="js/brasilapi.js?v=597"></script>
-<script defer src="js/ocr.js?v=597"></script>
-<script defer src="js/scanner.js?v=597"></script>
-<script defer src="js/foto-branca.js?v=597"></script>
-<script defer src="js/recorte.js?v=597"></script>
-<script defer src="js/excel.js?v=597"></script>
-<script defer src="js/gestor.js?v=597"></script>
-<script defer src="js/frota.js?v=597"></script>
-<script defer src="js/frota-painel.js?v=597"></script>
-<script defer src="js/frota-planilha.js?v=597"></script>
-<script defer src="js/ponto.js?v=597"></script>
-<script defer src="js/campo.js?v=597"></script>
-<script defer src="js/rastreio.js?v=597"></script>
-<script defer src="js/repasses-equipe.js?v=597"></script>
-<script defer src="js/fechamento.js?v=597"></script>
-<script defer src="js/busca.js?v=597"></script>
-<script defer src="js/gdrive.js?v=597"></script>
+<script defer src="js/api.js?v=598"></script>
+<script defer src="js/db.js?v=598"></script>
+<script defer src="js/nfce.js?v=598"></script>
+<script defer src="js/sefaz.js?v=598"></script>
+<script defer src="js/brasilapi.js?v=598"></script>
+<script defer src="js/ocr.js?v=598"></script>
+<script defer src="js/scanner.js?v=598"></script>
+<script defer src="js/foto-branca.js?v=598"></script>
+<script defer src="js/recorte.js?v=598"></script>
+<script defer src="js/excel.js?v=598"></script>
+<script defer src="js/gestor.js?v=598"></script>
+<script defer src="js/frota.js?v=598"></script>
+<script defer src="js/frota-painel.js?v=598"></script>
+<script defer src="js/frota-planilha.js?v=598"></script>
+<script defer src="js/ponto.js?v=598"></script>
+<script defer src="js/campo.js?v=598"></script>
+<script defer src="js/rastreio.js?v=598"></script>
+<script defer src="js/repasses-equipe.js?v=598"></script>
+<script defer src="js/fechamento.js?v=598"></script>
+<script defer src="js/busca.js?v=598"></script>
+<script defer src="js/gdrive.js?v=598"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=597"></script>
+<script defer src="js/svelte-ajuda.js?v=598"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=597"></script>
+<script defer src="js/svelte-historico.js?v=598"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=597"></script>
+<script defer src="js/svelte-arquivos.js?v=598"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=597"></script>
-<script defer src="js/app.js?v=597"></script>
-<script defer src="js/instalar.js?v=597"></script>
+<script defer src="js/svelte-perfil.js?v=598"></script>
+<script defer src="js/app.js?v=598"></script>
+<script defer src="js/instalar.js?v=598"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=597').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=598').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
