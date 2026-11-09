@@ -49,7 +49,7 @@ class DuplicataNota
             'tipo' => $d['tipo'] ?? null,
             'cnpj' => self::cnpjValido($d['cnpj'] ?? null),
             'razao' => self::razaoNormalizada($d['razao_social'] ?? null),
-            'numero' => self::numeroNormalizado($d['numero'] ?? null),
+            'numero' => self::numeroDe($d['numero'] ?? null, $d['chave'] ?? null),
             'serie' => trim((string) ($d['serie'] ?? '')),
             'centavos' => isset($d['valor']) && is_numeric($d['valor']) ? (int) round(((float) $d['valor']) * 100) : 0,
             'data' => $d['data'] ?? null,
@@ -158,7 +158,7 @@ class DuplicataNota
         if (! $this->mesmoFornecedor($n, $cand)) {
             return null;
         }
-        $num = self::numeroNormalizado($n->numero);
+        $num = self::numeroDe($n->numero, $n->chave_nfce);
         $serieDaNota = trim((string) $n->serie);
         /* Recibo com placa também é pedágio (09/11/2026, caso do Pedro): os recibos lançados antes da categoria Pedágio
            (05/11) ficaram em "Outros", mas o OCR já gravava a placa desde 27/10. */
@@ -173,7 +173,10 @@ class DuplicataNota
            fornecedor + dia + valor não diz nada. Quem separa um recibo do outro é o número (SEQ) e a data: número igual em
            dia diferente não é a mesma passagem, e número diferente no mesmo dia também não. Sem número em um dos lados,
            segue a regra de sempre (pergunta). */
-        if ($pedagio && $num !== '' && $cand['numero'] !== '' && $num !== $cand['numero']) {
+        /* 09/11/2026 (Cleiton, Casa das Balanças nº 31703 e 31704, R$ 70 no mesmo dia): número diferente nos dois lados
+           separa em QUALQUER categoria, não só no pedágio. Decisão consciente: uma duplicata real com o número lido errado
+           passa sem aviso. Sem número de um lado, segue a regra de sempre. */
+        if ($num !== '' && $cand['numero'] !== '' && $num !== $cand['numero']) {
             return null;
         }
         /* Horário impresso no recibo (09/11/2026): duas passagens na mesma praça, no mesmo dia e com a mesma tarifa só se
@@ -248,5 +251,23 @@ class DuplicataNota
     private static function numeroNormalizado(?string $v): string
     {
         return ltrim(trim((string) $v), '0');
+    }
+
+    /**
+     * Número da nota; sem ele, o número de dentro da chave de NF-e/NFC-e (modelo 55/65, posições 26 a 34). Vale também com
+     * a chave cortada na foto, desde que tenha chegado até o número (34 dígitos). Mesma conta de _numeroDaNota no app.
+     */
+    public static function numeroDe(?string $numero, ?string $chave): string
+    {
+        $num = self::numeroNormalizado($numero);
+        if ($num !== '') {
+            return $num;
+        }
+        $k = preg_replace('/\D/', '', (string) $chave);
+        if (strlen($k) < 34 || strlen($k) > 44 || ! in_array(substr($k, 20, 2), ['55', '65'], true)) {
+            return '';
+        }
+
+        return self::numeroNormalizado(substr($k, 25, 9));
     }
 }

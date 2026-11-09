@@ -73,6 +73,17 @@ confere(dups().length === 0, 'duplicata lançada há mais de 30 dias não entra 
 poe([nota('a'), nota('b', { user_id: 'joao', created_by: 'joao', numero: '9999', valor: 40, created_at: iso(1) })]);
 confere(dups().length === 0, 'notas diferentes não avisam');
 
+/* 09/11/2026: Casa das Balanças nº 31703 e 31704, R$ 70 no mesmo dia, uma com a chave cortada na foto */
+const balanca = { tipo: 'RDM', subtipo: 'Outros', valor: 70, cnpj: '25654468000120', razao_social: 'CANUTO E CIA LTDA', serie: '002' };
+poe([nota('a', { ...balanca, numero: '0000031703', chave_nfce: '31261125654468000120550020000317031547533851' }),
+     nota('b', { ...balanca, user_id: 'joao', created_by: 'joao', numero: '31704', chave_nfce: '31261125654468000120550020000317041658', created_at: iso(1) })]);
+confere(dups().length === 0, 'número diferente separa fora do pedágio, mesmo com a chave cortada');
+poe([nota('a', { ...balanca, numero: '0000031703', chave_nfce: '31261125654468000120550020000317031547533851' }),
+     nota('b', { ...balanca, user_id: 'joao', created_by: 'joao', numero: '', chave_nfce: '31261125654468000120550020000317041658', created_at: iso(1) })]);
+confere(dups().length === 0, 'sem número gravado, o número sai de dentro da chave cortada');
+poe([nota('a', { ...balanca, numero: '' }), nota('b', { ...balanca, user_id: 'joao', created_by: 'joao', numero: '', created_at: iso(1) })]);
+confere(dups().length === 1, 'sem número nenhum, mesmo fornecedor, dia e valor ainda avisa');
+
 poe([nota('a', { deleted: true }), nota('b', { user_id: 'joao', created_by: 'joao', created_at: iso(1) })]);
 confere(dups().length === 0, 'nota na lixeira não conta');
 

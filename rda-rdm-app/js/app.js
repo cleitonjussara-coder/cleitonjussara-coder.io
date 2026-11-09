@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 589;
+const APP_BUILD = 590;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10033,11 +10033,20 @@ function _mesmoFornecedor(a, b) {
   const ra = norm(a?.razao_social), rb = norm(b?.razao_social);
   return !!ra && ra === rb;
 }
+/* Número da nota; sem ele, o de dentro da chave de NF-e/NFC-e (modelo 55/65, posições 26 a 34), mesmo com a chave cortada
+   na foto. Mesma conta de DuplicataNota::numeroDe no servidor. */
+function _numeroDaNota(n) {
+  const num = String(n.numero || '').trim().replace(/^0+/, '');
+  if (num) return num;
+  const k = _digitos(n.chave_nfce || '');
+  if (k.length < 34 || k.length > 44 || !['55', '65'].includes(k.slice(20, 22))) return '';
+  return k.slice(25, 34).replace(/^0+/, '');
+}
 function _motivoDuplicata(a, b) {
   const ka = _digitos(a.chave_nfce || ''), kb = _digitos(b.chave_nfce || '');
   if (ka.length === 44 && ka === kb) return 'chave';
   if (!_mesmoFornecedor(a, b)) return null;
-  const na = String(a.numero || '').replace(/^0+/, ''), nb = String(b.numero || '').replace(/^0+/, '');
+  const na = _numeroDaNota(a), nb = _numeroDaNota(b);
   /* Pedágio (09/11/2026): a mesma praça cobra a mesma tarifa várias vezes no dia — quem separa os recibos é o número (SEQ)
      e a data. Número igual em outro dia não é duplicata; número diferente nunca é. Mesma regra de DuplicataNota no servidor. */
   /* recibo com placa também é pedágio (09/11/2026, caso do Pedro): os lançados antes da categoria Pedágio ficaram em Outros */
@@ -10045,7 +10054,9 @@ function _motivoDuplicata(a, b) {
   const da = String(a.data || '').slice(0, 10), db = String(b.data || '').slice(0, 10);
   if (na && na === nb && (!a.serie || !b.serie || String(a.serie) === String(b.serie))
       && !(pedagio && da && db && da !== db)) return 'numero';
-  if (pedagio && na && nb && na !== nb) return null;
+  /* número diferente nos dois lados separa em QUALQUER categoria (09/11/2026, Casa das Balanças nº 31703 e 31704 de R$ 70
+     no mesmo dia, uma com a chave cortada na foto). Mesma regra de DuplicataNota no servidor. */
+  if (na && nb && na !== nb) return null;
   /* hora impressa no recibo (09/11/2026): só a hora e o minuto (segundo lido errado pelo OCR não separa passagens).
      A hora só é gravada em recibo (documento Outro): vale em qualquer categoria. */
   const ha = String(a.hora || '').slice(0, 5), hb = String(b.hora || '').slice(0, 5);
@@ -10177,7 +10188,7 @@ function _mapaDuplicatas(lista) {
     if (k.length === 44) por('K' + k, n);
     const f = fornDe(n);
     if (!f) continue;
-    const num = String(n.numero || '').replace(/^0+/, '');
+    const num = _numeroDaNota(n);
     if (num) por('N' + f + '|' + num, n);
     const v = Math.round(Number(n.valor) * 100);
     if (v > 0 && n.data) por('I' + f + '|' + n.data + '|' + v + '|' + (n.tipo || ''), n);

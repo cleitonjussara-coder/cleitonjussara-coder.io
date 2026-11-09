@@ -365,14 +365,41 @@ class DuplicidadeNotasTest extends TestCase
         $this->assertNull(\App\Services\LeitorNota::hora('9h44'));
     }
 
-    public function test_fora_do_pedagio_numero_diferente_ainda_pergunta_por_dia_e_valor(): void
+    /* 09/11/2026 (Cleiton): Casa das Balanças nº 31703 e 31704, R$ 70 no mesmo dia; a foto da 31704 cortou o fim da chave.
+       Antes, fora do pedágio, número diferente ainda perguntava por dia e valor. */
+    public function test_numero_diferente_separa_em_qualquer_categoria_mesmo_com_chave_cortada(): void
     {
         $colab = $this->pessoa('colaborador');
-        $this->faturamento(['tipo' => 'RDM', 'subtipo' => 'Outros']);
+        $balanca = ['tipo' => 'RDM', 'subtipo' => 'Outros', 'valor' => 70, 'data' => '2026-11-07',
+            'cnpj' => '25654468000120', 'razao_social' => 'CANUTO E CIA LTDA', 'serie' => '002'];
+        $this->nota($colab, $balanca + ['numero' => '0000031703', 'chave_nfce' => '31261125654468000120550020000317031547533851']);
         Sanctum::actingAs($colab);
+        $cortada = '312611256544680001205500200003170416'.'58';   // 38 dígitos: chave cortada na foto
 
-        $this->postJson('/api/notas/duplicada', $this->candidata(['tipo' => 'RDM', 'subtipo' => 'Outros', 'numero' => '9999']))
+        // número diferente, chave cortada: duas notas
+        $this->postJson('/api/notas/duplicada', $balanca + ['numero' => '31704', 'chave' => $cortada])
+            ->assertOk()->assertJsonPath('existe', false);
+        // sem número gravado: o número sai de dentro da chave cortada
+        $this->postJson('/api/notas/duplicada', $balanca + ['numero' => null, 'chave' => $cortada])
+            ->assertOk()->assertJsonPath('existe', false);
+        // número diferente, sem chave nenhuma: também separa
+        $this->postJson('/api/notas/duplicada', $balanca + ['numero' => '31704'])
+            ->assertOk()->assertJsonPath('existe', false);
+        // mesmo número: continua sendo a mesma nota
+        $this->postJson('/api/notas/duplicada', $balanca + ['numero' => '31703'])
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'numero');
+        // sem número de nenhum jeito: regra de sempre, pergunta
+        $this->postJson('/api/notas/duplicada', $balanca + ['numero' => null])
             ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
+    public function test_numero_vem_da_chave_so_em_nfe_ou_nfce_que_chegou_ate_o_numero(): void
+    {
+        $this->assertSame('31704', \App\Services\DuplicataNota::numeroDe(null, '31261125654468000120550020000317041658'));
+        $this->assertSame('12345', \App\Services\DuplicataNota::numeroDe(null, self::CHAVE));
+        $this->assertSame('77', \App\Services\DuplicataNota::numeroDe('0077', self::CHAVE), 'o número gravado vale primeiro');
+        $this->assertSame('', \App\Services\DuplicataNota::numeroDe(null, '3126112565446800012055002000'), 'cortada antes do número');
+        $this->assertSame('', \App\Services\DuplicataNota::numeroDe(null, '31261125654468000120990020000317041658'), 'modelo que não é 55/65');
     }
 
     /* ── privacidade ────────────────────────────────────────────────── */
