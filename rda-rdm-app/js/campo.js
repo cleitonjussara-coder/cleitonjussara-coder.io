@@ -11,10 +11,11 @@
    padrão do grupo, com o link do mapa — enviar é escolha da pessoa.
 
    Quem vê: o gestor liga a função por pessoa (Equipe → editar). Gestor e
-   admin sempre veem a tela para acompanhar quem está em campo e onde.
+   admin sempre veem a tela para acompanhar quem está em campo e onde; o
+   focal (09/11/2026, colaborador com a chave ligada) também, só nesta função.
 
    Depende de globais do app.js: $, sb, user, toast, setLoading, esc,
-   fmtData, filMes, filAno, MESES, _ehGestorOuAdmin, _registraCampo, DB,
+   fmtData, filMes, filAno, MESES, _acompanhaCampo, _registraCampo, DB,
    viewAtual, FusoBR, pedirCampos, pedirConfirmacao.
 ───────────────────────────────────────────────────────────── */
 window.Campo = (() => {
@@ -39,7 +40,7 @@ window.Campo = (() => {
   let _offline = false, _cacheEm = null;
   let _filtroPessoa = null;
   /* Planilha dinâmica do gestor (08/11/2026) */
-  let _aba = 'painel';           // 'painel' | 'registros'
+  let _aba = 'painel';           // 'painel' | 'registros' | 'campos' (cadastro de campos, 09/11/2026)
   let _filtroFazenda = null;     // nome da fazenda já com "Faz."
   let _filtroDia = null;         // 'AAAA-MM-DD' (só na aba Registros)
   let _filtroPend = null;        // 'abertas' | 'auto' | 'semloc' (só na aba Registros)
@@ -102,9 +103,9 @@ window.Campo = (() => {
   async function carregar() {
     if (!sb || !navigator.onLine) throw new Error('offline');
     await subirFila();
-    const gestor = _ehGestorOuAdmin();
+    const gestor = _acompanhaCampo();   // gestor, admin e focal (09/11/2026)
     const [l, e, c] = await Promise.all([sb.atividadesCampo.list(_periodo()), gestor ? sb.atividadesCampo.equipe() : Promise.resolve([]),
-      _registraCampo() ? sb.atividadesCampo.campos().catch(() => null) : Promise.resolve(null)]);
+      _registraCampo() || gestor ? sb.atividadesCampo.campos().catch(() => null) : Promise.resolve(null)]);
     lista = l || []; equipe = e || [];
     if (c) { camposEquipe = c; try { await DB.setMeta(KEY_CAMPOS, c); } catch (_) {} }   // guardado para buscar sem internet
     _offline = false; _cacheEm = new Date().toISOString();
@@ -133,7 +134,7 @@ window.Campo = (() => {
     const el = $('app-content');
     el.innerHTML = '<div class="loading-state"><div class="spin"></div><p>Carregando atividade em campo…</p></div>';
     try { await carregar(); } catch (_) { await carregarDoCache(); }
-    const gestor = _ehGestorOuAdmin();
+    const gestor = _acompanhaCampo();   // gestor, admin e focal (09/11/2026)
     const registra = _registraCampo();
     const aberta = registra ? await _aberta() : null;
     const fila = await _minhas();
@@ -185,9 +186,10 @@ window.Campo = (() => {
       <div class="cp-abas">
         <button class="chip ${_aba === 'painel' ? 'active' : ''}" onclick="Campo.aba('painel')">📊 Painel</button>
         <button class="chip ${_aba === 'registros' ? 'active' : ''}" onclick="Campo.aba('registros')">📋 Registros (${_registrosVisiveis(regs).length})</button>
+        <button class="chip ${_aba === 'campos' ? 'active' : ''}" onclick="Campo.aba('campos')">🌾 Campos (${(camposEquipe || []).length})</button>
       </div>
-      ${_filtrosHTML()}`;
-      html += _aba === 'painel' ? _painelHTML(regs) : _registrosHTML(regs, true);
+      ${_aba === 'campos' ? '' : _filtrosHTML()}`;
+      html += _aba === 'campos' ? _camposHTML() : _aba === 'painel' ? _painelHTML(regs) : _registrosHTML(regs, true);
     } else {
       html += _registrosHTML(lista.filter(a => a.user_id === user?.id), false);
     }
@@ -206,6 +208,7 @@ window.Campo = (() => {
             ${gestor && a.user_nome ? `<span class="subtipo-tag">👤 ${esc(a.user_nome)}</span>` : ''}
             ${a.em_campo ? '<span class="sync-pill pending">🟢 em campo</span>' : ''}
             ${a.fim_automatico ? '<span class="doc-tag outro" title="Fechada quando outro campo foi iniciado">fim automático</span>' : ''}
+            ${a.editado_em ? `<span class="doc-tag outro" title="Corrigido em ${_atG(dataBR(a.editado_em))} às ${_atG(horaBR(a.editado_em))}${a.editado_por_nome ? ` por ${_atG(a.editado_por_nome)}` : ''}">✏️ editado</span>` : ''}
           </div>
           <div class="nota-body">
             <div class="nota-empresa">${esc(_faz(a.fazenda))} · <b>${esc(a.campo)}</b></div>
@@ -215,8 +218,10 @@ window.Campo = (() => {
               ${a.fim ? (mf ? `<a class="link" href="${_atG(mf)}" target="_blank" rel="noopener">📍 fim${a.precisao_fim ? ` (±${a.precisao_fim} m)` : ''}</a>` : '<span>📍 fim sem localização</span>') : ''}
             </div>
           </div>
-          ${a.user_id === user?.id ? `<div class="nota-foot"><span></span><div class="nota-actions">
-            <button class="btn btn-sm btn-outline" data-id="${_atG(a.id)}" onclick="Campo.compartilharId(this.dataset.id)">📤 Compartilhar</button>
+          ${a.observacao ? `<div class="nota-cnpj" style="padding:0 14px 8px">📝 ${esc(a.observacao)}</div>` : ''}
+          ${a.user_id === user?.id || _acompanhaCampo() ? `<div class="nota-foot"><span></span><div class="nota-actions">
+            <button class="btn btn-sm btn-outline" data-id="${_atG(a.id)}" onclick="Campo.editar(this.dataset.id)">✏️ Editar</button>
+            ${a.user_id === user?.id ? `<button class="btn btn-sm btn-outline" data-id="${_atG(a.id)}" onclick="Campo.compartilharId(this.dataset.id)">📤 Compartilhar</button>` : ''}
           </div></div>` : ''}
         </div>`;
   }
@@ -413,7 +418,84 @@ window.Campo = (() => {
       </div>`;
   }
 
-  function aba(qual) { _aba = qual === 'registros' ? 'registros' : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } render(); }
+  function aba(qual) { _aba = ['registros', 'campos'].includes(qual) ? qual : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } render(); }
+
+  /* ── Cadastro de campos (09/11/2026) ────────────────────
+     Gestor, admin e focal cadastram fazenda + campo sem registrar atividade e corrigem o nome de um campo. A lista junta
+     o cadastro com o que a equipe já registrou (GET /atividades-campo/campos). Nada de dado na onclick: só o índice. */
+  function _camposHTML() {
+    const lst = (camposEquipe || []).slice().sort((a, b) => _semAcento(_faz(a.fazenda)).localeCompare(_semAcento(_faz(b.fazenda))) || String(a.campo).localeCompare(String(b.campo)));
+    _camposTela = lst;
+    const linha = (c, i) => `
+      <div class="campo-cad" data-busca="${_atG(_semAcento(`${c.fazenda} ${c.campo}`))}">
+        <div style="flex:1;min-width:0">
+          <div class="nota-name" style="overflow-wrap:anywhere">${esc(c.campo)}</div>
+          <div class="nota-cnpj">${esc(_faz(c.fazenda))} · ${c.usos ? `${c.usos} visita${c.usos === 1 ? '' : 's'}` : 'sem visita ainda'}${c.cadastrado ? ' · cadastrado' : ''}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" data-i="${i}" onclick="Campo.editarCampo(Number(this.dataset.i))">✏️ Editar</button>
+      </div>`;
+    return `
+      <div class="db-card">
+        <div class="db-card-title"><span>Campos (${lst.length})</span></div>
+        <p class="campo-sub" style="margin:0 0 10px">Cadastre o campo antes da visita: ele aparece no buscador de quem registra. Corrigir um nome errado vale para o buscador; os registros antigos só mudam se você escolher.</p>
+        <button class="btn btn-primary btn-full" onclick="Campo.novoCampoCadastro()">➕ Cadastrar campo</button>
+        <input class="inp" type="search" placeholder="🔎 Buscar fazenda ou campo" style="margin:10px 0" oninput="Campo.filtrarCampos(this.value)" autocomplete="off">
+        <div id="campo-cad-lista">${lst.length ? lst.map(linha).join('') : '<p class="campo-sub">Nenhum campo ainda.</p>'}</div>
+        <p id="campo-cad-vazio" class="campo-sub" style="display:none">Nenhum campo com esse nome.</p>
+      </div>`;
+  }
+  let _camposTela = [];
+  function filtrarCampos(txt) {
+    const q = _semAcento(txt).trim();
+    let n = 0;
+    document.querySelectorAll('#campo-cad-lista .campo-cad').forEach(el => {
+      const ok = !q || el.dataset.busca.includes(q);
+      el.style.display = ok ? '' : 'none';
+      if (ok) n++;
+    });
+    const v = document.getElementById('campo-cad-vazio');
+    if (v) v.style.display = n ? 'none' : '';
+  }
+  const _validaFaz = t => (t.trim() ? '' : 'Informe a fazenda.');
+  const _validaCampo = t => (t.trim() ? '' : 'Informe o código do campo.');
+  async function novoCampoCadastro() {
+    if (!_acompanhaCampo()) return;
+    const r = await pedirCampos({
+      titulo: 'Cadastrar campo', dica: 'Não registra atividade: só deixa o campo pronto no buscador da equipe.', confirmar: 'Cadastrar',
+      campos: [
+        { id: 'fazenda', rotulo: 'Fazenda', placeholder: 'ex.: São José', maxlength: 120, validar: _validaFaz },
+        { id: 'campo', rotulo: 'Campo', placeholder: 'ex.: BRCB147A-B', maxlength: 60, validar: _validaCampo },
+      ],
+    });
+    if (!r) return;
+    setLoading(true, 'Cadastrando…');
+    try { await sb.atividadesCampo.cadastrarCampo({ fazenda: r.fazenda.trim(), campo: r.campo.trim() }); toast('Campo cadastrado ✅'); }
+    catch (e) { toast(e.message || 'Não foi possível cadastrar', 'err'); }
+    finally { setLoading(false); }
+    _aba = 'campos';
+    await render();
+  }
+  async function editarCampo(i) {
+    const c = _camposTela[i];
+    if (!c || !_acompanhaCampo()) return;
+    const campos = [
+      { id: 'fazenda', rotulo: 'Fazenda', valor: c.fazenda, maxlength: 120, validar: _validaFaz },
+      { id: 'campo', rotulo: 'Campo', valor: c.campo, maxlength: 60, validar: _validaCampo },
+    ];
+    if (c.usos) campos.push({ id: 'registros', valor: 'nao', rotulo: c.usos === 1 ? 'O registro já feito neste campo' : `Os ${c.usos} registros já feitos neste campo`, opcoes: [
+      { valor: 'nao', rotulo: 'Deixar como estão' },
+      { valor: 'sim', rotulo: 'Corrigir também para o nome novo' },
+    ] });
+    const r = await pedirCampos({ titulo: 'Editar campo', dica: `${_faz(c.fazenda)} · ${c.campo}`, confirmar: 'Salvar', campos });
+    if (!r) return;
+    setLoading(true, 'Salvando…');
+    try {
+      const res = await sb.atividadesCampo.editarCampo({ fazenda_antiga: c.fazenda, campo_antigo: c.campo, fazenda: r.fazenda.trim(), campo: r.campo.trim(), corrigir_registros: r.registros === 'sim' });
+      toast(res?.registros_corrigidos ? `Campo corrigido ✅ (${res.registros_corrigidos} registro${res.registros_corrigidos === 1 ? '' : 's'})` : 'Campo corrigido ✅');
+    } catch (e) { toast(e.message || 'Não foi possível salvar', 'err'); }
+    finally { setLoading(false); }
+    await render();
+  }
   function filtrarFazenda(f) { _filtroFazenda = f || null; render(); }
   function filtrarDia(d) { _filtroDia = d || null; if (d) _aba = 'registros'; render(); }
   function filtrarPend(k) { _filtroPend = PEND[k] ? k : null; if (k) _aba = 'registros'; render(); }
@@ -555,7 +637,7 @@ window.Campo = (() => {
       await _guardarNoHistorico(dados.fazenda, dados.campo);
       if (loc.erro) toast('Registrado sem localização: ' + loc.erro, 'err', 6000);
       await render();
-      depois = { ...dados, lat_inicio: dados.lat, lng_inicio: dados.lng };
+      depois = { ...dados, inicio: dados.hora, lat_inicio: dados.lat, lng_inicio: dados.lng };
     } catch (e) { toast(e.message || 'Não foi possível registrar', 'err'); }
     finally { setLoading(false); }
     if (depois) await _oferecerCompartilhar('inicio', depois);
@@ -574,7 +656,7 @@ window.Campo = (() => {
       await _registrar({ tipo: 'finalizar', id: aberta.id, dados }, () => sb.atividadesCampo.finalizar(aberta.id, dados));
       if (loc.erro) toast('Registrado sem localização: ' + loc.erro, 'err', 6000);
       await render();
-      depois = { ...aberta, lat_fim: dados.lat, lng_fim: dados.lng };
+      depois = { ...aberta, fim: dados.hora, lat_fim: dados.lat, lng_fim: dados.lng };
     } catch (e) { toast(e.message || 'Não foi possível registrar', 'err'); }
     finally { setLoading(false); }
     if (depois) await _oferecerCompartilhar('fim', depois);
@@ -601,7 +683,14 @@ window.Campo = (() => {
   function _texto(qual, a) {
     const lat = qual === 'fim' ? a.lat_fim : a.lat_inicio, lng = qual === 'fim' ? a.lng_fim : a.lng_inicio;
     const m = mapa(lat, lng);
-    return [qual === 'fim' ? 'Fim das atividades' : 'Início das atividades', _faz(a.fazenda), String(a.campo || '').toUpperCase(), m ? `📍 ${m}` : null]
+    /* horário do registro (fuso de Brasília); no fim, também o início e a duração */
+    const quando = qual === 'fim' ? a.fim : a.inicio;
+    let hora = quando ? `🕒 ${dataBR(quando)} às ${horaBR(quando)}` : null;
+    if (hora && qual === 'fim' && a.inicio) {
+      const min = (new Date(a.fim) - new Date(a.inicio)) / 60000;
+      hora += ` (início ${horaBR(a.inicio)}${min >= 0 ? ` · ${hm(min)}` : ''})`;
+    }
+    return [qual === 'fim' ? 'Fim das atividades' : 'Início das atividades', _faz(a.fazenda), String(a.campo || '').toUpperCase(), hora, m ? `📍 ${m}` : null]
       .filter(Boolean).join('\n');
   }
   /* Pedido de 09/11/2026: com o OK do registro, já abrir o compartilhar (postar sozinho no grupo
@@ -624,6 +713,57 @@ window.Campo = (() => {
     }
     window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
   }
+  /* ── Corrigir registro (09/11/2026) ─────────────────────── */
+  /* Dono e gestor/admin corrigem fazenda, campo e observação; só gestor/admin a hora. Localização nunca muda.
+     A hora é digitada HH:MM no dia do início (fuso de Brasília); fim menor que o início = passou da meia-noite. */
+  const _hhmm = /^([01]?\d|2[0-3]):?([0-5]\d)$/;
+  const _isoBR = (dia, txt) => { const m = txt.match(_hhmm); return `${dia}T${m[1].padStart(2, '0')}:${m[2]}:00-03:00`; };
+  async function editar(id) {
+    const a = lista.find(x => x.id === id);
+    if (!a) return;
+    if (!navigator.onLine || !sb) { toast('Sem internet: corrija quando voltar a conexão', 'err'); return; }
+    const gestor = _acompanhaCampo();   // gestor, admin e focal corrigem a hora
+    const campos = [
+      { id: 'fazenda', rotulo: 'Fazenda', valor: a.fazenda, maxlength: 120, validar: t => t ? '' : 'Informe a fazenda' },
+      { id: 'campo', rotulo: 'Campo', valor: a.campo, maxlength: 60, validar: t => t ? '' : 'Informe o campo' },
+    ];
+    if (gestor) {
+      campos.push({ id: 'inicio', rotulo: `Hora do início (${dataBR(a.inicio)})`, valor: horaBR(a.inicio), inputmode: 'numeric', placeholder: 'HH:MM',
+        validar: t => _hhmm.test(t) ? '' : 'Hora do início no formato HH:MM' });
+      if (a.fim) campos.push({ id: 'fim', rotulo: 'Hora do fim', valor: horaBR(a.fim), inputmode: 'numeric', placeholder: 'HH:MM',
+        validar: t => _hhmm.test(t) ? '' : 'Hora do fim no formato HH:MM' });
+    }
+    campos.push({ id: 'observacao', rotulo: 'Observação (opcional)', valor: a.observacao || '', maxlength: 500, linhas: 2 });
+    const r = await pedirCampos({
+      titulo: '✏️ Corrigir registro',
+      dica: gestor ? 'A localização não muda. O registro fica marcado como editado.' : 'A localização e a hora não mudam (hora errada? peça ao gestor ou ao focal). O registro fica marcado como editado.',
+      confirmar: 'Salvar correção', campos,
+    });
+    if (!r) return;
+    const corpo = { fazenda: r.fazenda, campo: r.campo, observacao: r.observacao };
+    if (gestor) {
+      const dia = new Date(a.inicio).toLocaleDateString('sv-SE', { timeZone: FusoBR.TZ });
+      corpo.inicio = _isoBR(dia, r.inicio);
+      if (a.fim) {
+        let fim = _isoBR(dia, r.fim);
+        if (new Date(fim) < new Date(corpo.inicio)) {   // passou da meia-noite
+          const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1);
+          fim = _isoBR(d.toISOString().slice(0, 10), r.fim);
+        }
+        corpo.fim = fim;
+      }
+    }
+    setLoading(true, 'Salvando a correção…');
+    try {
+      const novo = await sb.atividadesCampo.editar(id, corpo);
+      const i = lista.findIndex(x => x.id === id);
+      if (i >= 0) lista[i] = { ...lista[i], ...novo };
+      toast(novo.editado_em ? 'Registro corrigido ✏️' : 'Nada mudou');
+      await render();
+    } catch (e) { toast(e.message || 'Não foi possível corrigir', 'err', 6000); }
+    finally { setLoading(false); }
+  }
+
   async function compartilharId(id) {
     const a = lista.find(x => x.id === id);
     if (!a) return;
@@ -633,7 +773,7 @@ window.Campo = (() => {
   /* ── Planilha do mês ───────────────────────────────────── */
   /* Só gestor/admin (pedido de 08/11/2026). Leva os filtros de colaborador e fazenda que estão na tela. */
   async function exportarExcel() {
-    if (!_ehGestorOuAdmin()) { toast('A planilha é do gestor', 'err'); return; }
+    if (!_acompanhaCampo()) { toast('A planilha é do gestor e do focal', 'err'); return; }
     const vis = _filtrados();
     if (!vis.length) { toast('Nada para exportar neste mês', 'err'); return; }
     const filtro = [
@@ -646,5 +786,5 @@ window.Campo = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, exportarExcel, _texto };
+  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto };
 })();

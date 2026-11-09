@@ -1827,7 +1827,13 @@ window.Gestor = (() => {
             <input type="checkbox" id="g-campo" style="width:22px;height:22px;flex:none;margin-top:1px" ${colab.atividade_campo ? 'checked' : ''}>
             <span>📍 Registra atividade em campo</span>
           </label>
-          <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mostra para a pessoa o botão de início e fim de atividade (fazenda, campo e localização no toque). Quem não tem não vê a função.</p>` : ''}
+          <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Mostra para a pessoa o botão de início e fim de atividade (fazenda, campo e localização no toque). Quem não tem não vê a função.</p>
+          ${colab.role === 'gestor' || colab.role === 'admin' ? '' : `
+          <label class="lbl" style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer">
+            <input type="checkbox" id="g-focal" style="width:22px;height:22px;flex:none;margin-top:1px" ${colab.focal_campo ? 'checked' : ''}>
+            <span>📡 Focal — acompanha a equipe em campo</span>
+          </label>
+          <p style="font-size:14px;color:var(--text2);line-height:1.4;margin-top:4px">Na atividade em campo, faz o mesmo que o gestor: vê quem está em campo e onde, todos os registros, painel e planilha, e cadastra e corrige campos. Fora disso continua colaborador (não vê despesas nem repasses da equipe).</p>`}` : ''}
           ${!podeEditar ? '' : `
           <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
             <label class="lbl">Situação</label>
@@ -1867,6 +1873,8 @@ window.Gestor = (() => {
       const dados  = { nome, role, regime };   // o servidor filtra o que este papel pode gravar
       const chkCampo = ov.querySelector('#g-campo');
       if (chkCampo) dados.atividade_campo = chkCampo.checked;
+      const chkFocal = ov.querySelector('#g-focal');
+      if (chkFocal) dados.focal_campo = chkFocal.checked;
       /* Entrar ou sair de "administrador" mexe em quem mantém o sistema:
          confirma antes, dos dois lados. */
       const quem = colab.nome || colab.email;
