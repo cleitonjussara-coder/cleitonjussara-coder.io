@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 593;
+const APP_BUILD = 594;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10042,10 +10042,14 @@ function _numeroDaNota(n) {
   if (k.length < 34 || k.length > 44 || !['55', '65'].includes(k.slice(20, 22))) return '';
   return k.slice(25, 34).replace(/^0+/, '');
 }
+function _placaDup(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function _motivoDuplicata(a, b) {
   const ka = _digitos(a.chave_nfce || ''), kb = _digitos(b.chave_nfce || '');
   if (ka.length === 44 && ka === kb) return 'chave';
   if (!_mesmoFornecedor(a, b)) return null;
+  /* placa diferente nos dois lados = veículos diferentes (09/11/2026, EPR Triângulo R$ 14,50). Mesma regra do servidor. */
+  const pla = _placaDup(a.placa), plb = _placaDup(b.placa);
+  if (pla && plb && pla !== plb) return null;
   const na = _numeroDaNota(a), nb = _numeroDaNota(b);
   /* Pedágio (09/11/2026): a mesma praça cobra a mesma tarifa várias vezes no dia — quem separa os recibos é o número (SEQ)
      e a data. Número igual em outro dia não é duplicata; número diferente nunca é. Mesma regra de DuplicataNota no servidor. */
@@ -10061,6 +10065,10 @@ function _motivoDuplicata(a, b) {
      A hora só é gravada em recibo (documento Outro): vale em qualquer categoria. */
   const ha = String(a.hora || '').slice(0, 5), hb = String(b.hora || '').slice(0, 5);
   if (/^\d{2}:\d{2}$/.test(ha) && /^\d{2}:\d{2}$/.test(hb) && ha !== hb) return null;
+  /* colaboradores diferentes (09/11/2026, pedido do Cleiton): fornecedor + dia + valor sozinho não junta notas de duas
+     pessoas — a mesma praça e o mesmo restaurante cobram o mesmo valor de quem passa. Chave e número continuam valendo
+     entre pessoas, e o Faturamento sem colaborador (dono nulo) continua conferido contra todos. Mesma regra do servidor. */
+  if (a.user_id && b.user_id && a.user_id !== b.user_id) return null;
   const va =Math.round(Number(a.valor) * 100), vb = Math.round(Number(b.valor) * 100);
   if (va > 0 && va === vb && a.data && a.data === b.data && a.tipo === b.tipo && !_chavesDiferentes(a, b)) return 'igual';
   return null;
@@ -10104,7 +10112,14 @@ function _candidataDoFormulario() {
     serie: ($('nf-serie').value || '').trim() || null,
     subtipo: $('nf-tipo').value === 'RDM' ? ($('nf-subtipo').value || null) : null,
     hora: _horaLimpa($('nf-hora').value),
+    placa: _placaDup($('nf-placa').value) || null,
+    user_id: _donoDoFormulario(),
   };
+}
+/* dono da nota no formulário, com a mesma conta de salvarNota; null = Faturamento sem colaborador */
+function _donoDoFormulario() {
+  if (_semColaboradorForcado) return null;
+  return $('nf-owner-id')?.value || _notaPorId($('nf-id').value || null)?.user_id || user?.id || null;
 }
 /* o mesmo recorte, a partir de uma nota já gravada (restaurar da lixeira) */
 function _candidataDeNota(n) {
@@ -10123,6 +10138,7 @@ function _candidataDeNota(n) {
     subtipo: n.subtipo || null,
     hora: _horaLimpa(n.hora),
     placa: String(n.placa || '').trim() || null,
+    user_id: n.user_id || null,
   };
 }
 /* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */
@@ -10220,6 +10236,8 @@ function _avisarDuplicataAposLeitura() {
     chave_nfce: $('nf-chave').value, qr_url: $('nf-qr-url').value, numero: $('nf-numero').value, serie: $('nf-serie').value,
     subtipo: $('nf-tipo').value === 'RDM' ? $('nf-subtipo').value : null,
     hora: $('nf-hora').value,
+    placa: $('nf-placa').value,
+    user_id: _donoDoFormulario(),
   };
   const d = _acharDuplicata(cand, $('nf-id').value || null);
   if (!d) { _avisarDuplicataDaEquipeAposLeitura().catch(() => {}); return false; }   // as do aparelho não casaram: confere a equipe/Faturamento
