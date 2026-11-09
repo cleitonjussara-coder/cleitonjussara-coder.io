@@ -135,7 +135,9 @@ window.OCR = (() => {
     /* Recibo da WAY 153 (05/11/2026): o número é o "DFE N: JLEE546J82JK", letras e números sem padrão fixo.
        Aqui O e 0 não são corrigidos: o código não é hexadecimal, então não há como saber qual dos dois é. */
     if (!r.numero) {
-      const dfe = oneLine.match(/\bDFE\s*N[º°oO]?\.?\s*[:.]?\s*([0-9A-Z]{6,20})\b/i);
+      /* Rota dos Grãos (09/11/2026, caso do Romário): "ID RECIBO/DFE:PKPM242B8334/", sem o "N". Sem "N" exige os dois-pontos:
+         o site impresso no rodapé ("dfe.rotadosgraos.com.br") não pode virar número. */
+      const dfe = oneLine.match(/\bDFE\s*(?:N[º°oO]?\.?\s*[:.]?|:)\s*([0-9A-Z]{6,20})\b/i);
       if (dfe) r.numero = dfe[1].toUpperCase();
     }
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
@@ -187,6 +189,8 @@ window.OCR = (() => {
       /\d{2}\.?\d{3}\.?\d{3}[/1]\d{4}[-]?\d{2}/,
       /CNPJ[:\s]*(\d{2}\.?\d{3}\.?\d{3}[/1]\d{4}[-]?\d{2})/i,
       /\b(\d{2}\s?\d{3}\s?\d{3}\s?[/1]\s?\d{4}\s?[-]?\s?\d{2})\b/,
+      /* CNPJ partido na quebra de linha ("41.315.638/0001" e "-07" embaixo, recibo da Rota dos Grãos): só com pontos, barra e hífen */
+      /\b(\d{2}\.\d{3}\.\d{3}\/\d{4}\s+-\s?\d{2})\b/,
     ];
     for (const p of cnpjPats) {
       const g = new RegExp(p.source, p.flags.replace('g','') + 'g');

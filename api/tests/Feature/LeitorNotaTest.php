@@ -243,6 +243,8 @@ class LeitorNotaTest extends TestCase
         $this->assertSame("123456", $this->leitor()->validar(json_encode(["numero" => "123456", "dfe" => "JLEE546J82JK"]))["numero"]);
         $this->assertNull($this->leitor()->validar(json_encode(["dfe" => "AB-12"]))["numero"]);
         $this->assertNull($this->leitor()->validar(json_encode(["numero" => "JLEE546J82JK"]))["numero"]);
+        /* Rota dos Grãos (caso do Romário): "ID RECIBO/DFE:PKPM242B8334/" — a barra do fim sai */
+        $this->assertSame("PKPM242B8334", $this->leitor()->validar(json_encode(["dfe" => "PKPM242B8334/"]))["numero"]);
     }
 
     public function test_chave_de_nfse_de_50_digitos_so_com_estrutura_valida(): void

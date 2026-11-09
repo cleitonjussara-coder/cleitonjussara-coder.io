@@ -45,7 +45,7 @@ class LeitorNota
         .'data = data de EMISSÃO no formato AAAA-MM-DD. '
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
-        .'dfe = somente em recibo de pedágio que traga "DFE N:" (ex.: "DFE N: JLEE546J82JK"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
+        .'dfe = somente em recibo de pedágio que traga "DFE N:" ou "ID RECIBO/DFE:" (ex.: "DFE N: JLEE546J82JK", "ID RECIBO/DFE:PKPM242B8334/" → "PKPM242B8334"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
         .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
         .'hora = somente em recibo de pedágio: o horário da passagem impresso ao lado da data (ex.: "04.11.2026 09:44:18" → "09:44:18"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
         .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
@@ -179,7 +179,8 @@ class LeitorNota
             ? $seq
             : $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
         /* recibo da WAY 153: o "DFE N:" vem em campo próprio, para o numero seguir recusando letras nas outras notas */
-        $dfe = is_string($j['dfe'] ?? null) ? strtoupper(trim($j['dfe'])) : '';
+        /* Rota dos Grãos imprime "ID RECIBO/DFE:PKPM242B8334/": a barra do fim não faz parte do código */
+        $dfe = is_string($j['dfe'] ?? null) ? strtoupper(trim($j['dfe'], " \t\n\r\0\x0B/")) : '';
         if ($out['numero'] === null && preg_match('/^[0-9A-Z]{6,20}$/', $dfe)) {
             $out['numero'] = $dfe;
         }
