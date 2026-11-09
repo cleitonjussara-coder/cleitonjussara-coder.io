@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=596">
+  <link rel="manifest" href="manifest.json?v=597">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1810,6 +1810,21 @@ button.arq-lin-abrir:active{background:rgba(201,234,98,.16)}
 .form-hdr h3{flex:1;font-size:19px;font-weight:800}
 .form-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 .form-body::-webkit-scrollbar{display:none}
+/* Tela dividida da nota (09/11/2026): gestor/admin corrige olhando o anexo. Celular: nota em cima, dados embaixo;
+   tela larga: nota à esquerda, dados à direita. Cada lado rola sozinho. */
+.nf-corpo{flex:1;min-height:0;display:flex;flex-direction:column}
+.nf-acoes-topo{display:flex;flex-wrap:wrap;gap:8px}
+.nf-lado{flex:0 0 44%;min-height:0;min-width:0;display:flex;flex-direction:column;background:#1d2126;border-bottom:3px solid var(--primary)}
+.nf-lado-barra{display:flex;gap:6px;padding:6px 8px;flex-shrink:0;overflow-x:auto}
+.nf-lado-barra .btn{background:#fff;min-height:36px;padding:4px 10px;font-size:15px;flex-shrink:0;white-space:nowrap}
+.nf-lado-vista{flex:1;min-height:0;min-width:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex}
+.nf-lado-vista img{display:block;margin:auto;max-width:none;transform-origin:center;transition:width .15s}
+.nf-lado-vista .nf-lado-msg{margin:auto;padding:20px;color:#e9edf1;text-align:center;font-size:16px;line-height:1.45}
+@media (min-width:900px){
+  .nf-corpo.dividida{flex-direction:row}
+  .nf-corpo.dividida .nf-lado{flex:1 1 55%;border-bottom:0;border-right:3px solid var(--primary)}
+  .nf-corpo.dividida .form-body{flex:0 1 45%;min-width:380px}
+}
 .field-row{display:flex;gap:10px}
 .field-row .field{flex:1;min-width:0}
 .field{display:flex;flex-direction:column;gap:4px}
@@ -2430,7 +2445,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=596" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=597" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2691,10 +2706,26 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
             style="background:#fff;color:var(--primary);border-color:#fff"
             onclick="salvarNota()">Salvar</button>
   </div>
+  <!-- 09/11/2026: tela dividida do gestor/admin — a nota de um lado, os dados do outro (js/app.js: _ladoNota*) -->
+  <div class="nf-corpo">
+  <div id="nf-lado" class="nf-lado" style="display:none">
+    <div class="nf-lado-barra">
+      <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaZoom(-1)" aria-label="Diminuir">－</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaZoom(0)" aria-label="Tamanho da tela">Ajustar</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaZoom(1)" aria-label="Aumentar">＋</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaGirar()" aria-label="Girar">⟳ Girar</button>
+      <button type="button" class="btn btn-sm btn-outline" id="nf-lado-abrir" onclick="verFoto($('nf-id').value)" aria-label="Abrir o anexo inteiro">⤢ Abrir</button>
+    </div>
+    <div class="nf-lado-vista" id="nf-lado-vista"></div>
+  </div>
   <div class="form-body">
     <div id="captura-badge" class="captura-badge">✏️ Manual</div>
-    <button type="button" class="btn btn-sm btn-outline" id="nf-btn-historico" style="display:none;align-self:flex-start"
-            onclick="abrirHistoricoNota($('nf-id').value)">🕘 Histórico</button>
+    <div class="nf-acoes-topo">
+      <button type="button" class="btn btn-sm btn-outline" id="nf-btn-historico" style="display:none"
+              onclick="abrirHistoricoNota($('nf-id').value)">🕘 Histórico</button>
+      <button type="button" class="btn btn-sm btn-outline" id="nf-btn-lado" style="display:none"
+              onclick="alternarLadoNota()">◫ Ver nota ao lado</button>
+    </div>
     <div id="gestor-edit-banner" class="nota-gestor-banner" style="display:none">
       <span class="nota-gestor-icon">🛡️</span>
       <div>
@@ -2884,6 +2915,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <input type="hidden" id="nf-mes">
     <input type="hidden" id="nf-ano">
   </div>
+  </div><!-- /nf-corpo -->
 </div>
 
 <!-- ═══════════ REPASSE FORM ═══════════ -->
@@ -3159,42 +3191,42 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=596"></script>
-<script defer src="js/db.js?v=596"></script>
-<script defer src="js/nfce.js?v=596"></script>
-<script defer src="js/sefaz.js?v=596"></script>
-<script defer src="js/brasilapi.js?v=596"></script>
-<script defer src="js/ocr.js?v=596"></script>
-<script defer src="js/scanner.js?v=596"></script>
-<script defer src="js/foto-branca.js?v=596"></script>
-<script defer src="js/recorte.js?v=596"></script>
-<script defer src="js/excel.js?v=596"></script>
-<script defer src="js/gestor.js?v=596"></script>
-<script defer src="js/frota.js?v=596"></script>
-<script defer src="js/frota-painel.js?v=596"></script>
-<script defer src="js/frota-planilha.js?v=596"></script>
-<script defer src="js/ponto.js?v=596"></script>
-<script defer src="js/campo.js?v=596"></script>
-<script defer src="js/rastreio.js?v=596"></script>
-<script defer src="js/repasses-equipe.js?v=596"></script>
-<script defer src="js/fechamento.js?v=596"></script>
-<script defer src="js/busca.js?v=596"></script>
-<script defer src="js/gdrive.js?v=596"></script>
+<script defer src="js/api.js?v=597"></script>
+<script defer src="js/db.js?v=597"></script>
+<script defer src="js/nfce.js?v=597"></script>
+<script defer src="js/sefaz.js?v=597"></script>
+<script defer src="js/brasilapi.js?v=597"></script>
+<script defer src="js/ocr.js?v=597"></script>
+<script defer src="js/scanner.js?v=597"></script>
+<script defer src="js/foto-branca.js?v=597"></script>
+<script defer src="js/recorte.js?v=597"></script>
+<script defer src="js/excel.js?v=597"></script>
+<script defer src="js/gestor.js?v=597"></script>
+<script defer src="js/frota.js?v=597"></script>
+<script defer src="js/frota-painel.js?v=597"></script>
+<script defer src="js/frota-planilha.js?v=597"></script>
+<script defer src="js/ponto.js?v=597"></script>
+<script defer src="js/campo.js?v=597"></script>
+<script defer src="js/rastreio.js?v=597"></script>
+<script defer src="js/repasses-equipe.js?v=597"></script>
+<script defer src="js/fechamento.js?v=597"></script>
+<script defer src="js/busca.js?v=597"></script>
+<script defer src="js/gdrive.js?v=597"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=596"></script>
+<script defer src="js/svelte-ajuda.js?v=597"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=596"></script>
+<script defer src="js/svelte-historico.js?v=597"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=596"></script>
+<script defer src="js/svelte-arquivos.js?v=597"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=596"></script>
-<script defer src="js/app.js?v=596"></script>
-<script defer src="js/instalar.js?v=596"></script>
+<script defer src="js/svelte-perfil.js?v=597"></script>
+<script defer src="js/app.js?v=597"></script>
+<script defer src="js/instalar.js?v=597"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=596').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=597').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

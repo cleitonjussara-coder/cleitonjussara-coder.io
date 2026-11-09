@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 596;
+const APP_BUILD = 597;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9392,7 +9392,148 @@ async function abrirFormNota(dados = {}) {
       + ((_pedido.motivos || []).some(_ehMotivoFoto) ? 'Tire a foto de novo mostrando a nota inteira, com as bordas do papel, e salve.' : 'Corrija e salve.');
   }
   window.Fechamento?.abrirForm(dados);   // 06/11/2026: nota de mês fechado abre sem Salvar
+  _prepararLadoNota(dados);
 }
+
+/* ── Tela dividida (09/11/2026, pedido do Cleiton) ──────────────────────────
+   Gestor/admin corrigindo uma nota vê o anexo ao lado dos dados, sem abrir e fechar o visualizador. A escolha fica
+   lembrada no aparelho: quem ligou uma vez já abre a próxima nota dividida. O anexo vem do aparelho (fotoBlob) ou do
+   servidor; PDF mostra a 1ª página (⤢ Abrir mostra o arquivo inteiro). Nada disso grava na nota. */
+const _LADO_PREF = 'nf-lado-a-lado';
+const _lado = { id: null, url: null, zoom: 1, giro: 0, seq: 0 };
+const _ladoPrefLigada = () => { try { return localStorage.getItem(_LADO_PREF) === '1'; } catch (_) { return false; } };
+
+function _prepararLadoNota(dados) {
+  const pode = _ehGestorOuAdmin() && !!dados?.id;
+  const btn = $('nf-btn-lado');
+  if (btn) btn.style.display = pode ? '' : 'none';
+  const topo = btn?.parentElement;
+  if (topo) topo.style.display = [...topo.children].some(b => b.style.display !== 'none') ? '' : 'none';
+  _fecharLadoNota();
+  if (pode && _ladoPrefLigada()) _abrirLadoNota(dados.id);
+}
+
+function alternarLadoNota() {
+  const ligar = $('nf-lado').style.display === 'none';
+  try { localStorage.setItem(_LADO_PREF, ligar ? '1' : '0'); } catch (_) {}
+  if (ligar) _abrirLadoNota($('nf-id').value); else _fecharLadoNota();
+}
+
+function _fecharLadoNota() {
+  const lado = $('nf-lado');
+  if (!lado) return;
+  lado.style.display = 'none';
+  lado.parentElement.classList.remove('dividida');
+  $('nf-lado-vista').innerHTML = '';
+  if (_lado.url) URL.revokeObjectURL(_lado.url);
+  Object.assign(_lado, { id: null, url: null, original: null, zoom: 1, giro: 0, seq: _lado.seq + 1 });
+  const btn = $('nf-btn-lado'); if (btn) btn.textContent = '◫ Ver nota ao lado';
+}
+
+async function _abrirLadoNota(id) {
+  const lado = $('nf-lado'), vista = $('nf-lado-vista');
+  if (!lado || !id) return;
+  lado.style.display = 'flex';
+  lado.parentElement.classList.add('dividida');
+  $('nf-btn-lado').textContent = '✕ Fechar nota ao lado';
+  const seq = ++_lado.seq;
+  _lado.id = id;
+  const msg = t => { if (seq === _lado.seq) vista.innerHTML = `<div class="nf-lado-msg">${t}</div>`; };
+  msg('Carregando o anexo…');
+  const blob = await _blobDoAnexoDaNota(id);
+  if (seq !== _lado.seq) return;                                   // fechou ou trocou de nota enquanto baixava
+  if (!blob) { msg('Esta nota não tem anexo para mostrar.' + (navigator.onLine ? '' : '<br>Sem internet: o anexo fica no servidor.')); return; }
+  await _mostrarBlobNoLado(blob, seq);
+}
+
+/* anexo da nota em blob: o que está no formulário (aparelho) primeiro, depois o servidor */
+async function _blobDoAnexoDaNota(id) {
+  if (fotoBlob && $('nf-id').value === id) return fotoBlob;
+  const local = await DB.getFotoLocal(id).catch(() => null);
+  if (local?.blob) return local.blob;
+  const n = _notaPorId(id);
+  if (!n?.foto_path || !sb || !navigator.onLine) return null;
+  try { return await sb.fotos.download(n.foto_path); } catch (_) {}
+  try {
+    const url = await sb.fotos.url(n.foto_path);
+    if (url) { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return await r.blob(); }
+  } catch (_) {}
+  return null;
+}
+
+async function _mostrarBlobNoLado(blob, seq) {
+  const vista = $('nf-lado-vista');
+  const tipo = String(blob.type || '').toLowerCase();
+  const ext = _extDoArquivo(blob) || '';
+  let img = blob;
+  if (tipo.includes('xml') || ext === 'xml') {
+    vista.innerHTML = '<div class="nf-lado-msg">🧾 Anexo em XML (NF-e): não tem imagem.<br>Use ⤢ Abrir para ver o arquivo.</div>';
+    return;
+  }
+  if (tipo.includes('pdf') || ext === 'pdf') {
+    vista.innerHTML = '<div class="nf-lado-msg">Abrindo o PDF…</div>';
+    try { img = (await _renderPdfPagina1(blob)).blob; }
+    catch (_) { if (seq === _lado.seq) vista.innerHTML = '<div class="nf-lado-msg">📄 Não deu para mostrar o PDF aqui.<br>Use ⤢ Abrir.</div>'; return; }
+  }
+  if (seq !== _lado.seq) return;
+  if (_lado.url) URL.revokeObjectURL(_lado.url);
+  _lado.url = URL.createObjectURL(img);
+  _lado.zoom = 1; _lado.giro = 0;
+  _lado.original = img;
+  _pintarImagemLado();
+}
+
+function _pintarImagemLado() {
+  const vista = $('nf-lado-vista');
+  vista.innerHTML = `<img id="nf-lado-img" alt="Anexo da nota" src="${_lado.url}">`;
+  const el = $('nf-lado-img');
+  el.onload = () => _aplicarZoomLado();
+  el.onerror = () => { vista.innerHTML = '<div class="nf-lado-msg">Não deu para mostrar este anexo aqui.<br>Use ⤢ Abrir.</div>'; };
+}
+
+function _aplicarZoomLado() {
+  const el = $('nf-lado-img'), vista = $('nf-lado-vista');
+  if (!el || !el.naturalWidth) return;
+  /* "Ajustar" = largura da área (a nota de cupom é comprida: lê-se rolando para baixo) */
+  const base = Math.min(vista.clientWidth - 8, el.naturalWidth * 2);
+  el.style.width = Math.max(80, Math.round(base * _lado.zoom)) + 'px';
+}
+
+function _ladoNotaZoom(dir) {
+  if (!$('nf-lado-img')) return;
+  _lado.zoom = dir === 0 ? 1 : Math.min(5, Math.max(0.4, _lado.zoom * (dir > 0 ? 1.35 : 1 / 1.35)));
+  _aplicarZoomLado();
+}
+
+/* gira de verdade (canvas) para a rolagem acompanhar a imagem deitada */
+async function _ladoNotaGirar() {
+  if (!_lado.original || !$('nf-lado-img')) return;
+  const seq = _lado.seq;
+  try {
+    const bmp = await createImageBitmap(_lado.original);
+    _lado.giro = (_lado.giro + 90) % 360;
+    const deitada = _lado.giro % 180 !== 0;
+    const c = document.createElement('canvas');
+    c.width = deitada ? bmp.height : bmp.width; c.height = deitada ? bmp.width : bmp.height;
+    const ctx = c.getContext('2d');
+    ctx.translate(c.width / 2, c.height / 2);
+    ctx.rotate(_lado.giro * Math.PI / 180);
+    ctx.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+    const girada = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    if (!girada || seq !== _lado.seq) return;
+    if (_lado.url) URL.revokeObjectURL(_lado.url);
+    _lado.url = URL.createObjectURL(girada);
+    _pintarImagemLado();
+  } catch (_) { toast('Não deu para girar este anexo', 'err'); }
+}
+
+/* trocou o anexo no formulário com a tela dividida aberta: mostra o novo */
+function _ladoNotaAnexoTrocado() {
+  if (!_lado.id || !fotoBlob || $('nf-lado')?.style.display === 'none') return;
+  const seq = ++_lado.seq;
+  _mostrarBlobNoLado(fotoBlob, seq);
+}
+window.addEventListener('resize', () => { if (_lado.id) _aplicarZoomLado(); });
 
 /* edição de nota com PDF salvo: renderiza a 1ª página em background p/ preview */
 async function _renderizarPreviewPdfAsync(blob) {
@@ -9459,6 +9600,7 @@ function fecharFormNota() {
   _formEsperandoLeitura = false;
   _pagamentoForcado = null;
   _semColaboradorForcado = false;
+  _fecharLadoNota();
   $('nota-form-overlay').style.display = 'none';
 }
 
@@ -9954,6 +10096,7 @@ function atualizarPreviewFoto(url) {
   $('btn-foto-label').textContent = '📷 Trocar foto';
   _atualizarBotaoLerChave();
   _atualizarDocumentoAuto();   // anexo XML/PDF x foto decide NF-e x DANFE
+  _ladoNotaAnexoTrocado();     // tela dividida aberta: mostra o anexo novo
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:

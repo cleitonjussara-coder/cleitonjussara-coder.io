@@ -181,6 +181,13 @@
       </ul>
     </div>
 
+    <div class="ajuda-sec ajuda-gestor">
+      <h4>◫ Ver a nota ao lado (09/11/2026)</h4>
+      <p>Ao <b>editar ou corrigir uma nota</b>, o gestor e o admin têm o botão <b>◫ Ver nota ao lado</b>: a tela se divide e o <b>anexo da nota</b> fica visível enquanto você confere e corrige os dados. No computador a nota fica à <b>esquerda</b> e os dados à <b>direita</b>; no celular a nota fica <b>em cima</b> e os dados embaixo. Cada parte rola sozinha.</p>
+      <p>Na barra da nota: <b>－</b> e <b>＋</b> mudam o tamanho, <b>Ajustar</b> volta a caber na largura, <b>⟳ Girar</b> endireita a foto deitada e <b>⤢ Abrir</b> mostra o anexo inteiro (com Baixar e Compartilhar). PDF aparece pela <b>1ª página</b>; XML não tem imagem, use ⤢ Abrir.</p>
+      <p>O aparelho <b>lembra a escolha</b>: ligou uma vez, as próximas notas já abrem divididas, até você tocar em <b>✕ Fechar nota ao lado</b>. Girar e aumentar só mudam a visualização, <b>nada é gravado na nota</b>. O anexo que está no servidor precisa de internet para aparecer.</p>
+    </div>
+
     <div class="ajuda-sec">
       <h4>🕘 Histórico da nota (06/11/2026)</h4>
       <p>No cartão de cada nota, e na tela de editar, o botão <b>🕘 Histórico</b> mostra <b>quem mudou o quê</b>: dia, hora, nome, papel e cada campo com o valor de <b>antes → depois</b>. Entram lançamento, edição, troca de grupo, lixeira, restauração, troca de anexo, troca de colaborador e exclusão definitiva. Do anexo fica só o aviso de que foi trocado.</p>
