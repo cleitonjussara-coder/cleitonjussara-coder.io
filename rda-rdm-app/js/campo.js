@@ -37,6 +37,10 @@ window.Campo = (() => {
   let camposEquipe = null; // GET /atividades-campo/campos: fazendas e campos já registrados (buscador)
   const KEY_CAMPOS = 'campo_campos_equipe';
   let equipe = [];         // gestor: último registro de cada pessoa ligada
+  /* Lixeira (09/11/2026): registros apagados (os meus; do gestor/focal, de todos) e campos apagados (gestor/focal) */
+  let lixeira = [], lixeiraCampos = [];
+  const KEY_OCULTOS = 'campo_campos_ocultos';
+  let _ocultos = null;     // chaves de campos na lixeira: somem também do histórico do aparelho
   let _offline = false, _cacheEm = null;
   let _filtroPessoa = null;
   /* Planilha dinâmica do gestor (08/11/2026) */
@@ -104,16 +108,25 @@ window.Campo = (() => {
     if (!sb || !navigator.onLine) throw new Error('offline');
     await subirFila();
     const gestor = _acompanhaCampo();   // gestor, admin e focal (09/11/2026)
-    const [l, e, c] = await Promise.all([sb.atividadesCampo.list(_periodo()), gestor ? sb.atividadesCampo.equipe() : Promise.resolve([]),
-      _registraCampo() || gestor ? sb.atividadesCampo.campos().catch(() => null) : Promise.resolve(null)]);
-    lista = l || []; equipe = e || [];
-    if (c) { camposEquipe = c; try { await DB.setMeta(KEY_CAMPOS, c); } catch (_) {} }   // guardado para buscar sem internet
+    const [l, e, c, lx, lxc] = await Promise.all([sb.atividadesCampo.list(_periodo()), gestor ? sb.atividadesCampo.equipe() : Promise.resolve([]),
+      _registraCampo() || gestor ? sb.atividadesCampo.campos().catch(() => null) : Promise.resolve(null),
+      sb.atividadesCampo.lixeira().catch(() => []),                                    // lixeira (09/11/2026): API antiga devolve erro → vazia
+      gestor ? sb.atividadesCampo.lixeiraCampos().catch(() => []) : Promise.resolve([])]);
+    lista = l || []; equipe = e || []; lixeira = lx || []; lixeiraCampos = lxc || [];
+    if (c) await _guardarCampos(c);   // guardado para buscar sem internet
     _offline = false; _cacheEm = new Date().toISOString();
-    try { await DB.setMeta(KEY_CACHE(), { lista, equipe, em: _cacheEm }); } catch (_) {}
+    try { await DB.setMeta(KEY_CACHE(), { lista, equipe, lixeira, lixeiraCampos, em: _cacheEm }); } catch (_) {}
+  }
+  /* O servidor manda também os campos da lixeira, marcados: saem da lista e escondem o mesmo nome no histórico do aparelho. */
+  async function _guardarCampos(c) {
+    camposEquipe = c.filter(x => !x.apagado);
+    _ocultos = new Set(c.filter(x => x.apagado).map(x => _chave(x.fazenda, x.campo)));
+    try { await DB.setMeta(KEY_CAMPOS, camposEquipe); await DB.setMeta(KEY_OCULTOS, [..._ocultos]); } catch (_) {}
   }
   async function carregarDoCache() {
     const c = await DB.getMeta(KEY_CACHE()).catch(() => null);
-    lista = c?.lista || []; equipe = c?.equipe || []; _cacheEm = c?.em || null; _offline = true;
+    lista = c?.lista || []; equipe = c?.equipe || []; lixeira = c?.lixeira || []; lixeiraCampos = c?.lixeiraCampos || [];
+    _cacheEm = c?.em || null; _offline = true;
   }
 
   /* Atividade aberta AGORA (servidor + fila): o que a fila iniciou e ainda não finalizou vale mais. */
@@ -138,7 +151,8 @@ window.Campo = (() => {
     const el = $('app-content'), seq = ++_seq, chave = KEY_CACHE();
     const c = navigator.onLine ? await DB.getMeta(chave).catch(() => null) : null;
     if (c) {
-      lista = c.lista || []; equipe = c.equipe || []; _cacheEm = c.em || null; _offline = false; _atualizando = true;
+      lista = c.lista || []; equipe = c.equipe || []; lixeira = c.lixeira || []; lixeiraCampos = c.lixeiraCampos || [];
+      _cacheEm = c.em || null; _offline = false; _atualizando = true;
       if (!camposEquipe) { try { camposEquipe = (await DB.getMeta(KEY_CAMPOS)) || null; } catch (_) {} }
       await _desenhar();
     } else {
@@ -208,11 +222,15 @@ window.Campo = (() => {
         <button class="chip ${_aba === 'painel' ? 'active' : ''}" onclick="Campo.aba('painel')">📊 Painel</button>
         <button class="chip ${_aba === 'registros' ? 'active' : ''}" onclick="Campo.aba('registros')">📋 Registros (${_registrosVisiveis(regs).length})</button>
         <button class="chip ${_aba === 'campos' ? 'active' : ''}" onclick="Campo.aba('campos')">🌾 Campos (${(camposEquipe || []).length})</button>
+        <button class="chip ${_aba === 'lixeira' ? 'active' : ''}" onclick="Campo.aba('lixeira')">🗑 Lixeira (${lixeira.length + lixeiraCampos.length})</button>
       </div>
-      ${_aba === 'campos' ? '' : _filtrosHTML()}`;
-      html += _aba === 'campos' ? _camposHTML() : _aba === 'painel' ? _painelHTML(regs) : _registrosHTML(regs, true);
+      ${_aba === 'campos' || _aba === 'lixeira' ? '' : _filtrosHTML()}`;
+      html += _aba === 'campos' ? _camposHTML() : _aba === 'lixeira' ? _lixeiraHTML(true) : _aba === 'painel' ? _painelHTML(regs) : _registrosHTML(regs, true);
+    } else if (_aba === 'lixeira') {
+      html += _lixeiraHTML(false);
     } else {
       html += _registrosHTML(lista.filter(a => a.user_id === user?.id), false);
+      if (lixeira.length) html += `<button class="btn btn-outline btn-full" style="margin-top:10px" onclick="Campo.aba('lixeira')">🗑 Lixeira (${lixeira.length})</button>`;
     }
     html += '</div>';
     el.innerHTML = html;
@@ -220,14 +238,23 @@ window.Campo = (() => {
 
   const _faz = f => { f = String(f || '').trim(); return /^faz/i.test(f) ? f : `Faz. ${f}`; };
 
-  function _cartao(a, gestor) {
+  /* naLixeira (09/11/2026): o cartão do registro apagado troca Editar/Apagar por Restaurar e, para gestor/admin, Apagar de vez. */
+  function _cartao(a, gestor, naLixeira = false) {
     const mi = mapa(a.lat_inicio, a.lng_inicio), mf = mapa(a.lat_fim, a.lng_fim);
+    const id = _atG(a.id);
+    const acoes = naLixeira ? `
+            <button class="btn btn-sm btn-outline" data-id="${id}" onclick="Campo.restaurar(this.dataset.id)">♻️ Restaurar</button>
+            ${_ehGestorOuAdmin() ? `<button class="btn btn-sm btn-danger-outline" data-id="${id}" onclick="Campo.apagarDeVez(this.dataset.id)">❌ Apagar de vez</button>` : ''}` : `
+            <button class="btn btn-sm btn-outline" data-id="${id}" onclick="Campo.editar(this.dataset.id)">✏️ Editar</button>
+            ${a.user_id === user?.id ? `<button class="btn btn-sm btn-outline" data-id="${id}" onclick="Campo.compartilharId(this.dataset.id)">📤 Compartilhar</button>` : ''}
+            <button class="btn btn-sm btn-outline" data-id="${id}" onclick="Campo.apagar(this.dataset.id)" aria-label="Apagar registro">🗑 Apagar</button>`;
     return `
-        <div class="nota-card">
+        <div class="nota-card"${naLixeira ? ' style="opacity:.85"' : ''}>
           <div class="nota-head">
             <span class="tipo-badge tipo-RDA">${dataBR(a.inicio)}</span>
             ${gestor && a.user_nome ? `<span class="subtipo-tag">👤 ${esc(a.user_nome)}</span>` : ''}
-            ${a.em_campo ? '<span class="sync-pill pending">🟢 em campo</span>' : ''}
+            ${naLixeira && a.apagado_em ? `<span class="doc-tag outro">🗑 apagado ${esc(dataBR(a.apagado_em))}${a.apagado_por_nome ? ` por ${esc(a.apagado_por_nome)}` : ''}</span>` : ''}
+            ${a.em_campo && !naLixeira ? '<span class="sync-pill pending">🟢 em campo</span>' : ''}
             ${a.fim_automatico ? '<span class="doc-tag outro" title="Fechada quando outro campo foi iniciado">fim automático</span>' : ''}
             ${a.editado_em ? `<span class="doc-tag outro" title="Corrigido em ${_atG(dataBR(a.editado_em))} às ${_atG(horaBR(a.editado_em))}${a.editado_por_nome ? ` por ${_atG(a.editado_por_nome)}` : ''}">✏️ editado</span>` : ''}
           </div>
@@ -240,11 +267,43 @@ window.Campo = (() => {
             </div>
           </div>
           ${a.observacao ? `<div class="nota-cnpj" style="padding:0 14px 8px">📝 ${esc(a.observacao)}</div>` : ''}
-          ${a.user_id === user?.id || _acompanhaCampo() ? `<div class="nota-foot"><span></span><div class="nota-actions">
-            <button class="btn btn-sm btn-outline" data-id="${_atG(a.id)}" onclick="Campo.editar(this.dataset.id)">✏️ Editar</button>
-            ${a.user_id === user?.id ? `<button class="btn btn-sm btn-outline" data-id="${_atG(a.id)}" onclick="Campo.compartilharId(this.dataset.id)">📤 Compartilhar</button>` : ''}
+          ${a.user_id === user?.id || _acompanhaCampo() ? `<div class="nota-foot"><span></span><div class="nota-actions">${acoes}
           </div></div>` : ''}
         </div>`;
+  }
+
+  /* Lixeira (09/11/2026): registros apagados e, para gestor/admin/focal, campos apagados. Nada some sozinho daqui. */
+  function _lixeiraHTML(gestor) {
+    const deVez = _ehGestorOuAdmin();
+    let html = `
+      <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>🗑 Registros apagados (${lixeira.length})</span>
+        ${gestor ? '' : `<button class="btn btn-sm btn-outline" onclick="Campo.aba('registros')">‹ Meus registros</button>`}
+      </div>
+      <p class="campo-sub" style="margin:0 0 10px">${deVez
+        ? 'Apagado vai para cá e some do painel, da planilha e do buscador. ♻️ Restaurar devolve; ❌ Apagar de vez tira do sistema e não tem volta.'
+        : 'Apagado vai para cá e some do histórico. ♻️ Restaurar devolve. Só o gestor apaga de vez.'}</p>
+      <div class="notas-list">
+        ${lixeira.length ? lixeira.map(a => _cartao(a, gestor, true)).join('') : '<p class="muted-p">Nenhum registro na lixeira.</p>'}
+      </div>`;
+    if (gestor) {
+      html += `
+      <div class="ini-titulo">🗑 Campos apagados (${lixeiraCampos.length})</div>
+      <div class="db-card">
+        ${lixeiraCampos.length ? lixeiraCampos.map((c, i) => `
+        <div class="campo-cad" style="flex-wrap:wrap">
+          <div style="flex:1 1 200px;min-width:0">
+            <div class="nota-name" style="overflow-wrap:anywhere">${esc(c.campo)}</div>
+            <div class="nota-cnpj">${esc(_faz(c.fazenda))}${c.apagado_em ? ` · apagado ${esc(dataBR(c.apagado_em))}` : ''}${c.apagado_por_nome ? ` por ${esc(c.apagado_por_nome)}` : ''}${c.registros ? ` · ${c.registros} registro${c.registros === 1 ? '' : 's'}` : ''}</div>
+          </div>
+          <div class="nota-actions">
+            <button class="btn btn-sm btn-outline" data-i="${i}" onclick="Campo.restaurarCampo(Number(this.dataset.i))">♻️ Restaurar</button>
+            ${deVez ? `<button class="btn btn-sm btn-danger-outline" data-i="${i}" onclick="Campo.apagarCampoDeVez(Number(this.dataset.i))">❌ De vez</button>` : ''}
+          </div>
+        </div>`).join('') : '<p class="campo-sub">Nenhum campo na lixeira.</p>'}
+      </div>`;
+    }
+    return html;
   }
 
   function _equipeHTML() {
@@ -439,7 +498,80 @@ window.Campo = (() => {
       </div>`;
   }
 
-  function aba(qual) { _aba = ['registros', 'campos'].includes(qual) ? qual : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } _desenhar(); }
+  function aba(qual) { _aba = ['registros', 'campos', 'lixeira'].includes(qual) ? qual : 'painel'; if (_aba === 'painel') { _filtroDia = null; _filtroPend = null; } _desenhar(); }
+
+  /* ── Apagar, lixeira e apagar de vez (09/11/2026) ────────
+     Apagar manda para a lixeira (dono, gestor, admin, focal) e dá para restaurar. Apagar de vez: só gestor e admin, só
+     da lixeira, com confirmação. Precisa de internet: a lixeira mora no servidor. */
+  const _online = () => { if (navigator.onLine && sb) return true; toast('Sem internet: tente quando voltar a conexão', 'err'); return false; };
+  async function apagar(id) {
+    const a = lista.find(x => x.id === id);
+    if (!a || !_online()) return;
+    const deOutro = a.user_id !== user?.id && a.user_nome ? ` de ${a.user_nome}` : '';
+    if (!(await pedirConfirmacao({ titulo: '🗑 Apagar registro', mensagem: `Mandar para a lixeira o registro${deOutro}?\n${_faz(a.fazenda)} · ${a.campo}\n${dataBR(a.inicio)} ${horaBR(a.inicio)} → ${a.fim ? horaBR(a.fim) : '…'}\n\nSai do painel e da planilha. Dá para restaurar na 🗑 Lixeira.`, confirmar: 'Apagar', perigo: true }))) return;
+    setLoading(true, 'Apagando…');
+    try {
+      const r = await sb.atividadesCampo.apagar(id);
+      lista = lista.filter(x => x.id !== id);
+      lixeira = [r || { ...a, apagado_em: new Date().toISOString() }, ...lixeira.filter(x => x.id !== id)];
+      toast('Registro na lixeira 🗑');
+      await _desenhar();
+    } catch (e) { toast(e.message || 'Não foi possível apagar', 'err', 6000); }
+    finally { setLoading(false); }
+    render();
+  }
+  async function restaurar(id) {
+    if (!_online()) return;
+    setLoading(true, 'Restaurando…');
+    try { await sb.atividadesCampo.restaurar(id); lixeira = lixeira.filter(x => x.id !== id); toast('Registro restaurado ♻️'); }
+    catch (e) { toast(e.message || 'Não foi possível restaurar', 'err', 6000); }
+    finally { setLoading(false); }
+    render();
+  }
+  async function apagarDeVez(id) {
+    const a = lixeira.find(x => x.id === id);
+    if (!a || !_ehGestorOuAdmin() || !_online()) return;
+    if (!(await pedirConfirmacao({ titulo: '❌ Apagar de vez', mensagem: `Apagar DE VEZ do sistema?\n${a.user_nome ? a.user_nome + ' · ' : ''}${_faz(a.fazenda)} · ${a.campo}\n${dataBR(a.inicio)} ${horaBR(a.inicio)} → ${a.fim ? horaBR(a.fim) : '…'}\n\nNão tem volta: hora e localização deste registro somem.`, confirmar: 'Apagar de vez', perigo: true }))) return;
+    setLoading(true, 'Apagando de vez…');
+    try { await sb.atividadesCampo.apagarDefinitivo(id); lixeira = lixeira.filter(x => x.id !== id); toast('Apagado de vez'); }
+    catch (e) { toast(e.message || 'Não foi possível apagar', 'err', 6000); }
+    finally { setLoading(false); }
+    render();
+  }
+  async function apagarCampo(i) {
+    const c = _camposTela[i];
+    if (!c || !_acompanhaCampo() || !_online()) return;
+    const regs = c.usos ? `\n\n${c.usos === 1 ? 'O registro feito nele continua' : `Os ${c.usos} registros feitos nele continuam`} no histórico.` : '';
+    if (!(await pedirConfirmacao({ titulo: '🗑 Apagar campo', mensagem: `Mandar para a lixeira o campo?\n${_faz(c.fazenda)} · ${c.campo}\n\nSome do buscador de quem registra. Dá para restaurar na 🗑 Lixeira.${regs}`, confirmar: 'Apagar', perigo: true }))) return;
+    setLoading(true, 'Apagando…');
+    try { await sb.atividadesCampo.apagarCampo({ fazenda: c.fazenda, campo: c.campo }); toast('Campo na lixeira 🗑'); }
+    catch (e) { toast(e.message || 'Não foi possível apagar', 'err', 6000); }
+    finally { setLoading(false); }
+    render();
+  }
+  async function restaurarCampo(i) {
+    const c = lixeiraCampos[i];
+    if (!c || !_online()) return;
+    setLoading(true, 'Restaurando…');
+    try { await sb.atividadesCampo.restaurarCampo({ fazenda: c.fazenda, campo: c.campo }); toast('Campo restaurado ♻️'); }
+    catch (e) { toast(e.message || 'Não foi possível restaurar', 'err', 6000); }
+    finally { setLoading(false); }
+    render();
+  }
+  async function apagarCampoDeVez(i) {
+    const c = lixeiraCampos[i];
+    if (!c || !_ehGestorOuAdmin() || !_online()) return;
+    if (c.registros) {
+      toast(`${c.registros === 1 ? 'Há 1 registro' : `Há ${c.registros} registros`} com este campo: corrija o nome deles (✏️ Editar o campo) ou apague-os antes`, 'err', 7000);
+      return;
+    }
+    if (!(await pedirConfirmacao({ titulo: '❌ Apagar campo de vez', mensagem: `Apagar DE VEZ do sistema?\n${_faz(c.fazenda)} · ${c.campo}\n\nNão tem volta.`, confirmar: 'Apagar de vez', perigo: true }))) return;
+    setLoading(true, 'Apagando de vez…');
+    try { await sb.atividadesCampo.apagarCampoDefinitivo({ fazenda: c.fazenda, campo: c.campo }); toast('Campo apagado de vez'); }
+    catch (e) { toast(e.message || 'Não foi possível apagar', 'err', 7000); }
+    finally { setLoading(false); }
+    render();
+  }
 
   /* ── Cadastro de campos (09/11/2026) ────────────────────
      Gestor, admin e focal cadastram fazenda + campo sem registrar atividade e corrigem o nome de um campo. A lista junta
@@ -453,7 +585,10 @@ window.Campo = (() => {
           <div class="nota-name" style="overflow-wrap:anywhere">${esc(c.campo)}</div>
           <div class="nota-cnpj">${esc(_faz(c.fazenda))} · ${c.usos ? `${c.usos} visita${c.usos === 1 ? '' : 's'}` : 'sem visita ainda'}${c.cadastrado ? ' · cadastrado' : ''}</div>
         </div>
-        <button class="btn btn-sm btn-outline" data-i="${i}" onclick="Campo.editarCampo(Number(this.dataset.i))">✏️ Editar</button>
+        <div class="nota-actions">
+          <button class="btn btn-sm btn-outline" data-i="${i}" onclick="Campo.editarCampo(Number(this.dataset.i))">✏️ Editar</button>
+          <button class="btn btn-sm btn-outline" data-i="${i}" onclick="Campo.apagarCampo(Number(this.dataset.i))" aria-label="Apagar campo">🗑</button>
+        </div>
       </div>`;
     return `
       <div class="db-card">
@@ -563,7 +698,8 @@ window.Campo = (() => {
   /* Campos para o buscador: os meus (histórico do aparelho + mês) primeiro, depois os que a equipe já registrou. */
   async function _camposParaBuscar() {
     if (!camposEquipe) { try { camposEquipe = (await DB.getMeta(KEY_CAMPOS)) || []; } catch (_) { camposEquipe = []; } }
-    const meus = await _historico();
+    if (!_ocultos) { try { _ocultos = new Set((await DB.getMeta(KEY_OCULTOS)) || []); } catch (_) { _ocultos = new Set(); } }
+    const meus = (await _historico()).filter(h => !_ocultos.has(_chave(h.fazenda, h.campo)));   // campo na lixeira não volta pelo histórico
     const mapa = new Map();
     meus.forEach(h => mapa.set(_chave(h.fazenda, h.campo), { fazenda: h.fazenda, campo: String(h.campo).toUpperCase(), meu: true, em: h.em || '', usos: 0 }));
     (camposEquipe || []).forEach(c => {
@@ -807,5 +943,6 @@ window.Campo = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto };
+  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto,
+    apagar, restaurar, apagarDeVez, apagarCampo, restaurarCampo, apagarCampoDeVez };
 })();

@@ -340,4 +340,142 @@ class AtividadeCampoTest extends TestCase
         $this->patchJson("/api/atividades-campo/{$id}", ['fim' => '2026-11-08T11:30:00-03:00', 'campo' => 'BRCB150'])
             ->assertOk()->assertJsonPath('minutos', 270)->assertJsonPath('campo', 'BRCB150')->assertJsonPath('editado_por_nome', 'Focal');
     }
+
+    /* 09/11/2026 — lixeira: registro e campo vão para a lixeira e voltam; só gestor e admin apagam de vez */
+    private function focal(string $nome = 'Focal'): Colaborador
+    {
+        $f = $this->pessoa($nome);
+        $f->forceFill(['focal_campo' => true])->save();
+
+        return $f->fresh();
+    }
+
+    public function test_dono_apaga_registro_que_some_e_volta_ao_restaurar(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        Sanctum::actingAs($romario);
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertOk()->assertJsonPath('apagado_por_nome', 'Romario');
+        $this->getJson('/api/atividades-campo')->assertOk()->assertJsonCount(0);
+        $this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(0);   // buscador não conta registro apagado
+        $this->getJson('/api/atividades-campo/lixeira')->assertOk()->assertJsonCount(1)->assertJsonPath('0.id', $id);
+        $this->postJson("/api/atividades-campo/{$id}/finalizar", [])->assertStatus(409);   // fila velha não mexe no apagado
+        $this->patchJson("/api/atividades-campo/{$id}", ['campo' => 'X'])->assertNotFound();
+
+        $this->postJson("/api/atividades-campo/{$id}/restaurar")->assertOk()->assertJsonPath('apagado_em', null);
+        $this->getJson('/api/atividades-campo')->assertOk()->assertJsonCount(1);
+        $this->getJson('/api/atividades-campo/lixeira')->assertOk()->assertJsonCount(0);
+    }
+
+    public function test_colega_nao_apaga_registro_dos_outros_e_dono_nao_apaga_de_vez(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        Sanctum::actingAs($romario);
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+
+        Sanctum::actingAs($this->pessoa('Ana', 'colaborador', true));
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertNotFound();
+        $this->getJson('/api/atividades-campo/lixeira')->assertOk()->assertJsonCount(0);
+
+        Sanctum::actingAs($romario);
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertOk();
+        $this->deleteJson("/api/atividades-campo/{$id}/definitivo")->assertForbidden();
+
+        Sanctum::actingAs($this->focal());   // focal manda para a lixeira e restaura, mas não apaga de vez
+        $this->getJson('/api/atividades-campo/lixeira')->assertOk()->assertJsonCount(1);
+        $this->deleteJson("/api/atividades-campo/{$id}/definitivo")->assertForbidden();
+        $this->assertSame(1, AtividadeCampo::count());
+    }
+
+    public function test_gestor_apaga_de_vez_so_o_que_esta_na_lixeira(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->deleteJson("/api/atividades-campo/{$id}/definitivo")->assertStatus(409);
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertOk()->assertJsonPath('apagado_por_nome', 'Paulo');
+        $this->deleteJson("/api/atividades-campo/{$id}/definitivo")->assertOk();
+        $this->assertSame(0, AtividadeCampo::count());
+    }
+
+    public function test_restaurar_registro_aberto_fecha_quando_ja_ha_outro_depois(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $primeiro = (string) Str::uuid();
+        $this->iniciar(['id' => $primeiro, 'hora' => Carbon::now()->subHours(3)->toIso8601String()])->assertCreated();
+        $this->deleteJson("/api/atividades-campo/{$primeiro}")->assertOk();
+        $this->iniciar(['campo' => 'BRCB148', 'hora' => Carbon::now()->subHour()->toIso8601String()])->assertCreated();
+
+        $this->postJson("/api/atividades-campo/{$primeiro}/restaurar")->assertOk()
+            ->assertJsonPath('em_campo', false)->assertJsonPath('fim_automatico', true)->assertJsonPath('minutos', 120);
+    }
+
+    public function test_campo_apagado_some_do_buscador_e_gestor_apaga_de_vez(): void
+    {
+        $paulo = $this->pessoa('Paulo', 'gestor');
+        Sanctum::actingAs($paulo);
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Faz. Boa Vista', 'campo' => 'bv01'])->assertCreated();
+
+        Sanctum::actingAs($this->focal());
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertOk();
+        $this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(0);
+        $this->getJson('/api/atividades-campo/campos?com_apagados=1')->assertOk()->assertJsonPath('0.apagado', true);
+        $this->getJson('/api/atividades-campo/campos/lixeira')->assertOk()->assertJsonCount(1)->assertJsonPath('0.apagado_por_nome', 'Focal');
+        $this->postJson('/api/atividades-campo/campos/definitivo', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertForbidden();
+        $this->postJson('/api/atividades-campo/campos/restaurar', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertOk();
+        $this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(1);
+
+        Sanctum::actingAs($this->pessoa('Ana', 'colaborador', true));
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertForbidden();
+
+        Sanctum::actingAs($paulo);
+        $this->postJson('/api/atividades-campo/campos/definitivo', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertStatus(409);   // fora da lixeira
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertOk();
+        $this->postJson('/api/atividades-campo/campos/definitivo', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertOk();
+        $this->assertSame(0, \App\Models\CampoCadastro::count());
+    }
+
+    public function test_campo_so_dos_registros_vai_para_a_lixeira_e_de_vez_so_sem_registros(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id, 'campo' => 'errado1'])->assertCreated();
+
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'São José', 'campo' => 'ERRADO1'])->assertOk();
+        $this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(0);   // escondido mesmo com registro
+        $this->getJson('/api/atividades-campo')->assertOk()->assertJsonCount(1);         // o registro continua
+        $this->getJson('/api/atividades-campo/campos/lixeira')->assertOk()->assertJsonPath('0.registros', 1);
+        $this->postJson('/api/atividades-campo/campos/definitivo', ['fazenda' => 'São José', 'campo' => 'ERRADO1'])->assertStatus(409);
+
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertOk();   // registro na lixeira já não segura o campo
+        $this->postJson('/api/atividades-campo/campos/definitivo', ['fazenda' => 'São José', 'campo' => 'ERRADO1'])->assertOk();
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'Nada', 'campo' => 'NADA'])->assertNotFound();
+    }
+
+    public function test_cadastrar_campo_da_lixeira_restaura(): void
+    {
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertCreated();
+        $this->postJson('/api/atividades-campo/campos/apagar', ['fazenda' => 'Boa Vista', 'campo' => 'BV01'])->assertOk();
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Faz. Boa Vista', 'campo' => 'bv01'])->assertCreated()->assertJsonPath('restaurado', true);
+        $this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(1)->assertJsonPath('0.fazenda', 'Faz. Boa Vista');
+        $this->assertSame(1, \App\Models\CampoCadastro::count());
+    }
+
+    public function test_equipe_ignora_registro_apagado(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id])->assertCreated();
+        $this->deleteJson("/api/atividades-campo/{$id}")->assertOk();
+
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->getJson('/api/atividades-campo/equipe')->assertOk()->assertJsonPath('0.ultima', null);
+    }
 }

@@ -17,12 +17,12 @@ class AtividadeCampo extends Model
     public $incrementing = false;
 
     protected $fillable = ['id', 'user_id', 'fazenda', 'campo', 'inicio', 'fim', 'fim_automatico',
-        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao', 'editado_em', 'editado_por'];
+        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao', 'editado_em', 'editado_por', 'apagado_em', 'apagado_por'];
 
     protected function casts(): array
     {
         return [
-            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_automatico' => 'boolean', 'editado_em' => 'datetime',
+            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_automatico' => 'boolean', 'editado_em' => 'datetime', 'apagado_em' => 'datetime',
             'lat_inicio' => 'float', 'lng_inicio' => 'float', 'lat_fim' => 'float', 'lng_fim' => 'float',
             'precisao_inicio' => 'integer', 'precisao_fim' => 'integer',
         ];
@@ -56,6 +56,37 @@ class AtividadeCampo extends Model
         }
 
         return $tem;
+    }
+
+    /* Lixeira (09/11/2026): a API nova pode chegar antes da migração rodar; sem a coluna, nada está apagado. */
+    public static function temLixeira(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('atividades_campo', 'apagado_em');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
+    /* Registros fora da lixeira: é o que o histórico, o painel, a planilha e o buscador mostram. */
+    public function scopeVivos(Builder $q): Builder
+    {
+        return self::temLixeira() ? $q->whereNull('apagado_em') : $q;
+    }
+
+    public function scopeNaLixeira(Builder $q): Builder
+    {
+        return self::temLixeira() ? $q->whereNotNull('apagado_em') : $q->whereRaw('1 = 0');
+    }
+
+    public function apagador(): BelongsTo
+    {
+        return $this->belongsTo(Colaborador::class, 'apagado_por');
     }
 
     public function colaborador(): BelongsTo

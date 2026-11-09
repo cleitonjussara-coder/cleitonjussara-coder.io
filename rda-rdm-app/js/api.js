@@ -425,7 +425,17 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
   const atividadesCampo = {
     list: params => req('GET', '/atividades-campo', { query: params, timeout: 15_000 }),
     equipe: () => req('GET', '/atividades-campo/equipe', { timeout: 15_000 }),
-    campos: () => req('GET', '/atividades-campo/campos', { timeout: 15_000 }),   // buscador do início: fazendas e campos já registrados pela equipe
+    /* buscador do início: fazendas e campos já registrados pela equipe; com_apagados traz os da lixeira marcados (09/11/2026) */
+    campos: () => req('GET', '/atividades-campo/campos', { query: { com_apagados: 1 }, timeout: 15_000 }),
+    /* lixeira (09/11/2026): apagar/restaurar registro e campo; apagar de vez só gestor e admin */
+    lixeira: () => req('GET', '/atividades-campo/lixeira', { timeout: 15_000 }),
+    apagar: id => req('DELETE', `/atividades-campo/${encodeURIComponent(id)}`),
+    restaurar: id => req('POST', `/atividades-campo/${encodeURIComponent(id)}/restaurar`),
+    apagarDefinitivo: id => req('DELETE', `/atividades-campo/${encodeURIComponent(id)}/definitivo`),
+    lixeiraCampos: () => req('GET', '/atividades-campo/campos/lixeira', { timeout: 15_000 }),
+    apagarCampo: item => req('POST', '/atividades-campo/campos/apagar', { body: item }),
+    restaurarCampo: item => req('POST', '/atividades-campo/campos/restaurar', { body: item }),
+    apagarCampoDefinitivo: item => req('POST', '/atividades-campo/campos/definitivo', { body: item }),
     cadastrarCampo: item => req('POST', '/atividades-campo/campos', { body: item }),   // gestor/admin/focal (09/11/2026)
     editarCampo: item => req('PUT', '/atividades-campo/campos', { body: item }),
     iniciar: item => req('POST', '/atividades-campo/iniciar', { body: item }),

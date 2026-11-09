@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 601;
+const APP_BUILD = 603;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -11372,7 +11372,7 @@ function abrirAjuda(opcoes = {}) {
    próprio) abre com a pergunta ao assistente pronta para digitar — só no computador, porque no celular o teclado
    subiria por cima de tudo. O pontinho vermelho aparece quando o Como usar ganhou novidade: suba AJUDA_NOVIDADE
    para o número do build sempre que acrescentar uma seção que valha a pena a equipe ver. */
-const AJUDA_NOVIDADE = 599;
+const AJUDA_NOVIDADE = 603;
 const _AJUDA_VISTA = 'ajuda-vista-build';
 const _SECAO_DA_TELA = {
   notas: 'campos da nota', lixeira: 'lixeira', equipe: 'quem pode corrigir', arquivos: 'arquivos no servidor',

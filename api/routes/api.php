@@ -173,6 +173,15 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
     Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
     Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1');   // corrigir registro (09/11/2026)
+    /* lixeira (09/11/2026): apagar/restaurar registro e campo; apagar de vez só gestor e admin */
+    Route::get('/atividades-campo/lixeira', [\App\Http\Controllers\AtividadeCampoController::class, 'lixeira']);
+    Route::get('/atividades-campo/campos/lixeira', [\App\Http\Controllers\AtividadeCampoController::class, 'lixeiraCampos']);
+    Route::post('/atividades-campo/campos/apagar', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampo'])->middleware('throttle:30,1');
+    Route::post('/atividades-campo/campos/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurarCampo'])->middleware('throttle:30,1');
+    Route::post('/atividades-campo/campos/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampoDefinitivo'])->middleware('throttle:30,1');
+    Route::delete('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'apagar'])->middleware('throttle:30,1');
+    Route::post('/atividades-campo/{id}/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurar'])->middleware('throttle:30,1');
+    Route::delete('/atividades-campo/{id}/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarDefinitivo'])->middleware('throttle:30,1');
 
     /* pedido de justificativa (19/10/2026): gestor pede pelo Rastreio, colaborador responde */
     Route::get('/justificativas', [JustificativaController::class, 'index']);
