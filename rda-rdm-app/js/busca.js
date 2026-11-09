@@ -5,7 +5,7 @@
    o que cada papel enxerga. Dado nunca vai dentro do onclick: cada linha guarda a ação em `acoes` e o HTML leva só o índice.
    Depende de globais do app.js: $, sb, user, esc, brl, fmtDataBR, _itensMenu, _veEquipe, _ehContabilidade, _categoriaCV,
    _chaveCategoriaDetalhe, _notasComPendencia, garantirNotasNaLista, editarNota, verCartaoDoColaborador, switchView,
-   irParaNotas, abrirAjuda, fecharMenu, _armarNav.
+   irParaNotas, abrirAjuda, fecharMenu, _armarNav, verFoto, _fotoSeq, toast.
 ───────────────────────────────────────────────────────────── */
 window.Busca = (() => {
   const ESPERA_MS = 300;
@@ -57,8 +57,18 @@ window.Busca = (() => {
   function linhaNota(n) {
     const cat = _categoriaCV(_chaveCategoriaDetalhe(n))?.nome;
     const sub = [donoDe(n), cat, n.data ? fmtDataBR(String(n.data).slice(0, 10)) : ''].filter(Boolean).join(' · ');
-    return linha('🧾', n.razao_social || 'Sem empresa', sub, Number(n.valor) > 0 ? brl(n.valor) : 'sem valor',
+    const html = linha('🧾', n.razao_social || 'Sem empresa', sub, Number(n.valor) > 0 ? brl(n.valor) : 'sem valor',
       saindo(() => { garantirNotasNaLista([n]); editarNota(n.id); }));
+    if (!n.foto_path) return html;
+    return `<div class="bsg-lw">${html}<button class="bsg-ver" onclick="Busca.tocar(${acao(() => verAnexo(n))})" aria-label="Ver, baixar ou compartilhar o anexo">📎 Ver</button></div>`;
+  }
+  /* 📎 Ver (08/11/2026, pedido do Cleiton): abre o mesmo visualizador das notas, com ⬇ Baixar e ↗ Compartilhar, por cima da
+     busca — ao fechar, os resultados continuam ali. As setas ‹ › passam pelos anexos desta lista de resultados. */
+  async function verAnexo(n) {
+    const lista = (res?.notas || []).filter(x => x.foto_path);
+    garantirNotasNaLista(lista.length ? lista : [n]);
+    _fotoSeq = lista.map(x => x.id);
+    if (!(await verFoto(n.id, true))) toast('Anexo não encontrado', 'err');
   }
   function linhaRepasse(r) {
     const pedido = String(r.kind || 'received') !== 'received';
