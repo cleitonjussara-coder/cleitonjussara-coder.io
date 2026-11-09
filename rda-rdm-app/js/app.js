@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 579;
+const APP_BUILD = 583;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1415,7 +1415,10 @@ function _ehCV(u = user) { return u?.role !== 'contabilidade' && (u?.regime || '
 function _veFrota() { return MODULOS_EXTRAS && !_ehContabilidade(); }
 /* Atividade em campo (08/11/2026): o gestor liga por pessoa (colaboradores.atividade_campo). Quem não tem não vê nada.
    Gestor/admin sempre veem a tela, para acompanhar a equipe; registram só se a própria conta estiver ligada. */
-function _veCampo() { return !_ehContabilidade() && (!!user?.atividade_campo || _ehGestorOuAdmin()); }
+function _veCampo() { return !_ehContabilidade() && (!!user?.atividade_campo || _acompanhaCampo()); }
+/* Focal (09/11/2026): colaborador que o gestor liga para acompanhar a equipe em campo com os poderes do gestor/admin,
+   só nessa função (colaboradores.focal_campo). Fora dela segue colaborador. */
+function _acompanhaCampo() { return !_ehContabilidade() && (_ehGestorOuAdmin() || !!user?.focal_campo); }
 function _registraCampo() { return !_ehContabilidade() && !!user?.atividade_campo; }
 /* "Usa cartão" é hoje a mesma coisa que ser do regime CV. O nome fica
    separado de propósito: é por ele que passam saldo do cartão, repasse e
