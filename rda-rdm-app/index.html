@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=601">
+  <link rel="manifest" href="manifest.json?v=602">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1908,6 +1908,7 @@ button.arq-lin-abrir:active{background:rgba(201,234,98,.16)}
 .tipo-lancamento-icon{font-size:29px;line-height:1}
 .tipo-lancamento-title{font-size:21.5px;font-weight:800;letter-spacing:.3px}
 .tipo-lancamento-subtitle{font-size:14px;font-weight:600;text-align:center;line-height:1.4;color:var(--text2)}
+.tipo-lancamento-sem-nota{display:block;width:100%;margin-top:14px;padding:10px 6px;background:none;border:0;font:inherit;font-size:14px;font-weight:600;line-height:1.4;color:var(--text2);text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:center}
 .nota-aba-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:#f7fbff;border:1px solid #dbe9f7;margin-bottom:12px}
 .nota-aba-pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;font-size:14px;font-weight:800;letter-spacing:.3px}
 .nota-aba-pill.rda{background:#e8f5ee;color:#2d6a4f}
@@ -2459,7 +2460,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=601" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=602" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2692,22 +2693,23 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <p style="margin:0 0 14px;font-size:15.5px;line-height:1.5;color:var(--text2)">
         <span id="tipo-lancamento-passo2-aba" class="nota-aba-pill rda">RDA</span>
         <button type="button" id="tipo-lancamento-trocar" class="btn btn-outline btn-sm" style="margin-left:6px" onclick="voltarEscolhaAba()">Trocar</button>
-        &nbsp;Agora o comprovante — a nota não é salva sem ele.</p>
+        &nbsp;Comece pelo comprovante: o app <b>lê valor, data, CNPJ e número</b> e abre os campos já preenchidos para você conferir.</p>
       <p id="tipo-lancamento-dica2" style="margin:-6px 0 12px;font-size:15px;line-height:1.4;color:#b45309;font-weight:700"></p>
       <div class="tipo-lancamento-grid">
         <button class="tipo-lancamento-card tipo-lancamento-card-rda" onclick="lancarManualComAnexo('foto')">
           <div class="tipo-lancamento-icon">📷</div>
           <div class="tipo-lancamento-title">Tirar foto</div>
-          <div class="tipo-lancamento-subtitle">Abre a câmera</div>
+          <div class="tipo-lancamento-subtitle">Abre a câmera e lê a nota</div>
         </button>
         <button class="tipo-lancamento-card tipo-lancamento-card-rdm" onclick="lancarManualComAnexo('arquivo')">
           <div class="tipo-lancamento-icon">📎</div>
           <div class="tipo-lancamento-title">Anexar arquivo</div>
-          <div class="tipo-lancamento-subtitle">PDF, XML ou imagem</div>
+          <div class="tipo-lancamento-subtitle">PDF, XML ou imagem — lê a nota</div>
         </button>
       </div>
-      <button type="button" class="btn btn-outline btn-sm btn-full" style="margin-top:12px" onclick="lancarManualComAnexo(null)">
-        Preencher primeiro, anexar depois
+      <!-- Caminho secundário: quem está sem a nota na mão preenche à mão e anexa depois (sem leitura automática) -->
+      <button type="button" class="tipo-lancamento-sem-nota" onclick="lancarManualComAnexo(null)">
+        Estou sem a nota agora — preencher e anexar depois
       </button>
     </div>
   </div>
@@ -3207,42 +3209,42 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=601"></script>
-<script defer src="js/db.js?v=601"></script>
-<script defer src="js/nfce.js?v=601"></script>
-<script defer src="js/sefaz.js?v=601"></script>
-<script defer src="js/brasilapi.js?v=601"></script>
-<script defer src="js/ocr.js?v=601"></script>
-<script defer src="js/scanner.js?v=601"></script>
-<script defer src="js/foto-branca.js?v=601"></script>
-<script defer src="js/recorte.js?v=601"></script>
-<script defer src="js/excel.js?v=601"></script>
-<script defer src="js/gestor.js?v=601"></script>
-<script defer src="js/frota.js?v=601"></script>
-<script defer src="js/frota-painel.js?v=601"></script>
-<script defer src="js/frota-planilha.js?v=601"></script>
-<script defer src="js/ponto.js?v=601"></script>
-<script defer src="js/campo.js?v=601"></script>
-<script defer src="js/rastreio.js?v=601"></script>
-<script defer src="js/repasses-equipe.js?v=601"></script>
-<script defer src="js/fechamento.js?v=601"></script>
-<script defer src="js/busca.js?v=601"></script>
-<script defer src="js/gdrive.js?v=601"></script>
+<script defer src="js/api.js?v=602"></script>
+<script defer src="js/db.js?v=602"></script>
+<script defer src="js/nfce.js?v=602"></script>
+<script defer src="js/sefaz.js?v=602"></script>
+<script defer src="js/brasilapi.js?v=602"></script>
+<script defer src="js/ocr.js?v=602"></script>
+<script defer src="js/scanner.js?v=602"></script>
+<script defer src="js/foto-branca.js?v=602"></script>
+<script defer src="js/recorte.js?v=602"></script>
+<script defer src="js/excel.js?v=602"></script>
+<script defer src="js/gestor.js?v=602"></script>
+<script defer src="js/frota.js?v=602"></script>
+<script defer src="js/frota-painel.js?v=602"></script>
+<script defer src="js/frota-planilha.js?v=602"></script>
+<script defer src="js/ponto.js?v=602"></script>
+<script defer src="js/campo.js?v=602"></script>
+<script defer src="js/rastreio.js?v=602"></script>
+<script defer src="js/repasses-equipe.js?v=602"></script>
+<script defer src="js/fechamento.js?v=602"></script>
+<script defer src="js/busca.js?v=602"></script>
+<script defer src="js/gdrive.js?v=602"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=601"></script>
+<script defer src="js/svelte-ajuda.js?v=602"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=601"></script>
+<script defer src="js/svelte-historico.js?v=602"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=601"></script>
+<script defer src="js/svelte-arquivos.js?v=602"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=601"></script>
-<script defer src="js/app.js?v=601"></script>
-<script defer src="js/instalar.js?v=601"></script>
+<script defer src="js/svelte-perfil.js?v=602"></script>
+<script defer src="js/app.js?v=602"></script>
+<script defer src="js/instalar.js?v=602"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=601').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=602').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
