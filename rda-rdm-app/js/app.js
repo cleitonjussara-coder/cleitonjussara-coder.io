@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 598;
+const APP_BUILD = 599;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1123,6 +1123,7 @@ function _pintarBarraUsuario() {
   const conteudo = $('barra-usuario-conteudo');
   if (!el || !conteudo) return;
   if (!user || _telaAtual !== 'app') { el.style.display = 'none'; if (avEl) avEl.innerHTML = ''; return; }
+  _pintarBotaoAjuda();
   const hora = FusoBR.partes().hora;
   const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (user?.nome || user?.email || '').split(' ')[0] || '';
@@ -11358,7 +11359,60 @@ async function compartilharFotoViewer() {
    dinheiro envolvido, só texto de ajuda. abrirAjuda()/fecharAjuda() viraram
    uma ponte fina para window.SvelteAjuda (js/svelte-ajuda.js); o resto do
    app nem percebe a troca, chama do mesmo jeito de sempre. */
-function abrirAjuda()  { window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), veFrota: _veFrota(), onFechar: fecharAjuda, perguntar: p => sb.assistente.perguntar(p) }); }
+function abrirAjuda(opcoes = {}) {
+  window.SvelteAjuda?.montar($('ajuda-mount'), { vejoEquipe: _ehGestorOuAdmin(), ehContador: _ehContabilidade(), veFrota: _veFrota(),
+    onFechar: fecharAjuda, perguntar: p => sb.assistente.perguntar(p),
+    secao: opcoes.secao || '', focar: !!opcoes.focar, atalhos: _atalhosAjuda() });
+  _marcarAjudaVista();
+}
+
+/* ── Botão ❓ Ajuda do cabeçalho (09/11/2026, pedido do Cleiton) ───────────────
+   Fica ao lado do sino. Abre o Como usar no assunto da tela em que a pessoa está; no Início (e onde não há assunto
+   próprio) abre com a pergunta ao assistente pronta para digitar — só no computador, porque no celular o teclado
+   subiria por cima de tudo. O pontinho vermelho aparece quando o Como usar ganhou novidade: suba AJUDA_NOVIDADE
+   para o número do build sempre que acrescentar uma seção que valha a pena a equipe ver. */
+const AJUDA_NOVIDADE = 599;
+const _AJUDA_VISTA = 'ajuda-vista-build';
+const _SECAO_DA_TELA = {
+  notas: 'campos da nota', lixeira: 'lixeira', equipe: 'quem pode corrigir', arquivos: 'arquivos no servidor',
+  perfil: 'entrar e perfil', frota: 'frota / km', ponto: 'ponto de presença', historico: '🕓 histórico',
+  repasses: 'pedido de repasse pago', campo: 'atividade em campo',
+};
+function _secaoAjudaDaTela(v = viewAtual) {
+  if (v === 'saldo') return _ehCV() ? 'cartão corporativo (c.v.)' : 'pedido de repasse pago';
+  if (_ehContabilidade() && v !== 'arquivos') return '';
+  return _SECAO_DA_TELA[v] || '';
+}
+function _atalhosAjuda() {
+  if (_ehContabilidade()) return [
+    { rot: '📊 Planilha de C.V.', alvo: 'planilha de c.v.' },
+    { rot: '📁 Arquivos', alvo: 'arquivos no servidor' },
+    { rot: '🧑‍💼 O que o contador faz', alvo: 'perfil contador' },
+  ];
+  return [
+    { rot: '📷 Lançar nota', alvo: 'lançar pelo qr code' },
+    { rot: '📝 Recibo sem QR', alvo: 'lançar sem qr' },
+    { rot: '💸 Repasse', alvo: 'pedido de repasse pago' },
+    { rot: '☁️ Nota não sobe', alvo: 'envio para o servidor' },
+    { rot: '🔄 Atualizar o app', alvo: 'atualizar o aplicativo' },
+  ];
+}
+function abrirAjudaDoCabecalho() {
+  try { navigator.vibrate?.(12); } catch (_) {}
+  const secao = _secaoAjudaDaTela();
+  abrirAjuda({ secao, focar: !secao && !!window.matchMedia?.('(pointer:fine)').matches });
+}
+function _ajudaTemNovidade() {
+  try { return Number(localStorage.getItem(_AJUDA_VISTA) || 0) < AJUDA_NOVIDADE; } catch (_) { return false; }
+}
+function _marcarAjudaVista() {
+  try { localStorage.setItem(_AJUDA_VISTA, String(AJUDA_NOVIDADE)); } catch (_) {}
+  _pintarBotaoAjuda();
+}
+function _pintarBotaoAjuda() {
+  const ponto = $('hdr-ajuda-novo');
+  if (ponto) ponto.style.display = _ajudaTemNovidade() ? '' : 'none';
+}
 function fecharAjuda() { window.SvelteAjuda?.desmontar(); }
 
 /* ── Form Repasse ────────────────────────────────────────── */

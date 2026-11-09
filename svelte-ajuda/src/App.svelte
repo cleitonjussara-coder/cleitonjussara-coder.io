@@ -4,7 +4,27 @@
   // errar um parágrafo de ajuda real da equipe.
   import conteudo from './ajuda-conteudo.html?raw';
 
-  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {}, perguntar = null } = $props();
+  let { vejoEquipe = false, ehContador = false, veFrota = false, onFechar = () => {}, perguntar = null,
+        secao = '', focar = false, atalhos = [] } = $props();
+
+  /* Botão ❓ Ajuda do cabeçalho (09/11/2026): a ajuda abre no assunto da tela em que a pessoa está (`secao` = começo do
+     título <h4>) ou, sem assunto, com a pergunta pronta para digitar. Os atalhos levam aos tópicos mais procurados. */
+  let corpo;
+  function irPara(trecho) {
+    const t = String(trecho || '').toLowerCase();
+    if (!t || !corpo) return false;
+    const h = [...corpo.querySelectorAll('.ajuda-sec h4')]
+      .find(x => x.offsetParent && x.textContent.toLowerCase().includes(t));
+    if (!h) return false;
+    h.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const sec = h.closest('.ajuda-sec') || h;
+    sec.classList.remove('ajuda-destaque'); void sec.offsetWidth; sec.classList.add('ajuda-destaque');
+    return true;
+  }
+  $effect(() => {
+    const achou = secao && irPara(secao);
+    if (!achou && focar) corpo?.querySelector('#ajuda-pergunta')?.focus({ preventScroll: true });
+  });
 
   // Assistente (01/11/2026): pergunta em linguagem comum; o servidor busca na PRÓPRIA ajuda (respeitando o papel)
   // e a IA só redige a resposta. Nenhum dado de nota ou pessoa vai junto.
@@ -41,7 +61,7 @@
     <button class="btn-voltar" aria-label="Voltar" onclick={onFechar}>‹ Voltar</button>
     <h3>Como usar o app</h3>
   </div>
-  <div class="form-body" class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}>
+  <div class="form-body" bind:this={corpo} class:ve-equipe={vejoEquipe} class:ve-frota={veFrota} class:eh-contador={ehContador}>
     {#if perguntar}
       <form class="ajuda-assist" onsubmit={enviar}>
         <label for="ajuda-pergunta"><b>🤖 Pergunte ao assistente</b></label>
@@ -57,6 +77,14 @@
         {/if}
         <div class="ajuda-assist-fontes">Respostas geradas por IA a partir deste texto de ajuda. Confira nos tópicos abaixo.</div>
       </form>
+    {/if}
+    {#if atalhos.length}
+      <div class="ajuda-atalhos">
+        <span class="ajuda-atalhos-tit">Mais procurados:</span>
+        {#each atalhos as a}
+          <button type="button" class="ajuda-atalho" onclick={() => irPara(a.alvo)}>{a.rot}</button>
+        {/each}
+      </div>
     {/if}
     {@html conteudo}
   </div>
@@ -87,4 +115,12 @@
   .ajuda-assist-resp { margin-top: 10px; white-space: pre-wrap; line-height: 1.45; }
   .ajuda-assist-erro { opacity: .8; }
   .ajuda-assist-fontes { margin-top: 6px; font-size: 12px; opacity: .65; }
+  .ajuda-atalhos { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 16px; }
+  .ajuda-atalhos-tit { font-size: 14px; font-weight: 700; opacity: .75; }
+  .ajuda-atalho { border: 2px solid var(--primary, #1f6b3a); background: transparent; color: var(--primary, #1f6b3a); border-radius: 999px;
+    padding: 6px 14px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 38px; }
+  .ajuda-atalho:active { transform: scale(.96); }
+  .form-body :global(.ajuda-sec h4) { scroll-margin-top: 12px; }
+  .form-body :global(.ajuda-destaque) { animation: ajuda-pisca 2.4s ease-out; border-radius: 12px; }
+  @keyframes ajuda-pisca { 0%, 40% { box-shadow: 0 0 0 3px #b9e24a; background: rgba(185, 226, 74, .18); } 100% { box-shadow: 0 0 0 3px transparent; background: transparent; } }
 </style>
