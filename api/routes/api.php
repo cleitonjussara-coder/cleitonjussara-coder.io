@@ -166,6 +166,10 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/atividades-campo', [\App\Http\Controllers\AtividadeCampoController::class, 'index']);
     Route::get('/atividades-campo/equipe', [\App\Http\Controllers\AtividadeCampoController::class, 'equipe']);
     Route::get('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'campos']);   // buscador do início (08/11/2026)
+    /* cadastro de campos (09/11/2026): gestor, admin e focal criam e corrigem campo sem registrar atividade.
+       PUT e não PATCH: PATCH /atividades-campo/{id} é a correção de um registro. */
+    Route::post('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'cadastrarCampo'])->middleware('throttle:30,1');
+    Route::put('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'editarCampo'])->middleware('throttle:30,1');
     Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
     Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
     Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1');   // corrigir registro (09/11/2026)

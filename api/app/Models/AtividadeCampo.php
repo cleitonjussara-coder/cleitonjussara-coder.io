@@ -71,6 +71,6 @@ class AtividadeCampo extends Model
     /* Dono vê as próprias; gestor e admin veem todas. O Contador não entra: é controle de segurança, não despesa. */
     public function scopeVisiveisPara(Builder $q, Colaborador $u): Builder
     {
-        return $u->gerencia() ? $q : $q->where('user_id', $u->id);
+        return $u->acompanhaCampo() ? $q : $q->where('user_id', $u->id);   // gestor, admin e focal (09/11/2026)
     }
 }

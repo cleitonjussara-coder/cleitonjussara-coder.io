@@ -73,11 +73,15 @@ class ColaboradorController extends Controller
             'nucleo' => ['sometimes', 'string', 'max:60'],
             'regime' => ['sometimes', Rule::in(Colaborador::REGIMES)],
             'atividade_campo' => ['sometimes', 'boolean'],   // 08/11/2026: só gestor/admin liga (inclusive para si)
+            'focal_campo' => ['sometimes', 'boolean'],       // 09/11/2026: focal acompanha a equipe em campo
         ]);
-        if (! $u->gerencia() || ! Schema::hasColumn('colaboradores', 'atividade_campo')) {
-            unset($d['atividade_campo']);
-        } elseif (array_key_exists('atividade_campo', $d)) {
-            $d['atividade_campo'] = (bool) $d['atividade_campo'];
+        /* focal_campo (09/11/2026): mesma regra da atividade_campo — só gestor/admin liga, e só se a coluna já existe */
+        foreach (['atividade_campo', 'focal_campo'] as $chave) {
+            if (! $u->gerencia() || ! Schema::hasColumn('colaboradores', $chave)) {
+                unset($d[$chave]);
+            } elseif (array_key_exists($chave, $d)) {
+                $d[$chave] = (bool) $d[$chave];
+            }
         }
         /* 04/11/2026: ninguém muda o próprio papel direto, nem o admin. Núcleo e regime o admin segue mudando em si mesmo,
            para testar os dois regimes. Limite conhecido: o admin edita papéis de outros, então pode promover outra conta
@@ -109,7 +113,7 @@ class ColaboradorController extends Controller
            servidor. Uma linha por campo mudado, junto do Histórico de nota
            e repasse (build 287). */
         $txt = fn ($v) => is_bool($v) ? ($v ? 'sim' : 'não') : $v;
-        foreach (['role', 'regime', 'atividade_campo'] as $campo) {
+        foreach (['role', 'regime', 'atividade_campo', 'focal_campo'] as $campo) {
             if (isset($d[$campo]) && $txt($d[$campo]) !== $txt($alvo->$campo)) {
                 DB::table('colaboradores_historico')->insert([
                     'id' => (string) Str::uuid(),

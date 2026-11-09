@@ -38,7 +38,7 @@ class Colaborador extends Authenticatable
      */
     public const REGIMES = ['rdm_rda', 'cv'];
 
-    protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via', 'atividade_campo'];
+    protected $fillable = ['id', 'nome', 'cpf', 'email', 'password', 'role', 'nucleo', 'regime', 'google_id', 'foto_path', 'ativo', 'desativado_em', 'exclusao_pedida_por', 'exclusao_pedida_em', 'confirmado_em', 'confirmado_por', 'criado_via', 'atividade_campo', 'focal_campo'];
 
     protected $hidden = ['password', 'remember_token', 'google_id'];
 
@@ -56,7 +56,14 @@ class Colaborador extends Authenticatable
             'exclusao_pedida_em' => 'datetime',
             'confirmado_em' => 'datetime',
             'atividade_campo' => 'boolean',
+            'focal_campo' => 'boolean',
         ];
+    }
+
+    /* Focal (09/11/2026): acompanha a equipe em campo como gestor/admin, só nessa função. Fora dela segue colaborador. */
+    public function acompanhaCampo(): bool
+    {
+        return $this->gerencia() || (bool) ($this->getAttributes()['focal_campo'] ?? false);
     }
 
     /* Atividade em campo (08/11/2026): o gestor liga por pessoa; quem não tem, nem vê a função. O gestor e o admin

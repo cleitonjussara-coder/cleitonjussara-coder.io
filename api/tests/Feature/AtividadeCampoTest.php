@@ -175,6 +175,98 @@ class AtividadeCampoTest extends TestCase
         $this->getJson('/api/atividades-campo/campos')->assertForbidden();
     }
 
+    /* 09/11/2026 — focal: acompanha a equipe em campo como o gestor, só nessa função */
+    public function test_focal_acompanha_a_equipe_em_campo_como_o_gestor(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        $focal = $this->pessoa('Focal', 'colaborador', true);
+        Sanctum::actingAs($romario);
+        $this->iniciar(['campo' => 'BRCB148'])->assertCreated();
+
+        /* sem a chave: igual a qualquer colaborador */
+        Sanctum::actingAs($focal);
+        $this->getJson('/api/atividades-campo')->assertOk()->assertJsonCount(0);
+        $this->getJson('/api/atividades-campo/equipe')->assertForbidden();
+
+        Sanctum::actingAs($this->pessoa('Gestor', 'gestor'));
+        $this->patchJson("/api/colaboradores/{$focal->id}", ['focal_campo' => true])->assertOk()->assertJsonPath('focal_campo', true);
+        $this->assertSame(1, DB::table('colaboradores_historico')->where('colaborador_id', $focal->id)->where('campo', 'focal_campo')->where('para', 'sim')->count());
+
+        Sanctum::actingAs($focal->fresh());
+        $this->getJson('/api/atividades-campo')->assertOk()->assertJsonCount(1)->assertJsonPath('0.user_nome', 'Romario');
+        $this->getJson('/api/atividades-campo/equipe')->assertOk()->assertJsonCount(2);
+        /* continua registrando o próprio campo */
+        $this->iniciar(['campo' => 'BRAE4305'])->assertCreated();
+        /* e continua colaborador fora do campo */
+        $this->getJson('/api/colaboradores/atividade')->assertForbidden();
+    }
+
+    public function test_focal_nao_liga_chaves_de_ninguem(): void
+    {
+        $focal = $this->pessoa('Focal', 'colaborador', true);
+        $focal->forceFill(['focal_campo' => true])->save();
+        $ana = $this->pessoa('Ana');
+
+        Sanctum::actingAs($focal->fresh());
+        $this->patchJson("/api/colaboradores/{$ana->id}", ['focal_campo' => true, 'atividade_campo' => true])->assertForbidden();
+        $this->patchJson("/api/colaboradores/{$focal->id}", ['focal_campo' => false])->assertOk();
+        $this->assertTrue($focal->fresh()->acompanhaCampo());   // nem desligar a própria
+        $this->assertFalse($ana->fresh()->acompanhaCampo());
+    }
+
+    /* 09/11/2026 — cadastro de campos: gestor, admin e focal criam sem registrar atividade */
+    public function test_gestor_e_focal_cadastram_campo_sem_registrar_atividade(): void
+    {
+        Sanctum::actingAs($this->pessoa('Ana', 'colaborador', true));
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Arco Verde', 'campo' => 'BRAE1'])->assertForbidden();
+
+        $gestor = $this->pessoa('Gestor', 'gestor');   // sem a função de registrar
+        Sanctum::actingAs($gestor);
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Faz. Arco Verde', 'campo' => 'brae4305'])
+            ->assertCreated()->assertJsonPath('campo', 'BRAE4305');
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'Arco Verde', 'campo' => 'BRAE4305'])->assertStatus(409);
+
+        $focal = $this->pessoa('Focal');
+        $focal->forceFill(['focal_campo' => true])->save();
+        Sanctum::actingAs($focal->fresh());
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'São José', 'campo' => 'BRCB200'])->assertCreated();
+        $this->assertSame(0, AtividadeCampo::count());
+
+        /* aparece no buscador de quem registra, sem uso ainda */
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $r = collect($this->getJson('/api/atividades-campo/campos')->assertOk()->assertJsonCount(2)->json())->keyBy('campo');
+        $this->assertTrue($r['BRAE4305']['cadastrado']);
+        $this->assertSame(0, $r['BRAE4305']['usos']);
+    }
+
+    public function test_corrigir_campo_e_opcionalmente_os_registros_antigos(): void
+    {
+        $romario = $this->pessoa('Romario', 'colaborador', true);
+        Sanctum::actingAs($romario);
+        $this->iniciar(['fazenda' => 'Sao Jose', 'campo' => 'BRCB14', 'hora' => Carbon::now()->subHours(3)->toIso8601String()]);
+        $this->iniciar(['fazenda' => 'Faz. Sao Jose', 'campo' => 'BRCB14']);
+        $this->iniciar(['fazenda' => 'Outra', 'campo' => 'BRCB14']);   // mesmo campo, outra fazenda: não muda
+
+        $novo = ['fazenda_antiga' => 'Sao Jose', 'campo_antigo' => 'BRCB14', 'fazenda' => 'Faz. São José', 'campo' => 'BRCB147A-B'];
+        $this->putJson('/api/atividades-campo/campos', $novo)->assertForbidden();   // colaborador não corrige
+
+        Sanctum::actingAs($this->pessoa('Gestor', 'gestor'));
+        /* só o cadastro: os registros ficam como estavam */
+        $this->putJson('/api/atividades-campo/campos', $novo)->assertOk()->assertJsonPath('registros_corrigidos', 0);
+        $this->assertSame(3, AtividadeCampo::where('campo', 'BRCB14')->count());
+
+        /* agora corrigindo os registros também */
+        $this->putJson('/api/atividades-campo/campos', $novo + ['corrigir_registros' => true])->assertOk()->assertJsonPath('registros_corrigidos', 2);
+        $this->assertSame(2, AtividadeCampo::where('campo', 'BRCB147A-B')->where('fazenda', 'Faz. São José')->count());
+        $this->assertSame('Outra', AtividadeCampo::where('campo', 'BRCB14')->value('fazenda'));
+        $this->assertSame(1, \App\Models\CampoCadastro::count());
+
+        /* nome que já existe no cadastro é recusado; campo inexistente dá 404 */
+        $this->postJson('/api/atividades-campo/campos', ['fazenda' => 'X', 'campo' => 'Y'])->assertCreated();
+        $this->putJson('/api/atividades-campo/campos', ['fazenda_antiga' => 'X', 'campo_antigo' => 'Y', 'fazenda' => 'São José', 'campo' => 'BRCB147A-B'])->assertStatus(409);
+        $this->putJson('/api/atividades-campo/campos', ['fazenda_antiga' => 'Nada', 'campo_antigo' => 'Z', 'fazenda' => 'A', 'campo' => 'B'])->assertNotFound();
+    }
+
     public function test_contador_nao_registra(): void
     {
         Sanctum::actingAs($this->pessoa('Contador', 'contabilidade', true));
@@ -233,5 +325,19 @@ class AtividadeCampoTest extends TestCase
         $this->patchJson("/api/atividades-campo/{$id}", ['fim' => '2026-11-08T06:00:00-03:00'])->assertStatus(422);
         $this->patchJson("/api/atividades-campo/{$id}", ['fim' => Carbon::now()->addDay()->toIso8601String()])->assertStatus(422);
         $this->patchJson("/api/atividades-campo/{$id}", ['fim' => null])->assertStatus(422);
+    }
+
+    public function test_focal_corrige_a_hora_de_registro_da_equipe(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id, 'hora' => '2026-11-08T07:00:00-03:00'])->assertCreated();
+        $this->postJson("/api/atividades-campo/{$id}/finalizar", ['hora' => '2026-11-08T11:00:00-03:00'])->assertOk();
+
+        $focal = $this->pessoa('Focal', 'colaborador');
+        $focal->forceFill(['focal_campo' => true])->save();
+        Sanctum::actingAs($focal->fresh());
+        $this->patchJson("/api/atividades-campo/{$id}", ['fim' => '2026-11-08T11:30:00-03:00', 'campo' => 'BRCB150'])
+            ->assertOk()->assertJsonPath('minutos', 270)->assertJsonPath('campo', 'BRCB150')->assertJsonPath('editado_por_nome', 'Focal');
     }
 }
