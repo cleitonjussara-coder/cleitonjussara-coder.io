@@ -62,6 +62,16 @@ rodar_testes() {
       echo "  ✗ PHPUnit falhou: nada foi enviado"; exit 1
     fi
   fi
+  # 09/11/2026 (auditoria): o lint fecha com zero erro; um no-undef novo é nome que sumiu (caso do build 588).
+  if [[ "$ALVO" == "app" || "$ALVO" == "tudo" ]]; then
+    echo "▸ testes: ESLint do app"
+    if [[ ! -d rda-rdm-app/node_modules ]]; then
+      echo "  ✗ rda-rdm-app/node_modules não existe (rode npm ci lá): nada foi enviado"; exit 1
+    fi
+    if ! (cd rda-rdm-app && npx --no-install eslint --no-warn-ignored --quiet js/*.js sw.js); then
+      echo "  ✗ ESLint achou erro: nada foi enviado"; exit 1
+    fi
+  fi
   echo "▸ testes: sincronização"
   if ! node scripts/testar-sync-conflito.js; then
     echo "  ✗ testar-sync-conflito falhou: nada foi enviado"; exit 1

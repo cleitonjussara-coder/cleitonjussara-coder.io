@@ -13,9 +13,14 @@ const doApp = [
   "excluirRepassesDeOutro", "fmtDataBR", "garantirNotasNaLista", "irParaMesAtualEquipe", "irParaMesEquipe",
   "mostrarAviso", "mudarMesEquipe", "pedirCampos", "pedirConfirmacao", "pedirPalavra", "renderInicio",
   "selNotasBarraHTML", "setLoading", "switchView", "toast",
+  // 09/11/2026 (auditoria): usados por busca.js, campo.js, gestor.js e repasses-equipe.js e que faltavam aqui (55 no-undef falsos)
+  "CATEGORIAS_TODAS", "_acompanhaCampo", "_armarNav", "_categoriaCV", "_chaveCategoriaDetalhe", "_dataNoFuturo",
+  "_ehCV", "_ehContabilidade", "_grupoDoRepasse", "_gruposDoRepasse", "_itensMenu", "_mesAnoDaData",
+  "_notaDoCartao", "_notasComPendencia", "_repasseNoGrupo", "_veEquipe", "abrirAjuda", "chipDelta", "editarNota",
+  "fecharMenu", "irParaNotas", "mudarAnoEquipe", "salvarCorrecaoRepasse", "verCartaoDoColaborador", "verFoto",
 ];
 // Também do app.js, mas são `let`: os outros arquivos podem reatribuir.
-const estadoDoApp = ["equipePorId", "filAno", "filMes", "notasEquipe", "repassesEquipe", "sb", "user", "viewAtual"];
+const estadoDoApp = ["equipePorId", "filAno", "filMes", "notas", "notasEquipe", "_fotoSeq", "repassesEquipe", "sb", "user", "viewAtual"];
 
 const nomes = (lista, modo) => Object.fromEntries(lista.map(n => [n, modo]));
 
@@ -55,6 +60,7 @@ export default [
         FusoBR: "readonly",
         Frota: "readonly",
         Scanner: "readonly",
+        Fechamento: "readonly",   // window.Fechamento de fechamento.js
         ...nomes(doApp, "readonly"),
         ...nomes(estadoDoApp, "writable"),
       }
@@ -63,6 +69,11 @@ export default [
       // Função de topo é chamada por onclick no HTML ou por outro arquivo: só vale olhar variável local.
       "no-unused-vars": ["warn", { vars: "local", args: "none", caughtErrors: "none" }],
       "no-undef": "error",
+      /* 09/11/2026 (auditoria): sobra de variável e barra escapada sem necessidade são estilo, não defeito. Ficam como
+         aviso para o lint fechar com ZERO erro: assim um no-undef de verdade (o _acompanhaCampo perdido no merge do
+         build 588) aparece sozinho em vez de se perder entre dezenas de alarmes. */
+      "no-useless-assignment": "warn",
+      "no-useless-escape": "warn",
       // builtinGlobals desligado: a declaração de verdade no app.js não pode acusar a lista acima.
       "no-redeclare": ["error", { builtinGlobals: false }],
       "no-inner-declarations": "warn",

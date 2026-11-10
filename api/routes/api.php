@@ -79,7 +79,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/notas/existem', [NotaController::class, 'existem']);
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
     Route::post('/assistente/perguntar', [\App\Http\Controllers\AssistenteController::class, 'perguntar'])->middleware('throttle:12,1');   // RAG da ajuda (01/11/2026)
-    Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto']);   // IA de visão lê a nota (10/10/2026)
+    Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto'])->middleware('throttle:20,1,ia-nota');   // IA de visão lê a nota (10/10/2026); 20/min além do teto diário (09/11/2026). O 3º parâmetro dá contador próprio: sem ele, todo throttle:N,1 divide o mesmo contador da pessoa
     Route::post('/notas/reparar-fotos', [NotaController::class, 'repararFotos']);
     Route::put('/notas/{id}', [NotaController::class, 'upsert']);
     Route::patch('/notas/{id}/tipo', [NotaController::class, 'corrigirTipo']);   // gestor corrige RDA⇄RDM (23/09/2026)
@@ -142,7 +142,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     /* frota: veículos + registros de km (16/09/2026) */
     Route::get('/veiculos', [FrotaController::class, 'veiculos']);
     Route::put('/veiculos/{id}', [FrotaController::class, 'veiculoUpsert']);
-    Route::post('/km/ler-foto', [FrotaController::class, 'lerFoto']);   // IA de visão, 2ª tentativa (09/10/2026) — antes do {id}
+    Route::post('/km/ler-foto', [FrotaController::class, 'lerFoto'])->middleware('throttle:20,1,ia-km');   // IA de visão, 2ª tentativa (09/10/2026) — antes do {id}
     Route::get('/km', [FrotaController::class, 'index']);
     Route::put('/km/{id}', [FrotaController::class, 'upsert']);
     Route::delete('/km/{id}', [FrotaController::class, 'destroy']);
