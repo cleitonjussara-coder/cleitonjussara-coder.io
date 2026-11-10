@@ -22,7 +22,27 @@ Para incluir PLACA/CPF/CNPJ acesse ate 7 dias
 http://dfe.rotadosgraos.com.br
 ***0800 1300130***`;
 
+/* EPR Triângulo Mineiro (09/11/2026): duas passagens no mesmo dia, mesmo valor e placa; o OCR lê a placa TXI1F14 como "TX11F14". */
+const epr = (hora, praca, dfe, placa) => `EPR TRIANGULO MINEIRO CNPJ: 48.127.012/0001-08
+08.10.2026 ${hora}
+${praca} Via:04 Leste Operador:00766
+DFE N: ${dfe} Placa: ${placa} Classe: 01
+R$14.00 DEBITO TRIB:18.24%(IBPT) Recibo:${dfe}
+MASTERCARD DEBITO REDE
+550209******9013 A:674164
+DEBITO A VISTA VALOR:14,00
+214671103074988 DOC:504295698 (SiTef)
+Incluir placa, CPF/CNPJ no doc. fiscal em até 7 dias:
+www.eprtriangulo.com.br DUVIDAS: 0800-452-0365`;
+
 const casos = [
+  ['EPR Indianópolis 11:47', epr('11:47:02', 'P4 - INDIANOPOLIS', 'NLOLUCVB828M', 'TXI1F14'),
+    { numero: 'NLOLUCVB828M', cnpj: '48127012000108', placa: 'TXI1F14', hora: '11:47:02', valor: 14, data: '2026-10-08', portal_nfse: 'https://www.eprtriangulo.com.br' }],
+  ['EPR Monte Carmelo 12:42', epr('12:42:50', 'P3 - MONTE CARMELO', 'SHTL9GVB8262', 'TXI1F14'),
+    { numero: 'SHTL9GVB8262', placa: 'TXI1F14', hora: '12:42:50', valor: 14, data: '2026-10-08' }],
+  ['EPR "DFE N:" lido como "OFE N;"', epr('11:47:02', 'P4', 'NLOLUCVB828M', 'TXI1F14').replace('DFE N:', 'OFE N;'), { numero: 'NLOLUCVB828M' }],
+  ['EPR sem a linha do DFE (só Recibo:)', epr('11:47:02', 'P4', 'NLOLUCVB828M', 'TXI1F14').replace(/DFE N: \S+/, ''), { numero: 'NLOLUCVB828M' }],
+  ['EPR placa lida como TX11F14', epr('11:47:02', 'P4 - INDIANOPOLIS', 'NLOLUCVB828M', 'TX11F14'), { placa: 'TXI1F14' }],
   ['Rota dos Grãos 11:12', rotaDosGraos('03 Norte', '11:12:51', 'MNTQHC2B81IM'),
     { numero: 'MNTQHC2B81IM', cnpj: '41315638000107', placa: 'UVK4H82', hora: '11:12:51', valor: 10.9, data: '2026-10-01' }],
   ['Rota dos Grãos 17:48', rotaDosGraos('06 Sul', '17:48:34', 'PKPM242B8334'),

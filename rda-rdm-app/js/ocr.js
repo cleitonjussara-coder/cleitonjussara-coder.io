@@ -137,12 +137,17 @@ window.OCR = (() => {
     if (!r.numero) {
       /* Rota dos Grãos (09/11/2026, caso do Romário): "ID RECIBO/DFE:PKPM242B8334/", sem o "N". Sem "N" exige os dois-pontos:
          o site impresso no rodapé ("dfe.rotadosgraos.com.br") não pode virar número. */
-      const dfe = oneLine.match(/\bDFE\s*(?:N[º°oO]?\.?\s*[:.]?|:)\s*([0-9A-Z]{6,20})\b/i);
+      /* EPR Triângulo (09/11/2026): impressão fraca vira "OFE N:" / "0FE N;" — aceita D/O/0 e ; ou , no lugar dos dois-pontos.
+         Se mesmo assim falhar, o mesmo código está em "Recibo:NLOLUCVB828M" (precisa ter letra e número). */
+      const dfe = oneLine.match(/\b[DO0]FE\s*(?:N[º°oO]?\.?\s*[:.;,]?|[:;])\s*([0-9A-Z]{6,20})\b/i)
+               || oneLine.match(/\bRecibo\s*[:;]\s*((?=[0-9A-Z]*[A-Z])(?=[0-9A-Z]*[0-9])[0-9A-Z]{8,20})\b/i);
       if (dfe) r.numero = dfe[1].toUpperCase();
     }
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
-    const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
-    if (mp) r.placa = (mp[1] + mp[2]).toUpperCase();
+    /* EPR Triângulo (09/11/2026): o OCR lê a placa TXI1F14 como "TX11F14". Nas 3 primeiras posições só cabe letra,
+       então 0/1/5/8 voltam a ser O/I/S/B (exige ao menos uma letra de verdade ali). */
+    const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z0-9]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
+    if (mp && /[A-Z]/i.test(mp[1])) r.placa = (mp[1].toUpperCase().replace(/[0158]/g, d => ({ 0: 'O', 1: 'I', 5: 'S', 8: 'B' })[d]) + mp[2]).toUpperCase();
     /* Hora da passagem no recibo de pedágio (09/11/2026): "04.11.2026 09:44:18" (EPR) ou "Hora: 09:44". Só em recibo de
        pedágio: cupom comum também imprime hora, e lá ela não serve para nada. */
     if (/ped[áa]gio|\bDFE\b|SEQ\.?\s*N|Registro\s+de\s+Passagem|Pra[çc]a\s*:|Placa\s*:/i.test(oneLine)) {

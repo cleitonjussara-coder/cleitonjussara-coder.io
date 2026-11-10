@@ -45,7 +45,7 @@ class LeitorNota
         .'data = data de EMISSÃO no formato AAAA-MM-DD. '
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
-        .'dfe = somente em recibo de pedágio que traga "DFE N:" ou "ID RECIBO/DFE:" (ex.: "DFE N: JLEE546J82JK", "ID RECIBO/DFE:PKPM242B8334/" → "PKPM242B8334"): copie o código inteiro, com letras e números; nesse caso deixe numero null. '
+        .'dfe = somente em recibo de pedágio que traga "DFE N:" ou "ID RECIBO/DFE:" (ex.: "DFE N: JLEE546J82JK", "ID RECIBO/DFE:PKPM242B8334/" → "PKPM242B8334", "Recibo:NLOLUCVB828M"): copie o código inteiro, com letras e números; nesse caso deixe numero null (DOC, NSU e autorização "A:" do cartão não são o número). '
         .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
         .'hora = somente em recibo de pedágio: o horário da passagem impresso ao lado da data (ex.: "04.11.2026 09:44:18" → "09:44:18"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
         .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
@@ -181,7 +181,12 @@ class LeitorNota
         /* recibo da WAY 153: o "DFE N:" vem em campo próprio, para o numero seguir recusando letras nas outras notas */
         /* Rota dos Grãos imprime "ID RECIBO/DFE:PKPM242B8334/": a barra do fim não faz parte do código */
         $dfe = is_string($j['dfe'] ?? null) ? strtoupper(trim($j['dfe'], " \t\n\r\0\x0B/")) : '';
-        if ($out['numero'] === null && preg_match('/^[0-9A-Z]{6,20}$/', $dfe)) {
+        /* EPR Triângulo (09/11/2026): o recibo traz também "DOC:504295698" e "A:674164" do cartão — se a IA pôs um desses
+           no numero, o DFE vale mais (só o SEQ No, que é o número do recibo de outra concessionária, fica na frente) */
+        $ehSeq = $out['numero'] !== null && str_contains($out['numero'], '-');
+        if (! $ehSeq && preg_match('/^(?=.*[A-Z])(?=.*[0-9])[0-9A-Z]{6,20}$/', $dfe)) {
+            $out['numero'] = $dfe;
+        } elseif ($out['numero'] === null && preg_match('/^[0-9A-Z]{6,20}$/', $dfe)) {
             $out['numero'] = $dfe;
         }
         $out['serie'] = $this->grupoDeDigitos($j['serie'] ?? null, 3, false);
@@ -215,6 +220,10 @@ class LeitorNota
             return null;
         }
         $p = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $v));
+        /* EPR Triângulo (09/11/2026): "TX11F14" é TXI1F14 — nas 3 primeiras posições só cabe letra (exige uma letra de verdade) */
+        if (strlen($p) === 7 && preg_match('/[A-Z]/', substr($p, 0, 3))) {
+            $p = strtr(substr($p, 0, 3), '0158', 'OISB').substr($p, 3);
+        }
 
         return preg_match('/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/', $p) ? $p : null;
     }
