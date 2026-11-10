@@ -39,11 +39,11 @@ Route::get('/ping', fn () => [
 
 /* ── sem token ─────────────────────────────────────────────── */
 Route::prefix('auth')->group(function () {
-    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
-    Route::get('/convites/{token}', [ConviteController::class, 'ver'])->middleware('throttle:30,1');   // público: a tela de cadastro mostra o convite
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1,cadastro');
+    Route::get('/convites/{token}', [ConviteController::class, 'ver'])->middleware('throttle:30,1,convite');   // público: a tela de cadastro mostra o convite
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');   // limites em AppServiceProvider
-    Route::post('/forgot', [AuthController::class, 'forgot'])->middleware('throttle:5,1');
-    Route::post('/reset', [AuthController::class, 'reset'])->middleware('throttle:10,1');
+    Route::post('/forgot', [AuthController::class, 'forgot'])->middleware('throttle:5,1,esqueci-senha');
+    Route::post('/reset', [AuthController::class, 'reset'])->middleware('throttle:10,1,troca-senha');
     Route::get('/google/redirect', [AuthController::class, 'googleRedirect'])->name('auth.google.redirect');
     Route::get('/google/callback', [AuthController::class, 'googleCallback'])->name('auth.google.callback');
 });
@@ -78,7 +78,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/notas/duplicada', [NotaController::class, 'duplicada']);   // chave, NFS-e, nº+fornecedor, dia+valor+fornecedor em TODAS as notas (21/10/2026)
     Route::post('/notas/existem', [NotaController::class, 'existem']);
     Route::post('/notas/consultar-qr', [NotaController::class, 'consultarQr']);
-    Route::post('/assistente/perguntar', [\App\Http\Controllers\AssistenteController::class, 'perguntar'])->middleware('throttle:12,1');   // RAG da ajuda (01/11/2026)
+    Route::post('/assistente/perguntar', [\App\Http\Controllers\AssistenteController::class, 'perguntar'])->middleware('throttle:12,1,assistente');   // RAG da ajuda (01/11/2026)
     Route::post('/notas/ler-foto', [NotaController::class, 'lerFoto'])->middleware('throttle:20,1,ia-nota');   // IA de visão lê a nota (10/10/2026); 20/min além do teto diário (09/11/2026). O 3º parâmetro dá contador próprio: sem ele, todo throttle:N,1 divide o mesmo contador da pessoa
     Route::post('/notas/reparar-fotos', [NotaController::class, 'repararFotos']);
     Route::put('/notas/{id}', [NotaController::class, 'upsert']);
@@ -114,7 +114,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/relatorio/equipe', [RelatorioController::class, 'equipe']);
     Route::get('/relatorio/cv-equipe', [RelatorioController::class, 'cvEquipe']);
     /* fila das planilhas da equipe (06/11/2026): pede, acompanha e baixa; relatorios:processar gera */
-    Route::post('/relatorio/cv-equipe/pedido', [\App\Http\Controllers\RelatorioPedidoController::class, 'pedir'])->middleware('throttle:10,1');
+    Route::post('/relatorio/cv-equipe/pedido', [\App\Http\Controllers\RelatorioPedidoController::class, 'pedir'])->middleware('throttle:10,1,planilha-pedido');
     Route::get('/relatorio/pedidos/{id}', [\App\Http\Controllers\RelatorioPedidoController::class, 'ver']);
     Route::get('/relatorio/pedidos/{id}/arquivo', [\App\Http\Controllers\RelatorioPedidoController::class, 'arquivo']);
     Route::get('/relatorio/km', [RelatorioController::class, 'km']);   // Planilha de KM montada no servidor (31/10/2026)
@@ -168,33 +168,33 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'campos']);   // buscador do início (08/11/2026)
     /* cadastro de campos (09/11/2026): gestor, admin e focal criam e corrigem campo sem registrar atividade.
        PUT e não PATCH: PATCH /atividades-campo/{id} é a correção de um registro. */
-    Route::post('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'cadastrarCampo'])->middleware('throttle:30,1');
-    Route::put('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'editarCampo'])->middleware('throttle:30,1');
-    Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1');
-    Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1');
-    Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1');   // corrigir registro (09/11/2026)
+    Route::post('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'cadastrarCampo'])->middleware('throttle:30,1,campo');
+    Route::put('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'editarCampo'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1,campo');
+    Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1,campo');   // corrigir registro (09/11/2026)
     /* lixeira (09/11/2026): apagar/restaurar registro e campo; apagar de vez só gestor e admin */
     Route::get('/atividades-campo/lixeira', [\App\Http\Controllers\AtividadeCampoController::class, 'lixeira']);
     Route::get('/atividades-campo/campos/lixeira', [\App\Http\Controllers\AtividadeCampoController::class, 'lixeiraCampos']);
-    Route::post('/atividades-campo/campos/apagar', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampo'])->middleware('throttle:30,1');
-    Route::post('/atividades-campo/campos/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurarCampo'])->middleware('throttle:30,1');
-    Route::post('/atividades-campo/campos/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampoDefinitivo'])->middleware('throttle:30,1');
-    Route::delete('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'apagar'])->middleware('throttle:30,1');
-    Route::post('/atividades-campo/{id}/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurar'])->middleware('throttle:30,1');
-    Route::delete('/atividades-campo/{id}/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarDefinitivo'])->middleware('throttle:30,1');
+    Route::post('/atividades-campo/campos/apagar', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampo'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/campos/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurarCampo'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/campos/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarCampoDefinitivo'])->middleware('throttle:30,1,campo');
+    Route::delete('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'apagar'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/{id}/restaurar', [\App\Http\Controllers\AtividadeCampoController::class, 'restaurar'])->middleware('throttle:30,1,campo');
+    Route::delete('/atividades-campo/{id}/definitivo', [\App\Http\Controllers\AtividadeCampoController::class, 'apagarDefinitivo'])->middleware('throttle:30,1,campo');
 
     /* pedido de justificativa (19/10/2026): gestor pede pelo Rastreio, colaborador responde */
     Route::get('/justificativas', [JustificativaController::class, 'index']);
     Route::get('/justificativas/sino', [JustificativaController::class, 'sino']);
-    Route::post('/justificativas', [JustificativaController::class, 'store'])->middleware('throttle:20,1');
-    Route::post('/justificativas/{id}/responder', [JustificativaController::class, 'responder'])->middleware('throttle:20,1');
+    Route::post('/justificativas', [JustificativaController::class, 'store'])->middleware('throttle:20,1,justificativa');
+    Route::post('/justificativas/{id}/responder', [JustificativaController::class, 'responder'])->middleware('throttle:20,1,justificativa');
     Route::patch('/justificativas/{id}/visto', [JustificativaController::class, 'visto']);
     Route::delete('/justificativas/{id}', [JustificativaController::class, 'cancelar']);
 
     /* aviso para corrigir nota (24/10/2026): gestor/admin avisa o dono pelo quadro "O que falta corrigir" */
     Route::get('/avisos-correcao', [AvisoCorrecaoController::class, 'index']);
     Route::get('/avisos-correcao/sino', [AvisoCorrecaoController::class, 'sino']);
-    Route::post('/avisos-correcao', [AvisoCorrecaoController::class, 'store'])->middleware('throttle:30,1');
+    Route::post('/avisos-correcao', [AvisoCorrecaoController::class, 'store'])->middleware('throttle:30,1,aviso-correcao');
     Route::patch('/avisos-correcao/{id}/visto', [AvisoCorrecaoController::class, 'visto']);
 
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);

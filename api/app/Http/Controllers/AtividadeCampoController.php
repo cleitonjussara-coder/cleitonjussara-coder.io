@@ -343,8 +343,13 @@ class AtividadeCampoController extends Controller
         abort_unless($r->user()->acompanhaCampo(), 403, 'Só gestor, administrador ou focal acompanha a equipe em campo.');
 
         $pessoas = Colaborador::query()->where('ativo', true)->where('atividade_campo', true)->orderBy('nome')->get(['id', 'nome']);
-        $ultimas = AtividadeCampo::query()->vivos()->whereIn('user_id', $pessoas->pluck('id'))
-            ->orderByDesc('inicio')->get()->groupBy('user_id')->map->first();
+        /* 10/11/2026 (auditoria, item 4): só o último de cada pessoa sai do banco — antes vinha o histórico inteiro */
+        $ids = $pessoas->pluck('id');
+        $maior = AtividadeCampo::query()->vivos()->whereIn('user_id', $ids)
+            ->groupBy('user_id')->selectRaw('user_id as uid, MAX(inicio) as ultimo');
+        $ultimas = AtividadeCampo::query()->vivos()->whereIn('atividades_campo.user_id', $ids)
+            ->joinSub($maior, 'u', fn ($j) => $j->on('atividades_campo.user_id', '=', 'u.uid')->on('atividades_campo.inicio', '=', 'u.ultimo'))
+            ->select('atividades_campo.*')->orderByDesc('atividades_campo.inicio')->get()->groupBy('user_id')->map->first();
 
         return response()->json($pessoas->map(function (Colaborador $p) use ($ultimas) {
             $a = $ultimas->get($p->id);
@@ -508,13 +513,17 @@ class AtividadeCampoController extends Controller
             return response()->json([]);
         }
         $nomes = Colaborador::query()->pluck('nome', 'id');
+        $apagados = CampoCadastro::query()->whereNotNull('apagado_em')->orderByDesc('apagado_em')->limit(500)->get();
+        /* 10/11/2026 (auditoria, item 13): uma consulta para todos os campos, contada pela mesma chave de registrosDoCampo() */
+        $porChave = $apagados->isEmpty() ? collect() : AtividadeCampo::query()->vivos()
+            ->whereIn('campo', $apagados->pluck('campo')->unique()->values())->get(['fazenda', 'campo'])
+            ->countBy(fn (AtividadeCampo $a) => CampoCadastro::chave($a->fazenda, $a->campo));
 
-        return response()->json(CampoCadastro::query()->whereNotNull('apagado_em')->orderByDesc('apagado_em')->limit(500)->get()
-            ->map(fn (CampoCadastro $c) => [
-                'fazenda' => $c->fazenda, 'campo' => $c->campo,
-                'apagado_em' => $this->br($c->apagado_em)?->toIso8601String(), 'apagado_por_nome' => $nomes[$c->apagado_por] ?? null,
-                'registros' => $this->registrosDoCampo($c->campo, $c->chave),
-            ]));
+        return response()->json($apagados->map(fn (CampoCadastro $c) => [
+            'fazenda' => $c->fazenda, 'campo' => $c->campo,
+            'apagado_em' => $this->br($c->apagado_em)?->toIso8601String(), 'apagado_por_nome' => $nomes[$c->apagado_por] ?? null,
+            'registros' => (int) ($porChave[$c->chave] ?? 0),
+        ]));
     }
 
     private function json(AtividadeCampo $a): array

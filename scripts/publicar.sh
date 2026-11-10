@@ -23,17 +23,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VENDOR=0; SEM_TESTES=0; POS=()
+VENDOR=0; SEM_TESTES=0; SEM_GIT=0; POS=()
 for a in "$@"; do
   case "$a" in
     --vendor)     VENDOR=1 ;;
+    --sem-git)    SEM_GIT=1 ;;
     --sem-testes) SEM_TESTES=1 ;;
     *)            POS+=("$a") ;;
   esac
 done
 AMB="${POS[0]:-}"; ALVO="${POS[1]:-tudo}"
 
-USO="uso: bash scripts/publicar.sh teste|producao [app|api|tudo] [--vendor] [--sem-testes]"
+USO="uso: bash scripts/publicar.sh teste|producao [app|api|tudo] [--vendor] [--sem-testes] [--sem-git]"
 case "$ALVO" in app|api|tudo) ;; *) echo "$USO"; exit 1 ;; esac
 case "$AMB" in
   teste)    API_DIR=api-teste;     APP_DIR=public_html/teste; WEB_API=public_html/api-petermann/public/teste; PING=https://api.pmservicosagronomicos.com.br/teste/api/ping; APP_URL=https://teste.pmservicosagronomicos.com.br/rda-rdm-app/ ;;
@@ -78,6 +79,31 @@ rodar_testes() {
   fi
   echo "  ✔ testes passaram"
 }
+
+# 10/11/2026 (auditoria, item 1): o que sobe é o disco. Pasta com arquivo modificado ou atrás do
+# GitHub publicaria código velho (a pasta principal chegou a estar no 601 com a produção no 603).
+conferir_git() {
+  echo "▸ git: pasta limpa e em dia com origin/main"
+  local sujos
+  sujos=$(git status --porcelain --untracked-files=no)
+  if [[ -n "$sujos" ]]; then
+    echo "$sujos" | sed 's/^/    /'
+    echo "  ✗ há arquivo modificado sem commit: commite (ou guarde) antes de publicar. Nada foi enviado"; exit 1
+  fi
+  if git fetch -q origin main 2>/dev/null; then
+    if ! git merge-base --is-ancestor origin/main HEAD; then
+      echo "  ✗ esta pasta está ATRÁS do GitHub (origin/main $(git rev-parse --short origin/main), aqui $(git rev-parse --short HEAD))."
+      echo "    Publicar daqui desfaria o que já está no ar. Rode git pull (ou rebase) antes. Nada foi enviado"; exit 1
+    fi
+  else
+    echo "  ⚠ sem acesso ao GitHub agora: não deu para conferir se a pasta está em dia"
+  fi
+}
+if [[ "$SEM_GIT" == "1" ]]; then
+  echo "  ⚠ --sem-git: publicando sem conferir o git (só em emergência)"
+else
+  conferir_git
+fi
 
 if [[ "$SEM_TESTES" == "1" ]]; then
   echo "════════════════════════════════════════════════════════════"

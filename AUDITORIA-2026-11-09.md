@@ -166,3 +166,19 @@ A única falha é `AssistenteAjudaTest::test_copia_da_ajuda_no_servidor_e_igual_
 3. Item 3, depois de você decidir o limite de horas.
 4. Itens 4, 7 e 8–12, num build de manutenção.
 5. Item 14, junto da próxima mexida no Início.
+
+## Correções do build 607 (10/11/2026)
+
+- **Item 1:** o `publicar.sh` confere o git antes de tudo. Recusa se houver arquivo modificado sem commit ou se a pasta estiver atrás de `origin/main`. Sem acesso ao GitHub, só avisa. `--sem-git` pula a conferência (emergência).
+- **Item 4:** `/atividades-campo/equipe` busca só o último registro de cada pessoa (subconsulta com `MAX(inicio)`).
+- **Item 7:** `symfony/routing` e `symfony/http-kernel` em 7.4.23. O `composer audit` não acha mais nada. Publicar a API com `--vendor`.
+- **Item 8:** "Conta desativada" só aparece depois da senha certa. O e-mail do login passa por `trim()`.
+- **Item 9:** o login Google recusa e-mail não verificado (`email_verified`).
+- **Item 11:** `observacao` e `qr_url` são cortados em 2000 caracteres. Não há recusa, para não travar a fila.
+- **Item 12:** o service worker só guarda a resposta da CDN se ela for ok ou opaca (script sem `crossorigin`, que é o caso normal).
+- **Item 13:** a lixeira de campos conta os registros com uma consulta só.
+- **Item 15:** cada `throttle` tem um prefixo próprio (cadastro, convite, esqueci-senha, troca-senha, assistente, planilha-pedido, campo, justificativa, aviso-correcao).
+- **Teste da ajuda:** compara sem `\r`. O CRLF do Windows não reprova mais a suíte.
+- **Testes:** `AuditoriaCorrecoes2Test`, com 6 testes.
+
+Continuam abertos: o item 3 (depende do limite de horas), o 10 (CSP/SRI) e o 14 (layout a 320 px, que precisa de imagem antes de mexer).

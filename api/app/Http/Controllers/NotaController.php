@@ -150,6 +150,13 @@ class NotaController extends Controller
            o que chega aqui gerava URL assinada para arquivo de outra pessoa e gravava "../../.env". A regra acima fica frouxa
            de propósito: aparelho antigo segue mandando o campo e não pode tomar 422 por isso. */
         unset($d['foto_path']);
+        /* 10/11/2026 (auditoria, item 11): sem teto, um cliente com defeito gravava megabytes por nota (backup, ZIP).
+           Corta em vez de recusar: um 422 travaria a fila do aparelho antigo. */
+        foreach (['observacao' => 2000, 'qr_url' => 2000] as $campo => $max) {
+            if (is_string($d[$campo] ?? null) && mb_strlen($d[$campo]) > $max) {
+                $d[$campo] = mb_substr($d[$campo], 0, $max);
+            }
+        }
 
         /* 24/09/2026: HOJE é o presente — nada é gravado com data adiante
            dele. O app já barra na hora de salvar; aqui o servidor garante,

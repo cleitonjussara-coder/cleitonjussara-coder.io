@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v606';
+const CACHE   = 'petermann-v607';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -67,7 +67,7 @@ const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
    db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
    normal e só o envio em segundo plano fica de fora. */
 let _importErro = null;
-try { importScripts('./js/api.js?v=606', './js/db.js?v=606'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
+try { importScripts('./js/api.js?v=607', './js/db.js?v=607'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
@@ -191,7 +191,9 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.open(CACHE).then(async c => {
         const cached = await c.match(e.request);
-        const fresh  = fetch(e.request).then(r => { c.put(e.request, r.clone()); return r; }).catch(() => null);
+        /* 10/11/2026 (auditoria, item 12): um 503 da CDN não vai para o cache. A resposta opaca (status 0, script sem
+           crossorigin) continua sendo guardada: é o caso normal da CDN e não dá para ler o status dela. */
+        const fresh  = fetch(e.request).then(r => { if (r.ok || r.type === 'opaque') c.put(e.request, r.clone()); return r; }).catch(() => null);
         return cached || fresh;
       })
     );

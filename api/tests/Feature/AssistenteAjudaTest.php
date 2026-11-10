@@ -39,7 +39,9 @@ class AssistenteAjudaTest extends TestCase
         if (! is_file($fonte)) {
             $this->markTestSkipped('fonte do app fora do pacote da API');
         }
-        $this->assertSame(md5_file($fonte), md5_file(base_path('resources/ajuda/ajuda-conteudo.html')), 'copie svelte-ajuda/src/ajuda-conteudo.html para api/resources/ajuda/');
+        /* 10/11/2026: no Windows o git pode gravar a fonte com CRLF; o conteúdo é o mesmo, então compara sem o CR */
+        $semCr = fn (string $f) => md5(str_replace("\r\n", "\n", file_get_contents($f)));
+        $this->assertSame($semCr($fonte), $semCr(base_path('resources/ajuda/ajuda-conteudo.html')), 'copie svelte-ajuda/src/ajuda-conteudo.html para api/resources/ajuda/');
     }
 
     public function test_busca_acha_o_trecho_certo_e_respeita_o_papel(): void

@@ -70,13 +70,15 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = Colaborador::where('email', strtolower($d['email']))->first();
-        if ($user && ! $user->ativo) {
-            throw ValidationException::withMessages(['email' => 'Conta desativada. Fale com o gestor ou o administrador.']);
-        }
+        $user = Colaborador::where('email', strtolower(trim($d['email'])))->first();
         if (! $user || ! $user->password || ! Hash::check($d['password'], $user->password)) {
             /* Mensagem única de propósito: não revela se o e-mail existe. */
             throw ValidationException::withMessages(['email' => 'E-mail ou senha incorretos']);
+        }
+        /* 10/11/2026 (auditoria, item 8): só depois da senha certa — antes, quem sabia só o e-mail
+           descobria que a pessoa já trabalhou na empresa */
+        if (! $user->ativo) {
+            throw ValidationException::withMessages(['email' => 'Conta desativada. Fale com o gestor ou o administrador.']);
         }
 
         /* Hash antigo do Supabase ($2a$10$…): o PHP valida igual, mas
@@ -248,6 +250,13 @@ class AuthController extends Controller
             return redirect()->away($front.'#auth_error=google');
         }
 
+        /* 10/11/2026 (auditoria, item 9): a conta é ligada pelo e-mail, então ele precisa ser verificado pelo Google */
+        $verificado = $info['email_verified'] ?? false;
+        if ($verificado !== true && $verificado !== 'true') {
+            Log::warning('google callback: e-mail não verificado', ['email' => $info['email'] ?? null]);
+
+            return redirect()->away($front.'#auth_error=google');
+        }
         $email = strtolower($info['email']);
         $user = Colaborador::where('google_id', $info['sub'])->first()
             ?? Colaborador::where('email', $email)->first();
