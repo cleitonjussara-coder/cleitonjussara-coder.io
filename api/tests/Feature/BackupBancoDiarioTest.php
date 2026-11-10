@@ -276,14 +276,14 @@ class BackupBancoDiarioTest extends TestCase
 
     /* ── rotação no servidor ─────────────────────────────────── */
 
-    public function test_rotacao_do_diario_guarda_14_por_padrao_e_nao_toca_nos_completos(): void
+    public function test_rotacao_do_diario_guarda_7_por_padrao_e_nao_toca_nos_completos(): void
     {
         $this->zipsNaPasta('banco', 20);
         $completos = $this->zipsNaPasta('petermann', 3, '2026-08-02', '0330');
 
         Artisan::call('backup:gerar', ['--so-banco' => true, '--sem-drive' => true]);
 
-        $this->assertCount(14, $this->naPasta('banco'));
+        $this->assertCount(7, $this->naPasta('banco'));
         $this->assertContains('banco-2026-11-03-0230.zip', $this->naPasta('banco'));
         $this->assertSame($completos, $this->naPasta('petermann'));
     }

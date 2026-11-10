@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Com --so-banco (03/11/2026, todo dia): gera banco-AAAA-MM-DD-HHMM.zip, só com
  * o banco, porque o completo de domingo deixava até 7 dias descobertos. Rotação
- * própria: 14 no servidor e 30 no Drive, sem mensal, salvo opção explícita.
+ * própria: 7 no servidor (eram 14 até 10/11/2026) e 30 no Drive, sem mensal, salvo opção explícita.
  * Cada tipo só apaga cópias do próprio tipo.
  *
  * Com --fotos-novas (05/11/2026, todo dia): gera fotos-AAAA-MM-DD-HHMM.zip com os
@@ -55,7 +55,7 @@ class BackupGerar extends Command
             'titulo' => 'Backup semanal completo', 'opcao' => '', 'zip' => 'O zip completo da semana', 'chave' => 'backup',
         ],
         'banco' => [
-            'prefixo' => BackupCompleto::PREFIXO_BANCO, 'manter' => 14, 'drive_manter' => 30, 'drive_meses' => 0,
+            'prefixo' => BackupCompleto::PREFIXO_BANCO, 'manter' => 7, 'drive_manter' => 30, 'drive_meses' => 0,
             'titulo' => 'Backup diário do banco', 'opcao' => ' --so-banco', 'zip' => 'O zip do dia (só o banco)', 'chave' => 'backup-banco',
         ],
         'fotos' => [
@@ -67,7 +67,7 @@ class BackupGerar extends Command
     protected $signature = 'backup:gerar
         {--so-banco : só o banco, sem fotos (backup diário, banco-*.zip)}
         {--fotos-novas : só os anexos novos desde o último completo (backup diário, fotos-*.zip)}
-        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 14; com --fotos-novas, 3)}
+        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 7; com --fotos-novas, 3)}
         {--meses= : meses com uma cópia mensal no servidor (padrão 0 = nenhuma)}
         {--drive-manter= : cópias guardadas no Google Drive (padrão 12; com --so-banco, 30; com --fotos-novas, 14)}
         {--drive-meses= : meses com uma cópia mensal no Drive (padrão 12; com --so-banco ou --fotos-novas, 0)}

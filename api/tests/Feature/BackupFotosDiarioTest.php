@@ -630,7 +630,7 @@ class BackupFotosDiarioTest extends TestCase
         Artisan::call('backup:gerar', ['--so-banco' => true, '--sem-drive' => true]);
         Artisan::call('backup:gerar', ['--sem-drive' => true]);
 
-        $this->assertCount(14, $this->naPasta('banco'));
+        $this->assertCount(7, $this->naPasta('banco'));
         $this->assertCount(2, $this->naPasta('petermann'));
         $this->assertSame($fotos, $this->naPasta('fotos'));
     }
