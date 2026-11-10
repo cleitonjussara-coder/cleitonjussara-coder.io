@@ -85,7 +85,9 @@ function empacotarApp() {
   fs.copyFileSync(path.join(RAIZ, 'index.html'), path.join(t, 'index.html'));
   copiar(path.join(RAIZ, 'rda-rdm-app'), path.join(t, 'rda-rdm-app'), (rel, ent) => {
     const n = ent.name;
-    if (ent.isDirectory()) return !['node_modules', 'migrations'].includes(n);
+    /* 09/11/2026: em worktree o node_modules é uma junção (link), que não passa por isDirectory() e quebrava a cópia */
+    if (n === 'node_modules') return false;
+    if (ent.isDirectory()) return n !== 'migrations';
     return !/\.(sql|md|mjs|lock)$/.test(n) && !['package.json', 'package-lock.json', '.nojekyll'].includes(n);
   });
   zipar(t, path.join(RAIZ, 'petermann-app.zip'));
