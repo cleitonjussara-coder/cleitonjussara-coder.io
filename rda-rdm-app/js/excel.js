@@ -805,7 +805,7 @@ window.Excel = (() => {
   function buildCampoResumo(A, filtro) {
     const ws = {}; ws['!merges'] = []; let r = 0;
     ws['!cols'] = [{wch:30},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:16}];
-    merge(ws, r, 0, r, 6); _c(ws, r, 0, titCell(`PETERMANN — ATIVIDADE EM CAMPO — ${MESES[A.mes-1]}/${A.ano}`)); r++;
+    merge(ws, r, 0, r, 6); _c(ws, r, 0, titCell(`PETERMANN — ATIVIDADE EM CAMPO / ACOMPANHAMENTO SOLIDÁRIO — ${MESES[A.mes-1]}/${A.ano}`)); r++;
     merge(ws, r, 0, r, 6); _c(ws, r, 0, subCell(`${filtro} · horas contam só atividades com início e fim; a que está em andamento aparece em Pendências.`)); r += 2;
 
     /* indicadores */

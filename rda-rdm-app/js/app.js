@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 608;
+const APP_BUILD = 609;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1189,7 +1189,7 @@ function _itensMenu() {
   }
   if (!_ehContabilidade()) itens.push({ g: _ehGestorOuAdmin() ? 'controle' : 'dia', view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
   if (_veFrota()) itens.push({ g:'dia', view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
-  if (_veCampo()) itens.push({ g: _registraCampo() ? 'dia' : 'equipe', view:'campo', ico:'📍', lbl:'Atividade em campo', sub: _registraCampo() ? 'início e fim no campo' : 'quem está em campo e onde' });
+  if (_veCampo()) itens.push({ g: _registraCampo() ? 'dia' : 'equipe', view:'campo', ico:'📍', lbl:'Atividade em campo / Acompanhamento solidário', sub: _registraCampo() ? 'início e fim no campo' : 'quem está em campo e onde' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
     itens.push({ g:'controle', view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
   }
@@ -2862,11 +2862,16 @@ function _abrirSinoPelaUrl(urlDoAviso) {
     const daMensagem = !!urlDoAviso;
     const q = daMensagem ? new URL(urlDoAviso, location.href).searchParams : new URLSearchParams(location.search);
     const alvo = q.get('abrir');
-    if (alvo !== 'sino' && alvo !== 'fechamento' && alvo !== 'nota') return;
+    if (alvo !== 'sino' && alvo !== 'fechamento' && alvo !== 'nota' && alvo !== 'campo') return;
     const notaId = q.get('id');
     if (!daMensagem) {
       q.delete('abrir'); q.delete('id');
       history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+    }
+    /* ./?abrir=campo (11/11/2026): alguém está em campo há muitas horas sem finalizar (campo:verificar no servidor) */
+    if (alvo === 'campo') {
+      if (user && _acompanhaCampo()) { document.getElementById('notif-overlay')?.remove(); switchView('campo'); }
+      return;
     }
     if (alvo === 'fechamento') {
       if (user && _ehGestorOuAdmin()) { window.Fechamento?.abrirQuadro(); window.Gestor?.definirAba('rel'); switchView('equipe'); }
@@ -3315,7 +3320,7 @@ const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
   perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
-  repasses: 'Repasses e recargas', campo: 'Atividade em campo',
+  repasses: 'Repasses e recargas', campo: 'Atividade em campo / Acompanhamento solidário',
 };
 let _histViews = [];
 
@@ -4359,7 +4364,7 @@ function renderInicio() {
     </button>` : ''}
     ${_registraCampo() ? `<button class="ih-cta ih-cta-campo" onclick="switchView('campo')">
       <span class="ih-cta-mais" aria-hidden="true">📍</span>
-      <span class="ih-cta-t"><b>Em campo</b><small>Início e fim da atividade</small></span>
+      <span class="ih-cta-t"><b>Em campo</b><small>Acompanhamento solidário</small></span>
       <em aria-hidden="true">›</em>
     </button>` : ''}
     ${_ehGestorOuAdmin() ? `<button class="ih-cta ih-cta-fat" onclick="iniciarFaturamento()">

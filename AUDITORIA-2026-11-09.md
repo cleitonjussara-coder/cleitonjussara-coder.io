@@ -51,6 +51,8 @@ Revisão: o achado original estava exagerado. As duas rotas **já tinham teto di
 Um colaborador pode registrar "início" e "fim" de ontem, ou da semana passada, como se estivesse em campo. A localização também vem do aparelho.
 Para um registro que serve de prova de presença, isso enfraquece o dado.
 
+> Esclarecimento do Cleiton (11/11/2026): o registro é feito na hora e serve para a segurança da equipe, não como prova de presença. Se o colaborador passar mal dentro do campo, a empresa precisa saber onde ele está. Por isso o limite de 24 h e o selo "registrado depois" servem para o gestor saber se a localização que está vendo é recente.
+
 **Correção (decisão sua):** aceitar hora do aparelho até um limite (ex.: 24 h, o suficiente para a fila offline). Gravar também quando o servidor recebeu. Mostrar ao gestor um selo "registrado depois (offline)" quando a diferença passar de ~15 min.
 
 ## 4. Painel "equipe em campo" lê tudo — MÉDIA
