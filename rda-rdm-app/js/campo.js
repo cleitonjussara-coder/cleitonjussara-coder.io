@@ -44,7 +44,7 @@ window.Campo = (() => {
   let _offline = false, _cacheEm = null;
   let _filtroPessoa = null;
   /* Planilha dinâmica do gestor (08/11/2026) */
-  let _aba = 'painel';           // 'painel' | 'registros' | 'campos' (cadastro de campos, 09/11/2026)
+  let _aba = 'registros';        // 'painel' | 'registros' | 'campos' (cadastro de campos, 09/11/2026); 12/11/2026: abre nos registros, embaixo da verificação
   let _filtroFazenda = null;     // nome da fazenda já com "Faz."
   let _filtroDia = null;         // 'AAAA-MM-DD' (só na aba Registros)
   let _filtroPend = null;        // 'abertas' | 'auto' | 'semloc' (só na aba Registros)
@@ -307,26 +307,50 @@ window.Campo = (() => {
     return html;
   }
 
+  /* Painel de verificação (12/11/2026, pedido do Cleiton): no topo, quem está em campo agora, quem ainda não deu
+     entrada hoje e quem já saiu, para monitorar a equipe; os registros ficam embaixo. Passou de 2h30 em campo sem
+     fim (o mesmo prazo do aviso no celular, campo:verificar) fica em destaque. Tocar na pessoa mostra os registros dela. */
+  const ALERTA_MIN = 150;
   function _equipeHTML() {
     if (!equipe.length) return `
-      <div class="ini-titulo">Equipe em campo</div>
+      <div class="ini-titulo">Verificação da equipe</div>
       <div class="db-card"><p class="muted-p">Ninguém está com a atividade em campo ligada. Ligue em <b>Equipe → editar colaborador → 📍 Registra atividade em campo</b>.</p></div>`;
-    const ord = equipe.slice().sort((x, y) => (y.ultima?.em_campo ? 1 : 0) - (x.ultima?.em_campo ? 1 : 0) || String(x.nome).localeCompare(String(y.nome)));
-    const agora = ord.filter(p => p.ultima?.em_campo).length;
+    const hoje = FusoBR.hojeISO(), agoraMs = Date.now();
+    const nome = (x, y) => String(x.nome).localeCompare(String(y.nome));
+    const emCampo = equipe.filter(p => p.ultima?.em_campo)
+      .map(p => ({ ...p, min: Math.max(0, Math.round((agoraMs - new Date(p.ultima.inicio)) / 60000)) }))
+      .sort((x, y) => y.min - x.min);
+    const sairam = equipe.filter(p => !p.ultima?.em_campo && p.ultima?.fim && _diaDe(p.ultima.inicio) === hoje).sort(nome);
+    const semEntrada = equipe.filter(p => !p.ultima?.em_campo && !(p.ultima && _diaDe(p.ultima.inicio) === hoje)).sort(nome);
+    const alertas = emCampo.filter(p => p.min >= ALERTA_MIN).length;
+    const loc = u => { const m = u.em_campo || !mapa(u.lat_fim, u.lng_fim) ? mapa(u.lat_inicio, u.lng_inicio) : mapa(u.lat_fim, u.lng_fim);
+      return m ? ` · <a class="link" href="${_atG(m)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 localização</a>` : ''; };
+    const linha = (p, cls, topo, info) => `<div class="campo-pessoa ${cls}" data-uid="${_atG(p.user_id)}" onclick="Campo.verPessoa(this.dataset.uid)">
+            <div class="campo-pessoa-nome"><span>${esc(p.nome)}</span>${topo}</div>
+            <div class="campo-pessoa-info">${info}</div></div>`;
+    const grupo = (tit, n, corpo) => `<div class="cv-grupo"><div class="cv-grupo-tit">${tit} <span>${n}</span></div>${corpo}</div>`;
+    const kpi = (ico, n, lbl, cls) => `<a class="cv-kpi ${cls}" href="#cv-${cls}" onclick="event.preventDefault();document.getElementById('cv-${cls}')?.scrollIntoView({behavior:'smooth',block:'center'})"><b>${ico} ${n}</b><small>${lbl}</small></a>`;
     return `
-      <div class="ini-titulo">Equipe em campo — ${agora} agora</div>
-      <div class="db-card">
-        ${ord.map(p => {
-          const u = p.ultima;
-          const m = u ? (mapa(u.lat_fim, u.lng_fim) && !u.em_campo ? mapa(u.lat_fim, u.lng_fim) : mapa(u.lat_inicio, u.lng_inicio)) : null;
-          return `<div class="campo-pessoa" data-uid="${_atG(p.user_id)}" onclick="Campo.filtrarPessoa(this.dataset.uid)">
-            <div class="campo-pessoa-nome">${u?.em_campo ? '🟢' : '⚪'} ${esc(p.nome)}</div>
-            <div class="campo-pessoa-info">${u
-              ? `${esc(_faz(u.fazenda))} · <b>${esc(u.campo)}</b><br>${u.em_campo ? `em campo desde ${dataBR(u.inicio)} ${horaBR(u.inicio)}` : `saiu ${dataBR(u.fim)} ${horaBR(u.fim)}`}`
-              : 'sem registro ainda'}
-              ${m ? ` · <a class="link" href="${_atG(m)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 última localização</a>` : ''}</div>
-          </div>`;
-        }).join('')}
+      <div class="ini-titulo">Verificação de hoje · ${fmtData(hoje)}</div>
+      <div class="cv-kpis">
+        ${kpi('🟢', emCampo.length, 'em campo agora', 'campo')}
+        ${kpi('⚪', semEntrada.length, 'sem entrada hoje', 'sem')}
+        ${kpi('✅', sairam.length, 'já saíram hoje', 'saiu')}
+      </div>
+      ${alertas ? `<div class="ini-dica cv-alerta">⚠️ <b>${alertas} ${alertas === 1 ? 'pessoa' : 'pessoas'} há mais de 2h30 em campo</b> sem registrar o fim. Ligue para confirmar se está tudo bem.</div>` : ''}
+      <div class="db-card cv-painel">
+        <div id="cv-campo">${grupo('🟢 Em campo agora', emCampo.length, emCampo.length ? emCampo.map(p => linha(p, p.min >= ALERTA_MIN ? 'cv-longo' : '',
+          `<span class="cv-tempo">${p.min >= ALERTA_MIN ? '⚠️ ' : ''}${hm(p.min)}</span>`,
+          `${esc(_faz(p.ultima.fazenda))} · <b>${esc(p.ultima.campo)}</b><br>desde ${_diaDe(p.ultima.inicio) === hoje ? '' : dataBR(p.ultima.inicio) + ' '}${horaBR(p.ultima.inicio)}${loc(p.ultima)}`)).join('')
+          : '<p class="campo-sub">Ninguém em campo agora.</p>')}</div>
+        <div id="cv-sem">${grupo('⚪ Ainda não deram entrada hoje', semEntrada.length, semEntrada.length ? semEntrada.map(p => linha(p, 'cv-compacto', '',
+          p.ultima ? `último: ${dataBR(p.ultima.inicio)} · ${esc(_faz(p.ultima.fazenda))} · ${esc(p.ultima.campo)}` : 'sem registro ainda')).join('')
+          : '<p class="campo-sub">Todos já deram entrada hoje.</p>')}</div>
+        <div id="cv-saiu">${grupo('✅ Já saíram hoje', sairam.length, sairam.length ? sairam.map(p => linha(p, 'cv-compacto',
+          `<span class="cv-tempo ok">${p.ultima.minutos != null ? hm(p.ultima.minutos) : ''}</span>`,
+          `${esc(_faz(p.ultima.fazenda))} · <b>${esc(p.ultima.campo)}</b> · ${horaBR(p.ultima.inicio)} → ${horaBR(p.ultima.fim)}${p.ultima.fim_automatico ? ' (fim automático)' : ''}${loc(p.ultima)}`)).join('')
+          : '<p class="campo-sub">Ninguém saiu do campo hoje ainda.</p>')}</div>
+        <p class="campo-sub" style="margin:8px 0 0">Atualizado às ${horaBR(new Date().toISOString())} · toque na pessoa para ver os registros dela.</p>
       </div>`;
   }
 
@@ -487,11 +511,12 @@ window.Campo = (() => {
     return html;
   }
 
+  const _nomeDe = id => equipe.find(p => p.user_id === id)?.nome || lista.find(a => a.user_id === id)?.user_nome || '';
   function _registrosHTML(regs, gestor) {
     const vis = gestor ? _registrosVisiveis(regs) : regs;
     return `
-      <div class="ini-titulo" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <span>${gestor ? 'Registros da equipe' : 'Meus registros'} (${vis.length})</span>
+      <div class="ini-titulo" id="cp-registros" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>${gestor ? (_filtroPessoa ? `Registros de ${esc(_nomeDe(_filtroPessoa))}` : 'Registros da equipe') : 'Meus registros'} (${vis.length})</span>
         ${gestor && vis.length ? `<button class="btn btn-sm btn-primary" onclick="Campo.exportarExcel()">📗 Planilha ${MESES[filMes - 1]}</button>` : ''}
       </div>
       <div class="notas-list">
@@ -658,6 +683,12 @@ window.Campo = (() => {
   function filtrarPend(k) { _filtroPend = PEND[k] ? k : null; if (k) _aba = 'registros'; _desenhar(); }
 
   function filtrarPessoa(id) { _filtroPessoa = id; _desenhar(); }
+  /* do painel de verificação: registros da pessoa logo abaixo */
+  async function verPessoa(id) {
+    _filtroPessoa = id || null; _filtroDia = null; _filtroPend = null; _aba = 'registros';
+    await _desenhar();
+    document.getElementById('cp-registros')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function mudarMes(delta) {
     _filtroDia = null;
     filMes += delta;
@@ -944,6 +975,6 @@ window.Campo = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto,
+  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, verPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto,
     apagar, restaurar, apagarDeVez, apagarCampo, restaurarCampo, apagarCampoDeVez };
 })();

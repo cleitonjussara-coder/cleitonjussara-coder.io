@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 /**
  * 11/11/2026 — acompanhamento de trabalho solitário: quem está em campo há muitas horas sem finalizar gera aviso no celular de
- * quem acompanha (gestor, admin e focal), uma vez por atividade.
+ * quem acompanha (gestor, admin e focal), uma vez por atividade. Desde 12/11/2026: com 2h30, todos juntos.
  */
 class CampoVerificarTest extends TestCase
 {
@@ -53,46 +53,51 @@ class CampoVerificarTest extends TestCase
             'campo' => $campo, 'inicio' => Carbon::parse($inicio), 'fim' => $fim ? Carbon::parse($fim) : null]);
     }
 
-    public function test_focal_recebe_com_4_horas_e_o_gestor_entra_com_6(): void
+    /* 12/11/2026 — decisão do Cleiton: com 2h30, um aviso só, ao mesmo tempo para o focal e o gestor */
+    public function test_com_2h30_avisa_focal_e_gestor_juntos_uma_vez(): void
     {
         $this->pessoa('Paulo', 'gestor');
         $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
         $this->pessoa('Joao');                                      // colaborador comum: não recebe
         $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
-        $this->campo($romario, '2026-11-11 10:20:00');               // 4h40 em campo
-
+        $this->campo($romario, '2026-11-11 12:40:00');               // 2h20: ainda não
         $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertCount(1, $this->pushes);
-        $this->assertSame(['Focal'], $this->pushes[0]['para'], 'com 4 h, só o focal');
-        $this->assertSame('⚠️ Romario em campo há 4 h', $this->pushes[0]['titulo']);
-        $this->assertStringContainsString('Faz. São José · campo BRCB147, desde 10:20', $this->pushes[0]['corpo']);
+        $this->assertSame([], $this->pushes);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:10:00-03:00'));   // 2h30
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(1, $this->pushes, 'um aviso só, para todos');
+        $this->assertSame(['Focal', 'Paulo'], $this->pushes[0]['para']);
+        $this->assertSame('⚠️ Romario em campo há 2h30', $this->pushes[0]['titulo']);
+        $this->assertStringContainsString('Faz. São José · campo BRCB147, desde 12:40', $this->pushes[0]['corpo']);
         $this->assertSame('./?abrir=campo', $this->pushes[0]['url']);
 
-        $this->artisan('campo:verificar')->assertSuccessful();      // a mesma etapa não avisa de novo
+        Carbon::setTestNow(Carbon::parse('2026-11-11T19:00:00-03:00'));   // não repete mais tarde
+        $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertCount(1, $this->pushes);
-
-        Carbon::setTestNow(Carbon::parse('2026-11-11T16:30:00-03:00'));   // 6h10: o gestor entra
-        $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertCount(2, $this->pushes);
-        $this->assertSame(['Paulo'], $this->pushes[1]['para']);
-        $this->assertSame('⚠️ Romario em campo há 6 h', $this->pushes[1]['titulo']);
-
-        $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertCount(2, $this->pushes);
     }
 
-    public function test_sem_focal_o_gestor_recebe_com_4_horas_uma_vez_so(): void
+    public function test_sem_focal_o_gestor_recebe_sozinho(): void
     {
         $this->pessoa('Paulo', 'gestor');
         $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
-        $this->campo($romario, '2026-11-11 10:20:00');
+        $this->campo($romario, '2026-11-11 12:00:00');
 
         $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertSame(['Paulo'], $this->pushes[0]['para']);
+        $this->assertSame('⚠️ Romario em campo há 3h', $this->pushes[0]['titulo']);
+    }
 
-        Carbon::setTestNow(Carbon::parse('2026-11-11T17:00:00-03:00'));
+    public function test_quem_so_avisou_o_focal_no_sistema_antigo_ainda_avisa_o_gestor(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $a = $this->campo($romario, '2026-11-11 10:00:00');
+        \Illuminate\Support\Facades\Cache::put('campo-alerta-'.$a->id, 'antigo', now()->addDays(3));
+
         $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertCount(1, $this->pushes, 'o gestor já foi avisado; com 6 h não repete');
+        $this->assertSame(['Focal', 'Paulo'], $this->pushes[0]['para']);
     }
 
     public function test_nao_avisa_curto_finalizado_antigo_ou_apagado(): void
@@ -121,10 +126,10 @@ class CampoVerificarTest extends TestCase
         $this->campo($focal, '2026-11-11 10:00:00');
 
         $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertSame(['Bia'], $this->pushes[0]['para']);
+        $this->assertSame(['Bia', 'Paulo'], $this->pushes[0]['para']);
     }
 
-    public function test_unico_focal_em_campo_vai_direto_ao_gestor(): void
+    public function test_focal_em_campo_avisa_o_admin(): void
     {
         $this->pessoa('Ana', 'admin');
         $focal = $this->pessoa('Focal', 'colaborador', ['focal_campo' => true, 'atividade_campo' => true]);
@@ -132,6 +137,6 @@ class CampoVerificarTest extends TestCase
 
         $this->artisan('campo:verificar', ['--horas' => 5])->assertSuccessful();
         $this->assertSame(['Ana'], $this->pushes[0]['para']);
-        $this->assertSame('⚠️ Focal em campo há 6 h', $this->pushes[0]['titulo']);
+        $this->assertSame('⚠️ Focal em campo há 6h', $this->pushes[0]['titulo']);
     }
 }
