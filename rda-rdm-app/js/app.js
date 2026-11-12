@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 607;
+const APP_BUILD = 608;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -155,14 +155,15 @@ async function _ensurePdfJs() {
   if (window.pdfjsLib) return;
   await new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = `${_PDFJS_BASE}/pdf.min.js`;
+    _scriptCdn(s, `${_PDFJS_BASE}/pdf.min.js`);
     s.onload  = res;
     s.onerror = () => rej(new Error('Falha ao carregar o leitor de PDF'));
     document.head.appendChild(s);
   });
   // worker via blob (CDN é cross-origin); se falhar, o pdf.js usa o fallback na thread principal
   try {
-    const t = await (await fetch(`${_PDFJS_BASE}/pdf.worker.min.js`)).text();
+    const wurl = `${_PDFJS_BASE}/pdf.worker.min.js`;
+    const t = await (await fetch(wurl, { integrity: SRI_CDN[wurl] })).text();
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([t], { type: 'text/javascript' }));
   } catch (_) {}
 }
@@ -1014,10 +1015,27 @@ async function syncBadge(syncing) {
 }
 
 /* ── Loaders sob demanda (lazy) ──────────────────────────── */
+/* 11/11/2026 (auditoria, item 10): biblioteca de CDN entra com o hash (SRI). Se a CDN entregar outro arquivo, o
+   navegador recusa e cai no onerror, em vez de rodar código estranho com o token do usuário na página.
+   Trocou a versão de uma biblioteca? Troque o hash junto: curl -sL URL | openssl dgst -sha384 -binary | openssl base64 -A */
+const SRI_CDN = {
+  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js': 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js': 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2',
+  'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js': 'sha384-psn2zgwBrLFynK3nbWMPGpOea/KaEQgRUaP8IleAHOlOBjY1TURA69h05H2pmHNH',
+  'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js': 'sha384-QCIdq2UMVEoSRhR3ZWZwdz2/pivLowr+eokFMdYyukq7qI26VYRxFa4Nl6FKetmL',
+  'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js': 'sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F',
+};
+function _scriptCdn(s, src) {
+  s.src = src;
+  if (SRI_CDN[src]) { s.integrity = SRI_CDN[src]; s.crossOrigin = 'anonymous'; }
+  return s;
+}
+
 function _loadScript(src, erro) {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = src;
+    _scriptCdn(s, src);
     s.onload  = () => res();
     s.onerror = () => rej(new Error(erro));
     document.head.appendChild(s);
@@ -4321,7 +4339,7 @@ function renderInicio() {
       <span class="ih-mes"><button onclick="mudarMes(-1)" aria-label="Mês anterior">‹</button><b>${MESES_LONGO_ARQUIVOS[filMes]} ${filAno}</b><button onclick="mudarMes(1)" aria-label="Próximo mês">›</button></span>
       <button class="ih-link" onclick="switchView('home')">Painel ›</button>
     </div>
-    <div class="ih-duo">${_tipos.map(t => `<button class="ih-lado" onclick="irParaNotas('grupo:${t.k}')"><small>${t.sigla}</small><strong>${brl(t.gasto)}</strong><span class="ih-tag ${t.cls}">${esc(t.txt)}</span></button>`).join('')}</div>
+    <div class="ih-duo">${_tipos.map(t => `<button class="ih-lado" onclick="irParaNotas('grupo:${t.k}')"><small>${t.sigla}</small><strong>${brl(t.gasto)}</strong><span class="ih-tag ${t.cls}">${esc(t.txt).replace(/(-?R\$\s?[\d.,]+)/, '<span class="ih-num">$1</span>')}</span></button>`).join('')}</div>
   </div>`;
 
   const pend = _pendenciasMenu();
@@ -8061,7 +8079,7 @@ async function _ensureQuagga() {
   if (_quaggaLoaded) return;
   return new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js';
+    _scriptCdn(s, 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js');
     s.onload  = () => { _quaggaLoaded = true; res(); };
     s.onerror = () => rej(new Error('Falha ao carregar Quagga2'));
     document.head.appendChild(s);

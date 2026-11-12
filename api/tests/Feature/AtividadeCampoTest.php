@@ -94,6 +94,32 @@ class AtividadeCampoTest extends TestCase
         $this->iniciar(['hora' => Carbon::now()->addHour()->toIso8601String()])->assertStatus(422);
     }
 
+    /* Auditoria 09/11, item 3: a hora do aparelho vale até 24 h para trás; o gestor/focal corrige qualquer hora */
+    public function test_hora_do_aparelho_vale_ate_24_horas_para_tras(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $this->iniciar(['hora' => Carbon::now()->subHours(25)->toIso8601String()])->assertStatus(422)
+            ->assertJsonPath('message', 'Registro de mais de 24 horas atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
+        $this->assertSame(0, AtividadeCampo::count());
+
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id, 'hora' => Carbon::now()->subHours(23)->toIso8601String()])->assertCreated();
+        $this->postJson("/api/atividades-campo/{$id}/finalizar", ['hora' => Carbon::now()->subHours(30)->toIso8601String()])->assertStatus(422);
+
+        Sanctum::actingAs($this->pessoa('Paulo', 'gestor'));
+        $this->patchJson("/api/atividades-campo/{$id}", ['inicio' => Carbon::now()->subDays(3)->toIso8601String()])->assertOk();
+    }
+
+    public function test_toque_sem_internet_que_chega_depois_ganha_o_selo(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $this->iniciar(['hora' => Carbon::now()->subHours(3)->toIso8601String()])->assertCreated()
+            ->assertJsonPath('registrado_depois_min', 180);
+        $this->iniciar(['campo' => 'BRCB148', 'hora' => Carbon::now()->subMinutes(5)->toIso8601String()])->assertCreated()
+            ->assertJsonPath('registrado_depois_min', null);
+        $this->iniciar(['campo' => 'BRCB149'])->assertCreated()->assertJsonPath('registrado_depois_min', null);
+    }
+
     public function test_fim_antes_do_inicio_e_recusado(): void
     {
         Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
@@ -311,6 +337,7 @@ class AtividadeCampoTest extends TestCase
 
     public function test_gestor_corrige_a_hora_e_o_fim_automatico(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-11-08T18:00:00-03:00'));   // as horas abaixo são de 08/11; o limite de 24 h conta a partir de "agora"
         Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
         $id = (string) Str::uuid();
         $this->iniciar(['id' => $id, 'hora' => '2026-11-08T07:00:00-03:00'])->assertCreated();
@@ -329,6 +356,7 @@ class AtividadeCampoTest extends TestCase
 
     public function test_focal_corrige_a_hora_de_registro_da_equipe(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-11-08T18:00:00-03:00'));   // as horas abaixo são de 08/11; o limite de 24 h conta a partir de "agora"
         Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
         $id = (string) Str::uuid();
         $this->iniciar(['id' => $id, 'hora' => '2026-11-08T07:00:00-03:00'])->assertCreated();

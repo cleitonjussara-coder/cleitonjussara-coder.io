@@ -57,7 +57,7 @@ window.OCR = (() => {
       const s = document.createElement('script');
       /* versão FIXA (era @5): o jsDelivr serve versão exata com cache de 1 ano, então o que foi
          baixado uma vez sobrevive offline — importa agora que a IA lê primeiro e o Tesseract é reserva */
-      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      _scriptCdn(s, 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
       const tid = setTimeout(() => { s.remove(); rej(new Error('Tesseract.js demorou demais para carregar')); }, 25000);
       s.onload  = () => { clearTimeout(tid); _tesseractLoaded = true; res(); };
       s.onerror = () => { clearTimeout(tid); rej(new Error('Falha ao carregar Tesseract.js')); };

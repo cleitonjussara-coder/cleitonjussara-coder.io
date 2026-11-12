@@ -182,3 +182,11 @@ A única falha é `AssistenteAjudaTest::test_copia_da_ajuda_no_servidor_e_igual_
 - **Testes:** `AuditoriaCorrecoes2Test`, com 6 testes.
 
 Continuam abertos: o item 3 (depende do limite de horas), o 10 (CSP/SRI) e o 14 (layout a 320 px, que precisa de imagem antes de mexer).
+
+## Correções do build 608 (11/11/2026)
+
+- **Item 3:** o servidor aceita a hora do aparelho até **24 h para trás**, conforme decisão do Cleiton. Um início ou fim mais antigo é recusado com o aviso "Peça ao gestor ou ao focal para lançar a hora certa", e a fila do app mostra o motivo. A correção feita pelo gestor ou pelo focal continua sem esse limite. O JSON passou a trazer `registrado_depois_min`, que mostra o selo **📶 registrado depois** quando o início chegou ao servidor 15 min ou mais depois do toque. Ajuda atualizada.
+- **Item 10:** jsQR, pdf.js (com o worker), Quagga, SheetJS e Tesseract agora carregam com `integrity` (sha384) e `crossorigin`. A tabela `SRI_CDN` fica em `js/app.js`. Testado no navegador: as 6 bibliotecas carregam, e um arquivo diferente do esperado é recusado.
+  - Ficam de fora: os arquivos que o próprio Tesseract baixa (worker e core em wasm) e a CSP. A CSP esbarra nos `onclick` inline.
+- **Item 14:** o valor do cartão do Início fica numa linha só, com fonte `clamp(14px,4.6vw,18px)` e `nowrap`, e o valor da pílula fica junto (`.ih-num`). Conferido a 320 px até R$ 1.599.999,94, sem estouro.
+- Suíte: 789/789. ESLint com zero erro.

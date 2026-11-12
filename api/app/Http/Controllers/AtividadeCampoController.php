@@ -30,6 +30,12 @@ class AtividadeCampoController extends Controller
     /** Tolerância para relógio de aparelho adiantado. */
     private const FUTURO_MAX_MIN = 5;
 
+    /** Até quanto tempo para trás vale a hora do aparelho (fila sem internet). Auditoria 09/11, item 3 — decisão do Cleiton: 24 h. */
+    private const PASSADO_MAX_H = 24;
+
+    /** Diferença entre o toque e a chegada ao servidor a partir da qual o gestor vê "registrado depois". */
+    private const ATRASO_SELO_MIN = 15;
+
     private function localizacao(): array
     {
         return [
@@ -46,7 +52,8 @@ class AtividadeCampoController extends Controller
         return $c ? Carbon::parse($c->format('Y-m-d H:i:s'), self::TZ) : null;
     }
 
-    private function hora(?string $iso): Carbon
+    /* $doAparelho: início/fim vindos da fila do aparelho têm o limite para trás; a correção do gestor/focal (editar) não. */
+    private function hora(?string $iso, bool $doAparelho = true): Carbon
     {
         $agora = Carbon::now(self::TZ);
         if (! $iso) {
@@ -54,6 +61,8 @@ class AtividadeCampoController extends Controller
         }
         $h = Carbon::parse($iso)->setTimezone(self::TZ);
         abort_if($h->gt($agora->copy()->addMinutes(self::FUTURO_MAX_MIN)), 422, 'Hora no futuro. Confira o relógio do aparelho.');
+        abort_if($doAparelho && $h->lt($agora->copy()->subHours(self::PASSADO_MAX_H)), 422,
+            'Registro de mais de '.self::PASSADO_MAX_H.' horas atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
 
         return $h;
     }
@@ -162,12 +171,12 @@ class AtividadeCampoController extends Controller
         /* hora igual à gravada não passa pela checagem de "futuro" de novo: só o que mudou é conferido */
         $igual = fn (?string $iso, ?Carbon $atual) => $iso && $atual && Carbon::parse($iso)->eq($atual);
         if (array_key_exists('inicio', $d) && ! $igual($d['inicio'], $inicio)) {
-            $inicio = $this->hora($d['inicio']);
+            $inicio = $this->hora($d['inicio'], false);
         }
         if (array_key_exists('fim', $d)) {
             abort_if($d['fim'] === null && $a->fim !== null, 422, 'Não dá para reabrir uma atividade já encerrada.');
             if (! $igual($d['fim'], $fim)) {
-                $fim = $d['fim'] === null ? null : $this->hora($d['fim']);
+                $fim = $d['fim'] === null ? null : $this->hora($d['fim'], false);
             }
         }
         abort_if($fim && $fim->lt($inicio), 422, 'O fim ficou antes do início. Confira as horas.');
@@ -530,12 +539,16 @@ class AtividadeCampoController extends Controller
     {
         $iso = fn (?Carbon $c) => $this->br($c)?->toIso8601String();
         $min = $a->fim ? (int) $a->inicio->diffInMinutes($a->fim, true) : null;
+        /* "registrado depois": o toque foi feito sem internet e chegou ao servidor bem mais tarde. created_at é a chegada
+           (instante real); o início é a hora de parede de Brasília, por isso passa pelo br(). Corrigido pelo gestor não conta. */
+        $atrasoIni = $a->created_at && ! $a->editado_em ? (int) floor(($a->created_at->getTimestamp() - $this->br($a->inicio)->getTimestamp()) / 60) : 0;
 
         return [
             'id' => $a->id, 'user_id' => $a->user_id, 'user_nome' => $a->colaborador?->nome,
             'fazenda' => $a->fazenda, 'campo' => $a->campo,
             'inicio' => $iso($a->inicio), 'fim' => $iso($a->fim), 'em_campo' => $a->fim === null,
             'fim_automatico' => (bool) $a->fim_automatico, 'minutos' => $min,
+            'registrado_depois_min' => $atrasoIni >= self::ATRASO_SELO_MIN ? $atrasoIni : null,
             'lat_inicio' => $a->lat_inicio, 'lng_inicio' => $a->lng_inicio, 'precisao_inicio' => $a->precisao_inicio,
             'lat_fim' => $a->lat_fim, 'lng_fim' => $a->lng_fim, 'precisao_fim' => $a->precisao_fim,
             'observacao' => $a->observacao,

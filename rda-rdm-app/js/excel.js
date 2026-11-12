@@ -923,7 +923,7 @@ window.Excel = (() => {
     if (_carregando) return _carregando;
     _carregando = new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+      _scriptCdn(s, 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
       s.onload  = () => res();
       s.onerror = () => { _carregando = null; rej(new Error('Sem internet para baixar o gerador de planilha')); };
       document.head.appendChild(s);

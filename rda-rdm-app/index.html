@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=607">
+  <link rel="manifest" href="manifest.json?v=608">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -789,7 +789,7 @@ select.inp{cursor:pointer}
 .ih-mes{display:flex;align-items:center;gap:6px;min-width:0}.ih-mes button{border:0;background:none;color:var(--primary-d);font-size:22px;line-height:1;padding:2px 6px}
 .ih-link{border:0;background:none;padding:2px;font-size:13px;font-weight:700;color:var(--primary-d);white-space:nowrap}
 .ih-duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
-.ih-lado{border:0;background:rgba(0,0,0,.25);border-radius:10px;padding:7px 8px;color:var(--text);text-align:left;min-width:0}.ih-lado small{display:block;font-size:12.5px;font-weight:800;color:var(--text2)}.ih-lado strong{display:block;font-size:18px;overflow-wrap:anywhere}
+.ih-lado{border:0;background:rgba(0,0,0,.25);border-radius:10px;padding:7px 8px;color:var(--text);text-align:left;min-width:0}.ih-lado small{display:block;font-size:12.5px;font-weight:800;color:var(--text2)}.ih-lado strong{display:block;font-size:clamp(14px,4.6vw,18px);white-space:nowrap}.ih-num{white-space:nowrap}
 .ih-tag{display:inline-block;margin-top:3px;font-size:11.5px;font-weight:800;border-radius:9px;padding:1px 6px;overflow-wrap:anywhere}.ih-tag.receber{background:#ffd166;color:#4a3300}.ih-tag.adiantado{background:#b9e24a;color:#10321c}
 .ih-dias{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:6px}
 .ih-dias button{border:0;background:none;color:var(--text2);padding:0;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}.ih-dias button:disabled{opacity:.45;cursor:default}.ih-dias small{font-size:11px}
@@ -2460,7 +2460,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=607" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=608" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -3207,44 +3207,44 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
-<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=607"></script>
-<script defer src="js/db.js?v=607"></script>
-<script defer src="js/nfce.js?v=607"></script>
-<script defer src="js/sefaz.js?v=607"></script>
-<script defer src="js/brasilapi.js?v=607"></script>
-<script defer src="js/ocr.js?v=607"></script>
-<script defer src="js/scanner.js?v=607"></script>
-<script defer src="js/foto-branca.js?v=607"></script>
-<script defer src="js/recorte.js?v=607"></script>
-<script defer src="js/excel.js?v=607"></script>
-<script defer src="js/gestor.js?v=607"></script>
-<script defer src="js/frota.js?v=607"></script>
-<script defer src="js/frota-painel.js?v=607"></script>
-<script defer src="js/frota-planilha.js?v=607"></script>
-<script defer src="js/ponto.js?v=607"></script>
-<script defer src="js/campo.js?v=607"></script>
-<script defer src="js/rastreio.js?v=607"></script>
-<script defer src="js/repasses-equipe.js?v=607"></script>
-<script defer src="js/fechamento.js?v=607"></script>
-<script defer src="js/busca.js?v=607"></script>
-<script defer src="js/gdrive.js?v=607"></script>
+<script defer src="js/api.js?v=608"></script>
+<script defer src="js/db.js?v=608"></script>
+<script defer src="js/nfce.js?v=608"></script>
+<script defer src="js/sefaz.js?v=608"></script>
+<script defer src="js/brasilapi.js?v=608"></script>
+<script defer src="js/ocr.js?v=608"></script>
+<script defer src="js/scanner.js?v=608"></script>
+<script defer src="js/foto-branca.js?v=608"></script>
+<script defer src="js/recorte.js?v=608"></script>
+<script defer src="js/excel.js?v=608"></script>
+<script defer src="js/gestor.js?v=608"></script>
+<script defer src="js/frota.js?v=608"></script>
+<script defer src="js/frota-painel.js?v=608"></script>
+<script defer src="js/frota-planilha.js?v=608"></script>
+<script defer src="js/ponto.js?v=608"></script>
+<script defer src="js/campo.js?v=608"></script>
+<script defer src="js/rastreio.js?v=608"></script>
+<script defer src="js/repasses-equipe.js?v=608"></script>
+<script defer src="js/fechamento.js?v=608"></script>
+<script defer src="js/busca.js?v=608"></script>
+<script defer src="js/gdrive.js?v=608"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=607"></script>
+<script defer src="js/svelte-ajuda.js?v=608"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=607"></script>
+<script defer src="js/svelte-historico.js?v=608"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=607"></script>
+<script defer src="js/svelte-arquivos.js?v=608"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=607"></script>
-<script defer src="js/app.js?v=607"></script>
-<script defer src="js/instalar.js?v=607"></script>
+<script defer src="js/svelte-perfil.js?v=608"></script>
+<script defer src="js/app.js?v=608"></script>
+<script defer src="js/instalar.js?v=608"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=607').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=608').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

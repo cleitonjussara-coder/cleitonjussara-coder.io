@@ -256,6 +256,7 @@ window.Campo = (() => {
             ${naLixeira && a.apagado_em ? `<span class="doc-tag outro">🗑 apagado ${esc(dataBR(a.apagado_em))}${a.apagado_por_nome ? ` por ${esc(a.apagado_por_nome)}` : ''}</span>` : ''}
             ${a.em_campo && !naLixeira ? '<span class="sync-pill pending">🟢 em campo</span>' : ''}
             ${a.fim_automatico ? '<span class="doc-tag outro" title="Fechada quando outro campo foi iniciado">fim automático</span>' : ''}
+            ${a.registrado_depois_min ? `<span class="doc-tag outro" title="O início foi tocado sem internet e chegou ao servidor ${a.registrado_depois_min >= 120 ? Math.floor(a.registrado_depois_min / 60) + ' h' : a.registrado_depois_min + ' min'} depois">📶 registrado depois</span>` : ''}
             ${a.editado_em ? `<span class="doc-tag outro" title="Corrigido em ${_atG(dataBR(a.editado_em))} às ${_atG(horaBR(a.editado_em))}${a.editado_por_nome ? ` por ${_atG(a.editado_por_nome)}` : ''}">✏️ editado</span>` : ''}
           </div>
           <div class="nota-body">
