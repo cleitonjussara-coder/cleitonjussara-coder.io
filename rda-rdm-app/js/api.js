@@ -367,6 +367,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     inscrever: dados => req('POST', '/push/inscrever', { body: dados }),
     desinscrever: endpoint => req('DELETE', '/push/inscrever', { body: { endpoint } }),
     testar: () => req('POST', '/push/testar'),
+    equipe: () => req('GET', '/push/equipe'),                              // gestor/admin (12/11/2026)
+    lembrar: ids => req('POST', '/push/lembrar', { body: ids ? { ids } : {} }),
   };
 
   const fotos = {

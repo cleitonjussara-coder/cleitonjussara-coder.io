@@ -94,6 +94,8 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/push/inscrever', [PushController::class, 'inscrever']);
     Route::delete('/push/inscrever', [PushController::class, 'desinscrever']);
     Route::post('/push/testar', [PushController::class, 'testar']);
+    Route::get('/push/equipe', [PushController::class, 'equipe']);   // gestor/admin: quem tem aviso ligado (12/11/2026)
+    Route::post('/push/lembrar', [PushController::class, 'lembrar'])->middleware('throttle:10,1,push-lembrar');
 
     Route::get('/repasses', [RepasseController::class, 'index']);
     Route::put('/repasses/{id}', [RepasseController::class, 'upsert']);

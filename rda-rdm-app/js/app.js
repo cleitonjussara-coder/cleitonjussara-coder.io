@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 612;
+const APP_BUILD = 613;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2724,11 +2724,145 @@ function abrirNotificacoes() {
   ov.innerHTML = `
     <div class="modal-card" onclick="event.stopPropagation()">
       <div class="modal-hd"><h3>🔔 Notificações${itens.length ? ` (${itens.length})` : ''}</h3><button class="btn-close-modal" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
-      <div class="modal-bd" style="max-height:65vh;overflow:auto">${html}</div>
+      <div class="modal-bd" style="max-height:72vh;overflow:auto"><div id="sino-push"></div>${_ehGestorOuAdmin() ? '<div id="sino-push-equipe"></div>' : ''}${html}</div>
       ${itens.some(i => i.tipo === 'atendido') ? `<div class="modal-ft"><button class="btn btn-outline" onclick="dispensarTodasNotificacoes()">Marcar todas como vistas</button></div>` : ''}
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
+  _pintarSinoPush();
+  if (_ehGestorOuAdmin()) _pintarSinoEquipe();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AVISOS NO CELULAR DENTRO DO SINO (12/11/2026, pedido do Cleiton)
+   O lugar natural para ligar os avisos é o próprio sino. Desligado → cartão verde grande com o botão; bloqueado →
+   cartão laranja ensinando a liberar; iPhone fora da Tela de Início → ensina a instalar; ligado → só uma faixa fina.
+   "Agora não" encolhe o cartão para uma faixa por 7 dias (no aparelho). Gestor/admin veem ainda "Avisos da equipe":
+   quem tem aviso ligado e o botão que manda e-mail pedindo para ligar (push não adianta: essas pessoas não recebem).
+═══════════════════════════════════════════════════════════ */
+const _SP_ADIA_MS = 7 * 24 * 60 * 60 * 1000;
+const _spChave = () => 'pm_sino_push_adiado_' + (user?.id || '');
+
+function _spAdiado() {
+  try { return Date.now() - Number(localStorage.getItem(_spChave()) || 0) < _SP_ADIA_MS; } catch (_) { return false; }
+}
+
+function _spListaPapel() {
+  const itens = _ehGestorOuAdmin()
+    ? [['💸', 'Pedido de repasse e recarga'], ['💬', 'Justificativa respondida'], ['🙋', 'Cadastro novo para liberar'], ['📷', 'Foto em branco e cartão acabando']]
+    : [['📝', 'Justificativa pedida pelo gestor'], ['✏️', 'Nota para corrigir'], ['💸', 'Repasse e recarga do cartão']];
+  if (_acompanhaCampo()) itens.push(['📍', 'Colega há muitas horas em campo']);
+  return `<ul class="sp-lista">${itens.map(([i, t]) => `<li><span>${i}</span>${t}</li>`).join('')}</ul>`;
+}
+
+async function _pintarSinoPush() {
+  const el = document.getElementById('sino-push');
+  if (!el || !user || DEMO_MODE) return;
+  if (!_pushDisponivel()) {
+    el.innerHTML = _ehIOS() && !_jaInstalado()
+      ? `<div class="sp-hero sp-bloq"><div class="sp-top"><div class="sp-sino">📲</div>
+          <div><h4>Instale o app para receber avisos</h4><p class="sp-sub">No iPhone, os avisos só chegam com o app na Tela de Início.</p></div></div>
+          <ol class="sp-passos"><li>Toque em <b>Compartilhar</b> ${typeof _SVG_COMPARTILHAR !== 'undefined' ? _SVG_COMPARTILHAR : ''}</li><li><b>Adicionar à Tela de Início</b></li><li>Abra o app pelo ícone novo e volte ao sino</li></ol>
+          <button class="sp-btn" onclick="_modalInstalarIOS()">📲 Ver como instalar</button></div>`
+      : '';
+    return;
+  }
+  const inscrito = !!(await _inscricaoAtual());
+  if (!document.getElementById('sino-push')) return;            // sino fechou enquanto conferia
+  if (inscrito) {
+    el.innerHTML = `<div class="sp-faixa sp-ok"><span class="sp-dot"></span><span class="sp-txt">Avisos ligados neste celular</span>
+      <button onclick="this.disabled=true; sb?.push.testar().then(()=>toast('Aviso de teste enviado')).catch(()=>toast('Não deu','err')).finally(()=>this.disabled=false)">Testar</button></div>`;
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    el.innerHTML = `<div class="sp-hero sp-bloq"><div class="sp-top"><div class="sp-sino">🔕</div>
+        <div><h4>Avisos bloqueados</h4><p class="sp-sub">Este celular está recusando os avisos do app.</p></div></div>
+        <ol class="sp-passos">${_jaInstalado()
+          ? '<li>Abra as <b>Configurações</b> do celular → <b>Apps</b> (ou Notificações)</li><li>Escolha o app <b>Petermann</b> e ligue as <b>Notificações</b></li>'
+          : '<li>Toque no <b>cadeado 🔒</b> ao lado do endereço</li><li>Em <b>Notificações</b>, escolha <b>Permitir</b></li>'}
+          <li>Volte aqui e toque em <b>Já liberei</b></li></ol>
+        <button class="sp-btn" onclick="_spJaLiberei(this)">✅ Já liberei</button></div>`;
+    return;
+  }
+  if (_spAdiado()) {
+    el.innerHTML = `<div class="sp-faixa sp-off"><span class="sp-dot"></span><span class="sp-txt">Avisos desligados neste celular</span>
+      <button onclick="ativarNotificacoes(this)">Ligar</button></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="sp-hero"><div class="sp-top"><div class="sp-sino">🔔</div>
+      <div><h4>Receba os avisos no celular</h4><p class="sp-sub">Toca e aparece na tela, mesmo com o app fechado.</p></div></div>
+      ${_spListaPapel()}
+      <button class="sp-btn" onclick="ativarNotificacoes(this)">🔔 Ligar avisos neste celular</button>
+      <button class="sp-depois" onclick="_spAgoraNao()">Agora não</button></div>`;
+}
+
+function _spAgoraNao() {
+  try { localStorage.setItem(_spChave(), String(Date.now())); } catch (_) {}
+  _pintarSinoPush();
+}
+
+async function _spJaLiberei(btn) {
+  if (Notification.permission === 'denied') {
+    toast('Ainda está bloqueado — libere nas configurações e tente de novo', 'err');
+    return;
+  }
+  await ativarNotificacoes(btn);
+}
+
+async function _pintarSinoEquipe() {
+  const el = document.getElementById('sino-push-equipe');
+  if (!el || !sb || DEMO_MODE) return;
+  el.innerHTML = '<div class="sp-eq"><div class="sp-eq-sub">Conferindo os avisos da equipe…</div></div>';
+  let d;
+  try { d = await sb.push.equipe(); }
+  catch (_) { el.innerHTML = '<div class="sp-eq"><div class="sp-eq-sub">Sem internet para ver os avisos da equipe.</div></div>'; return; }
+  if (!document.getElementById('sino-push-equipe')) return;
+  const equipe = (d.equipe || []).filter(p => p.id !== user?.id);
+  const ligados = equipe.filter(p => p.aparelhos > 0).length;
+  const total = equipe.length;
+  const desl = equipe.filter(p => !p.aparelhos);
+  const pct = total ? Math.round(ligados / total * 100) : 0;
+  const ini = n => (n || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase();
+  const hojeBR = FusoBR.hojeISO();
+  const linha = p => {
+    const on = p.aparelhos > 0;
+    const lembrado = p.lembrado_em ? (String(p.lembrado_em).slice(0, 10) === hojeBR ? 'e-mail pedido hoje' : 'e-mail pedido') : '';
+    return `<div class="sp-pes"><div class="sp-av ${on ? 'on' : 'off'}">${esc(ini(p.nome))}</div>
+      <div class="sp-nome">${esc(p.nome)}${lembrado && !on ? `<small>📧 ${lembrado}</small>` : ''}</div>
+      <span class="sp-tag ${on ? 'on' : 'off'}">${on ? (p.aparelhos > 1 ? p.aparelhos + ' aparelhos' : 'Ligado') : 'Desligado'}</span></div>`;
+  };
+  const ordem = [...desl, ...equipe.filter(p => p.aparelhos > 0)];
+  const aberto = el.dataset.aberto === '1';
+  const mostra = aberto ? ordem : ordem.slice(0, 4);
+  el.innerHTML = `<div class="sp-eq">
+    <div class="sp-eq-hd"><span>📣 Avisos da equipe</span><b>${ligados} de ${total}</b></div>
+    <div class="sp-barra"><i style="width:${pct}%"></i></div>
+    <div class="sp-eq-sub">${desl.length ? `${desl.length} ${desl.length === 1 ? 'pessoa ainda não recebe' : 'pessoas ainda não recebem'} no celular` : 'Toda a equipe recebe os avisos no celular 🎉'}</div>
+    ${mostra.map(linha).join('')}
+    <div class="sp-eq-acoes">
+      ${ordem.length > 4 ? `<button class="btn btn-sm btn-outline" onclick="const e=document.getElementById('sino-push-equipe'); e.dataset.aberto='${aberto ? '0' : '1'}'; _pintarSinoEquipe()">${aberto ? 'Mostrar menos' : `Ver todos (${total})`}</button>` : ''}
+      ${desl.length ? `<button class="btn btn-sm btn-primary" onclick="_spLembrarEquipe(this, ${desl.length})">📧 Pedir para ligar</button>` : ''}
+    </div></div>`;
+}
+
+async function _spLembrarEquipe(btn, n) {
+  if (!(await pedirConfirmacao({
+    mensagem: `Mandar e-mail para ${n === 1 ? 'a pessoa' : 'as ' + n + ' pessoas'} sem aviso ligado, explicando como ligar?\n\nQuem já recebeu hoje não recebe de novo.`,
+    confirmar: 'Mandar e-mail',
+  }))) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await sb.push.lembrar();
+    const partes = [];
+    if (r.enviados) partes.push(`e-mail enviado para ${r.enviados}`);
+    if (r.pulados) partes.push(`${r.pulados} já ${r.pulados === 1 ? 'tinha' : 'tinham'} recebido hoje ou sem e-mail`);
+    if (r.falhas?.length) partes.push(`${r.falhas.length} não foi`);
+    toast(partes.length ? partes.join(' · ') : 'Ninguém para avisar', r.falhas?.length ? 'err' : undefined);
+    _pintarSinoEquipe();
+  } catch (e) {
+    toast('Não deu: ' + (e.message || 'erro'), 'err');
+    if (btn) btn.disabled = false;
+  }
 }
 /* Gestor confirma (ou recusa) a entrada de um cadastro novo (22/09/2026).
    Recusar desativa a conta e derruba as sessões abertas no aparelho dela. */
@@ -12016,6 +12150,8 @@ async function ativarNotificacoes(btn) {
     toast('Notificações ligadas neste aparelho ✅');
     await sb.push.testar().catch(() => {});
     if (viewAtual === 'perfil') switchView('perfil');
+    _pintarSinoPush();
+    if (_ehGestorOuAdmin()) _pintarSinoEquipe();
   } catch (e) {
     toast('Não deu para ligar: ' + (e.message || 'erro'), 'err');
   } finally {
