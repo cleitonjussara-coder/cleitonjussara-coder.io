@@ -10,13 +10,15 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
- * php84 artisan backup:gerar [--manter=2] [--meses=0] [--sem-drive]
+ * php84 artisan backup:gerar [--manter=1] [--meses=0] [--sem-drive]
  *
  * É a linha do Agendador de tarefas do painel da Locaweb (1x por semana):
  *   /usr/bin/php84 /home/.../api-petermann/artisan backup:gerar
  * Gera storage/app/backups/petermann-AAAA-MM-DD-HHMM.zip (banco + fotos) e
  * guarda no SERVIDOR só as --manter cópias mais novas (2, pedido do Cleiton
- * em 22/09/2026 para ocupar menos espaço; --meses=0 = sem cópia mensal).
+ * em 22/09/2026 para ocupar menos espaço; 1 desde 12/11/2026, quando o total no
+ * servidor caiu para 8 = 1 completo + 5 banco + 2 fotos; --meses=0 = sem cópia mensal).
+ * A cópia antiga só sai depois de a nova existir e de a antiga estar no Drive.
  * No GOOGLE DRIVE a rotação é mais folgada (--drive-manter/--drive-meses):
  * lá o espaço é do próprio Drive e é a cópia que sobrevive se a Locaweb
  * perder o disco. O gestor/admin vê e baixa tudo pelo Perfil.
@@ -27,13 +29,13 @@ use Illuminate\Support\Facades\Log;
  *
  * Com --so-banco (03/11/2026, todo dia): gera banco-AAAA-MM-DD-HHMM.zip, só com
  * o banco, porque o completo de domingo deixava até 7 dias descobertos. Rotação
- * própria: 7 no servidor (eram 14 até 10/11/2026) e 30 no Drive, sem mensal, salvo opção explícita.
+ * própria: 5 no servidor (eram 14 até 10/11/2026; 7 por um dia) e 30 no Drive, sem mensal, salvo opção explícita.
  * Cada tipo só apaga cópias do próprio tipo.
  *
  * Com --fotos-novas (05/11/2026, todo dia): gera fotos-AAAA-MM-DD-HHMM.zip com os
  * anexos novos ou alterados desde o último completo, porque nota nova ficava até
  * 7 dias sem cópia do anexo. Restaurar = último completo + último fotos. Rotação
- * própria: 3 no servidor (eram 7 até 07/11/2026) e 14 no Drive, sem mensal. Sem foto nova não cria zip nem
+ * própria: 2 no servidor (eram 7 até 07/11/2026; 3 até 12/11/2026) e 14 no Drive, sem mensal. Sem foto nova não cria zip nem
  * gira nada; sem completo na pasta é erro.
  *
  * Quem para de rodar não falha, então não avisa: a rodada do completo confere se
@@ -51,15 +53,15 @@ class BackupGerar extends Command
      */
     private const MODOS = [
         'completo' => [
-            'prefixo' => BackupCompleto::PREFIXO_COMPLETO, 'manter' => 2, 'drive_manter' => 12, 'drive_meses' => 12,
+            'prefixo' => BackupCompleto::PREFIXO_COMPLETO, 'manter' => 1, 'drive_manter' => 12, 'drive_meses' => 12,
             'titulo' => 'Backup semanal completo', 'opcao' => '', 'zip' => 'O zip completo da semana', 'chave' => 'backup',
         ],
         'banco' => [
-            'prefixo' => BackupCompleto::PREFIXO_BANCO, 'manter' => 7, 'drive_manter' => 30, 'drive_meses' => 0,
+            'prefixo' => BackupCompleto::PREFIXO_BANCO, 'manter' => 5, 'drive_manter' => 30, 'drive_meses' => 0,
             'titulo' => 'Backup diário do banco', 'opcao' => ' --so-banco', 'zip' => 'O zip do dia (só o banco)', 'chave' => 'backup-banco',
         ],
         'fotos' => [
-            'prefixo' => BackupCompleto::PREFIXO_FOTOS, 'manter' => 3, 'drive_manter' => 14, 'drive_meses' => 0,
+            'prefixo' => BackupCompleto::PREFIXO_FOTOS, 'manter' => 2, 'drive_manter' => 14, 'drive_meses' => 0,
             'titulo' => 'Backup diário das fotos', 'opcao' => ' --fotos-novas', 'zip' => 'O zip do dia (só as fotos novas)', 'chave' => 'backup-fotos',
         ],
     ];
@@ -67,7 +69,7 @@ class BackupGerar extends Command
     protected $signature = 'backup:gerar
         {--so-banco : só o banco, sem fotos (backup diário, banco-*.zip)}
         {--fotos-novas : só os anexos novos desde o último completo (backup diário, fotos-*.zip)}
-        {--manter= : cópias guardadas no servidor (padrão 2; com --so-banco, 7; com --fotos-novas, 3)}
+        {--manter= : cópias guardadas no servidor (padrão 1; com --so-banco, 5; com --fotos-novas, 2)}
         {--meses= : meses com uma cópia mensal no servidor (padrão 0 = nenhuma)}
         {--drive-manter= : cópias guardadas no Google Drive (padrão 12; com --so-banco, 30; com --fotos-novas, 14)}
         {--drive-meses= : meses com uma cópia mensal no Drive (padrão 12; com --so-banco ou --fotos-novas, 0)}

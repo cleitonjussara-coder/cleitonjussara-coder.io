@@ -591,7 +591,7 @@ class BackupFotosDiarioTest extends TestCase
 
     /* ── rotação no servidor ─────────────────────────────────── */
 
-    public function test_rotacao_das_fotos_guarda_3_por_padrao_e_nao_toca_nos_outros(): void
+    public function test_rotacao_das_fotos_guarda_2_por_padrao_e_nao_toca_nos_outros(): void
     {
         $completos = $this->zipsNaPasta('petermann', 3, '2026-08-02', '0330');
         $this->completoNaPasta();
@@ -603,7 +603,7 @@ class BackupFotosDiarioTest extends TestCase
 
         $this->rodar();
 
-        $this->assertCount(3, $this->naPasta('fotos'));
+        $this->assertCount(2, $this->naPasta('fotos'));
         $this->assertContains(self::ZIP_DO_DIA, $this->naPasta('fotos'));
         $this->assertSame($completos, $this->naPasta('petermann'));
         $this->assertSame($bancos, $this->naPasta('banco'));
@@ -630,8 +630,8 @@ class BackupFotosDiarioTest extends TestCase
         Artisan::call('backup:gerar', ['--so-banco' => true, '--sem-drive' => true]);
         Artisan::call('backup:gerar', ['--sem-drive' => true]);
 
-        $this->assertCount(7, $this->naPasta('banco'));
-        $this->assertCount(2, $this->naPasta('petermann'));
+        $this->assertCount(5, $this->naPasta('banco'));
+        $this->assertCount(1, $this->naPasta('petermann'));
         $this->assertSame($fotos, $this->naPasta('fotos'));
     }
 
@@ -648,11 +648,11 @@ class BackupFotosDiarioTest extends TestCase
         $this->assertSame(0, Artisan::call('backup:gerar', ['--fotos-novas' => true]));
 
         $this->assertContains(self::ZIP_DO_DIA, $g->enviados);
-        /* a regra manda tirar 20 a 23/10; só 20 e 21 estão no Drive, então 22 e 23 ficam */
+        /* a regra manda tirar 20 a 24/10; só 20 e 21 estão no Drive, então 22 e 23 ficam */
         $this->assertSame([$antigos[2], $antigos[3], $antigos[4], $antigos[5], self::ZIP_DO_DIA], $this->naPasta('fotos'));
     }
 
-    public function test_com_tudo_no_drive_o_servidor_fica_so_com_as_3_mais_novas(): void
+    public function test_com_tudo_no_drive_o_servidor_fica_so_com_as_2_mais_novas(): void
     {
         $this->gravarConexao();
         $this->completoNaPasta();
@@ -662,7 +662,7 @@ class BackupFotosDiarioTest extends TestCase
 
         Artisan::call('backup:gerar', ['--fotos-novas' => true]);
 
-        $this->assertSame([$antigos[4], $antigos[5], self::ZIP_DO_DIA], $this->naPasta('fotos'));
+        $this->assertSame([$antigos[5], self::ZIP_DO_DIA], $this->naPasta('fotos'));
     }
 
     public function test_drive_desconectado_nao_apaga_nada_no_servidor(): void
