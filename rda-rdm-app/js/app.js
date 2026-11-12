@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 611;
+const APP_BUILD = 612;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1189,7 +1189,7 @@ function _itensMenu() {
   }
   if (!_ehContabilidade()) itens.push({ g: _ehGestorOuAdmin() ? 'controle' : 'dia', view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
   if (_veFrota()) itens.push({ g:'dia', view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
-  if (_veCampo()) itens.push({ g: _registraCampo() ? 'dia' : 'equipe', view:'campo', ico:'📍', lbl:'Atividade em campo / Acompanhamento solidário', sub: _registraCampo() ? 'início e fim no campo' : 'quem está em campo e onde' });
+  if (_veCampo()) itens.push({ g: _registraCampo() ? 'dia' : 'equipe', view:'campo', ico:'📍', lbl:'Atividade em campo / Acompanhamento de trabalho solitário', sub: _registraCampo() ? 'início e fim no campo' : 'quem está em campo e onde' });
   if (MODULOS_EXTRAS && _ehGestorOuAdmin()) {
     itens.push({ g:'controle', view:'ponto', ico:'⏱️', lbl:'Ponto', sub:'entrada, saída, extras' });
   }
@@ -3320,7 +3320,7 @@ const NOME_VIEW = {
   inicio: 'Início', despesas: 'Despesas', home: 'Painel', notas: 'Minhas notas',
   lixeira: 'Apagados', saldo: 'RDM/RDA', equipe: 'Equipe', arquivos: 'Arquivos',
   perfil: 'Perfil', frota: 'Frota / KM', ponto: 'Ponto', historico: 'Histórico', rastreio: 'Rastreio da equipe',
-  repasses: 'Repasses e recargas', campo: 'Atividade em campo / Acompanhamento solidário',
+  repasses: 'Repasses e recargas', campo: 'Atividade em campo / Acompanhamento de trabalho solitário',
 };
 let _histViews = [];
 
@@ -4364,7 +4364,7 @@ function renderInicio() {
     </button>` : ''}
     ${_registraCampo() ? `<button class="ih-cta ih-cta-campo" onclick="switchView('campo')">
       <span class="ih-cta-mais" aria-hidden="true">📍</span>
-      <span class="ih-cta-t"><b>Em campo</b><small>Acompanhamento solidário</small></span>
+      <span class="ih-cta-t"><b>Em campo</b><small>Acompanhamento de trabalho solitário</small></span>
       <em aria-hidden="true">›</em>
     </button>` : ''}
     ${_ehGestorOuAdmin() ? `<button class="ih-cta ih-cta-fat" onclick="iniciarFaturamento()">

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Cache;
  * Linha sugerida no crontab da Locaweb (a cada 30 min):
  *   0,30 * * * * /usr/bin/php84 /home/.../api-petermann/artisan campo:verificar
  *
- * Acompanhamento solidário (11/11/2026, pedido do Cleiton): a atividade em campo serve para a empresa achar o
+ * Acompanhamento de trabalho solitário (11/11/2026, pedido do Cleiton): a atividade em campo serve para a empresa achar o
  * colaborador se ele passar mal dentro do campo. Quem iniciou um campo e está há muitas horas sem finalizar gera
  * aviso no celular, para alguém ligar e confirmar que está tudo bem.
  *
@@ -35,7 +35,7 @@ class CampoVerificar extends Command
         {--horas=4 : em campo há mais que isto, sem finalizar, avisa o focal}
         {--escalar=6 : continua aberto depois disto, avisa também o gestor}';
 
-    protected $description = 'Acompanhamento solidário: avisa o focal (e depois o gestor) quando alguém está em campo há muito tempo';
+    protected $description = 'Acompanhamento de trabalho solitário: avisa o focal (e depois o gestor) quando alguém está em campo há muito tempo';
 
     public function handle(PushService $push): int
     {

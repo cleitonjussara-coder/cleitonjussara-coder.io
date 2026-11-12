@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * 11/11/2026 — acompanhamento solidário: quem está em campo há muitas horas sem finalizar gera aviso no celular de
+ * 11/11/2026 — acompanhamento de trabalho solitário: quem está em campo há muitas horas sem finalizar gera aviso no celular de
  * quem acompanha (gestor, admin e focal), uma vez por atividade.
  */
 class CampoVerificarTest extends TestCase
