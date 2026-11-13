@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 620;
+const APP_BUILD = 621;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2716,7 +2716,8 @@ function abrirNotificacoes() {
         </div>` : it.tipo === 'devedor' ? `<div class="notif-acoes">
           ${_veEquipe() ? `<button class="btn btn-sm btn-primary" data-uid="${_at(it.userId)}" onclick="const u=this.dataset.uid; document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : it.tipo === 'pedido' ? `<div class="notif-acoes">
-          <button class="btn btn-sm btn-primary" data-pedido="${_at(it.id)}" onclick="abrirModalAtenderPedido(this.dataset.pedido)">✅ Marcar como pago</button>
+          <div class="notif-sub notif-pedido-dica">Ao marcar como pago, o valor já entra no saldo — não precisa lançar de novo.</div>
+          <button class="btn btn-sm btn-primary" data-pedido="${_at(it.id)}" onclick="abrirModalAtenderPedido(this.dataset.pedido, true)">✔ Paguei — já lança ${esc(brl(it.rep.valor))}</button>
           ${_veEquipe() ? `<button class="btn btn-sm btn-outline" data-uid="${_at(it.rep.user_id)}" onclick="const u=this.dataset.uid; document.getElementById('notif-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Ver colaborador</button>` : ''}
         </div>` : `<div class="notif-acoes"><button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif, this)">OK, vi</button></div>`}
       </div>
@@ -3378,10 +3379,37 @@ function iniciarRecargaColaborador() {
 /* Atender pedido (25/09/2026): antes ia direto por um confirm() com o valor
    pedido fixo. Agora abre um passo com o valor editável (o acerto pode ser
    diferente do pedido) e a opção de recusar — pedido do Cleiton. */
-function abrirModalAtenderPedido(id) {
+/* 13/11/2026, pedido do Cleiton: o gestor marcava o pedido como pago e depois lançava o mesmo dinheiro em "Lançar
+   repasse", achando que faltava registrar — repasse em dobro. O botão agora diz que já lança, a resposta diz "nada
+   mais a fazer" e o lançamento à mão avisa (só avisa: nada é apagado sozinho) quando há pedido aberto ou pago há pouco. */
+const _DIAS_PAGO_RECENTE = 7;
+const _pagosNestaSessao = [];   // o que o gestor acabou de pagar pelo sino, antes de a cópia local da equipe ser refeita
+function _mesmaConta(a, b) { return (a === 'recarga') === (b === 'recarga'); }
+function _repassesConhecidosDe(uid) {
+  const vistos = new Set(), out = [];
+  [window._repassesDaFicha, repassesEquipe, window._equipeCache?.repasses, _pagosNestaSessao].forEach(l => (l || []).forEach(r => {
+    if (r && r.user_id === uid && !vistos.has(r.id)) { vistos.add(r.id); out.push(r); }
+  }));
+  return out;
+}
+function _pedidoAbertoDe(uid, destino) {
+  return _repassesConhecidosDe(uid).filter(r => _repassePendente(r) && _mesmaConta(r.destino, destino))
+    .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')))[0] || null;
+}
+function _pedidoPagoRecente(uid, destino, valor) {
+  const lim = Date.now() - _DIAS_PAGO_RECENTE * 86400_000;
+  return _repassesConhecidosDe(uid).find(r => !r.deleted && r.pedido_id && !_repasseEhPedido(r)
+    && _mesmaConta(r.destino, destino) && Math.abs(Number(r.valor) - valor) < 0.005
+    && new Date(r.created_at || r.data).getTime() > lim) || null;
+}
+function _abrirPedidoDoForm(id) { fecharFormRepasse(); abrirModalAtenderPedido(id); }
+function _rotuloPagar(v) { return `✔ Paguei — lançar ${brl(v > 0 ? v : 0)}`; }
+
+function abrirModalAtenderPedido(id, doSino = false) {
   const r = _repasseDaEquipe(id);
   if (!r) { toast('Pedido não encontrado', 'err'); return; }
   const quem = equipePorId[r.user_id]?.nome || 'o colaborador';
+  const oque = r.destino === 'recarga' ? 'a recarga' : 'o repasse';
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
   ov.id = 'pedido-overlay';
@@ -3393,15 +3421,18 @@ function abrirModalAtenderPedido(id) {
         <p style="margin:0 0 12px;opacity:.75;font-size:14.5px">${esc(r.tipo)} · ${fmtDataBR(r.data)}${r.descricao ? ' · ' + esc(r.descricao) : ''}</p>
         <div class="field">
           <label class="lbl">Valor a pagar (R$) *</label>
-          <input class="inp" id="pedido-valor" type="number" inputmode="decimal" step="0.01" min="0.01" value="${Number(r.valor || 0).toFixed(2)}">
+          <input class="inp" id="pedido-valor" type="number" inputmode="decimal" step="0.01" min="0.01" value="${Number(r.valor || 0).toFixed(2)}"
+                 oninput="const b=document.getElementById('pedido-btn-pagar'); if (b) b.textContent=_rotuloPagar(Number(this.value))">
         </div>
         <p style="opacity:.7;font-size:13px;margin:6px 0 0">Pedido original: ${brl(r.valor)}. Mude o valor se o acerto for diferente do que foi pedido.</p>
+        <div class="pedido-dica">ℹ️ Isto já registra ${oque} no saldo de ${esc(quem)}. Depois não use “Lançar repasse” para o mesmo dinheiro.</div>
       </div>
       <div class="modal-ft" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-danger-outline" data-pedido="${_at(id)}" onclick="_recusarPedido(this.dataset.pedido, this)">🚫 Recusar</button>
-        <button class="btn btn-primary" data-pedido="${_at(id)}" onclick="_confirmarAtenderPedido(this.dataset.pedido, this)">✅ Confirmar pagamento</button>
+        <button class="btn btn-primary" id="pedido-btn-pagar" data-pedido="${_at(id)}" onclick="_confirmarAtenderPedido(this.dataset.pedido, this)">${esc(_rotuloPagar(Number(r.valor)))}</button>
       </div>
     </div>`;
+  ov.dataset.doSino = doSino ? '1' : '';
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
 }
@@ -3412,17 +3443,40 @@ async function _confirmarAtenderPedido(id, btn) {
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
   const valor = Number(document.getElementById('pedido-valor')?.value);
   if (!valor || valor <= 0) { toast('Informe um valor válido', 'err'); return; }
-  if (!(await pedirConfirmacao({ mensagem: `Confirmar que ${brl(valor)} foi PAGO para ${quem}?\n\nO repasse entra no saldo dele e o pedido sai das pendências.`, confirmar: 'Confirmar pagamento' }))) return;
+  if (!(await pedirConfirmacao({ mensagem: `Lançar ${brl(valor)} como pago para ${quem}?\n\nJá entra no saldo — não precisa lançar de novo.`, confirmar: 'Sim, lançar' }))) return;
   if (btn) btn.disabled = true;
+  let resp;
   try {
-    await sb.repasses.atendido(id, valor);
-    toast(`Pago ✅ — repasse registrado no saldo de ${quem}`);
-    document.getElementById('pedido-overlay')?.remove();
-    document.getElementById('notif-overlay')?.remove();
-    await _recarregarEquipe();
-    await atualizarNotificacoes();
-    abrirNotificacoes();
-  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
+    resp = await sb.repasses.atendido(id, valor);
+  } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; return; }
+  const rec = resp?.recebido;
+  if (rec?.id) {
+    _pagosNestaSessao.push({ ...rec, created_at: rec.created_at || new Date().toISOString() });
+    try { await DB.mesclarRepassesRemotos(rec); } catch (_) {}
+  }
+  const pago = Number(rec?.valor ?? valor);
+  const ov = document.getElementById('pedido-overlay');
+  const doSino = ov?.dataset.doSino === '1';
+  document.getElementById('notif-overlay')?.remove();
+  if (ov) {
+    const card = ov.querySelector('.modal-card');
+    if (card) card.innerHTML = `
+      <div class="modal-bd">
+        <div class="pedido-registrado">
+          <div class="pedido-registrado-tit">${resp?.ja_estava ? 'Este pedido já estava pago ✔' : 'Registrado ✔'}</div>
+          <div>${brl(pago)} para <b>${esc(quem)}</b>${r?.tipo ? ' (' + esc(r.tipo) + ')' : ''} — já está no saldo ${r?.destino === 'recarga' ? 'do cartão' : 'dele'}.</div>
+          <div class="pedido-registrado-fim">Nada mais a fazer.</div>
+        </div>
+      </div>
+      <div class="modal-ft"><button class="btn btn-primary" id="pedido-btn-ok" onclick="_fecharPedidoRegistrado(${doSino})">OK</button></div>`;
+    ov.dataset.registrado = '1';
+  }
+  await _recarregarEquipe();
+  await atualizarNotificacoes();
+}
+function _fecharPedidoRegistrado(doSino) {
+  document.getElementById('pedido-overlay')?.remove();
+  if (doSino) abrirNotificacoes();
 }
 
 async function _recusarPedido(id, btn) {
@@ -12044,8 +12098,13 @@ function abrirFormRepasse(modo = null, pre = null, alvo = null, destino = null) 
     if (t) t.textContent = _repasseTituloCabecalho();
     if (aviso) {
       aviso.style.display = _repasseAlvo ? '' : 'none';
+      /* 13/11/2026: lançar à mão é para ADIANTAR dinheiro sem pedido; pedido se paga pelo sino (já lança sozinho). */
+      const nomeAlvo = esc(_repasseAlvo?.nome || 'colaborador');
+      const aberto = _repasseAlvo ? _pedidoAbertoDe(_repasseAlvo.id, _repasseDestino) : null;
       aviso.innerHTML = _repasseAlvo
-        ? `💰 Lançando para <b>${esc(_repasseAlvo.nome || 'colaborador')}</b> — entra no saldo dele na hora, sem precisar de confirmação.`
+        ? `💰 Lançando para <b>${nomeAlvo}</b> — entra no saldo na hora. Use para <b>adiantar</b> dinheiro sem pedido. Pedido feito por ${nomeAlvo} se paga pelo 🔔 sino, que já lança o valor.`
+          + (aberto ? `<div class="rep-pedido-aberto">⚠️ <b>${nomeAlvo}</b> tem um pedido aberto de <b>${brl(aberto.valor)}</b>${aberto.tipo ? ' (' + esc(aberto.tipo) + ')' : ''} — use o pedido.
+              <button type="button" class="btn btn-sm btn-outline" data-pedido="${_at(aberto.id)}" onclick="_abrirPedidoDoForm(this.dataset.pedido)">Abrir o pedido</button></div>` : '')
         : '';
     }
     /* para outro só existe "recebido": o passo 1 nem entra no caminho
@@ -12113,6 +12172,13 @@ async function _salvarRepasseInterno() {
   };
   /* Padrão contra lançamento duplicado (24/10/2026): mesmo dono, tipo, destino, valor e data de um recebido que já
      existe → pergunta antes. Nunca apaga nada sozinho; a decisão é de quem lança. */
+  /* 13/11/2026: o mesmo valor de um pedido que o gestor acabou de pagar pelo sino quase sempre é o mesmo dinheiro. */
+  if (kind === 'received' && _repasseAlvo) {
+    const pago = _pedidoPagoRecente(_repasseAlvo.id, _repasseDestino, valor);
+    if (pago && !(await pedirConfirmacao({
+      mensagem: `${brl(valor)} já foi lançado quando você pagou o pedido de ${_repasseAlvo.nome || 'colaborador'} em ${fmtDataBR(String(pago.data).slice(0, 10))}.\n\nLançar de novo dobra o valor no saldo.`,
+      confirmar: 'Lançar de novo', cancelar: 'Não lançar', perigo: true }))) return;
+  }
   if (kind === 'received') {
     const dono = _repasseAlvo ? _repasseAlvo.id : user.id;
     const fonte = _repasseAlvo ? repassesEquipe : repasses;
