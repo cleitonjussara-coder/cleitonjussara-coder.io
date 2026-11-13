@@ -7,12 +7,19 @@
    Como funciona: a tela trabalha numa cópia reduzida (rápida no celular); ao salvar, tudo é refeito sobre a foto em
    resolução original, numa tela só (giro + recorte no mesmo desenho, sem cópia intermediária da foto inteira). O giro
    fino corta sozinho as quinas que sobrariam (maior retângulo de mesma proporção dentro da foto girada). Não depende de
-   nada do app.js: só do Scanner (opcional, para o realce automático). */
+   nada do app.js: só do Scanner (opcional, para o realce automático e para os cantos livres).
+
+   Cantos livres (13/11/2026, print da nota torta da Inova Celulares): além do recorte reto, cada um dos 4 cantos se arrasta
+   sozinho até a ponta da nota, e ao salvar a nota é esticada para um retângulo (Scanner.aplanar, a mesma homografia do
+   scanner da câmera). "Achar a nota" põe os cantos com o Scanner.achar. Os cantos ficam em frações do quadro já girado. */
 window.EditorFoto = (() => {
   const PREVIA_MAX = 1400;          // lado maior da cópia de trabalho
   const SAIDA_MAX_PX = 16e6;        // teto de área do canvas (Safari do iPhone recusa acima de ~16,7 MP)
   const FINO_MAX = 15;              // graus para cada lado no "Endireitar"
-  const INICIAL = () => ({ rot: 0, fino: 0, corte: { x: 0, y: 0, w: 1, h: 1 }, brilho: 0, contraste: 0, nitidez: 0, auto: false });
+  const QUAD_INICIAL = () => [{ x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 }, { x: 0.94, y: 0.94 }, { x: 0.06, y: 0.94 }];
+  const INICIAL = () => ({ rot: 0, fino: 0, corte: { x: 0, y: 0, w: 1, h: 1 }, modo: 'ret', quad: QUAD_INICIAL(),
+    brilho: 0, contraste: 0, nitidez: 0, auto: false });
+  const temCantos = () => !!(window.Scanner?.aplanar);
 
   let ov = null, est = null, hist = [], fonte = null, previa = null, resolver = null, quadroPrevia = null, timerPrevia = 0;
 
@@ -41,6 +48,37 @@ window.EditorFoto = (() => {
     g.rotate((st.rot + st.fino) * Math.PI / 180);
     g.drawImage(src, -W / 2, -H / 2, W, H);
     return cv;
+  }
+
+  /* ── cantos livres ─────────────────────────────────────── */
+  /* ordem que o aplanar espera: topo-esq, topo-dir, baixo-dir, baixo-esq (depois de um giro, a ordem se refaz) */
+  function ordenarQuad(q) {
+    const porSoma = [...q].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    const tl = porSoma[0], br = porSoma[3];
+    const [m1, m2] = [porSoma[1], porSoma[2]];
+    const tr = (m1.x - m1.y) > (m2.x - m2.y) ? m1 : m2, bl = tr === m1 ? m2 : m1;
+    return [tl, tr, br, bl].map(c => ({ x: c.x, y: c.y }));
+  }
+  function girarQuad(q, a) {
+    const f = a === '180' ? c => ({ x: 1 - c.x, y: 1 - c.y }) : a === 'dir' ? c => ({ x: 1 - c.y, y: c.x }) : c => ({ x: c.y, y: 1 - c.x });
+    return ordenarQuad(q.map(f));
+  }
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  /* estica o pedaço marcado do quadro (canvas) para um retângulo; mesmo cálculo de tamanho do Scanner.endireitar */
+  function aplanarQuadro(cv, quadN) {
+    const sw = cv.width, sh = cv.height;
+    const q = ordenarQuad(quadN).map(c => ({ x: c.x * sw, y: c.y * sh }));
+    const topo = dist(q[0], q[1]), base = dist(q[3], q[2]), esq = dist(q[0], q[3]), dir = dist(q[1], q[2]);
+    const amplia = Math.max(2 * Math.max(topo, base) / (topo + base || 1), 2 * Math.max(esq, dir) / (esq + dir || 1));
+    let dw = Math.round((topo + base) / 2 * amplia), dh = Math.round((esq + dir) / 2 * amplia);
+    const k = Math.min(1, Math.sqrt(SAIDA_MAX_PX / Math.max(1, dw * dh)));
+    dw = Math.max(1, Math.round(dw * k)); dh = Math.max(1, Math.round(dh * k));
+    const src = cv.getContext('2d').getImageData(0, 0, sw, sh).data;
+    const px = Scanner.aplanar(src, sw, sh, q, dw, dh);
+    if (!px) throw new Error('aplanar falhou');
+    const out = document.createElement('canvas'); out.width = dw; out.height = dh;
+    out.getContext('2d').putImageData(new ImageData(px, dw, dh), 0, 0);
+    return out;
   }
 
   /* ── ajustes de imagem ─────────────────────────────────── */
@@ -99,6 +137,9 @@ window.EditorFoto = (() => {
 #ef-ov .ef-alca{position:absolute;width:26px;height:26px;background:#fff;border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.5);touch-action:none}
 #ef-ov .ef-alca.nw{left:-13px;top:-13px;cursor:nwse-resize}#ef-ov .ef-alca.ne{right:-13px;top:-13px;cursor:nesw-resize}
 #ef-ov .ef-alca.sw{left:-13px;bottom:-13px;cursor:nesw-resize}#ef-ov .ef-alca.se{right:-13px;bottom:-13px;cursor:nwse-resize}
+#ef-ov svg.ef-quad{position:absolute;pointer-events:none;overflow:visible}
+#ef-ov .ef-pt{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:#fff;
+  border:3px solid #4ade80;box-shadow:0 1px 6px rgba(0,0,0,.6);touch-action:none;cursor:grab;z-index:1}
 #ef-ov .ef-ferr{flex-shrink:0;display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto}
 #ef-ov .ef-lin{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 #ef-ov .ef-lin.dois{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -135,12 +176,19 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
       <div class="ef-palco"><canvas class="ef-img"></canvas>
         <div class="ef-rect"><span class="ef-alca nw" data-alca="nw"></span><span class="ef-alca ne" data-alca="ne"></span>
           <span class="ef-alca sw" data-alca="sw"></span><span class="ef-alca se" data-alca="se"></span></div>
+        <svg class="ef-quad" style="display:none"><path class="ef-masc" fill="rgba(0,0,0,.55)" fill-rule="evenodd"></path>
+          <polygon class="ef-pol" fill="none" stroke="#4ade80" stroke-width="2.5"></polygon></svg>
+        ${[0, 1, 2, 3].map(i => `<span class="ef-pt" data-pt="${i}" style="display:none" aria-label="Canto ${i + 1} da nota"></span>`).join('')}
         <div class="ef-msg">Salvando a foto…</div></div>
       <div class="ef-ferr">
         <div class="ef-lin">
           <button type="button" class="ef-b" data-ef="esq">⟲ 90°</button>
           <button type="button" class="ef-b" data-ef="180">🔃 Cabeça p/ baixo</button>
           <button type="button" class="ef-b" data-ef="dir">⟳ 90°</button></div>
+        ${temCantos() ? `<div class="ef-lin">
+          <button type="button" class="ef-b" data-ef="modo-ret">▭ Recorte reto</button>
+          <button type="button" class="ef-b" data-ef="modo-cantos">⬚ Cantos livres</button>
+          <button type="button" class="ef-b" data-ef="achar">🎯 Achar a nota</button></div>` : ''}
         ${REGUAS.map(([k, rot, min, max, passo]) => `
         <label class="ef-reg"><span>${rot}</span><input type="range" data-reg="${k}" min="${min}" max="${max}" step="${passo}" value="0"><output data-out="${k}"></output></label>`).join('')}
         <div class="ef-lin">
@@ -165,9 +213,20 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
       if (a === 'esq' || a === 'dir' || a === '180') {
         est.rot = (est.rot + (a === 'esq' ? 270 : a === 'dir' ? 90 : 180)) % 360;
         est.corte = girarCorte(est.corte, a);
+        est.quad = girarQuad(est.quad, a);
         return pintar(true);
       }
       if (a === 'auto') { est.auto = !est.auto; return pintar(true); }
+      if (a === 'modo-ret' || a === 'modo-cantos') {
+        const m = a === 'modo-ret' ? 'ret' : 'cantos';
+        if (est.modo === m) { hist.pop(); return; }
+        est.modo = m; return pintar(true);
+      }
+      if (a === 'achar') {
+        const q = acharNota();
+        if (!q) { hist.pop(); if (window.toast) toast('Não achei a nota sozinho: arraste os cantos até as pontas dela.', 'err'); return; }
+        est.modo = 'cantos'; est.quad = q; return pintar(true);
+      }
     });
     ov.querySelectorAll('input[data-reg]').forEach(inp => {
       let guardou = false;
@@ -199,6 +258,8 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
       ov.querySelector(`output[data-out="${k}"]`).textContent = fmt(est[k]);
     });
     ov.querySelector('[data-ef="auto"]').classList.toggle('on', est.auto);
+    ov.querySelector('[data-ef="modo-ret"]')?.classList.toggle('on', est.modo === 'ret');
+    ov.querySelector('[data-ef="modo-cantos"]')?.classList.toggle('on', est.modo === 'cantos');
     ov.querySelector('[data-ef="desfazer"]').disabled = !hist.length;
     ov.querySelector('[data-ef="original"]').disabled = !mudou();
     clearTimeout(timerPrevia);
@@ -222,6 +283,23 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     if (!ov) return;
     const cv = ov.querySelector('canvas.ef-img'), palco = ov.querySelector('.ef-palco'), r = ov.querySelector('.ef-rect');
     const a = cv.getBoundingClientRect(), p = palco.getBoundingClientRect(), c = est.corte;
+    const cantos = est.modo === 'cantos', svg = ov.querySelector('svg.ef-quad');
+    r.style.display = cantos ? 'none' : '';
+    svg.style.display = cantos ? '' : 'none';
+    ov.querySelectorAll('.ef-pt').forEach(pt => { pt.style.display = cantos ? '' : 'none'; });
+    if (cantos) {
+      const x0 = a.left - p.left, y0 = a.top - p.top;
+      Object.assign(svg.style, { left: x0 + 'px', top: y0 + 'px', width: a.width + 'px', height: a.height + 'px' });
+      svg.setAttribute('viewBox', `0 0 ${a.width} ${a.height}`);
+      const pts = est.quad.map(q => [q.x * a.width, q.y * a.height]);
+      svg.querySelector('.ef-pol').setAttribute('points', pts.map(v => v.join(',')).join(' '));
+      svg.querySelector('.ef-masc').setAttribute('d', `M0,0H${a.width}V${a.height}H0Z M${pts.map(v => v.join(',')).join(' L')}Z`);
+      ov.querySelectorAll('.ef-pt').forEach(pt => {
+        const [x, y] = pts[Number(pt.dataset.pt)];
+        pt.style.left = (x0 + x) + 'px'; pt.style.top = (y0 + y) + 'px';
+      });
+      return;
+    }
     r.style.left = (a.left - p.left + c.x * a.width) + 'px';
     r.style.top = (a.top - p.top + c.y * a.height) + 'px';
     r.style.width = (c.w * a.width) + 'px';
@@ -261,6 +339,44 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     const soltar = e => { if (arr && e.pointerId === arr.id) arr = null; };
     r.addEventListener('pointerup', soltar);
     r.addEventListener('pointercancel', soltar);
+
+    /* cantos livres: cada ponto anda sozinho, preso dentro do quadro */
+    ov.querySelectorAll('.ef-pt').forEach(pt => {
+      let mv = null;
+      pt.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        const a = cv.getBoundingClientRect();
+        mv = { i: Number(pt.dataset.pt), a, guardou: false, id: e.pointerId };
+        try { pt.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      pt.addEventListener('pointermove', e => {
+        if (!mv || e.pointerId !== mv.id) return;
+        if (!mv.guardou) { guardar(); mv.guardou = true; }
+        const x = Math.min(1, Math.max(0, (e.clientX - mv.a.left) / mv.a.width));
+        const y = Math.min(1, Math.max(0, (e.clientY - mv.a.top) / mv.a.height));
+        est.quad = est.quad.map((q, k) => (k === mv.i ? { x, y } : q));
+        posicionarRect();
+        ov.querySelector('[data-ef="desfazer"]').disabled = false;
+        ov.querySelector('[data-ef="original"]').disabled = !mudou();
+      });
+      const fim = e => { if (mv && e.pointerId === mv.id) { mv = null; est.quad = ordenarQuad(est.quad); posicionarRect(); } };
+      pt.addEventListener('pointerup', fim);
+      pt.addEventListener('pointercancel', fim);
+    });
+  }
+
+  /* "Achar a nota": o mesmo detector do scanner da câmera, numa cópia pequena do quadro girado */
+  function acharNota() {
+    if (!window.Scanner?.achar || !quadroPrevia) return null;
+    try {
+      const mw = 320, mh = Math.max(1, Math.round(quadroPrevia.height * mw / quadroPrevia.width));
+      const c = document.createElement('canvas'); c.width = mw; c.height = mh;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(quadroPrevia, 0, 0, mw, mh);
+      const r = Scanner.achar(g.getImageData(0, 0, mw, mh).data, mw, mh);
+      if (!r?.quad || r.quad.length !== 4) return null;
+      return ordenarQuad(r.quad.map(q => ({ x: Math.min(1, Math.max(0, q.x)), y: Math.min(1, Math.max(0, q.y)) })));
+    } catch (_) { return null; }
   }
 
   /* refaz tudo na foto em resolução original */
@@ -272,9 +388,19 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     await new Promise(r => setTimeout(r, 30));   // deixa o aviso aparecer antes da conta pesada
     try {
       const W = fonte.width, H = fonte.height, q = quadro(W, H, est);
-      const area = q.w * est.corte.w * q.h * est.corte.h;
-      const escala = Math.min(1, Math.sqrt(SAIDA_MAX_PX / Math.max(1, area)));
-      const cv = ajustar(desenhar(fonte, W, H, est, escala), est);
+      let cv;
+      if (est.modo === 'cantos' && temCantos()) {
+        /* quadro inteiro (girado), depois a nota esticada para um retângulo; teto de área nos dois passos */
+        const inteiro = { ...est, corte: { x: 0, y: 0, w: 1, h: 1 } };
+        const escala = Math.min(1, Math.sqrt(12e6 / Math.max(1, q.w * q.h)));
+        const quadroCv = desenhar(fonte, W, H, inteiro, escala);
+        cv = ajustar(aplanarQuadro(quadroCv, est.quad), est);
+        quadroCv.width = quadroCv.height = 0;
+      } else {
+        const area = q.w * est.corte.w * q.h * est.corte.h;
+        const escala = Math.min(1, Math.sqrt(SAIDA_MAX_PX / Math.max(1, area)));
+        cv = ajustar(desenhar(fonte, W, H, est, escala), est);
+      }
       const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
       cv.width = cv.height = 0;
       fechar(blob && blob.size > 2000 ? blob : null, !blob);
