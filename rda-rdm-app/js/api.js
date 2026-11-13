@@ -313,6 +313,9 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     corrigirTipo: (id, tipo, subtipo = null) => req('PATCH', `/notas/${id}/tipo`, { body: { tipo, subtipo } }),
     /* quem mudou o quê na nota (06/11/2026): só existe no servidor, nunca entra no IndexedDB */
     historico: id => req('GET', `/notas/${encodeURIComponent(id)}/historico`),
+    /* foto original guardada quando alguém ajustou a foto (13/11/2026): há? / voltar a ela */
+    fotoOriginal: id => req('GET', `/notas/${encodeURIComponent(id)}/foto/original`),
+    restaurarFotoOriginal: id => req('POST', `/notas/${encodeURIComponent(id)}/foto/original`),
     /* valor/data/emitente oficiais pela URL do QR (servidor abre o portal do
        SEFAZ). null quando o portal não respondeu — o app fica com o OCR. */
     consultarQr: async (qrUrl, chave) => {
@@ -382,7 +385,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
       return out;
     },
     async url(path) { return (await fotos.urls([path]))[path] || null; },
-    download: path => req('GET', `/fotos/${path}`, { blob: true, timeout: 120_000 }),
+    /* fresca (13/11/2026): logo depois de trocar a foto o nome do arquivo é o mesmo, e o navegador devolveria a antiga do cache */
+    download: (path, fresca = false) => req('GET', `/fotos/${path}`, { blob: true, timeout: 120_000, query: fresca ? { t: Date.now() } : undefined }),
   };
 
   /* Frota: veículos e registros de km (16/09/2026). Online, sem fila. */

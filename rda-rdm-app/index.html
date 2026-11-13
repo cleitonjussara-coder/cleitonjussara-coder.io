@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=616">
+  <link rel="manifest" href="manifest.json?v=617">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -1947,6 +1947,7 @@ button.arq-lin-abrir:active{background:rgba(201,234,98,.16)}
   background:var(--surface2);
 }
 .foto-thumb{max-width:100%;max-height:180px;border-radius:var(--radius-sm);margin-top:8px}
+.foto-thumb-box{display:block}
 .foto-ajuste-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .foto-ajuste-btns .btn{flex:1 1 140px;min-height:40px}
 /* destaque do "Passo 2: fotografe a nota" (após ler o QR) */
@@ -2527,7 +2528,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=616" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=617" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2800,6 +2801,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
       <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaZoom(1)" aria-label="Aumentar">＋</button>
       <button type="button" class="btn btn-sm btn-outline" onclick="_ladoNotaGirar()" aria-label="Girar">⟳ Girar</button>
       <button type="button" class="btn btn-sm btn-outline" id="nf-lado-abrir" onclick="verFoto($('nf-id').value)" aria-label="Abrir o anexo inteiro">⤢ Abrir</button>
+      <button type="button" class="btn btn-sm btn-outline" id="nf-lado-editar" style="display:none" onclick="ajustarFotoNota()" aria-label="Editar a foto: girar, recortar e melhorar">✏️ Editar foto</button>
     </div>
     <div class="nf-lado-vista" id="nf-lado-vista"></div>
   </div>
@@ -3276,43 +3278,43 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=616"></script>
-<script defer src="js/db.js?v=616"></script>
-<script defer src="js/nfce.js?v=616"></script>
-<script defer src="js/sefaz.js?v=616"></script>
-<script defer src="js/brasilapi.js?v=616"></script>
-<script defer src="js/ocr.js?v=616"></script>
-<script defer src="js/scanner.js?v=616"></script>
-<script defer src="js/foto-branca.js?v=616"></script>
-<script defer src="js/recorte.js?v=616"></script>
-<script defer src="js/editor-foto.js?v=616"></script>
-<script defer src="js/excel.js?v=616"></script>
-<script defer src="js/gestor.js?v=616"></script>
-<script defer src="js/frota.js?v=616"></script>
-<script defer src="js/frota-painel.js?v=616"></script>
-<script defer src="js/frota-planilha.js?v=616"></script>
-<script defer src="js/ponto.js?v=616"></script>
-<script defer src="js/campo.js?v=616"></script>
-<script defer src="js/rastreio.js?v=616"></script>
-<script defer src="js/repasses-equipe.js?v=616"></script>
-<script defer src="js/fechamento.js?v=616"></script>
-<script defer src="js/busca.js?v=616"></script>
-<script defer src="js/gdrive.js?v=616"></script>
+<script defer src="js/api.js?v=617"></script>
+<script defer src="js/db.js?v=617"></script>
+<script defer src="js/nfce.js?v=617"></script>
+<script defer src="js/sefaz.js?v=617"></script>
+<script defer src="js/brasilapi.js?v=617"></script>
+<script defer src="js/ocr.js?v=617"></script>
+<script defer src="js/scanner.js?v=617"></script>
+<script defer src="js/foto-branca.js?v=617"></script>
+<script defer src="js/recorte.js?v=617"></script>
+<script defer src="js/editor-foto.js?v=617"></script>
+<script defer src="js/excel.js?v=617"></script>
+<script defer src="js/gestor.js?v=617"></script>
+<script defer src="js/frota.js?v=617"></script>
+<script defer src="js/frota-painel.js?v=617"></script>
+<script defer src="js/frota-planilha.js?v=617"></script>
+<script defer src="js/ponto.js?v=617"></script>
+<script defer src="js/campo.js?v=617"></script>
+<script defer src="js/rastreio.js?v=617"></script>
+<script defer src="js/repasses-equipe.js?v=617"></script>
+<script defer src="js/fechamento.js?v=617"></script>
+<script defer src="js/busca.js?v=617"></script>
+<script defer src="js/gdrive.js?v=617"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=616"></script>
+<script defer src="js/svelte-ajuda.js?v=617"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=616"></script>
+<script defer src="js/svelte-historico.js?v=617"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=616"></script>
+<script defer src="js/svelte-arquivos.js?v=617"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=616"></script>
-<script defer src="js/app.js?v=616"></script>
-<script defer src="js/instalar.js?v=616"></script>
+<script defer src="js/svelte-perfil.js?v=617"></script>
+<script defer src="js/app.js?v=617"></script>
+<script defer src="js/instalar.js?v=617"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=616').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=617').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

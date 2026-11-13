@@ -365,7 +365,9 @@ class NotaIntegridadeTest extends TestCase
         $this->assertSame('ANEXO CERTO DA GESTAO', Storage::disk('fotos')->get($nota->foto_path));
         $this->assertSame($gestor->id, $nota->updated_by);
         $this->assertSame($antes->updated_at->getTimestamp(), $nota->updated_at->getTimestamp());
-        $this->assertSame(["{$colab->id}/{$id}.pdf"], Storage::disk('fotos')->allFiles(), 'o anexo da edição descartada não fica no disco');
+        /* 13/11/2026: a troca da gestão guardou o primeiro anexo em original/ (Voltar à original); a edição descartada não fica */
+        $this->assertSame(["{$colab->id}/{$id}.pdf", "{$colab->id}/original/{$id}.pdf"], Storage::disk('fotos')->allFiles(), 'o anexo da edição descartada não fica no disco');
+        $this->assertSame('ANEXO DO COLABORADOR', Storage::disk('fotos')->get("{$colab->id}/original/{$id}.pdf"));
         Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx = []) => ($ctx['id'] ?? null) === $id && ($ctx['anexo_descartado'] ?? null) === true)->once();
     }
 
@@ -398,7 +400,8 @@ class NotaIntegridadeTest extends TestCase
         $this->putJson("/api/notas/{$id}", $this->corpo($colab->id, ['valor' => 75, 'base_updated_at' => $base]))->assertOk()
             ->assertJsonPath('foto_path', "{$colab->id}/{$id}.xml");
 
-        $this->assertSame(["{$colab->id}/{$id}.xml"], Storage::disk('fotos')->allFiles());
+        /* 13/11/2026: o anexo que existia antes da troca fica guardado como original */
+        $this->assertSame(["{$colab->id}/{$id}.xml", "{$colab->id}/original/{$id}.pdf"], Storage::disk('fotos')->allFiles());
         $this->assertSame($colab->id, Nota::findOrFail($id)->updated_by);
 
         Sanctum::actingAs($gestor);

@@ -318,6 +318,9 @@ class NotaController extends Controller
             /* 06/11/2026: lido antes, porque a promoção sobrescreve o atual. O mesmo arquivo reenviado continua sendo promovido,
                mas não é troca (ver foto()). Só com espera: ler o anexo em todo PUT seria custo à toa. */
             $conteudoAntes = $temEspera ? $this->conteudoDoAnexo($nota->foto_path) : null;
+            if ($temEspera && $conteudoAntes !== null && $conteudoAntes !== $this->fotos->conteudoDaEspera($this->fotos->pastaDe($nota), $id)) {
+                $this->fotos->guardarOriginal($this->fotos->pastaDe($nota), $id, $nota->foto_path);   // 13/11/2026: a 1ª foto fica guardada
+            }
             $emEspera = $temEspera ? $this->fotos->promoverEspera($this->fotos->pastaDe($nota), $id) : null;
             if ($emEspera !== null) {
                 $nota->foto_path = $emEspera;
@@ -803,6 +806,10 @@ class NotaController extends Controller
 
         /* 06/11/2026: precisa ser antes de gravar, porque salvarPara sobrescreve o arquivo que serve de comparação */
         $conteudoAntes = $nota ? $this->conteudoDoAnexo($nota->foto_path) : null;
+        /* 13/11/2026: foto ajustada (ou trocada) numa nota que já tinha anexo: a primeira foto fica guardada para "Voltar à original" */
+        if ($conteudoAntes !== null && $conteudoAntes !== sha1_file($r->file('file')->getRealPath())) {
+            $this->fotos->guardarOriginal($pasta, $id, $nota->foto_path);
+        }
         $path = $this->fotos->salvarPara($pasta, $id, $r->file('file'), $r->input('ext'));
         try {
             $this->fotos->miniatura($path);   // pronta para a tela Arquivos; se falhar, gera depois
@@ -821,6 +828,55 @@ class NotaController extends Controller
         }
 
         return response()->json(['foto_path' => $path, 'updated_at' => $nota?->updated_at]);
+    }
+
+    /* ── Foto original (13/11/2026) ─────────────────────────────────
+       Depois de alguém ajustar a foto, a primeira fica guardada (ver FotoStorage::guardarOriginal). Quem pode mexer no anexo
+       desta nota pergunta se há original e pode voltar a ela. O Contador fica de fora: corrige dados, não a foto (decisão do
+       Cleiton, 13/11/2026). Mês fechado trava a volta como trava qualquer troca de anexo. */
+    public function fotoOriginal(Request $r, string $id): JsonResponse
+    {
+        [$nota, $pasta] = $this->notaParaOriginal($r, $id);
+
+        return response()->json(['tem_original' => $this->fotos->original($pasta, $nota->id) !== null]);
+    }
+
+    public function restaurarFotoOriginal(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        [$nota, $pasta] = $this->notaParaOriginal($r, $id);
+        if ($periodo = $this->fechamento->periodoTravado($nota)) {
+            return $this->fechamento->recusa($nota, $periodo, $u);
+        }
+        abort_if($this->fotos->original($pasta, $nota->id) === null, 404, 'Esta nota não tem foto original guardada.');
+        $antes = $this->conteudoDoAnexo($nota->foto_path);
+        $path = $this->fotos->restaurarOriginal($pasta, $nota->id);
+        $nota->foto_path = $path;
+        $nota->updated_by = $u->id;
+        $nota->save();
+        if (! $this->mesmoConteudo($antes, $path)) {
+            $this->historico->registrarAnexo($nota->id, $u, 'foto original restaurada');
+        }
+        $this->fotoBranca->avaliar($nota, $u, refazer: true);
+
+        return response()->json(['foto_path' => $path, 'updated_at' => $nota->updated_at]);
+    }
+
+    /** @return array{0: Nota, 1: string} */
+    private function notaParaOriginal(Request $r, string $id): array
+    {
+        abort_unless(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id), 422, 'Id da nota inválido');
+        $u = $r->user();
+        abort_if($u->soLeitura(), 403, 'O Contador corrige os dados da nota, mas não a foto.');
+        $nota = Nota::find($id);
+        abort_if($nota === null || $nota->deleted, 404, 'Nota não encontrada.');
+        if ($nota->user_id === null) {
+            abort_unless($u->gerencia(), 403, 'Sem permissão para esta nota');
+        } else {
+            $this->podeGravar($u, $nota->user_id, true);
+        }
+
+        return [$nota, $this->fotos->pastaDe($nota)];
     }
 
     /* A fila repete o envio quando a resposta se perde: o mesmo arquivo de novo não é troca de anexo (06/11/2026). A conta é

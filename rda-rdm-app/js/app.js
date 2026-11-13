@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 616;
+const APP_BUILD = 617;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9513,7 +9513,7 @@ async function abrirFormNota(dados = {}) {
     return;
   }
   fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
-  _fotoAntesDoScanner = null; _fotoAjustada = false;
+  _fotoAntesDoScanner = null; _fotoAjustada = false; _temFotoOriginal = false;
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
@@ -9596,6 +9596,7 @@ async function abrirFormNota(dados = {}) {
   } else {
     atualizarPreviewFoto(null);
   }
+  if (dados.id) _verificarFotoOriginal(dados.id);   // 13/11/2026: há foto original guardada? mostra "↩ Voltar à original"
 
   // se vier com CNPJ, busca razão social automaticamente
   if (dados.cnpj && !dados.razao_social) buscarRazaoSocial(dados.cnpj);
@@ -9670,7 +9671,7 @@ function _fecharLadoNota() {
   const btn = $('nf-btn-lado'); if (btn) btn.textContent = '◫ Ver nota ao lado';
 }
 
-async function _abrirLadoNota(id) {
+async function _abrirLadoNota(id, fresca = false) {
   const lado = $('nf-lado'), vista = $('nf-lado-vista');
   if (!lado || !id) return;
   lado.style.display = 'flex';
@@ -9680,20 +9681,20 @@ async function _abrirLadoNota(id) {
   _lado.id = id;
   const msg = t => { if (seq === _lado.seq) vista.innerHTML = `<div class="nf-lado-msg">${t}</div>`; };
   msg('Carregando o anexo…');
-  const blob = await _blobDoAnexoDaNota(id);
+  const blob = await _blobDoAnexoDaNota(id, fresca);
   if (seq !== _lado.seq) return;                                   // fechou ou trocou de nota enquanto baixava
   if (!blob) { msg('Esta nota não tem anexo para mostrar.' + (navigator.onLine ? '' : '<br>Sem internet: o anexo fica no servidor.')); return; }
   await _mostrarBlobNoLado(blob, seq);
 }
 
 /* anexo da nota em blob: o que está no formulário (aparelho) primeiro, depois o servidor */
-async function _blobDoAnexoDaNota(id) {
+async function _blobDoAnexoDaNota(id, fresca = false) {
   if (fotoBlob && $('nf-id').value === id) return fotoBlob;
   const local = await DB.getFotoLocal(id).catch(() => null);
   if (local?.blob) return local.blob;
   const n = _notaPorId(id);
   if (!n?.foto_path || !sb || !navigator.onLine) return null;
-  try { return await sb.fotos.download(n.foto_path); } catch (_) {}
+  try { return await sb.fotos.download(n.foto_path, fresca); } catch (_) {}
   try {
     const url = await sb.fotos.url(n.foto_path);
     if (url) { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return await r.blob(); }
@@ -10335,6 +10336,7 @@ function atualizarPreviewFoto(url) {
   if (!url) {
     prev.innerHTML = '';
     $('btn-foto-label').textContent = '📷 Tirar foto';
+    _pintarBotaoEditarNoLado();
     _atualizarBotaoLerChave();
     return;
   }
@@ -10346,8 +10348,9 @@ function atualizarPreviewFoto(url) {
   }
   if (kind === 'image') {
     const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
-    prev.innerHTML = `<img src="${src}" alt="Anexo" class="foto-thumb"
-      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'">${_botoesAjusteFotoHTML()}`;
+    /* a imagem num invólucro próprio: o onerror troca só ele, e os botões de ajuste ficam */
+    prev.innerHTML = `<span class="foto-thumb-box"><img src="${src}" alt="Anexo" class="foto-thumb"
+      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'"></span><div id="foto-ajuste-box">${_botoesAjusteFotoHTML()}</div>`;
   } else if (kind === 'pdf' && fotoRenderURL) {
     // imagem da 1ª página puxada do PDF
     prev.innerHTML = `<img src="${fotoRenderURL}" alt="PDF (1ª página)" class="foto-thumb">
@@ -10357,39 +10360,76 @@ function atualizarPreviewFoto(url) {
     prev.innerHTML = `<span class="muted-p">${icon} ${kind.toUpperCase()} anexado — use “Ver anexo” na lista</span>`;
   }
   $('btn-foto-label').textContent = '📷 Trocar foto';
+  _pintarBotaoEditarNoLado();
   _atualizarBotaoLerChave();
   _atualizarDocumentoAuto();   // anexo XML/PDF x foto decide NF-e x DANFE
   _ladoNotaAnexoTrocado();     // tela dividida aberta: mostra o anexo novo
 }
 
 /* ─── Ajustar a foto (13/11/2026, pedido do Cleiton) ───────────────────────────────────────────────────────────────
-   Na foto anexada (a que está no aparelho, fotoBlob), "✏️ Ajustar foto" abre o EditorFoto: girar, endireitar, recortar e
-   melhorar. A foto salva lá vira o anexo (é ela que sobe e vai para a pasta). fotoOriginal fica como estava: o "Ler QR
-   da foto" continua procurando na foto inteira. Depois de um ajuste aparece "🔁 Ler de novo", que lê a foto corrigida e
-   completa os campos ainda vazios. Foto que só está no servidor (nota já enviada) fica para a etapa do gestor. */
+   "✏️ Ajustar foto" abre o EditorFoto (girar, endireitar, recortar e melhorar) e a foto salva lá vira o anexo: sobe ao salvar
+   a nota, pelo mesmo caminho do "Trocar foto". fotoOriginal fica como estava (o "Ler QR da foto" procura na foto inteira).
+   Depois de um ajuste aparece "🔁 Ler de novo", que lê a foto corrigida e completa os campos ainda vazios.
+   Etapa 1: foto que está no aparelho (lançamento). Etapa 2: nota já enviada, com a foto só no servidor. Ajusta quem pode
+   mexer na nota: gestor e admin em qualquer uma, o colaborador nas dele; o Contador não (decisão do Cleiton, 13/11/2026).
+   A primeira troca guarda no servidor a foto que chegou; "↩ Voltar à original" a devolve (POST /notas/{id}/foto/original). */
 let _fotoAjustada = false;
+let _temFotoOriginal = false;
+function _podeMexerNaFoto() {
+  if (_ehContabilidade() || !window.EditorFoto) return false;
+  const id = $('nf-id')?.value;
+  if (!id || _ehGestorOuAdmin()) return true;              // lançamento novo é de quem está lançando
+  const n = _notaPorId(id);
+  return !n || n.user_id === user?.id;                     // nota que não está na lista do aparelho só abre para o próprio dono
+}
+function _fotoDoServidorEhImagem() {
+  const n = _notaPorId($('nf-id')?.value);
+  return !!n?.foto_path && _ehImagemExt(_extDeUrl(n.foto_path) || '');
+}
 function _podeAjustarFoto() {
-  return !!window.EditorFoto && !!fotoBlob && _ehImagemExt(fotoExt || _extDoArquivo(fotoBlob) || 'jpg');
+  if (!_podeMexerNaFoto()) return false;
+  if (fotoBlob) return _ehImagemExt(fotoExt || _extDoArquivo(fotoBlob) || 'jpg');
+  return _fotoDoServidorEhImagem();
 }
 function _botoesAjusteFotoHTML() {
-  if (!_podeAjustarFoto()) return '';
+  const ajusta = _podeAjustarFoto(), volta = _temFotoOriginal && !_fotoAjustada && _podeMexerNaFoto();
+  if (!ajusta && !volta) return '';
   return `<div class="foto-ajuste-btns" onclick="event.stopPropagation()">
-      <button type="button" class="btn btn-outline btn-sm" onclick="ajustarFotoNota()">✏️ Ajustar foto</button>
+      ${ajusta ? '<button type="button" class="btn btn-outline btn-sm" onclick="ajustarFotoNota()">✏️ Ajustar foto</button>' : ''}
       ${_fotoAjustada ? '<button type="button" class="btn btn-outline btn-sm" onclick="lerFotoDeNovo()">🔁 Ler de novo</button>' : ''}
+      ${volta ? '<button type="button" class="btn btn-outline btn-sm" onclick="voltarFotoOriginal()">↩ Voltar à original</button>' : ''}
     </div>`;
+}
+function _pintarBotoesAjusteFoto() {
+  const box = $('foto-ajuste-box');
+  if (box) box.innerHTML = _botoesAjusteFotoHTML();
+  _pintarBotaoEditarNoLado();
+}
+/* tela dividida: "✏️ Editar foto" na barra do lado da foto */
+function _pintarBotaoEditarNoLado() {
+  const b = $('nf-lado-editar');
+  if (b) b.style.display = _podeAjustarFoto() ? '' : 'none';
 }
 async function ajustarFotoNota() {
   if (!_podeAjustarFoto()) return;
-  const antes = fotoBlob;
+  const id = $('nf-id').value;
+  let antes = fotoBlob;
+  if (!antes) {
+    toast('Baixando a foto da nota…');
+    antes = await _blobDoAnexoDaNota(id, true).catch(() => null);   // fresca: a foto pode ter sido trocada há pouco
+    if (!antes) { toast('Não deu para baixar a foto agora. Confira a internet e tente de novo.', 'err'); return; }
+    if (!antes.type) antes = new File([antes], 'nota.jpg', { type: 'image/jpeg' });
+  }
+  const fotoAntes = fotoBlob;
   const novo = await EditorFoto.abrir(antes);
-  if (!novo || fotoBlob !== antes) return;   // cancelou, não mudou nada, ou o anexo foi trocado enquanto o editor estava aberto
+  if (!novo || fotoBlob !== fotoAntes || $('nf-id').value !== id) return;   // cancelou, não mudou, ou o anexo/a nota mudou nesse meio-tempo
   fotoBlob = new File([novo], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
   fotoExt = 'jpg';
   if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
   fotoURL = URL.createObjectURL(fotoBlob);
   _fotoAjustada = true;
   atualizarPreviewFoto(fotoURL);
-  toast('Foto ajustada ✔ — ela é a que vai ser salva');
+  toast(id ? 'Foto ajustada ✔ — toque em Salvar para gravar na nota' : 'Foto ajustada ✔ — ela é a que vai ser salva');
 }
 async function lerFotoDeNovo() {
   if (!fotoBlob || !_ehImagemExt(fotoExt || 'jpg')) return;
@@ -10399,6 +10439,36 @@ async function lerFotoDeNovo() {
   let ocr = {};
   try { ocr = (await _lerNota(fotoBlob)) || {}; } catch (_) { ocr = {}; }
   await extrairDadosDaFoto(fotoBlob, ocr);   // com a leitura pronta: sem recorte, só completa os campos vazios
+}
+/* Nota aberta com id: pergunta ao servidor se há foto original guardada (só para quem pode mexer, e online). */
+async function _verificarFotoOriginal(id) {
+  _temFotoOriginal = false;
+  if (!id || !sb?.notas?.fotoOriginal || !navigator.onLine || !_podeMexerNaFoto()) return;
+  try {
+    const r = await sb.notas.fotoOriginal(id);
+    if ($('nf-id').value !== id) return;
+    _temFotoOriginal = !!r?.tem_original;
+    _pintarBotoesAjusteFoto();
+  } catch (_) {}
+}
+async function voltarFotoOriginal() {
+  const id = $('nf-id').value;
+  if (!id || !_temFotoOriginal) return;
+  if (!(await pedirConfirmacao('Voltar à foto original?\n\nA foto que chegou primeiro volta a ser o anexo desta nota. O que você digitou no formulário e ainda não salvou continua aqui.'))) return;
+  try {
+    const r = await sb.notas.restaurarFotoOriginal(id);
+    if ($('nf-id').value !== id) return;
+    if (r?.updated_at) _baseFormNota = r.updated_at;   // a volta mudou a nota no servidor: o Salvar do formulário não pode virar conflito
+    const n = _notaPorId(id);
+    if (n && r?.foto_path) { n.foto_path = r.foto_path; if (r.updated_at) n.server_updated_at = r.updated_at; }
+    if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+    fotoBlob = null; fotoURL = null; fotoExt = _extDeUrl(r?.foto_path || '') || 'jpg'; _fotoAjustada = false;
+    atualizarPreviewFoto(r?.foto_path ? `supabase:${r.foto_path}` : null);
+    if (_lado.id === id && $('nf-lado')?.style.display !== 'none') _abrirLadoNota(id, true);   // tela dividida: mostra a original
+    toast('Foto original de volta ✔');
+  } catch (e) {
+    toast(e?.message || 'Não deu para voltar à foto original agora.', 'err');
+  }
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:

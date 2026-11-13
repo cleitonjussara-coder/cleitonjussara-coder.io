@@ -170,6 +170,7 @@ class FotoStorage
         $this->apagarVersoesDe($this->pastaDe($nota), $nota->id);
         $this->descartarEspera($this->pastaDe($nota), $nota->id);
         $this->disk()->delete($this->esperasHerdadas($this->pastaDe($nota), $nota->id));
+        $this->apagar($this->original($this->pastaDe($nota), $nota->id));
         /* 04/11/2026: nota que trocou de dono antes de o anexo passar a mudar junto ainda aponta para a pasta antiga */
         $declarado = $this->anexoDeclarado($nota->foto_path, $nota->id);
         if ($declarado !== null) {
@@ -205,6 +206,12 @@ class FotoStorage
 
             if ($de !== $para) {
                 $this->guardarEsperasDoDonoAnterior($notaId, $de, $para, $m);
+                /* a foto original vai junto (13/11/2026); a origem sai em concluirMudanca, como o anexo */
+                $orig = $this->original($de, $notaId);
+                if ($orig !== null) {
+                    $this->apagar($this->original($para, $notaId));
+                    $this->copiarConferindo($orig, "{$para}/".self::ORIGINAL_DIR.'/'.basename($orig), $m);
+                }
             }
         } catch (\Throwable $e) {
             $this->desfazerMudanca($m);
@@ -336,6 +343,48 @@ class FotoStorage
 
     /** Espera do dono anterior (ver guardarEsperasDoDonoAnterior). Nada a promove, e também fica fora de validarCaminho(). */
     public const ESPERA_HERDADA_DIR = 'espera-herdada';
+
+    /* ── Foto original (13/11/2026) ─────────────────────────────────
+       Gestor, admin e o dono podem ajustar a foto de uma nota já enviada (girar, recortar, melhorar). A PRIMEIRA troca guarda o
+       anexo de antes em <pasta>/original/<nota_id>.<ext>, e as seguintes não mexem nele: é sempre o que chegou primeiro. Dá para
+       voltar a ele (restaurarOriginal), e ele acompanha a nota na troca de dono e sai junto quando a nota é apagada. Fora de
+       validarCaminho() e de arquivoDaNota(): não vira anexo por engano nem sai por URL. */
+    public const ORIGINAL_DIR = 'original';
+
+    /** Guarda o anexo atual como original se ainda não há um. $atual é o foto_path da nota antes da troca. */
+    public function guardarOriginal(string $pasta, string $notaId, ?string $atual): void
+    {
+        $origem = $this->anexoDeclarado($atual, $notaId) ?? $this->arquivoDaNota($pasta, $notaId);
+        if ($origem === null || $this->original($pasta, $notaId) !== null) {
+            return;
+        }
+        $m = ['copias' => [], 'origens' => []];
+        $this->copiarConferindo($origem, "{$pasta}/".self::ORIGINAL_DIR.'/'.basename($origem), $m);
+    }
+
+    public function original(string $pasta, string $notaId): ?string
+    {
+        return $this->arquivoDaNota("{$pasta}/".self::ORIGINAL_DIR, $notaId);
+    }
+
+    /** A foto original volta a ser o anexo (e continua guardada). Devolve o caminho do anexo, ou null se não há original. */
+    public function restaurarOriginal(string $pasta, string $notaId): ?string
+    {
+        $orig = $this->original($pasta, $notaId);
+        if ($orig === null) {
+            return null;
+        }
+        $final = "{$pasta}/".basename($orig);
+        $m = ['copias' => [], 'origens' => []];
+        $this->copiarConferindo($orig, $final, $m);   // por temporário: o anexo atual só sai com o original no lugar
+        $this->apagarVersoesDe($pasta, $notaId, $final);
+        try {
+            $this->miniatura($final);
+        } catch (\Throwable) {
+        }
+
+        return $final;
+    }
 
     /** Devolve o caminho que o anexo terá quando for promovido. */
     public function guardarEmEspera(string $pasta, string $notaId, UploadedFile $file, ?string $extHint = null): string

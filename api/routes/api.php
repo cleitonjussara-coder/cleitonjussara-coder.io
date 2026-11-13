@@ -88,6 +88,8 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/notas/{id}/historico', [NotaController::class, 'historico']);   // quem mudou o quê na nota (06/11/2026)
     Route::delete('/notas/{id}', [NotaController::class, 'destroy']);
     Route::post('/notas/{id}/foto', [NotaController::class, 'foto']);
+    Route::get('/notas/{id}/foto/original', [NotaController::class, 'fotoOriginal']);             // 13/11/2026: há foto original guardada?
+    Route::post('/notas/{id}/foto/original', [NotaController::class, 'restaurarFotoOriginal']);   // e voltar a ela
 
     /* Notificação no celular (24/09/2026) */
     Route::get('/push/chave', [PushController::class, 'chave']);
