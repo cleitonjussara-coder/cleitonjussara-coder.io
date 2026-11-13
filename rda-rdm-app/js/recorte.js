@@ -959,6 +959,20 @@ window.Recorte = (() => {
       _fechar(out);
     }
     $('crop-inteira').addEventListener('click', () => _fechar(null));
+    /* 13/11/2026 (pedido do Cleiton): ajuste fino pelos 4 cantos já na hora da foto. Abre o EditorFoto só com os cantos,
+       o giro e a prévia "Vai ficar assim"; a nota reta volta como o recorte (segue para a leitura e vira o anexo). "Voltar"
+       devolve esta tela como estava. */
+    $('crop-cantos')?.addEventListener('click', async () => {
+      if (_ocupado || !_blobAberto || !window.EditorFoto) return;
+      _ocupado = true;
+      $('crop-overlay').style.display = 'none';
+      let out = null;
+      try { out = await EditorFoto.abrir(_blobAberto, { soCantos: true }); } catch (_) { out = null; }
+      _ocupado = false;
+      if (out) { _fechar(out); return; }
+      $('crop-overlay').style.display = 'flex';
+      _remedir();
+    });
     /* 16/10/2026 (Paulo): depois de capturar não havia como desistir — só "Foto inteira" ou "Usar recorte", e quem
        tirou a foto errada tinha que fechar o app e entrar de novo. O X descarta a foto (resolve `false`, que o
        chamador distingue de `null` = "Foto inteira"). Durante o corte em andamento o toque é ignorado. */
@@ -999,6 +1013,8 @@ window.Recorte = (() => {
     /* A detecção é ajuda, não condição: sem memória para ela, a tela de recorte abre mesmo assim e a pessoa enquadra.
        Antes o erro subia e a foto era salva inteira. */
     _trabalho = null; _mapa = null; _rect = null;
+    /* "⬚ Cantos" só na foto da nota (quem chama pede com opts.cantos) e com o editor carregado */
+    { const b = $('crop-cantos'); if (b) b.style.display = (opts.cantos && window.EditorFoto && window.Scanner?.aplanar) ? '' : 'none'; }
     try { _trabalho = _prepararTrabalho(img); _mapa = _analisar(_trabalho); } catch (_) {}
     $('crop-overlay').style.display = 'flex';
 

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 619;
+const APP_BUILD = 620;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -8863,7 +8863,7 @@ async function onFotoNota(e) {
   }
   if (window.Recorte) {
     let rec = null;
-    try { rec = await Recorte.abrir(file, { corrigida }); }
+    try { rec = await Recorte.abrir(file, { corrigida, cantos: true }); }
     catch (err) { console.error('Recorte não abriu', err); toast('O recorte não abriu — a foto ficou inteira. Feche e abra o app e tente de novo.', 'err'); }
     if (rec === false) { e.target.value = ''; return; }                 // X: desistiu desta foto
     if (rec) file = new File([rec], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -10214,7 +10214,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       if (window.Recorte) {
         ov.style.display = 'none';                 // o recorte assume a tela
         let rec = null;
-        try { rec = await Recorte.abrir(file, { corrigida: !!_fotoAntesDoScanner }); }
+        try { rec = await Recorte.abrir(file, { corrigida: !!_fotoAntesDoScanner, cantos: true }); }
         catch (err) {
           rec = null;
           console.error('Recorte não abriu', err);

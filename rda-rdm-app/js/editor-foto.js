@@ -22,6 +22,7 @@ window.EditorFoto = (() => {
   const temCantos = () => !!(window.Scanner?.aplanar);
 
   let ov = null, est = null, hist = [], fonte = null, previa = null, resolver = null, quadroPrevia = null, timerPrevia = 0;
+  let opc = {};   // opções do abrir(): soCantos = só o ajuste dos cantos (tela "Enquadre a nota", 13/11/2026)
 
   /* ── geometria ─────────────────────────────────────────── */
   /* tamanho do quadro depois do giro de 90° em 90° e do giro fino (quinas cortadas) */
@@ -140,11 +141,13 @@ window.EditorFoto = (() => {
 #ef-ov svg.ef-quad{position:absolute;pointer-events:none;overflow:visible}
 #ef-ov .ef-pt{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:#fff;
   border:3px solid #4ade80;box-shadow:0 1px 6px rgba(0,0,0,.6);touch-action:none;cursor:grab;z-index:3}
-#ef-ov .ef-res{position:absolute;top:6px;right:6px;display:none;overflow:hidden;pointer-events:none;z-index:2;
+#ef-ov .ef-res{position:absolute;display:none;overflow:hidden;pointer-events:none;z-index:2;
   border:2px solid #4ade80;border-radius:6px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.6)}
 #ef-ov .ef-res canvas{display:block}
 #ef-ov .ef-res span{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:1px 2px}
 #ef-ov.ef-arrastando .ef-res{opacity:.15}
+#ef-ov.ef-so-cantos .ef-reg,#ef-ov.ef-so-cantos [data-ef="auto"],#ef-ov.ef-so-cantos [data-ef="original"],
+#ef-ov.ef-so-cantos [data-ef="modo-ret"],#ef-ov.ef-so-cantos [data-ef="modo-cantos"]{display:none}
 #ef-ov .ef-ferr{flex-shrink:0;display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto}
 #ef-ov .ef-lin{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 #ef-ov .ef-lin.dois{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -174,9 +177,10 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     }
     ov = document.createElement('div');
     ov.id = 'ef-ov';
+    if (opc.soCantos) ov.classList.add('ef-so-cantos');
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Ajustar a foto da nota');
     ov.innerHTML = `
-      <div class="ef-hd"><span class="ef-tit">Ajustar foto</span>
+      <div class="ef-hd"><span class="ef-tit">${opc.soCantos ? 'Ajuste os cantos da nota' : 'Ajustar foto'}</span>
         <button type="button" class="ef-x" data-ef="cancelar" aria-label="Cancelar sem salvar">✕</button></div>
       <div class="ef-palco"><canvas class="ef-img"></canvas>
         <div class="ef-rect"><span class="ef-alca nw" data-alca="nw"></span><span class="ef-alca ne" data-alca="ne"></span>
@@ -184,7 +188,7 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
         <svg class="ef-quad" style="display:none"><path class="ef-masc" fill="rgba(0,0,0,.55)" fill-rule="evenodd"></path>
           <polygon class="ef-pol" fill="none" stroke="#4ade80" stroke-width="2.5"></polygon></svg>
         ${[0, 1, 2, 3].map(i => `<span class="ef-pt" data-pt="${i}" style="display:none" aria-label="Canto ${i + 1} da nota"></span>`).join('')}
-        <div class="ef-res"><canvas></canvas><span>Vai ficar assim</span></div>
+        <div class="ef-res" style="top:6px;right:6px"><canvas></canvas><span>Vai ficar assim</span></div>
         <div class="ef-msg">Salvando a foto…</div></div>
       <div class="ef-ferr">
         <div class="ef-lin">
@@ -203,8 +207,8 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
           <button type="button" class="ef-b" data-ef="original">⟲ Original</button></div>
       </div>
       <div class="ef-ft">
-        <button type="button" class="ef-b" data-ef="cancelar">Cancelar</button>
-        <button type="button" class="ef-b ef-salvar" data-ef="salvar">✔ Salvar foto</button></div>`;
+        <button type="button" class="ef-b" data-ef="cancelar">${opc.soCantos ? '↩ Voltar' : 'Cancelar'}</button>
+        <button type="button" class="ef-b ef-salvar" data-ef="salvar">${opc.soCantos ? '✔ Usar cantos' : '✔ Salvar foto'}</button></div>`;
     document.body.appendChild(ov);
     document.body.classList.add('ef-aberto');
 
@@ -387,10 +391,26 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
         const alvo = ov.querySelector('.ef-res canvas');
         alvo.width = r.width; alvo.height = r.height;
         alvo.getContext('2d').drawImage(r, 0, 0);
-        /* tamanho na tela: cabe em ~1/3 do palco, para não cobrir os cantos */
+        /* tamanho e lugar: ~1/3 do palco, no canto onde não há alça embaixo (antes cobria o canto de cima à direita da nota).
+           Foto que enche o palco tem alça perto de todo canto: aí fica menor, no canto mais longe das alças. */
         const palco = ov.querySelector('.ef-palco').getBoundingClientRect();
-        const k = Math.min(palco.width * 0.34 / r.width, palco.height * 0.34 / r.height, 1);
-        alvo.style.width = Math.round(r.width * k) + 'px'; alvo.style.height = Math.round(r.height * k) + 'px';
+        const box = ov.querySelector('.ef-res'), pts = [...ov.querySelectorAll('.ef-pt')].map(e => [parseFloat(e.style.left), parseFloat(e.style.top)]);
+        const folga = ([x, y], lw, lh) => Math.min(...pts.map(([px, py]) => Math.hypot(Math.max(x - px, 0, px - (x + lw)), Math.max(y - py, 0, py - (y + lh)))));
+        let escolha = null;
+        for (const frac of [0.34, 0.24]) {
+          const k = Math.min(palco.width * frac / r.width, palco.height * frac / r.height, 1);
+          const lw = Math.round(r.width * k), lh = Math.round(r.height * k);
+          const cand = [['right', 'top', palco.width - 6 - lw, 6], ['left', 'top', 6, 6],
+            ['right', 'bottom', palco.width - 6 - lw, palco.height - 6 - lh], ['left', 'bottom', 6, palco.height - 6 - lh]]
+            .map(c => ({ h: c[0], v: c[1], lw, lh, f: folga([c[2], c[3]], lw, lh) }));
+          const melhor = cand.reduce((a, b) => (b.f > a.f ? b : a));
+          escolha = melhor;
+          if (melhor.f >= 20) break;   // há canto livre neste tamanho
+        }
+        alvo.style.width = escolha.lw + 'px'; alvo.style.height = escolha.lh + 'px';
+        const [h, v] = [escolha.h, escolha.v];
+        box.style.left = box.style.right = box.style.top = box.style.bottom = '';
+        box.style[h] = '6px'; box.style[v] = '6px';
       } catch (_) {}
     }, 90);
   }
@@ -466,6 +486,7 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
 
   /* opcoes.rot: giro inicial (90/180/270), o mesmo em que a pessoa estava vendo a foto; conta como ajuste ao salvar */
   async function abrir(blob, opcoes = {}) {
+    opc = opcoes || {};
     if (resolver) fechar(null);
     if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return null;
     try { fonte = await carregar(blob); } catch (_) { if (window.toast) toast('Não deu para abrir esta foto para ajuste.', 'err'); return null; }
@@ -480,6 +501,13 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     if (rot0 % 90 === 0 && rot0) est.rot = rot0;
     montar();
     pintar(true);
+    /* só cantos: já abre no modo Cantos, com os cantos postos pelo detector (ou um pouco para dentro da borda) */
+    if (opc.soCantos && temCantos()) {
+      est.modo = 'cantos';
+      const q = acharNota();
+      if (q) est.quad = q;
+      pintar(true);
+    }
     requestAnimationFrame(posicionarRect);
     return new Promise(r => { resolver = r; });
   }
