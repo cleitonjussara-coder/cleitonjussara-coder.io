@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 618;
+const APP_BUILD = 619;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10421,7 +10421,9 @@ async function ajustarFotoNota() {
     if (!antes.type) antes = new File([antes], 'nota.jpg', { type: 'image/jpeg' });
   }
   const fotoAntes = fotoBlob;
-  const novo = await EditorFoto.abrir(antes);
+  /* a tela dividida pode estar girando a foto só na tela: o editor abre no mesmo giro, para salvar o que a pessoa está vendo */
+  const giroVisto = (_lado.id === id && $('nf-lado')?.style.display !== 'none') ? _lado.giro : 0;
+  const novo = await EditorFoto.abrir(antes, { rot: giroVisto });
   if (!novo || fotoBlob !== fotoAntes || $('nf-id').value !== id) return;   // cancelou, não mudou, ou o anexo/a nota mudou nesse meio-tempo
   fotoBlob = new File([novo], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
   fotoExt = 'jpg';

@@ -65,13 +65,13 @@ window.EditorFoto = (() => {
   }
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   /* estica o pedaço marcado do quadro (canvas) para um retângulo; mesmo cálculo de tamanho do Scanner.endireitar */
-  function aplanarQuadro(cv, quadN) {
+  function aplanarQuadro(cv, quadN, maxPx = SAIDA_MAX_PX) {
     const sw = cv.width, sh = cv.height;
     const q = ordenarQuad(quadN).map(c => ({ x: c.x * sw, y: c.y * sh }));
     const topo = dist(q[0], q[1]), base = dist(q[3], q[2]), esq = dist(q[0], q[3]), dir = dist(q[1], q[2]);
     const amplia = Math.max(2 * Math.max(topo, base) / (topo + base || 1), 2 * Math.max(esq, dir) / (esq + dir || 1));
     let dw = Math.round((topo + base) / 2 * amplia), dh = Math.round((esq + dir) / 2 * amplia);
-    const k = Math.min(1, Math.sqrt(SAIDA_MAX_PX / Math.max(1, dw * dh)));
+    const k = Math.min(1, Math.sqrt(maxPx / Math.max(1, dw * dh)));
     dw = Math.max(1, Math.round(dw * k)); dh = Math.max(1, Math.round(dh * k));
     const src = cv.getContext('2d').getImageData(0, 0, sw, sh).data;
     const px = Scanner.aplanar(src, sw, sh, q, dw, dh);
@@ -139,7 +139,12 @@ window.EditorFoto = (() => {
 #ef-ov .ef-alca.sw{left:-13px;bottom:-13px;cursor:nesw-resize}#ef-ov .ef-alca.se{right:-13px;bottom:-13px;cursor:nwse-resize}
 #ef-ov svg.ef-quad{position:absolute;pointer-events:none;overflow:visible}
 #ef-ov .ef-pt{position:absolute;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:#fff;
-  border:3px solid #4ade80;box-shadow:0 1px 6px rgba(0,0,0,.6);touch-action:none;cursor:grab;z-index:1}
+  border:3px solid #4ade80;box-shadow:0 1px 6px rgba(0,0,0,.6);touch-action:none;cursor:grab;z-index:3}
+#ef-ov .ef-res{position:absolute;top:6px;right:6px;display:none;overflow:hidden;pointer-events:none;z-index:2;
+  border:2px solid #4ade80;border-radius:6px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.6)}
+#ef-ov .ef-res canvas{display:block}
+#ef-ov .ef-res span{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:1px 2px}
+#ef-ov.ef-arrastando .ef-res{opacity:.15}
 #ef-ov .ef-ferr{flex-shrink:0;display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto}
 #ef-ov .ef-lin{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 #ef-ov .ef-lin.dois{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -179,6 +184,7 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
         <svg class="ef-quad" style="display:none"><path class="ef-masc" fill="rgba(0,0,0,.55)" fill-rule="evenodd"></path>
           <polygon class="ef-pol" fill="none" stroke="#4ade80" stroke-width="2.5"></polygon></svg>
         ${[0, 1, 2, 3].map(i => `<span class="ef-pt" data-pt="${i}" style="display:none" aria-label="Canto ${i + 1} da nota"></span>`).join('')}
+        <div class="ef-res"><canvas></canvas><span>Vai ficar assim</span></div>
         <div class="ef-msg">Salvando a foto…</div></div>
       <div class="ef-ferr">
         <div class="ef-lin">
@@ -287,7 +293,9 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     r.style.display = cantos ? 'none' : '';
     svg.style.display = cantos ? '' : 'none';
     ov.querySelectorAll('.ef-pt').forEach(pt => { pt.style.display = cantos ? '' : 'none'; });
+    ov.querySelector('.ef-res').style.display = cantos ? 'block' : 'none';
     if (cantos) {
+      agendarResultado();
       const x0 = a.left - p.left, y0 = a.top - p.top;
       Object.assign(svg.style, { left: x0 + 'px', top: y0 + 'px', width: a.width + 'px', height: a.height + 'px' });
       svg.setAttribute('viewBox', `0 0 ${a.width} ${a.height}`);
@@ -347,6 +355,7 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
         e.preventDefault();
         const a = cv.getBoundingClientRect();
         mv = { i: Number(pt.dataset.pt), a, guardou: false, id: e.pointerId };
+        ov.classList.add('ef-arrastando');
         try { pt.setPointerCapture(e.pointerId); } catch (_) {}
       });
       pt.addEventListener('pointermove', e => {
@@ -359,10 +368,31 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
         ov.querySelector('[data-ef="desfazer"]').disabled = false;
         ov.querySelector('[data-ef="original"]').disabled = !mudou();
       });
-      const fim = e => { if (mv && e.pointerId === mv.id) { mv = null; est.quad = ordenarQuad(est.quad); posicionarRect(); } };
+      const fim = e => { if (mv && e.pointerId === mv.id) { mv = null; ov.classList.remove('ef-arrastando'); est.quad = ordenarQuad(est.quad); posicionarRect(); } };
       pt.addEventListener('pointerup', fim);
       pt.addEventListener('pointercancel', fim);
     });
+  }
+
+  /* "Vai ficar assim" (13/11/2026): no modo Cantos o palco mostra a foto inteira, e uma nota de lado numa foto em pé saía
+     em pé, com o texto de lado, sem a pessoa ver antes de salvar (caso da Inova Celulares). O quadrinho mostra o resultado
+     de verdade, numa cópia pequena; se estiver de lado, os botões de giro acertam. */
+  let timerRes = 0;
+  function agendarResultado() {
+    clearTimeout(timerRes);
+    timerRes = setTimeout(() => {
+      if (!ov || est.modo !== 'cantos' || !quadroPrevia) return;
+      try {
+        const r = aplanarQuadro(quadroPrevia, est.quad, 260000);
+        const alvo = ov.querySelector('.ef-res canvas');
+        alvo.width = r.width; alvo.height = r.height;
+        alvo.getContext('2d').drawImage(r, 0, 0);
+        /* tamanho na tela: cabe em ~1/3 do palco, para não cobrir os cantos */
+        const palco = ov.querySelector('.ef-palco').getBoundingClientRect();
+        const k = Math.min(palco.width * 0.34 / r.width, palco.height * 0.34 / r.height, 1);
+        alvo.style.width = Math.round(r.width * k) + 'px'; alvo.style.height = Math.round(r.height * k) + 'px';
+      } catch (_) {}
+    }, 90);
   }
 
   /* "Achar a nota": o mesmo detector do scanner da câmera, numa cópia pequena do quadro girado */
@@ -411,7 +441,7 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
   }
 
   function fechar(blob, falhou = false) {
-    clearTimeout(timerPrevia);
+    clearTimeout(timerPrevia); clearTimeout(timerRes);
     window.removeEventListener('resize', posicionarRect);
     ov?.remove(); ov = null;
     document.body.classList.remove('ef-aberto');
@@ -434,7 +464,8 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     }
   }
 
-  async function abrir(blob) {
+  /* opcoes.rot: giro inicial (90/180/270), o mesmo em que a pessoa estava vendo a foto; conta como ajuste ao salvar */
+  async function abrir(blob, opcoes = {}) {
     if (resolver) fechar(null);
     if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return null;
     try { fonte = await carregar(blob); } catch (_) { if (window.toast) toast('Não deu para abrir esta foto para ajuste.', 'err'); return null; }
@@ -445,6 +476,8 @@ body.ef-aberto #instalar-faixa{display:none!important}   /* a faixa de instalar 
     previa.width = Math.round(W * k); previa.height = Math.round(H * k);
     previa.getContext('2d').drawImage(fonte, 0, 0, previa.width, previa.height);
     est = INICIAL(); hist = [];
+    const rot0 = ((Number(opcoes.rot) || 0) % 360 + 360) % 360;
+    if (rot0 % 90 === 0 && rot0) est.rot = rot0;
     montar();
     pintar(true);
     requestAnimationFrame(posicionarRect);
