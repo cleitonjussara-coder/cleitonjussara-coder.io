@@ -11,7 +11,15 @@ class Nota extends Model
 {
     public const TIPOS = ['RDA', 'RDM'];
 
-    public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Locação de Veículos', 'Pedágio', 'Manutenção de Veículos', 'Exames', 'Contabilidade', 'Outros'];
+    public const SUBTIPOS = ['Abastecimento', 'Hospedagem', 'Locação de Veículos', 'Pedágio', 'Manutenção de Veículos', 'Exames', 'Contabilidade',
+        'Imposto - FGTS', 'Imposto - DARF', 'Imposto - IRPJ', 'Imposto - PIS/COFINS', 'Imposto - CSLL', 'Imposto - ISSQN', 'Outros'];
+
+    /* Impostos (13/11/2026, pedido do gestor): uma categoria só do Faturamento com seis impostos dentro. Cada imposto é um subtipo
+       "Imposto - X", então não precisa de coluna nova: a pasta IMPOSTOS e a coluna Impostos da planilha juntam pelo prefixo. */
+    public static function ehImposto(?string $subtipo): bool
+    {
+        return str_starts_with(mb_strtolower(trim((string) $subtipo)), 'imposto');
+    }
 
     /* colaborador CV (21/09/2026): cv = pagou com o cartão corporativo; carteira = do próprio bolso.
        25/09/2026: 'reembolso' virou 'carteira' — Reembolso e Repasse eram o mesmo dinheiro (o que vai

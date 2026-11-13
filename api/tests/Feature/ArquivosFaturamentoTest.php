@@ -174,6 +174,24 @@ class ArquivosFaturamentoTest extends TestCase
         $this->assertStringContainsString('CONTABILIDADE', $r->json('notas.0.pasta'));
     }
 
+    public function test_os_seis_impostos_ficam_na_pasta_impostos(): void
+    {
+        $gestor = $this->pessoa('gestor', 'Gestora Ana');
+        Sanctum::actingAs($gestor);
+        foreach (['FGTS', 'DARF', 'IRPJ', 'PIS/COFINS', 'CSLL', 'ISSQN'] as $imposto) {
+            $n = $this->nota(null, 'RECEITA '.$imposto, 100, 'empresa');
+            $this->patchJson("/api/notas/{$n->id}/tipo", ['tipo' => 'RDM', 'subtipo' => 'Imposto - '.$imposto])->assertOk();
+        }
+
+        $r = $this->getJson('/api/arquivos/notas?faturamento=1&ano='.self::ANO.'&mes=3')->assertOk();
+        $this->assertCount(6, $r->json('notas'));
+        foreach ($r->json('notas') as $nota) {
+            $this->assertSame('RDM · IMPOSTOS', $nota['grupo']);
+            $this->assertStringContainsString('IMPOSTOS', $nota['pasta']);
+        }
+        $this->patchJson("/api/notas/{$n->id}/tipo", ['tipo' => 'RDM', 'subtipo' => 'Imposto - INSS'])->assertStatus(422);
+    }
+
     public function test_exames_vira_categoria_propria_na_pasta(): void
     {
         $gestor = $this->pessoa('gestor', 'Gestora Ana');

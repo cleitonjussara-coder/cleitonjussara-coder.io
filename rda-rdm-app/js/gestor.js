@@ -591,7 +591,7 @@ window.Gestor = (() => {
   const _EQ_FILTROS = { pag: 'todos', reg: 'todos', colab: 'todos', cat: null, modo: 'mensal', ord: 'gasto', mais: false };
   const _eqF = { aba: 'resumo', ..._EQ_FILTROS };
   let _eq = null;   // dados do último carregamento da Equipe
-  const _EQ_COR = { alimentacao: '#b9e24a', abastecimento: '#F4A261', hospedagem: '#ffd166', pedagio: '#60a5fa', manutencao: '#c4b5fd', exames: '#5eead4', locacao: '#fdba74', contabilidade: '#f9a8d4', outros: '#cbd5e1' };
+  const _EQ_COR = { alimentacao: '#b9e24a', abastecimento: '#F4A261', hospedagem: '#ffd166', pedagio: '#60a5fa', manutencao: '#c4b5fd', exames: '#5eead4', locacao: '#fdba74', contabilidade: '#f9a8d4', impostos: '#fca5a5', outros: '#cbd5e1' };
   const _eqSoma = arr => arr.reduce((a, x) => a + Number(x.valor || 0), 0);
   const _eqQtd = (q, um, varios) => `${q} ${q === 1 ? um : varios}`;
 

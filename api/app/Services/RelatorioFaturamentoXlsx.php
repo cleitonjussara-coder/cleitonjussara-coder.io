@@ -28,9 +28,9 @@ class RelatorioFaturamentoXlsx
     private const MESES_LONGO = [1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     /** chave interna → rótulo da coluna; a mesma divisão do RESUMO da equipe e do PDF de Faturamento */
-    private const CATS = ['alimentacao' => 'Alimentação (RDA)', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'pedagio' => 'Pedágio', 'manutencao' => 'Manutenção de Veículos', 'exames' => 'Exames', 'contabilidade' => 'Contabilidade', 'outros' => 'Outros'];
+    private const CATS = ['alimentacao' => 'Alimentação (RDA)', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'pedagio' => 'Pedágio', 'manutencao' => 'Manutenção de Veículos', 'exames' => 'Exames', 'contabilidade' => 'Contabilidade', 'impostos' => 'Impostos', 'outros' => 'Outros'];
 
-    private const ROTULO_CAT = ['alimentacao' => 'Alimentação', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'pedagio' => 'Pedágio', 'manutencao' => 'Manutenção de Veículos', 'exames' => 'Exames', 'contabilidade' => 'Contabilidade', 'outros' => 'Outros'];
+    private const ROTULO_CAT = ['alimentacao' => 'Alimentação', 'abastecimento' => 'Abastecimento', 'hospedagem' => 'Hospedagem', 'locacao' => 'Locação de Veículos', 'pedagio' => 'Pedágio', 'manutencao' => 'Manutenção de Veículos', 'exames' => 'Exames', 'contabilidade' => 'Contabilidade', 'impostos' => 'Impostos', 'outros' => 'Outros'];
 
     private const DOCS = ['nfce' => 'NFC-e', 'nfe' => 'NF-e', 'danfe' => 'DANFE', 'nfse' => 'NFS-e', 'outro' => 'Outro'];
 
@@ -130,6 +130,9 @@ class RelatorioFaturamentoXlsx
         }
         if (str_starts_with($s, 'contab')) {
             return 'contabilidade';
+        }
+        if (str_starts_with($s, 'imposto')) {
+            return 'impostos';
         }
 
         return 'outros';
@@ -319,7 +322,7 @@ class RelatorioFaturamentoXlsx
                 $ws->setCellValue([1, $r], XlsDate::PHPToExcel($n->data->format('Y-m-d')));
             }
             $txt = [
-                2 => $donoDe($n->user_id), 3 => (string) $n->tipo, 4 => self::ROTULO_CAT[self::categoria($n)],
+                2 => $donoDe($n->user_id), 3 => (string) $n->tipo, 4 => self::categoria($n) === 'impostos' ? (string) $n->subtipo : self::ROTULO_CAT[self::categoria($n)],
                 5 => (string) $n->razao_social, 6 => $n->cnpjFormatado(),
                 7 => self::DOCS[(string) $n->documento] ?? (string) $n->documento, 8 => (string) $n->numero,
                 10 => $nomeDe($n->created_by), 11 => (string) $n->observacao,

@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 614;
+const APP_BUILD = 615;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3717,8 +3717,17 @@ const _ehLocacao = subtipo => String(subtipo || '').toLowerCase().startsWith('lo
 /* Contabilidade (05/11/2026): também só do Faturamento, pelo mesmo caminho da locação. */
 const CATEGORIA_CONTABILIDADE = { chave: 'contabilidade', ico: '🧮', nome: 'Contabilidade', tipo: 'RDM', subtipo: 'Contabilidade',
   sub: 'Serviços de contabilidade, pagos pela empresa.' };
-const CATEGORIAS_SO_FATURAMENTO = [CATEGORIA_LOCACAO, CATEGORIA_CONTABILIDADE];
-const _ehSoFaturamento = subtipo => _ehLocacao(subtipo) || subtipo === CATEGORIA_CONTABILIDADE.subtipo;
+/* Impostos (13/11/2026, pedido do gestor): só do Faturamento, uma pasta IMPOSTOS com seis impostos dentro. Cada imposto é um
+   subtipo "Imposto - X" (cabe nos 20 caracteres da coluna); a pasta, a coluna da planilha e os painéis juntam os seis em
+   CATEGORIA_IMPOSTOS. No lançamento o cartão Impostos abre a escolha do imposto, e nas listas eles vêm agrupados. */
+const IMPOSTOS = ['FGTS', 'DARF', 'IRPJ', 'PIS/COFINS', 'CSLL', 'ISSQN'];
+const _ehImposto = subtipo => String(subtipo || '').toLowerCase().startsWith('imposto');
+const CATEGORIA_IMPOSTOS = { chave: 'impostos', ico: '🏛️', nome: 'Impostos', tipo: 'RDM', subtipo: null,
+  sub: 'FGTS, DARF, IRPJ, PIS/COFINS, CSLL e ISSQN.' };
+const CATEGORIAS_IMPOSTO = IMPOSTOS.map(i => ({ chave: 'imposto-' + i.toLowerCase().replace(/\W+/g, '-'), ico: '🏛️', nome: 'Imposto - ' + i,
+  curto: i, tipo: 'RDM', subtipo: 'Imposto - ' + i, grupo: 'Impostos', sub: 'Pago pela empresa.' }));
+const CATEGORIAS_SO_FATURAMENTO = [CATEGORIA_LOCACAO, CATEGORIA_CONTABILIDADE, ...CATEGORIAS_IMPOSTO];
+const _ehSoFaturamento = subtipo => _ehLocacao(subtipo) || subtipo === CATEGORIA_CONTABILIDADE.subtipo || _ehImposto(subtipo);
 
 /* Pedágio (05/11/2026): entra no lançamento de todos, mas fica fora de CATEGORIAS_CV pelo mesmo motivo da locação: as planilhas
    da empresa não têm coluna de pedágio, então nos painéis ele soma em Outros. Só o Faturamento o mostra separado. */
@@ -3732,10 +3741,11 @@ const CATEGORIA_EXAMES = { chave: 'exames', ico: '🩺', nome: 'Exames', tipo: '
   sub: 'Exames médicos: admissional, periódico e demissional.' };
 const CATEGORIAS_LANCAMENTO = [...CATEGORIAS_CV.slice(0, -1), CATEGORIA_PEDAGIO, CATEGORIA_MANUTENCAO, CATEGORIA_EXAMES, CATEGORIAS_CV.at(-1)];
 
-const CATEGORIAS_TODAS = [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO];
+/* painéis e filtros: os seis impostos aparecem juntos, como Impostos */
+const CATEGORIAS_TODAS = [...CATEGORIAS_LANCAMENTO, CATEGORIA_LOCACAO, CATEGORIA_CONTABILIDADE, CATEGORIA_IMPOSTOS];
 
 function _categoriaCV(chave) {
-  return CATEGORIAS_TODAS.find(c => c.chave === chave) || null;
+  return [...CATEGORIAS_TODAS, ...CATEGORIAS_IMPOSTO].find(c => c.chave === chave) || null;
 }
 
 /* De uma nota para a categoria do CV (a mesma conta que o relatório faz). */
@@ -3754,6 +3764,7 @@ function _chaveCategoriaDetalhe(n) {
   const chave = _chaveCategoriaDaNota(n);
   if (chave !== 'outros' || !n) return chave;
   if (_ehLocacao(n.subtipo)) return 'locacao';
+  if (n.tipo === 'RDM' && _ehImposto(n.subtipo)) return 'impostos';
   const s = String(n.subtipo || '').toLowerCase();
   return CATEGORIAS_TODAS.find(c => c.subtipo && c.subtipo.toLowerCase() === s)?.chave || 'outros';
 }
@@ -8994,14 +9005,28 @@ function _montarGradeDoSeletor() {
   }
   if (!ehCv) return;
   /* refeita a cada abertura: o cartão da locação depende de a nota ser de Faturamento */
-  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? [...CATEGORIAS_LANCAMENTO, ...CATEGORIAS_SO_FATURAMENTO] : CATEGORIAS_LANCAMENTO;
-  cv.innerHTML = cats.map(c => `
+  const cats = _dadosLancamentoPendentes?.pagamento === 'empresa' ? CATEGORIAS_TODAS : CATEGORIAS_LANCAMENTO;
+  cv.innerHTML = cats.map(c => _cartaoCategoriaHTML(c, c === CATEGORIA_IMPOSTOS ? '_gradeDeImpostos()' : null)).join('');
+}
+
+function _cartaoCategoriaHTML(c, acao = null, titulo = c.nome) {
+  return `
     <button class="tipo-lancamento-card tipo-lancamento-card-${c.tipo.toLowerCase()}"
-            onclick="selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})">
+            onclick="${acao || `selecionarTipoLancamento('${c.tipo}', ${c.subtipo ? "'" + c.subtipo + "'" : 'null'})`}">
       <div class="tipo-lancamento-icon">${c.ico}</div>
-      <div class="tipo-lancamento-title">${esc(c.nome)}</div>
+      <div class="tipo-lancamento-title">${esc(titulo)}</div>
       <div class="tipo-lancamento-subtitle">${esc(c.sub)}</div>
-    </button>`).join('');
+    </button>`;
+}
+
+/* Cartão Impostos: a mesma grade passa a mostrar os seis impostos, com Voltar para as categorias. */
+function _gradeDeImpostos() {
+  const cv = $('tipo-lancamento-grid-cv');
+  if (!cv) return;
+  const voltar = { ico: '↩️', nome: 'Voltar', tipo: 'RDM', sub: 'Outra categoria.' };
+  cv.innerHTML = CATEGORIAS_IMPOSTO.map(c => _cartaoCategoriaHTML(c, null, c.curto)).join('') + _cartaoCategoriaHTML(voltar, '_montarGradeDoSeletor()');
+  const titulo = $('tipo-lancamento-passo1')?.querySelector('p');
+  if (titulo) titulo.textContent = 'Qual imposto?';
 }
 
 function selecionarTipoLancamento(tipo, subtipo = null) {
@@ -9854,9 +9879,26 @@ function _oferecerSoFaturamento(sim) {
       const sel = $(lista);
       if (!sel) continue;
       const opt = [...sel.options].find(o => o.value === valor);
-      if (!sim) { opt?.remove(); continue; }
+      const grupo = cat.grupo ? [...sel.querySelectorAll('optgroup')].find(g => g.dataset.grupo === cat.grupo) : null;
+      if (!sim) {
+        opt?.remove();
+        if (grupo && !grupo.children.length) grupo.remove();
+        continue;
+      }
       if (opt) continue;
       const novo = new Option(lista === 'nf-cat-cv' ? `${cat.ico} ${cat.nome}` : cat.nome, valor);
+      if (cat.grupo) {
+        /* os seis impostos ficam juntos debaixo de "Impostos", antes de Outros */
+        let g = grupo;
+        if (!g) {
+          g = document.createElement('optgroup');
+          g.label = `${CATEGORIA_IMPOSTOS.ico} ${cat.grupo}`;
+          g.dataset.grupo = cat.grupo;
+          sel.insertBefore(g, [...sel.children].find(o => o.value?.toLowerCase().startsWith('outros')) || null);
+        }
+        g.appendChild(novo);
+        continue;
+      }
       sel.add(novo, [...sel.options].find(o => o.value.toLowerCase().startsWith('outros')) || null);
     }
   }
@@ -9875,6 +9917,7 @@ function _ajustarCamposDeCategoria() {
   const rdm = $('nf-tipo').value === 'RDM', sub = $('nf-subtipo').value;
   sel.value = rdm && _ehLocacao(sub) ? CATEGORIA_LOCACAO.chave
     : rdm && sub === CATEGORIA_CONTABILIDADE.subtipo ? CATEGORIA_CONTABILIDADE.chave
+    : rdm && CATEGORIAS_IMPOSTO.some(c => c.subtipo === sub) ? CATEGORIAS_IMPOSTO.find(c => c.subtipo === sub).chave
     : rdm && sub === CATEGORIA_PEDAGIO.subtipo ? CATEGORIA_PEDAGIO.chave
     : rdm && sub === CATEGORIA_MANUTENCAO.subtipo ? CATEGORIA_MANUTENCAO.chave
     : rdm && sub === CATEGORIA_EXAMES.subtipo ? CATEGORIA_EXAMES.chave
@@ -11022,7 +11065,8 @@ const _GRUPOS = [
 
 /* Locação de Veículos (30/10/2026): categoria só da pasta Faturamento — é a que o gestor pode escolher ao mover uma nota faturada. */
 const _GRUPOS_FAT = [..._GRUPOS, { tipo: 'RDM', subtipo: 'Locação de Veículos', rotulo: 'RDM · Locação de Veículos', nota: 'aluguel de carro' },
-  { tipo: 'RDM', subtipo: 'Contabilidade', rotulo: 'RDM · Contabilidade', nota: 'serviços de contabilidade' }];
+  { tipo: 'RDM', subtipo: 'Contabilidade', rotulo: 'RDM · Contabilidade', nota: 'serviços de contabilidade' },
+  ...IMPOSTOS.map(i => ({ tipo: 'RDM', subtipo: 'Imposto - ' + i, rotulo: 'RDM · Imposto - ' + i, nota: 'imposto' }))];
 
 function corrigirGrupoNota(id) {
   const n = _notaPorId(id);

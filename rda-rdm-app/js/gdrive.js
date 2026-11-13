@@ -327,6 +327,7 @@ window.GDrive = (() => {
   function _trilhaGrupo(nota) {
     if (String(nota.tipo || '').toUpperCase() === 'RDA') return [GRUPO_RDA];
     const sub = String(nota.subtipo || '').trim().toLowerCase();
+    if (sub.startsWith('imposto')) return [GRUPO_RDM, 'IMPOSTOS'];   // os seis impostos numa pasta só (13/11/2026)
     return [GRUPO_RDM, CATEGORIA_RDM[sub] || 'OUTROS'];
   }
 

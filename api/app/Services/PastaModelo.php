@@ -39,6 +39,9 @@ class PastaModelo
             return [self::GRUPO_RDA];
         }
         $sub = mb_strtolower(trim((string) $n->subtipo));
+        if (Nota::ehImposto($sub)) {
+            return [self::GRUPO_RDM, 'IMPOSTOS'];   // os seis impostos numa pasta só
+        }
 
         return [self::GRUPO_RDM, self::CATEGORIA_RDM[$sub] ?? 'OUTROS'];
     }
