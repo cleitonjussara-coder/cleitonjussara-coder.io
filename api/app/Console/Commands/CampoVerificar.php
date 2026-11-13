@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\AtividadeCampo;
-use App\Models\Colaborador;
+use App\Services\CampoAviso;
 use App\Services\PushService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -47,9 +47,6 @@ class CampoVerificar extends Command
             ->with('colaborador:id,nome,email,ativo')->orderBy('inicio')->get()
             ->filter(fn (AtividadeCampo $a) => $a->colaborador && $a->colaborador->ativo);
 
-        $ativos = Colaborador::where('ativo', true)->get();
-        /* focal + gestor + admin numa lista só: o aviso vai para todos ao mesmo tempo */
-        $destino = $ativos->filter(fn (Colaborador $c) => $c->gerencia() || $c->acompanhaCampo())->values();
         $avisos = 0;
 
         foreach ($abertas as $a) {
@@ -59,7 +56,8 @@ class CampoVerificar extends Command
             if (Cache::has('campo-alerta-gestor-'.$a->id)) {
                 continue;
             }
-            $para = $destino->reject(fn (Colaborador $c) => $c->id === $a->user_id)->values();
+            /* focal + gestor + admin numa lista só: o aviso vai para todos ao mesmo tempo */
+            $para = CampoAviso::destinatarios($a->user_id);
             $this->avisar($push, $a, $inicio, $min, $para);
             Cache::put('campo-alerta-'.$a->id, $agora->toIso8601String(), now()->addDays(3));
             Cache::put('campo-alerta-gestor-'.$a->id, $agora->toIso8601String(), now()->addDays(3));
@@ -80,7 +78,7 @@ class CampoVerificar extends Command
             "⚠️ {$nome} em campo há {$ha}",
             "{$a->fazenda} · campo {$a->campo}, desde ".$inicio->format('H:i').'. Ainda sem fim registrado: ligue para confirmar se está tudo bem.',
             './?abrir=campo',
-            'campo-longo-'.$a->id,
+            CampoAviso::tag($a),   // a saída registrada usa a mesma tag e troca este aviso no celular
         );
         $this->line(sprintf('  %-28s %s · %s desde %s (%s) → %s: %d aparelho(s)',
             mb_substr($nome, 0, 28), $a->fazenda, $a->campo, $inicio->format('d/m H:i'), $ha,

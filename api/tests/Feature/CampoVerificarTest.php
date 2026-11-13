@@ -25,7 +25,7 @@ class CampoVerificarTest extends TestCase
         parent::setUp();
         $this->mock(PushService::class, function ($m) {
             $m->shouldReceive('enviar')->andReturnUsing(function ($destino, $titulo, $corpo, $url, $tag) {
-                $this->pushes[] = ['para' => collect($destino)->pluck('nome')->sort()->values()->all(), 'titulo' => $titulo, 'corpo' => $corpo, 'url' => $url];
+                $this->pushes[] = ['para' => collect($destino)->pluck('nome')->sort()->values()->all(), 'titulo' => $titulo, 'corpo' => $corpo, 'url' => $url, 'tag' => $tag];
 
                 return 1;
             });
@@ -127,6 +127,51 @@ class CampoVerificarTest extends TestCase
 
         $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertSame(['Bia', 'Paulo'], $this->pushes[0]['para']);
+    }
+
+    /* 13/11/2026 — pedido do Cleiton: depois do aviso das 2h30, a saída registrada manda outro aviso, com a mesma tag
+       (troca o "sem fim registrado" no celular). Sem o aviso das 2h30, a saída não avisa ninguém. */
+    public function test_saida_depois_do_aviso_manda_outro_com_a_mesma_tag(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $a = $this->campo($romario, '2026-11-11 12:00:00');
+        $curto = $this->campo($this->pessoa('Joao', 'colaborador', ['atividade_campo' => true]), '2026-11-11 14:00:00', null, 'CURTO');
+
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(1, $this->pushes);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:20:00-03:00'));
+        \Laravel\Sanctum\Sanctum::actingAs($romario);
+        $this->postJson("/api/atividades-campo/{$a->id}/finalizar")->assertOk();
+        $this->assertCount(2, $this->pushes);
+        $this->assertSame(['Focal', 'Paulo'], $this->pushes[1]['para']);
+        $this->assertSame('✅ Romario registrou a saída', $this->pushes[1]['titulo']);
+        $this->assertStringContainsString('Faz. São José · campo BRCB147: das 12:00 às 15:20 (3h20)', $this->pushes[1]['corpo']);
+        $this->assertSame('campo-longo-'.$a->id, $this->pushes[1]['tag']);
+        $this->assertSame($this->pushes[0]['tag'], $this->pushes[1]['tag'], 'mesma tag: substitui o aviso no celular');
+
+        $this->postJson("/api/atividades-campo/{$a->id}/finalizar")->assertOk();   // reenvio da fila: não repete
+        $this->assertCount(2, $this->pushes);
+
+        \Laravel\Sanctum\Sanctum::actingAs($curto->colaborador);
+        $this->postJson("/api/atividades-campo/{$curto->id}/finalizar")->assertOk();   // não teve aviso das 2h30
+        $this->assertCount(2, $this->pushes);
+    }
+
+    public function test_fechamento_automatico_ao_iniciar_outro_campo_tambem_avisa(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $this->campo($romario, '2026-11-11 12:00:00');
+        $this->artisan('campo:verificar')->assertSuccessful();
+
+        \Laravel\Sanctum\Sanctum::actingAs($romario);
+        $this->postJson('/api/atividades-campo/iniciar', ['id' => (string) Str::uuid(), 'fazenda' => 'Faz. Nova', 'campo' => 'X1'])->assertCreated();
+        $this->assertCount(2, $this->pushes);
+        $this->assertSame('✅ Romario registrou a saída', $this->pushes[1]['titulo']);
+        $this->assertStringContainsString('fechado sozinho ao iniciar outro campo', $this->pushes[1]['corpo']);
     }
 
     public function test_focal_em_campo_avisa_o_admin(): void

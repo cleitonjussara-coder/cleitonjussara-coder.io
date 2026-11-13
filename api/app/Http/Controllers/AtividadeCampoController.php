@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AtividadeCampo;
 use App\Models\CampoCadastro;
 use App\Models\Colaborador;
+use App\Services\CampoAviso;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -91,7 +92,10 @@ class AtividadeCampoController extends Controller
         /* Esqueceu de finalizar o campo anterior? Fecha na hora deste início (pedido do Paulo: "quando ele inicia o outro
            campo, registra o fechamento automático do outro"). Só fecha o que começou antes; a localização do fim fica vazia. */
         AtividadeCampo::query()->vivos()->where('user_id', $u->id)->whereNull('fim')->where('inicio', '<=', $hora)
-            ->get()->each(fn (AtividadeCampo $a) => $a->update(['fim' => $hora, 'fim_automatico' => true]));
+            ->get()->each(function (AtividadeCampo $a) use ($hora) {
+                $a->update(['fim' => $hora, 'fim_automatico' => true]);
+                app(CampoAviso::class)->saidaRegistrada($a);
+            });
 
         $a = AtividadeCampo::create([
             'id' => $d['id'], 'user_id' => $u->id,
@@ -132,6 +136,7 @@ class AtividadeCampoController extends Controller
             'lat_fim' => $d['lat'] ?? null, 'lng_fim' => $d['lng'] ?? null,
             'precisao_fim' => isset($d['precisao']) ? (int) round($d['precisao']) : null,
         ]);
+        app(CampoAviso::class)->saidaRegistrada($a);   // já tinha ido o aviso das 2h30? avisa que saiu
 
         return response()->json($this->json($a->fresh('colaborador:id,nome')));
     }
@@ -195,6 +200,9 @@ class AtividadeCampoController extends Controller
             $a->update($mudou + ['editado_em' => Carbon::now(self::TZ), 'editado_por' => $u->id]);
             \Illuminate\Support\Facades\Log::info('atividade_campo.editada', ['id' => $a->id, 'por' => $u->id, 'antes' => $antes,
                 'depois' => array_map(fn ($v) => $v instanceof Carbon ? $v->format('Y-m-d H:i:s') : $v, $mudou)]);
+            if (isset($mudou['fim'])) {
+                app(CampoAviso::class)->saidaRegistrada($a->fresh());   // gestor/focal lançou o fim
+            }
         }
 
         return response()->json($this->json($a->fresh(['colaborador:id,nome', 'editor:id,nome'])));
