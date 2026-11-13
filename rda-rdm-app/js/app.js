@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 615;
+const APP_BUILD = 616;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9513,7 +9513,7 @@ async function abrirFormNota(dados = {}) {
     return;
   }
   fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
-  _fotoAntesDoScanner = null;
+  _fotoAntesDoScanner = null; _fotoAjustada = false;
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
   const ov = $('nota-form-overlay');
   ov.style.display = 'flex';
@@ -9973,7 +9973,7 @@ async function onFotoNotaChange(e) {
      Roda DEPOIS da orientação, e a foto anterior fica guardada (_fotoAntesDoScanner): se o ajuste cortar algo, "Foto
      inteira" na tela de recorte devolve exatamente o que a câmera tirou. Sem nota à vista, a foto segue como veio. */
   const semScanner = file;
-  _fotoAntesDoScanner = null;
+  _fotoAntesDoScanner = null; _fotoAjustada = false;
   if (_camNotaScannerOn && typeof Scanner !== 'undefined') {
     const ov = $('ocr-overlay');
     if (ov) { ov.style.display = 'flex'; $('ocr-progress').textContent = 'Endireitando a nota…'; }
@@ -10003,7 +10003,7 @@ async function onArquivoNotaChange(e) {
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
   if (await _fotoEmBrancoBarrada(file, e.target, 'arquivo')) { _mostrarFormAposLeitura(); return; }   // 21/10/2026
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
-  _fotoAntesDoScanner = null;
+  _fotoAntesDoScanner = null; _fotoAjustada = false;
   if (_ehImagemExt(_extDoArquivo(file))) file = await _endireitarComAviso(file);   // 08/10/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
@@ -10347,7 +10347,7 @@ function atualizarPreviewFoto(url) {
   if (kind === 'image') {
     const src = url.startsWith('supabase:') ? '#' : url; // URL real viria de signed URL
     prev.innerHTML = `<img src="${src}" alt="Anexo" class="foto-thumb"
-      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'">`;
+      onerror="this.parentElement.innerHTML='<span class=muted-p>📎 anexo da nota</span>'">${_botoesAjusteFotoHTML()}`;
   } else if (kind === 'pdf' && fotoRenderURL) {
     // imagem da 1ª página puxada do PDF
     prev.innerHTML = `<img src="${fotoRenderURL}" alt="PDF (1ª página)" class="foto-thumb">
@@ -10360,6 +10360,45 @@ function atualizarPreviewFoto(url) {
   _atualizarBotaoLerChave();
   _atualizarDocumentoAuto();   // anexo XML/PDF x foto decide NF-e x DANFE
   _ladoNotaAnexoTrocado();     // tela dividida aberta: mostra o anexo novo
+}
+
+/* ─── Ajustar a foto (13/11/2026, pedido do Cleiton) ───────────────────────────────────────────────────────────────
+   Na foto anexada (a que está no aparelho, fotoBlob), "✏️ Ajustar foto" abre o EditorFoto: girar, endireitar, recortar e
+   melhorar. A foto salva lá vira o anexo (é ela que sobe e vai para a pasta). fotoOriginal fica como estava: o "Ler QR
+   da foto" continua procurando na foto inteira. Depois de um ajuste aparece "🔁 Ler de novo", que lê a foto corrigida e
+   completa os campos ainda vazios. Foto que só está no servidor (nota já enviada) fica para a etapa do gestor. */
+let _fotoAjustada = false;
+function _podeAjustarFoto() {
+  return !!window.EditorFoto && !!fotoBlob && _ehImagemExt(fotoExt || _extDoArquivo(fotoBlob) || 'jpg');
+}
+function _botoesAjusteFotoHTML() {
+  if (!_podeAjustarFoto()) return '';
+  return `<div class="foto-ajuste-btns" onclick="event.stopPropagation()">
+      <button type="button" class="btn btn-outline btn-sm" onclick="ajustarFotoNota()">✏️ Ajustar foto</button>
+      ${_fotoAjustada ? '<button type="button" class="btn btn-outline btn-sm" onclick="lerFotoDeNovo()">🔁 Ler de novo</button>' : ''}
+    </div>`;
+}
+async function ajustarFotoNota() {
+  if (!_podeAjustarFoto()) return;
+  const antes = fotoBlob;
+  const novo = await EditorFoto.abrir(antes);
+  if (!novo || fotoBlob !== antes) return;   // cancelou, não mudou nada, ou o anexo foi trocado enquanto o editor estava aberto
+  fotoBlob = new File([novo], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  fotoExt = 'jpg';
+  if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+  fotoURL = URL.createObjectURL(fotoBlob);
+  _fotoAjustada = true;
+  atualizarPreviewFoto(fotoURL);
+  toast('Foto ajustada ✔ — ela é a que vai ser salva');
+}
+async function lerFotoDeNovo() {
+  if (!fotoBlob || !_ehImagemExt(fotoExt || 'jpg')) return;
+  const ov = $('ocr-overlay');
+  ov.style.display = 'flex';
+  $('ocr-progress').textContent = 'Lendo a foto ajustada…';
+  let ocr = {};
+  try { ocr = (await _lerNota(fotoBlob)) || {}; } catch (_) { ocr = {}; }
+  await extrairDadosDaFoto(fotoBlob, ocr);   // com a leitura pronta: sem recorte, só completa os campos vazios
 }
 
 /* Botão manual de ler QR só aparece como RESERVA:
