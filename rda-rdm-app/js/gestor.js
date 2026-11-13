@@ -1140,7 +1140,7 @@ window.Gestor = (() => {
         const aba = (k, ico, nome, gastoL, recL) => ({ k, ico, nome, gastoL, recL, gasto: soma(gastoL), rec: soma(recL),
           ant: k === 'cartao' ? anoAnt.cartao : anoAnt.reemb, antRDM: anoAnt.reembRDM, antRDA: anoAnt.reembRDA,
           gRDM: porTipo(gastoL, 'RDM'), gRDA: porTipo(gastoL, 'RDA'), rRDM: porTipo(recL, 'RDM'), rRDA: porTipo(recL, 'RDA') });
-        return [aba('cartao', '💳', 'Cartão corporativo', cartaoN, recargasA), aba('reemb', '💵', 'CV reembolso', carteiraN, reembA)];
+        return [aba('cartao', '💳', 'Cartão corporativo', cartaoN, recargasA), aba('reemb', '💵', 'Repasse', carteiraN, reembA)];   // "Repasse" na tela (13/11/2026, pedido do Cleiton); a aba do Excel segue CV REEMBOLSO
       })() : null;
       const semFoto = notas.filter(n => !n.foto_path).length;
       const semValor = notas.filter(n => Number(n.valor || 0) <= 0).length;
