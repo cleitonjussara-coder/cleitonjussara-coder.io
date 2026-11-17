@@ -128,10 +128,15 @@ const hero = () => el.querySelector('.db-hero-val').textContent.trim();
   const antes = chamadas;
   G.eqAba('pessoas');
   confere(chamadas === antes, 'trocar de aba não vai ao servidor');
+  /* Lote 1 (17/11/2026): o número grande do cartão é o gasto do colaborador (o "Gasto no mês" da ficha); o pago pela empresa
+     vem na linha .eqp-empresa. Gasto + pago pela empresa de todos os cartões continua fechando com o Resumo. */
   const valores = [...el.querySelectorAll('.eqp-gasto b')].map(b => numero(b.textContent));
-  confere(Math.abs(valores.reduce((a, b) => a + b, 0) - faturamentoAntigo) < 0.01, `pessoas + desativados + sem colaborador = total (${valores.join(' + ')})`);
+  const empresa = [...el.querySelectorAll('.eqp-empresa')].map(d => numero((d.textContent.match(/pago pela empresa (R\$\s?[\d.,]+)/) || [, '0'])[1]));
+  const somaTudo = valores.concat(empresa).reduce((a, b) => a + b, 0);
+  confere(Math.abs(somaTudo - faturamentoAntigo) < 0.01, `gasto + pago pela empresa de todos = total (${valores.join(' + ')} + empresa ${empresa.join(' + ')})`);
   const ordem = [...el.querySelectorAll('.colab-list .colab-card[data-uid]')].map(c => c.dataset.uid);
-  confere(ordem[0] === 'a' && ordem[1] === 'b', `maior gasto primeiro (${ordem.join()})`);
+  const showDe = uid => numero(el.querySelector(`.colab-card[data-uid="${uid}"] .eqp-gasto b`)?.textContent || '0');
+  confere(ordem.slice(0, -1).every((u, i) => showDe(u) >= showDe(ordem[i + 1]) || showDe(ordem[i + 1]) === 0), `maior gasto do colaborador primeiro (${ordem.map(u => u + ' ' + showDe(u)).join(', ')})`);
   confere(/Faturamento geral \(sem colaborador\)/.test(texto()), 'linha do Faturamento sem colaborador');
   confere(/Desativados \(1\)/.test(texto()), 'desativados continuam');
   G.eqFiltro('ord', 'nome');

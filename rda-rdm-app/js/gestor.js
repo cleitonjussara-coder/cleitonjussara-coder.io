@@ -405,7 +405,10 @@ window.Gestor = (() => {
   let _filtroNotas = null;      // { chave, tipo: 'cartao' | 'carteira', tp: 'RDM' | 'RDA' | null }
   let _chaveFichaAtual = null;
   /* Idem para a lista de repasses (16/10/2026): Repasse recebido lista os repasses, Recarga do cartão lista as recargas. */
-  let _filtroReps = null;       // { chave, tipo: 'repasse' | 'recarga' }
+  let _filtroReps = null;       // { chave (= id da pessoa), dest, tp, sit }
+  /* 17/11/2026 (Lote 1): o filtro dos repasses é da PESSOA, não do mês — o gestor marca RDA + Pedidos pagos e vai passando os
+     meses sem perder a escolha. Só a primeira abertura da ficha da pessoa começa no padrão RDM + Recebidos. */
+  const _chaveRep = () => String(_chaveFichaAtual || '').split('|')[0];
   function mesRepasses(delta) {
     _rolarParaRepasses = true;
     if (delta === 0) irParaMesAtualEquipe(); else mudarMesEquipe(delta);
@@ -423,7 +426,7 @@ window.Gestor = (() => {
      (pedido pendente). Os três se combinam. Filtro vazio continua guardado ({ chave }) para a ficha redesenhada não
      voltar ao padrão RDM + Recebidos depois que a pessoa limpou. */
   function _aplicarFiltroReps() {
-    const f = _filtroReps && _filtroReps.chave === _chaveFichaAtual ? _filtroReps : {};
+    const f = _filtroReps && _filtroReps.chave === _chaveRep() ? _filtroReps : {};
     const itens = [...document.querySelectorAll('#cdet-replista .cdet-rep')];
     const passa = it => (!f.dest || it.dataset.dest === f.dest)
       && (!f.tp || (it.dataset.tp === f.tp && it.dataset.dest !== 'recarga'))
@@ -469,15 +472,15 @@ window.Gestor = (() => {
   }
   /* cartões Repasse recebido / Recarga do C.V.: tipo = 'repasse' | 'recarga'; tocar de novo (ou "Limpar filtros") volta à lista inteira */
   function filtrarRepasses(tipo) {
-    const atual = _filtroReps && _filtroReps.chave === _chaveFichaAtual ? _filtroReps : {};
-    if (!tipo || atual.dest === tipo) _filtroReps = { chave: _chaveFichaAtual };
-    else _filtroReps = { chave: _chaveFichaAtual, dest: tipo, sit: atual.sit || null };
+    const atual = _filtroReps && _filtroReps.chave === _chaveRep() ? _filtroReps : {};
+    if (!tipo || atual.dest === tipo) _filtroReps = { chave: _chaveRep() };
+    else _filtroReps = { ...atual, chave: _chaveRep(), dest: tipo, tp: null };
     _aplicarFiltroReps();
     if (_filtroReps.dest) irParaRepasses();
   }
   /* chips da lista: grupo 'tp' (RDM | RDA | recarga) ou 'sit' (rec | pago | pend); valor repetido ou 'todos' limpa o grupo */
   function filtrarReps(grupo, valor) {
-    const f = { ...(_filtroReps && _filtroReps.chave === _chaveFichaAtual ? _filtroReps : {}), chave: _chaveFichaAtual };
+    const f = { ...(_filtroReps && _filtroReps.chave === _chaveRep() ? _filtroReps : {}), chave: _chaveRep() };
     if (grupo === 'sit') f.sit = (valor === 'todos' || f.sit === valor) ? null : valor;
     else if (valor === 'todos' || (valor === 'recarga' ? f.dest === 'recarga' : f.tp === valor)) { f.tp = null; f.dest = null; }
     else if (valor === 'recarga') { f.dest = 'recarga'; f.tp = null; }
@@ -490,12 +493,15 @@ window.Gestor = (() => {
     const vale = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual;
     const f = vale ? _filtroNotas.tipo : null;
     const tp = vale ? _filtroNotas.tp || null : null;
-    const ativo = !!(f || tp);   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
+    const ativo = !!(f || tp || (vale && _filtroNotas.pend));   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
     const semEmp = !!(vale && _filtroNotas.semEmpresa);   // veio do gasto do mês no regime RDM/RDA: o valor não conta o Faturamento
-    const rot = f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : `${tp || ''}${semEmp ? ' sem Faturamento' : ''}`;
+    const pend = !!(vale && _filtroNotas.pend);   // cartão Pendências: só as notas sem foto ou sem valor (Lote 1, 17/11/2026)
+    const rot = pend ? 'pendências (sem foto ou sem valor)'
+      : f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : `${tp || ''}${semEmp ? ' sem Faturamento' : ''}`;
     const cards = [...document.querySelectorAll('#notas-list .nota-card')];
-    cards.forEach(c => { c.style.display = ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp) && (!semEmp || c.dataset.pag !== 'empresa')) ? '' : 'none'; });
-    document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', !tp && k.dataset.filtro === f));
+    cards.forEach(c => { c.style.display = (pend ? c.dataset.pend === '1'
+      : ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp) && (!semEmp || c.dataset.pag !== 'empresa'))) ? '' : 'none'; });
+    document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', pend ? k.dataset.filtro === 'pend' : (!tp && k.dataset.filtro === f)));
     document.querySelectorAll('#cdet-filtros-notas [data-fn]').forEach(c => {
       const on = !semEmp && c.dataset.fn === (ativo ? `${f || ''}:${tp || ''}` : 'todas');
       c.classList.toggle('btn-primary', on); c.classList.toggle('btn-outline', !on);
@@ -503,13 +509,16 @@ window.Gestor = (() => {
     });
     const info = document.getElementById('cdet-filtro-info');
     if (info) {
-      info.style.display = ativo ? 'flex' : 'none';
-      if (ativo) {
-        const n = cards.filter(c => c.style.display !== 'none').length;
-        info.querySelector('.txt').textContent = !cards.length ? 'Nenhuma nota neste mês.'
-          : !n ? `Nenhuma nota de ${rot} neste mês.`
-          : `Só ${rot}: ${n} de ${cards.length} nota${cards.length === 1 ? '' : 's'}`;
-      }
+      /* faixa sempre com a soma, como a dos repasses (Lote 1): com filtro, o que está na tela; sem filtro, o mês inteiro */
+      info.style.display = cards.length ? 'flex' : 'none';
+      const bt = info.querySelector('button'); if (bt) bt.style.display = ativo ? '' : 'none';
+      const vis = cards.filter(c => c.style.display !== 'none');
+      const somaN = arr => arr.reduce((t, c) => t + (Number(c.dataset.val) || 0), 0);
+      const qtd = k => `${k} nota${k === 1 ? '' : 's'}`;
+      info.querySelector('.txt').textContent = !cards.length ? 'Nenhuma nota neste mês.'
+        : !ativo ? `${qtd(cards.length)} no mês · ${brl(somaN(cards))}`
+        : !vis.length ? `Nenhuma nota de ${rot} neste mês.`
+        : `Só ${rot}: ${vis.length} de ${qtd(cards.length)} · ${brl(somaN(vis))}`;
     }
     if (typeof _selNotasAtualizar === 'function') _selNotasAtualizar();   // o que o filtro escondeu sai da seleção
   }
@@ -517,7 +526,13 @@ window.Gestor = (() => {
      (ou "Mostrar todas") volta à lista inteira. Os botões já estão na lista: só os cartões do resumo rolam até ela. */
   function filtrarNotas(tipo, tp = null) {
     const atual = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas : null;
-    if ((!tipo && !tp) || (atual && !atual.semEmpresa && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
+    if (tipo === 'pend') {   // cartão Pendências: tocar de novo volta à lista inteira
+      _filtroNotas = atual && atual.pend ? null : { chave: _chaveFichaAtual, pend: true };
+      _aplicarFiltroNotas();
+      if (_filtroNotas) irParaNotas();
+      return;
+    }
+    if ((!tipo && !tp) || (atual && !atual.semEmpresa && !atual.pend && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
     else _filtroNotas = { chave: _chaveFichaAtual, tipo, tp };
     _aplicarFiltroNotas();
     if (_filtroNotas && !tp) irParaNotas();
@@ -813,7 +828,7 @@ window.Gestor = (() => {
         + (semValor ? ` · <span class="alerta">${semValor} sem valor</span>` : '')
       : 'Nenhuma nota';
     return `
-      <div class="colab-card clicavel ${!ehContador && !pessoa.val ? 'eqp-zero' : ''}" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" data-uid="${_at(m.id)}" onclick="Gestor.abrir(this.dataset.uid)" title="Ver notas de ${_at(m.nome||m.email)}">
+      <div class="colab-card clicavel ${!ehContador && !pessoa.show ? 'eqp-zero' : ''}" data-busca="${_at(((m.nome||'')+' '+(m.email||'')).toLowerCase())}" data-uid="${_at(m.id)}" onclick="Gestor.abrir(this.dataset.uid)" title="Ver notas de ${_at(m.nome||m.email)}">
         <div class="colab-head">
           <div class="avatar ${m.foto_path ? 'clicavel' : ''}" data-foto="${_at(m.foto_path||'')}" data-nome="${_at(m.nome||m.email)}" data-sub="${_at(m.email)} · ${_at(m.role)}" title="Ver foto" onclick="if(this.dataset.foto){event.stopPropagation();Gestor.verFoto(this)}">${esc(ini(m.nome))}</div>
           <div class="colab-info">
@@ -826,8 +841,9 @@ window.Gestor = (() => {
           ${ehContador ? '' : `<button type="button" class="btn-icon-sm colab-mais ${previaAberta ? 'on' : ''}" aria-expanded="${previaAberta}" title="Prévia dos gastos" aria-label="Prévia dos gastos" data-uid="${_at(m.id)}" onclick="event.stopPropagation();Gestor.alternarPrevia(this,this.dataset.uid)">⋯</button>`}
           <span class="colab-seta">›</span>
         </div>
-        ${ehContador ? '' : `<div class="eqp-gasto"><span class="colab-resumo">${notasTxt}</span><b>${brl(pessoa.val)}</b></div>
-        <span class="eqp-track"><span style="width:${pessoa.val ? Math.max(3, Math.round(pessoa.val / maxVal * 100)) : 0}%;background:var(--primary-l)"></span></span>`}
+        ${ehContador ? '' : `<div class="eqp-gasto"><span class="colab-resumo">${notasTxt}</span><b>${brl(pessoa.show)}</b></div>
+        ${_eqF.pag === 'todos' && pessoa.empresa ? `<div class="eqp-empresa">gasto do colaborador · + pago pela empresa ${brl(pessoa.empresa)} · faturamento ${brl(pessoa.val)}</div>` : ''}
+        <span class="eqp-track"><span style="width:${pessoa.show ? Math.max(3, Math.round(pessoa.show / maxVal * 100)) : 0}%;background:var(--primary-l)"></span></span>`}
         <div class="colab-previa" style="display:${previaAberta ? 'block' : 'none'}">
         ${_eqF.modo === 'anual' && !ehContador ? `<div class="colab-resumo">Prévia até ${MESES_LONGO[mes-1]} de ${ano}:</div>` : ''}
         ${ehContador ? '' : cvM ? _balCvHTML(cvM, ano, acumOk) : `<div class="colab-bal">
@@ -858,12 +874,16 @@ window.Gestor = (() => {
     const lista = (_eqF.modo === 'anual' ? nsAno : ns).filter(_eqPassaTudo);
     const porPessoa = new Map();
     lista.forEach(n => { const id = n.user_id || null; if (!porPessoa.has(id)) porPessoa.set(id, []); porPessoa.get(id).push(n); });
-    const dados = id => { const notas = porPessoa.get(id) || []; return { notas, val: _eqSoma(notas) }; };
+    /* Lote 1 (17/11/2026): com "Todos" no pagamento, o número grande é o gasto do colaborador — o mesmo "Gasto no mês" da ficha —
+       e o pago direto pela empresa vem na linha de baixo. val (tudo) continua sendo a soma que fecha com o Resumo. */
+    const dados = id => { const notas = porPessoa.get(id) || []; const val = _eqSoma(notas);
+      const empresa = _eqSoma(notas.filter(n => n.pagamento === 'empresa'));
+      return { notas, val, empresa, show: _eqF.pag === 'todos' ? _r2(val - empresa) : val }; };
     const visivel = m => (_eqF.colab === 'todos' || m.id === _eqF.colab) && (_eqF.reg === 'todos' || _eqRegimeDe(m.id) === _eqF.reg);
     const pessoas = collabs.filter(visivel).map(m => ({ m, p: dados(m.id) }));
     const nome = x => String(x.m.nome || x.m.email);
-    pessoas.sort(_eqF.ord === 'nome' ? (a, b) => nome(a).localeCompare(nome(b)) : (a, b) => (b.p.val - a.p.val) || nome(a).localeCompare(nome(b)));
-    const maxVal = Math.max(1, ...pessoas.map(x => x.p.val));
+    pessoas.sort(_eqF.ord === 'nome' ? (a, b) => nome(a).localeCompare(nome(b)) : (a, b) => (b.p.show - a.p.show) || nome(a).localeCompare(nome(b)));
+    const maxVal = Math.max(1, ...pessoas.map(x => x.p.show));
     const ord = (k, t) => `<button class="seg-btn ${_eqF.ord === k ? 'active' : ''}" onclick="Gestor.eqFiltro('ord','${k}')">${t}</button>`;
     /* o que não tem cartão de pessoa ativa aparece numa linha própria: a soma da lista precisa fechar com o Resumo */
     const ativos = new Set(collabs.map(c => c.id)), desativados = new Set(inativos.map(c => c.id));
@@ -1066,7 +1086,7 @@ window.Gestor = (() => {
     const chaveFicha = `${id}|${ano}|${mes}`;
     _chaveFichaAtual = chaveFicha;
     if (_filtroNotas && _filtroNotas.chave !== chaveFicha) _filtroNotas = null;   // outro mês ou outra pessoa: lista inteira
-    if (_filtroReps && _filtroReps.chave !== chaveFicha) _filtroReps = null;
+    if (_filtroReps && _filtroReps.chave !== String(id)) _filtroReps = null;   // outra pessoa: volta ao padrão; outro mês mantém
     if (_planDono !== `${id}|${ano}`) { _planDono = `${id}|${ano}`; _planAberto = null; _planFiltros = {}; }
     const seq = ++_fichaSeq;
     const fichaAntes = el.querySelector('.cdet');
@@ -1398,6 +1418,11 @@ window.Gestor = (() => {
           </div>
         </div>` : ''}
 
+        <!-- atalhos (Lote 1, 17/11/2026): descer direto às listas, sem rolar a ficha inteira -->
+        <div class="cdet-atalhos">
+          <button type="button" class="btn btn-sm btn-primary" onclick="Gestor.irParaNotas()">🧾 Notas ${notas.length} ↓</button>
+          ${ehContador ? '' : `<button type="button" class="btn btn-sm btn-primary" onclick="Gestor.irParaRepasses()">💸 Repasses ${reps.length} ↓</button>`}
+        </div>
         <!-- dashboard da ficha (05/11/2026): os indicadores vêm antes dos relatórios e ações -->
         ${ehContador || !ehCVcolab ? '' : `<div class="cdet-mais-wrap"><button type="button" class="btn btn-sm btn-outline cdet-mais ${_kpisAbertos ? 'on' : ''}" aria-expanded="${_kpisAbertos}" onclick="Gestor.alternarKpis(this)">📊 <span class="txt">${_kpisAbertos ? 'Esconder resumo do mês' : 'Abrir resumo do mês'}</span></button></div>`}
         ${ehContador ? '' : `<div class="cdet-kpis" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>
@@ -1413,7 +1438,7 @@ window.Gestor = (() => {
             `<span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span>${_splitRDMRDA(sdMes('RDM'), sdMes('RDA'))}`, saldo < 0 ? 'neg' : '')}
           ${kpiToque('kpi-fat', 'Ver o faturamento do mês por categoria',
             `<span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento do mês</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">${MESES_LONGO[mes - 1]} · todas as despesas</span>${_splitRDMRDA(soma(notas.filter(n => n.tipo === 'RDM')), soma(notas.filter(n => n.tipo === 'RDA')))}`)}
-          <div class="cdet-kpi ${semFoto || semValor ? 'warn' : ''}"><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span></div>
+          <div class="cdet-kpi ${semFoto || semValor ? 'warn link' : ''}" ${semFoto || semValor ? `role="button" tabindex="0" data-filtro="pend" title="Listar só as notas sem foto ou sem valor" onclick="Gestor.filtrarNotas('pend')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('pend')}"` : ''}><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span>${semFoto || semValor ? '<span class="cdet-kpi-ver">Ver quais ›</span>' : ''}</div>
         </div>
         <div class="cdet-kpis-det" ${ehCVcolab && !_kpisAbertos ? 'style="display:none"' : ''}>${detGasto}${detRec}${detRecarga}${planilhaCV ? '' : detSaldo}${detFat}</div>`}
 
@@ -1472,7 +1497,8 @@ window.Gestor = (() => {
       } else if (typeof cardNotaHTML === 'function') {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
         if (_podeSelNotas) html += selNotasBarraHTML();
-        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })).join('')}</div>`;
+        html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })
+          .replace('<div class="nota-card ', `<div data-val="${Number(n.valor) || 0}" data-pend="${!n.foto_path || Number(n.valor || 0) <= 0 ? '1' : ''}" class="nota-card `)).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
@@ -1507,9 +1533,9 @@ window.Gestor = (() => {
       }
       const _sit = x => recebido(x) ? 'rec' : x.atendido_em ? 'pago' : 'pend';   // situação do repasse: recebido, pedido pago ou pendente
       if (reps.length) {
-        /* ficha aberta agora (não redesenho): começa em RDM + Recebidos, a conta que o gestor confere (áudio do Paulo, 17/11/2026) */
-        if (!_filtroReps || _filtroReps.chave !== chaveFicha) {
-          _filtroReps = { chave: chaveFicha, sit: 'rec', tp: reps.some(x => x.tipo === 'RDM' && !ehRecarga(x)) ? 'RDM' : null };
+        /* primeira vez na ficha desta pessoa: começa em RDM + Recebidos, a conta que o gestor confere (áudio do Paulo, 17/11/2026) */
+        if (!_filtroReps || _filtroReps.chave !== String(id)) {
+          _filtroReps = { chave: String(id), sit: 'rec', tp: reps.some(x => x.tipo === 'RDM' && !ehRecarga(x)) ? 'RDM' : null };
         }
         const _chip = (g, v, rot, n) => `<button type="button" class="btn btn-sm btn-outline" data-fr="${g}:${v}" onclick="Gestor.filtrarReps('${g}','${v}')">${rot}${n === '' ? '' : ' ' + n}</button>`;
         const _nRec = reps.filter(ehRecarga).length;

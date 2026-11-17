@@ -2,7 +2,8 @@
 /* ─────────────────────────────────────────────────────────────
    REPASSES E RECARGAS DA EQUIPE (03/11/2026, pedido do Cleiton) — gestor/admin.
    Aberta só pelo menu (05/11/2026). Lista o dinheiro já registrado de todos
-   (pedido pendente não entra: não é dinheiro na mão), com filtros RDM, RDA,
+   (pedido não entra na lista nem no total; desde o Lote 1, 17/11/2026, o topo mostra os pedidos abertos e o
+   recebido que veio de um pedido leva o selo "pago pelo sino"), com filtros RDM, RDA,
    Cartão RDM e Cartão RDA, por mês (ou ano todo) e por pessoa.
    ✏️ abre o editor na própria linha: enquanto o gestor digita, o quadro mostra
    como o saldo fica e os lançamentos do mês e grupo escolhidos. É prévia: nada
@@ -25,7 +26,7 @@ window.RepassesEquipe = (() => {
   ];
   let ano = null, mes = null;        // mes 0 = ano todo
   let pessoa = '', grupo = 'todos';
-  let lista = [], nomes = {}, erro = '';
+  let lista = [], pedidos = [], nomes = {}, erro = '';
   let pedidoAtual = 0;               // resposta lenta de outro ano não pinta por cima
   let colabs = {};                   // id → colaborador (o regime decide as contas e os grupos)
   let aberto = null, rascunho = null;   // id em edição e o que foi digitado
@@ -175,13 +176,16 @@ window.RepassesEquipe = (() => {
       nomes = Object.fromEntries((todos || []).map(c => [c.id, c.nome || c.email || 'Colaborador']));
       colabs = Object.fromEntries((todos || []).map(c => [c.id, c]));
       lista = (rows || []).filter(r => !r.deleted && _repasseEhRecebido(r));
+      /* Lote 1 (17/11/2026): os pedidos ficam guardados à parte — o recebido que veio de um pedido mostra de qual pedido
+         veio, e o topo mostra os pedidos ainda abertos. Eles NÃO entram na lista nem no total (seria contar duas vezes). */
+      pedidos = (rows || []).filter(r => !r.deleted && !_repasseEhRecebido(r));
       window._repassesDaFicha = lista;   // o 🗑 acha o registro por aqui (_repasseDaEquipe)
       erro = '';
       if (aberto && !abertoAgora()) { aberto = null; rascunho = null; }   // foi excluído
     } catch (e) {
       if (meu !== pedidoAtual) return;
       erro = 'Não deu para carregar: ' + (e.message || 'erro');
-      lista = [];
+      lista = []; pedidos = [];
     }
     _pintar();
   }
@@ -198,6 +202,14 @@ window.RepassesEquipe = (() => {
       .sort((a, b) => a[1].localeCompare(b[1]));
     if (pessoa && !pessoas.some(([id]) => id === pessoa)) pessoas.push([pessoa, nomes[pessoa] || 'Colaborador']);
 
+    const pedidoPorId = Object.fromEntries(pedidos.map(x => [x.id, x]));
+    const abertos = pedidos.filter(x => !x.atendido_em && (!pessoa || x.user_id === pessoa));
+    const selo = r => {
+      const pd = r.pedido_id && pedidoPorId[r.pedido_id];
+      if (!r.pedido_id) return '';
+      const dif = pd && Math.abs(Number(pd.valor) - Number(r.valor)) > 0.004 ? ` · pediu ${brl(pd.valor)}` : '';
+      return `<span class="rep-selo-pedido">✔ pago pelo sino${pd ? ` · pedido de ${fmtDataBR(pd.data)}${pd.descricao ? ' “' + esc(pd.descricao) + '”' : ''}${dif}` : ''}</span>`;
+    };
     const item = r => {
       const g = grupoDe(r);
       return `<div class="rep-item cdet-rep" style="flex-direction:column;align-items:stretch;gap:4px">
@@ -211,6 +223,7 @@ window.RepassesEquipe = (() => {
           <button class="btn-icon-sm" title="Corrigir" aria-label="Corrigir" aria-expanded="${aberto === r.id}" data-rep="${_at(r.id)}" onclick="RepassesEquipe.abrir(this.dataset.rep)">✏️</button>
           <button class="btn-icon-sm danger" title="Excluir" aria-label="Excluir" data-rep="${_at(r.id)}" onclick="excluirRepasseDeOutro(this.dataset.rep)">🗑</button>
         </div>
+        ${selo(r)}
         ${aberto === r.id ? _editor(r) : ''}
       </div>`;
     };
@@ -232,6 +245,8 @@ window.RepassesEquipe = (() => {
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px">
         ${chip('todos', 'Todos', doPeriodo)}${GRUPOS.map(g => chip(g.id, g.rotulo, doPeriodo.filter(r => grupoDe(r) === g.id))).join('')}
       </div>
+      ${!erro && abertos.length ? `<button type="button" class="rep-faixa-pedidos" onclick="abrirNotificacoes('pedido')">
+        <span>⏳ ${abertos.length} pedido${abertos.length === 1 ? '' : 's'} aberto${abertos.length === 1 ? '' : 's'}${pessoa ? ' de ' + esc(nomes[pessoa] || 'Colaborador') : ''} · <b>${brl(soma(abertos))}</b></span><span>abrir ›</span></button>` : ''}
       ${erro ? `<div class="empty-state"><p>${esc(erro)}</p></div>` : `
       <div class="colab-resumo" style="margin:0 0 10px">Total ${grupo === 'todos' ? 'da lista' : 'do filtro'}: <b>${brl(soma(visiveis))}</b> · ${visiveis.length} lançamento${visiveis.length === 1 ? '' : 's'}</div>
       ${visiveis.length ? visiveis.map(item).join('') : '<div class="empty-state" style="padding:24px 14px">Nada com esse filtro neste período.</div>'}`}`;

@@ -28,6 +28,8 @@ function montar() {
     var $ = id => document.getElementById(id);
     var _ehGestorOuAdmin = () => true;
     var currentUser = { id: 'g1', role: 'gestor', nome: 'Paulo' };
+    var cardNotaHTML = n => '<div class="nota-card com-thumb" data-tipo="' + n.tipo + '" data-pag="' + (n.pagamento || 'cartao') + '">' + n.razao_social + '</div>';
+    Element.prototype.scrollIntoView = function () {};
   `);
   w.eval('var sb = { fechamento: { aguardando: async () => ({ notas: [] }), lista: async () => ({ fechados: [] }) } };');
   w.DB = { getMeta: async () => [], setMeta: async () => {} };
@@ -48,7 +50,12 @@ function montar() {
     rep(200, { tipo: 'RDA', kind: 'request', descricao: 'Combustível' }),
   ];
   const w = montar();
-  const sb = { notas: { list: async () => [] }, repasses: { list: async q => reps.filter(x => (!q.mes || x.mes === q.mes)) }, colaboradores: { get: async () => colab } };
+  const notasMes = [
+    { id: 'n1', user_id: 'u1', tipo: 'RDM', subtipo: 'Outros', valor: 100, data: '2026-11-05', mes: 11, ano: 2026, pagamento: 'carteira', foto_path: 'f', razao_social: 'Posto A' },
+    { id: 'n2', user_id: 'u1', tipo: 'RDM', subtipo: 'Outros', valor: 50, data: '2026-11-06', mes: 11, ano: 2026, pagamento: 'carteira', foto_path: null, razao_social: 'Posto B' },
+    { id: 'n3', user_id: 'u1', tipo: 'RDA', subtipo: 'Outros', valor: 0, data: '2026-11-07', mes: 11, ano: 2026, pagamento: 'carteira', foto_path: 'f', razao_social: 'Restaurante' },
+  ];
+  const sb = { notas: { list: async q => notasMes.filter(x => (!q.mes || x.mes === q.mes)) }, repasses: { list: async q => reps.filter(x => (!q.mes || x.mes === q.mes)) }, colaboradores: { get: async () => colab } };
   const el = w.document.createElement('div'); w.document.body.appendChild(el);
   w.Gestor.abrir('u1');
   const render = () => w.Gestor.renderDashboard(el, sb, { id: 'g1', role: 'gestor', nome: 'Paulo' }, () => {}, { mes: 11, ano: 2026 });
@@ -78,6 +85,27 @@ function montar() {
 
   await render();   // ficha redesenhada (ex.: corrigiu um repasse): não volta ao padrão
   confere(vis().length === 6, 'redesenho da mesma ficha mantém o filtro limpo');
+
+  console.log('Lote 1: notas, pendências, atalhos e filtro lembrado entre meses');
+  const faixaN = () => el.querySelector('#cdet-filtro-info .txt').textContent.replace(/\s+/g, ' ').trim();
+  const visN = () => [...el.querySelectorAll('#notas-list .nota-card')].filter(c => c.style.display !== 'none');
+  confere(faixaN() === '3 notas no mês · R$ 150,00', `faixa das notas sem filtro traz a soma: "${faixaN()}"`);
+  w.Gestor.filtrarNotas(null, 'RDM');
+  confere(faixaN() === 'Só RDM: 2 de 3 notas · R$ 150,00', `filtro RDM com soma: "${faixaN()}"`);
+  w.Gestor.filtrarNotas(null);
+  const kpiPend = el.querySelector('.cdet-kpi[data-filtro="pend"]');
+  confere(!!kpiPend, 'cartão Pendências é tocável quando há pendência');
+  w.Gestor.filtrarNotas('pend');
+  confere(visN().length === 2 && /pendências/.test(faixaN()), `Pendências lista só as 2 notas (sem foto / sem valor): "${faixaN()}"`);
+  w.Gestor.filtrarNotas('pend');
+  confere(visN().length === 3, 'tocar de novo em Pendências volta à lista inteira');
+  const atalhos = [...el.querySelectorAll('.cdet-atalhos button')].map(b => b.textContent.trim());
+  confere(atalhos.length === 2 && /Notas 3/.test(atalhos[0]) && /Repasses 6/.test(atalhos[1]), `atalhos no topo: ${atalhos.join(' | ')}`);
+  w.Gestor.filtrarReps('tp', 'RDA'); w.Gestor.filtrarReps('sit', 'rec');
+  await w.Gestor.renderDashboard(el, sb, { id: 'g1', role: 'gestor', nome: 'Paulo' }, () => {}, { mes: 10, ano: 2026 });
+  await render();
+  confere(vis().length === 1 && vis()[0].dataset.tp === 'RDA' && vis()[0].dataset.sit === 'rec', 'outro mês e volta: RDA + Recebidos continua marcado');
+  w.Gestor.filtrarRepasses(null);
 
   w.Gestor.filtrarReps('sit', 'pend');
   confere(vis().length === 1 && faixa() === 'Só Pedidos pendentes: 1 de 6 · R$ 200,00', `Pendentes: "${faixa()}"`);

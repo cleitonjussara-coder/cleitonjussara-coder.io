@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 627;
+const APP_BUILD = 628;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1204,7 +1204,7 @@ function _pendenciasMenu() {
   const conta = t => _notificacoes().filter(i => i.tipo === t).length;
   const lista = [{ n: _notasComPendencia().length, um: 'nota para corrigir', varios: 'notas para corrigir', acao: 'abrirPendencias()' }];
   if (_ehGestorOuAdmin()) {
-    lista.unshift({ n: conta('pedido'), um: 'pedido de repasse', varios: 'pedidos de repasse', acao: 'abrirNotificacoes()' });
+    lista.unshift({ n: conta('pedido'), um: 'pedido de repasse', varios: 'pedidos de repasse', acao: "abrirNotificacoes('pedido')" });
     lista.push({ n: conta('novo'), um: 'cadastro para liberar', varios: 'cadastros para liberar', acao: 'abrirNotificacoes()' });
   }
   if (_ehGestorOuAdmin()) {
@@ -2678,8 +2678,13 @@ async function atualizarNotificacoes({ esperarJust = false } = {}) {
   return _pintarSino();
 }
 
-function abrirNotificacoes() {
-  const itens = _notificacoes();
+/* filtro = 'pedido' (Lote 1, 17/11/2026): o atalho "N pedidos de repasse" do menu, a faixa da tela Repasses e recargas
+   abrem só os pedidos, com o total — sem cartão baixo, duplicadas etc. Depois de pagar, o sino volta no mesmo filtro. */
+let _sinoFiltro = null;
+function abrirNotificacoes(filtro) {
+  _sinoFiltro = typeof filtro === 'string' ? filtro : null;
+  const todos = _notificacoes();
+  const itens = _sinoFiltro ? todos.filter(it => it.tipo === _sinoFiltro) : todos;
   const ov = document.createElement('div');
   ov.className = 'modal-overlay open';
   ov.id = 'notif-overlay';
@@ -2724,12 +2729,17 @@ function abrirNotificacoes() {
     </div>`).join('') : '<div class="empty-state" style="padding:24px 8px">Nenhuma notificação. 🎉</div>';
   ov.innerHTML = `
     <div class="modal-card" onclick="event.stopPropagation()">
-      <div class="modal-hd"><h3>🔔 Notificações${itens.length ? ` (${itens.length})` : ''}</h3><button class="btn-close-modal" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
-      <div class="modal-bd" style="max-height:72vh;overflow:auto"><div id="sino-push"></div>${_ehGestorOuAdmin() ? '<div id="sino-push-equipe"></div>' : ''}${html}</div>
+      <div class="modal-hd"><h3>${_sinoFiltro === 'pedido'
+        ? `💸 Pedidos de repasse (${itens.length})${itens.length ? ' · ' + esc(brl(itens.reduce((t, it) => t + (Number(it.rep?.valor) || 0), 0))) : ''}`
+        : `🔔 Notificações${itens.length ? ` (${itens.length})` : ''}`}</h3><button class="btn-close-modal" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
+      <div class="modal-bd" style="max-height:72vh;overflow:auto">${_sinoFiltro
+        ? (todos.length > itens.length ? `<button type="button" class="btn btn-sm btn-outline" style="margin:0 0 10px" onclick="document.getElementById('notif-overlay')?.remove(); abrirNotificacoes()">🔔 Ver todas as notificações (${todos.length})</button>` : '')
+        : `<div id="sino-push"></div>${_ehGestorOuAdmin() ? '<div id="sino-push-equipe"></div>' : ''}`}${html}</div>
       ${itens.some(i => i.tipo === 'atendido') ? `<div class="modal-ft"><button class="btn btn-outline" onclick="dispensarTodasNotificacoes()">Marcar todas como vistas</button></div>` : ''}
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
+  if (_sinoFiltro) return;
   _pintarSinoPush();
   if (_ehGestorOuAdmin()) _pintarSinoEquipe();
 }
@@ -3476,7 +3486,8 @@ async function _confirmarAtenderPedido(id, btn) {
 }
 function _fecharPedidoRegistrado(doSino) {
   document.getElementById('pedido-overlay')?.remove();
-  if (doSino) abrirNotificacoes();
+  if (typeof viewAtual !== 'undefined' && viewAtual === 'repasses') window.RepassesEquipe?.atualizar?.();   // a faixa de pedidos abertos acompanha
+  if (doSino) abrirNotificacoes(_sinoFiltro);
 }
 
 async function _recusarPedido(id, btn) {
@@ -3493,7 +3504,7 @@ async function _recusarPedido(id, btn) {
     document.getElementById('notif-overlay')?.remove();
     await _recarregarEquipe();
     await atualizarNotificacoes();
-    abrirNotificacoes();
+    abrirNotificacoes(_sinoFiltro);
   } catch (e) { toast('Não deu: ' + (e.message || 'erro'), 'err'); if (btn) btn.disabled = false; }
 }
 function dispensarNotificacao(id) { _notifMarcarVistos([id]); document.getElementById('notif-overlay')?.remove(); atualizarNotificacoes(); abrirNotificacoes(); }
@@ -4139,8 +4150,16 @@ function _avisoEquipeDevedoraHTML() {
       : c.cv
       ? `<span>C.V. · ${aReceberCv}</span><span>Gasto do bolso: RDM <b>${brl(c.bolso.RDM)}</b> · RDA <b>${brl(c.bolso.RDA)}</b></span><span>Cartão ${filAno}: gasto <b>${brl(c.cartao.total)}</b> (RDM ${brl(c.cartao.gasto.RDM)} · RDA ${brl(c.cartao.gasto.RDA)}) − recargas <b>${brl(c.cartao.recarga)}</b></span><span>Saldo do ano anterior: <b>${Gestor.brlInteiro(c.cartao.anterior || 0)}</b>${_comSentido(c.cartao.anterior)}</span><span>Saldo do cartão: <b>${brl(c.cartao.saldo)}</b>${c.cartao.saldo < 0 ? ' (a empresa deve)' : ''}</span>`
       : `<span>RDM <b>${brl(c.valor)}</b> · RDA <b>${brl(c.rda)}</b> a receber</span>`;
-    const acoes = btn('💵 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'") + (c.rda > 0.004 ? btn('💵 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'") : '')
-      + (c.cv ? btn('💳 Recarga', 'lancarRecargaDoAviso') : '');
+    /* Lote 1 (17/11/2026): se a pessoa já pediu, o botão paga O PEDIDO ("✔ Pagar o pedido de R$ X") — lançar outro repasse
+       por cima do pedido aberto era o caminho do pagamento em dobro. Recarga segue a mesma regra. */
+    const abertos = typeof repassesEquipe !== 'undefined' && typeof _repassePendente === 'function'
+      ? (repassesEquipe || []).filter(r => _repassePendente(r) && r.user_id === c.id) : [];
+    const pedidoDe = (tipo, recarga) => abertos.find(r => (r.destino === 'recarga') === recarga && (recarga || r.tipo === tipo));
+    const pagar = r => `<button type="button" class="res-eq-btn res-eq-pagar" data-pedido="${_at(r.id)}" onclick="abrirModalAtenderPedido(this.dataset.pedido)">✔ Pagar o pedido de ${esc(brl(r.valor))}${r.destino === 'recarga' ? ' (recarga)' : ' (' + esc(r.tipo) + ')'}</button>`;
+    const ouPedido = (r, botao) => r ? pagar(r) : botao;
+    const acoes = ouPedido(pedidoDe('RDM', false), btn('💵 Repasse RDM', 'lancarRepasseDoAviso', ",'RDM'"))
+      + (c.rda > 0.004 || pedidoDe('RDA', false) ? ouPedido(pedidoDe('RDA', false), btn('💵 Repasse RDA', 'lancarRepasseDoAviso', ",'RDA'")) : '')
+      + (c.cv || pedidoDe(null, true) ? ouPedido(pedidoDe(null, true), c.cv ? btn('💳 Recarga', 'lancarRecargaDoAviso') : '') : '');
     return `
       <div class="res-eq-linha">
         <div class="res-eq-quem"><b>${esc(c.nome)}</b>${info}</div>
