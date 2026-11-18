@@ -149,7 +149,7 @@ window.Rastreio = (() => {
       ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>
       <div class="rs-ac">
         <button class="rs-bt" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.verFicha(this.dataset.uid)">👤 Abrir a ficha</button>
-        ${typeof _veCampo === 'function' && _veCampo() ? `<button class="rs-bt suave" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.verCampo(this.dataset.uid)">📍 Atividade em campo</button>` : ''}
+        ${window._veCampo?.() ? `<button class="rs-bt suave" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.verCampo(this.dataset.uid)">📍 Atividade em campo</button>` : ''}
       </div>` : ''}
     </div>`;
   }

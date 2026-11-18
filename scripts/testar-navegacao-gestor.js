@@ -120,7 +120,7 @@ function base() {
       var PAPEL_NOME = { colaborador: 'Colaborador' };
       var navegou = [];
       var switchView = v => navegou.push(v);
-      var _veCampo = () => true;
+      var _veCampo = () => true; window._veCampo = _veCampo;
       var Gestor = { abrir: id => navegou.push('ficha:' + id) };
       var Campo = { verPessoa: id => navegou.push('campo:' + id) };
       var sb = { colaboradores: { atividade: async () => ({ gerado_em: new Date().toISOString(), equipe: [
