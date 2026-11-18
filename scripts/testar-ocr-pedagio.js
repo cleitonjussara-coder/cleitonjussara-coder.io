@@ -35,6 +35,18 @@ DEBITO A VISTA VALOR:14,00
 Incluir placa, CPF/CNPJ no doc. fiscal em até 7 dias:
 www.eprtriangulo.com.br DUVIDAS: 0800-452-0365`;
 
+const stone = (hora, aut, servico) => `VIA CLIENTE stone
+UBERABA/MG
+COMPRA SONIA BEATRIZ RODRIGUE
+14/11/2026 · ${hora} CNPJ: 53.801.766/0001-31
+CRÉDITO R$ 15,99
+MASTERCARD - ****6608 AUT ${aut}
+SN PB09228N76551 | SDK v.:4.14.0
+(Isso não é cupom fiscal)
+Serviço de ${servico}
+Quantidade: 1
+Valor total: R$ 15,99`;
+
 const casos = [
   ['EPR Indianópolis 11:47', epr('11:47:02', 'P4 - INDIANOPOLIS', 'NLOLUCVB828M', 'TXI1F14'),
     { numero: 'NLOLUCVB828M', cnpj: '48127012000108', placa: 'TXI1F14', hora: '11:47:02', valor: 14, data: '2026-10-08', portal_nfse: 'https://www.eprtriangulo.com.br' }],
@@ -49,6 +61,10 @@ const casos = [
     { numero: 'PKPM242B8334', cnpj: '41315638000107', placa: 'UVK4H82', hora: '17:48:34', valor: 10.9, data: '2026-10-01' }],
   ['WAY 153 (DFE N:) continua', 'PEDAGIO WAY 153\nDFE N: JLEE546J82JK\nPlaca: REM8H68', { numero: 'JLEE546J82JK', placa: 'REM8H68' }],
   ['site dfe.xxx.com.br não vira número', 'PRACA PEDAGIO: X\nhttp://dfe.rotadosgraos.com.br', { numero: null }],
+  /* 14/11/2026: comprovantes Stone da lavanderia, R$ 15,99 no mesmo dia — só a hora separa (antes só lia hora em pedágio) */
+  ['Stone lavanderia 16:10', stone('16:10', '043564', 'Lavagem'), { hora: '16:10', cnpj: '53801766000131', data: '2026-11-14' }],
+  ['Stone lavanderia 16:56', stone('16:56', '075933', 'Secagem'), { hora: '16:56', cnpj: '53801766000131', data: '2026-11-14' }],
+  ['Stone com ponto lido como -', stone('16:56', '075933', 'Secagem').replace('·', '-'), { hora: '16:56' }],
 ];
 let falhas = 0;
 for (const [nome, texto, esperado] of casos) {

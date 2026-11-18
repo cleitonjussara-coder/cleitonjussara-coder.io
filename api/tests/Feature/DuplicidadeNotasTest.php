@@ -399,6 +399,22 @@ class DuplicidadeNotasTest extends TestCase
             ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
     }
 
+    /* 14/11/2026: dois comprovantes Stone da lavanderia (R$ 15,99, 14/11, sem número), 16:10 e 16:56 — não é pedágio. */
+    public function test_comprovante_de_cartao_com_hora_diferente_nao_e_duplicata(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $cupom = ['tipo' => 'RDM', 'subtipo' => 'Outros', 'valor' => 15.99, 'data' => '2026-11-14', 'numero' => null,
+            'serie' => null, 'cnpj' => '53801766000131', 'razao_social' => 'SONIA BEATRIZ RODRIGUE'];
+        $this->nota($colab, $cupom + ['hora' => '16:10']);
+        Sanctum::actingAs($colab);
+
+        $this->postJson('/api/notas/duplicada', array_replace($cupom, ['hora' => '16:56']))
+            ->assertOk()->assertJsonPath('existe', false);
+        // o mesmo comprovante fotografado de novo continua avisando
+        $this->postJson('/api/notas/duplicada', array_replace($cupom, ['hora' => '16:10']))
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'igual');
+    }
+
     public function test_hora_do_recibo_e_gravada_e_recusada_quando_invalida(): void
     {
         $colab = $this->pessoa('colaborador');

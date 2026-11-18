@@ -148,10 +148,11 @@ window.OCR = (() => {
        então 0/1/5/8 voltam a ser O/I/S/B (exige ao menos uma letra de verdade ali). */
     const mp = oneLine.match(/Placa\s*[:.]?\s*([A-Z0-9]{3})[\s-]?([0-9][A-Z0-9][0-9]{2})\b/i);
     if (mp && /[A-Z]/i.test(mp[1])) r.placa = (mp[1].toUpperCase().replace(/[0158]/g, d => ({ 0: 'O', 1: 'I', 5: 'S', 8: 'B' })[d]) + mp[2]).toUpperCase();
-    /* Hora da passagem no recibo de pedágio (09/11/2026): "04.11.2026 09:44:18" (EPR) ou "Hora: 09:44". Só em recibo de
-       pedágio: cupom comum também imprime hora, e lá ela não serve para nada. */
-    if (/ped[áa]gio|\bDFE\b|SEQ\.?\s*N|Registro\s+de\s+Passagem|Pra[çc]a\s*:|Placa\s*:/i.test(oneLine)) {
-      const mh = oneLine.match(/\d{2}[/.-]\d{2}[/.-]\d{4}\s+([01]\d|2[0-3])[:.h]([0-5]\d)(?:[:.]([0-5]\d))?/)
+    /* Hora impressa ao lado da data: "04.11.2026 09:44:18" (pedágio EPR), "14/11/2026 · 16:10" (comprovante de cartão
+       Stone) ou "Hora: 09:44". Desde 14/11/2026 em QUALQUER recibo (antes só pedágio): dois comprovantes da lavanderia de
+       R$ 15,99 no mesmo dia (16:10 e 16:56) eram acusados de duplicata. Só é gravada em documento "Outro" (salvarNota). */
+    {
+      const mh = oneLine.match(/\d{2}[/.-]\d{2}[/.-]\d{4}\s*[-·•|,]?\s*(?:[àa]s\s+)?([01]\d|2[0-3])[:h]([0-5]\d)(?:[:.]([0-5]\d))?/i)
               || oneLine.match(/Hora\s*[:.]?\s*([01]\d|2[0-3])[:.h]([0-5]\d)(?:[:.]([0-5]\d))?/i);
       if (mh) r.hora = `${mh[1]}:${mh[2]}` + (mh[3] ? `:${mh[3]}` : '');
     }

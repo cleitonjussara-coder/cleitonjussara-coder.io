@@ -47,7 +47,7 @@ class LeitorNota
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
         .'dfe = somente em recibo de pedágio que traga "DFE N:" ou "ID RECIBO/DFE:" (ex.: "DFE N: JLEE546J82JK", "ID RECIBO/DFE:PKPM242B8334/" → "PKPM242B8334", "Recibo:NLOLUCVB828M"): copie o código inteiro, com letras e números; nesse caso deixe numero null (DOC, NSU e autorização "A:" do cartão não são o número). '
         .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
-        .'hora = somente em recibo de pedágio: o horário da passagem impresso ao lado da data (ex.: "04.11.2026 09:44:18" → "09:44:18"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
+        .'hora = o horário impresso ao lado da data em recibo, comprovante de cartão ou recibo de pedágio (ex.: "04.11.2026 09:44:18" → "09:44:18", "14/11/2026 · 16:10" → "16:10"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
         .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
         .'chave = chave de acesso de 44 dígitos (NF-e/NFC-e), somente se estiver impressa e totalmente legível. '
         .'chave_nfse = se a chave impressa tiver 50 dígitos (NFS-e nacional), escreva os 50 dígitos aqui e deixe chave null. '
