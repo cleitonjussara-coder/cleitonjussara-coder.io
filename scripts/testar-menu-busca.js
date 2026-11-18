@@ -30,6 +30,7 @@ w.eval(`
   var _veEquipe = () => _ehGestorOuAdmin() || _ehContabilidade();
   var _veFrota = () => !_ehContabilidade();
   var _usaCartao = () => false, _ehCV = () => false;
+  var _veCampo = () => !!(user && user.atividade_campo) && !_ehContabilidade(), _registraCampo = () => _veCampo();   // Atividade em campo (build 583+)
   var LIMITE_DEVEDOR = 1500, _equipeDevedora = () => [], _avisoEquipeDevedoraHTML = () => '', toast = () => {};
   var _notasComPendencia = () => pendentes;
   var _notificacoes = () => avisos;

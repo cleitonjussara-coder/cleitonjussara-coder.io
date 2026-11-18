@@ -21,7 +21,7 @@ const dom = new JSDOM('<div></div>', { runScripts: 'dangerously', url: 'http://l
 const w = dom.window;
 w.eval(`
   var user = null, notas = [], notasEquipe = [], vistosSet = new Set(), abertas = [], sinoAberto = 0;
-  var justificativasSino = [], avisosCorrecaoSino = [], repassesEquipe = [], repasses = [], equipePorId = {};
+  var justificativasSino = [], avisosCorrecaoSino = [], repassesEquipe = [], repasses = [], repassesRecusados = [], equipePorId = {};
   var _notifVistos = () => vistosSet;
   var _ehGestorOuAdmin = () => ['gestor','admin'].includes(user && user.role);
   var _ehContabilidade = () => user && user.role === 'contabilidade';

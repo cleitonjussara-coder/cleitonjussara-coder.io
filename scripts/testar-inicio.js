@@ -33,6 +33,7 @@ w.eval(`
   var _veEquipe = () => _ehGestorOuAdmin() || _ehContabilidade();
   var _veFrota = () => !_ehContabilidade();
   var _usaCartao = () => cartaoUsa;
+  var _veCampo = () => !!(user && user.atividade_campo) && !_ehContabilidade(), _registraCampo = () => _veCampo();   // Atividade em campo (build 583+)
   var _naoEhFaturamento = n => n.pagamento !== 'empresa';
   var _notaDoCartao = n => n.pagamento !== 'carteira' && n.pagamento !== 'empresa';
   var _notasComPendencia = () => pend, _notificacoes = () => avisos, _recalcularDuplicatas = () => {};
