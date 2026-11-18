@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 628;
+const APP_BUILD = 629;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -5864,11 +5864,18 @@ async function renderNotasApagadas() {
   let html = `
   <div class="page-hd">
     <div class="mes-nav">
-      <button class="btn-mes-nav" onclick="switchView('notas')">‹</button>
+      <button class="btn-mes-nav" aria-label="Voltar" onclick="voltarView()">‹</button>
       <span class="mes-label">Lançamentos apagados</span>
-      <button class="btn btn-sm btn-outline" onclick="switchView('notas')">Voltar</button>
+      <button class="btn btn-sm btn-outline" onclick="voltarView()">Voltar</button>
     </div>
   </div>`;
+  /* Lote 2 (17/11/2026): "Voltar" leva à tela de onde veio (o gestor entra pelo menu Controle, não por Notas); cada seção
+     mostra quantidade e soma; a busca acha por empresa, pessoa ou valor nas duas listas. */
+  const somaApag = arr => arr.reduce((t, n) => t + (Number(n.valor) || 0), 0);
+  const tituloApag = (rotulo, arr) => `<div class="lix-tit">${rotulo} <span>(${arr.length} · ${brl(somaApag(arr))})</span></div>`;
+  const buscaDe = (n, ...extra) => _at([n.razao_social, n.cnpj, n.subtipo, n.tipo, brl(Number(n.valor) || 0), ...extra].filter(Boolean).join(' ')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
+  if (ns.length + daEquipe.length > 3) html += `<div class="lix-busca"><input class="inp" type="search" placeholder="🔍 Buscar empresa, pessoa ou valor" autocomplete="off" aria-label="Buscar nos apagados" oninput="filtrarApagados(this.value)"></div>`;
 
   if (!ns.length && !daEquipe.length) {
     html += `<div class="empty-state">
@@ -5877,13 +5884,13 @@ async function renderNotasApagadas() {
       <button class="btn btn-primary" onclick="switchView('notas')">Voltar para as notas</button>
     </div>`;
   } else if (ns.length) {
-    html += `<div style="display:flex;justify-content:flex-end;padding:0 14px 8px">
+    html += `${daEquipe.length ? tituloApag('📱 Apagadas por você', ns) : `<div class="lix-tit"><span>${ns.length} · ${brl(somaApag(ns))}</span></div>`}<div style="display:flex;justify-content:flex-end;padding:0 14px 8px">
       <button class="btn btn-sm btn-outline" id="nota-selbtn" onclick="selecionarNotas(!this.classList.contains('on'))">☑️ Selecionar</button>
     </div>${selNotasBarraHTML('lixeira')}`;
     html += `<div class="notas-list" id="notas-list">`;
     ns.forEach(n => {
       html += `
-      <div class="nota-card" data-tipo="${_at(n.tipo)}">
+      <div class="nota-card" data-tipo="${_at(n.tipo)}" data-busca="${buscaDe(n, n.user_id && n.user_id !== user.id ? (equipePorId[n.user_id]?.nome || '') : '')}">
         ${n._orfa ? '' : `<input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarNota(this.value,this.checked)" aria-label="Selecionar este lançamento">`}
         <div class="nota-head">
           <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
@@ -5894,6 +5901,7 @@ async function renderNotasApagadas() {
         <div class="nota-body">
           <div class="nota-empresa">${esc(n.razao_social || (n.cnpj ? BrasilAPI.formatar(n.cnpj) : 'Sem empresa'))}</div>
           ${n.observacao ? `<div class="nota-obs">${esc(n.observacao)}</div>` : ''}
+          ${n.user_id && n.user_id !== user.id ? `<div class="nota-obs">👤 Nota de <b>${esc(equipePorId[n.user_id]?.nome || 'colaborador')}</b></div>` : ''}
         </div>
         ${(() => {
           const d = _dupNaLixeira(n);
@@ -5922,7 +5930,7 @@ async function renderNotasApagadas() {
     const nomeDe = uid => uid ? (equipePorId[uid]?.nome || equipePorId[uid]?.email || (uid === user.id ? (user.nome || user.email) : 'colaborador removido')) : 'Faturamento geral (sem colaborador)';
     const doFaturamento = daEquipe.filter(n => n.pagamento === 'empresa');
     const dosColaboradores = daEquipe.filter(n => n.pagamento !== 'empresa');
-    const tituloSecao = (rotulo, qtd) => `<div style="font-weight:700;font-size:16px;padding:14px 14px 6px">${rotulo} <span style="opacity:.7;font-weight:600">(${qtd})</span></div>`;
+    const tituloSecao = (rotulo, arr) => tituloApag(rotulo, arr);
     html += `<div style="display:flex;justify-content:flex-end;padding:14px 14px 0">
       <button class="btn btn-sm btn-outline" id="eq-selbtn" onclick="selecionarEquipe(!this.classList.contains('on'))">☑️ Selecionar</button>
     </div>
@@ -5937,7 +5945,7 @@ async function renderNotasApagadas() {
     const cartaoEquipe = n => {
       const quem = n.updated_by ? nomeDe(n.updated_by) : 'não registrado';
       return `
-      <div class="nota-card" data-tipo="${_at(n.tipo)}">
+      <div class="nota-card" data-tipo="${_at(n.tipo)}" data-busca="${buscaDe(n, nomeDe(n.user_id), quem)}">
         <input type="checkbox" class="nota-chk" value="${_at(n.id)}" onchange="marcarEquipe(this.value,this.checked)" aria-label="Selecionar este lançamento">
         <div class="nota-head">
           <span class="tipo-badge tipo-${_at(n.tipo)}">${esc(n.tipo)}</span>
@@ -5959,9 +5967,9 @@ async function renderNotasApagadas() {
         </div>
       </div>`;
     };
-    if (doFaturamento.length) html += `${tituloSecao('🏢 Apagadas do Faturamento', doFaturamento.length)}
+    if (doFaturamento.length) html += `${tituloSecao('🏢 Apagadas do Faturamento', doFaturamento)}
       <div class="notas-list notas-eq-lista" id="notas-faturamento-apagadas">${doFaturamento.map(cartaoEquipe).join('')}</div>`;
-    if (dosColaboradores.length) html += `${tituloSecao('👥 Apagadas pela equipe', dosColaboradores.length)}
+    if (dosColaboradores.length) html += `${tituloSecao('👥 Apagadas pela equipe', dosColaboradores)}
       <div class="notas-list notas-eq-lista" id="notas-equipe-apagadas">${dosColaboradores.map(cartaoEquipe).join('')}</div>`;
   }
 
@@ -5969,6 +5977,12 @@ async function renderNotasApagadas() {
   _selEq.clear();
   _equipeApagadasCache = daEquipe;
   el.innerHTML = html;
+}
+
+/* Busca dos Apagados (Lote 2, 17/11/2026): esconde o cartão que não tem o texto; sem acento e sem caixa. */
+function filtrarApagados(txt) {
+  const t = String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  document.querySelectorAll('#app-content .nota-card[data-busca]').forEach(c => { c.style.display = !t || c.dataset.busca.includes(t) ? '' : 'none'; });
 }
 
 /* Seleção em lote das apagadas pela equipe (01/11/2026, pedido do Cleiton): mesma ideia da lixeira própria, mas com conjunto
@@ -6128,6 +6142,7 @@ function renderHistorico() {
   window.SvelteHistorico?.montar(el, {
     sb, user, equipePorId, brl, esc,
     formatarCnpj: cnpj => window.BrasilAPI?.formatar?.(cnpj) || cnpj,
+    abrirHistoricoNota,   // Lote 2 (17/11/2026): tocar numa nota do Histórico mostra o que mudou nela
   });
 }
 
@@ -6156,7 +6171,35 @@ function _montarArquivos() {
     carregarAvatares: () => window.Gestor?.carregarAvatares?.(),
     verFotoCompartilhado: _verArquivoCompartilhado,
     podeExcluir: _ehGestorOuAdmin, moverNotaFat: faturadaMoverNota, excluirNotaFat: faturadaExcluirNota,
+    verNotaSemAnexo: _verNotaSemAnexo,
   });
+}
+
+/* Lote 2 (17/11/2026): em Arquivos, a nota sem anexo também abre. Mostra os dados que a lista tem, o histórico da nota e,
+   para quem vê a equipe, o atalho para a ficha da pessoa (pasta de colaborador; o Faturamento não tem ficha). */
+function _verNotaSemAnexo(n, pasta) {
+  document.getElementById('nota-sem-anexo-overlay')?.remove();
+  const uid = pasta && !pasta.faturamento ? pasta.user_id : null;
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'nota-sem-anexo-overlay';
+  ov.innerHTML = `
+    <div class="modal-card" style="max-width:440px" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3>🧾 ${esc(n.razao_social || 'Sem fornecedor')}</h3>
+        <button class="btn-close-modal" aria-label="Fechar" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
+      <div class="modal-bd">
+        <p style="font-size:22px;font-weight:800;margin:0 0 6px">${Number(n.valor) > 0 ? brl(n.valor) : '<span style="color:var(--danger)">⚠️ sem valor</span>'}</p>
+        <p style="margin:0 0 4px">${esc(fmtData(n.data))}${n.grupo ? ' · ' + esc(n.grupo) : ''}</p>
+        <p style="margin:0 0 10px;color:var(--text2)">${pasta?.faturamento ? '🏢 Faturamento' : '👤 ' + esc(pasta?.nome || pasta?.email || 'Colaborador')}</p>
+        <p style="margin:0 0 14px;padding:8px 10px;border-radius:10px;background:rgba(251,191,36,.14);color:#fde68a">📎 Esta nota está sem anexo no servidor.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn btn-outline" data-nota="${_at(n.id)}" onclick="abrirHistoricoNota(this.dataset.nota)">🕘 Histórico</button>
+          ${uid && _veEquipe() ? `<button class="btn btn-primary" data-uid="${_at(uid)}" onclick="const u=this.dataset.uid; document.getElementById('nota-sem-anexo-overlay')?.remove(); switchView('equipe'); setTimeout(() => Gestor.abrir(u), 400)">👤 Abrir a ficha</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 
 /* Abre a foto/PDF/XML de uma nota (antes vivia dentro do arquivos.js

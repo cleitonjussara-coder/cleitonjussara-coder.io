@@ -42,11 +42,11 @@ window.Rastreio = (() => {
   }
 
   function situacao(p) {
-    if (!p.ultimo_lancamento_em) return { cor: '#9aa5a0', txt: 'Sem notas nos últimos 60 dias', parado: true };
+    if (!p.ultimo_lancamento_em) return { cor: '#9aa5a0', txt: 'Sem notas nos últimos 60 dias', rot: 'sem notas', parado: true };
     const dias = diasDeDiferenca(p.ultimo_lancamento_em);
-    if (dias <= 0) return { cor: '#4ade80', txt: '', parado: false };
-    if (dias <= LIMITE_AMARELO) return { cor: '#fbbf24', txt: '', parado: false };
-    return { cor: '#f87171', txt: `Sem lançar há ${dias} dias`, parado: true };
+    if (dias <= 0) return { cor: '#4ade80', txt: '', rot: 'lançou hoje', parado: false };
+    if (dias <= LIMITE_AMARELO) return { cor: '#fbbf24', txt: '', rot: dias === 1 ? 'lançou ontem' : `há ${dias} dias`, parado: false };
+    return { cor: '#f87171', txt: `Sem lançar há ${dias} dias`, rot: `há ${dias} dias`, parado: true };
   }
 
   /* quando um novo pedido é liberado: "hoje 15:00" ou "20/10 12:00" */
@@ -91,7 +91,8 @@ window.Rastreio = (() => {
       .rs-av{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
       .rs-nm{font-size:16px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
       .rs-pp{font-size:13px;color:var(--text2)}
-      .rs-dot{width:11px;height:11px;border-radius:50%;margin-left:auto;flex-shrink:0;box-shadow:0 0 0 3px rgba(255,255,255,.12)}
+      .rs-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px rgba(255,255,255,.12)}
+      .rs-sit{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);white-space:nowrap;flex-shrink:0}
       .rs-ln{font-size:14px;color:var(--text2);line-height:1.45}
       .rs-ln b{color:var(--text);font-weight:700}
       .rs-warn{font-size:13.5px;font-weight:700;padding:5px 10px;border-radius:8px;background:rgba(248,113,113,.18);color:#fecaca;align-self:flex-start}
@@ -138,14 +139,18 @@ window.Rastreio = (() => {
       <div class="rs-top">
         <div class="rs-av">${esc(ini)}</div>
         <div><div class="rs-nm">${esc(p.nome)}</div><div class="rs-pp">${esc(papel)}${regime}</div></div>
-        <span class="rs-dot" style="background:${sit.cor}" title="${_atG(sit.txt || 'em dia')}"></span>
+        <span class="rs-sit"><span class="rs-dot" style="background:${sit.cor}"></span>${esc(sit.rot || '')}</span>
       </div>
       <div class="rs-ln">Visto no app <b>${p.visto_em ? esc(quando(p.visto_em)) : 'sem registro'}</b> · última nota <b>${p.ultimo_lancamento_em ? esc(quando(p.ultimo_lancamento_em)) : '—'}</b></div>
       ${linhaUlt}
       ${sit.txt && sit.parado ? `<div class="rs-warn">${esc(sit.txt)}</div>` : ''}
       <div class="rs-kp"><span class="rs-k">Hoje: ${Number(p.hoje) || 0}</span><span class="rs-k">Semana: ${Number(p.semana) || 0}</span><span class="rs-k">Mês: ${Number(p.mes) || 0}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>
       ${_blocoJustificativa(p, abre)}
-      ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>` : ''}
+      ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>
+      <div class="rs-ac">
+        <button class="rs-bt" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.verFicha(this.dataset.uid)">👤 Abrir a ficha</button>
+        ${typeof _veCampo === 'function' && _veCampo() ? `<button class="rs-bt suave" data-uid="${_atG(p.id)}" onclick="event.stopPropagation();Rastreio.verCampo(this.dataset.uid)">📍 Atividade em campo</button>` : ''}
+      </div>` : ''}
     </div>`;
   }
 
@@ -259,5 +264,8 @@ window.Rastreio = (() => {
     abrir: id => { aberto = aberto === id ? null : id; _pintar(); },
     pedirJustificativa,
     cancelarJustificativa,
+    /* Lote 2 (17/11/2026): do cartão aberto vai direto à ficha da pessoa e à atividade em campo dela */
+    verFicha: id => { switchView('equipe'); setTimeout(() => window.Gestor?.abrir?.(id), 400); },
+    verCampo: id => { switchView('campo'); setTimeout(() => window.Campo?.verPessoa?.(id), 400); },
   };
 })();

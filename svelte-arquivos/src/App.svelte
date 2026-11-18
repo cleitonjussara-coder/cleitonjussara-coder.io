@@ -8,7 +8,7 @@
      não em dado de usuário solto. */
   let {
     nivel, dados, ano,
-    onMudarAno, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
+    onMudarAno, onAndarMes = null, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
     onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
     onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {}, onMesesAbertos = () => {},
     mesesCurtos = [], onGraficosAbertos = () => {},
@@ -123,7 +123,7 @@
           {#if n.temAnexo}
             <button class="arq-lin-abrir" onclick={() => onVer(n.id)} title={n.titulo}>{@render celulas(n)}</button>
           {:else}
-            <div class="arq-lin-abrir arq-lin-sem" title="Sem anexo no servidor">{@render celulas(n)}</div>
+            <button class="arq-lin-abrir arq-lin-sem" onclick={() => onVer(n.id)} title="Sem anexo no servidor — toque para ver os dados da nota">{@render celulas(n)}</button>
           {/if}
           {#if dados.acoes}
             <div class="arq-acoes">
@@ -178,9 +178,15 @@
 {#snippet cabecalho(titulo, sub)}
   <div class="arq-hd">
     <div class="mes-nav" style="margin-left:auto">
-      <button class="btn-mes-nav" onclick={() => onMudarAno(-1)}>‹</button>
-      <span class="mes-label">{ano}</span>
-      <button class="btn-mes-nav" onclick={() => onMudarAno(1)}>›</button>
+      {#if nivel === 'mes' && onAndarMes}
+        <button class="btn-mes-nav" aria-label="Mês anterior" onclick={() => onAndarMes(-1)}>‹</button>
+        <span class="mes-label">{mesesCurtos[dados.mes - 1] || ''} {ano}</span>
+        <button class="btn-mes-nav" aria-label="Próximo mês" onclick={() => onAndarMes(1)}>›</button>
+      {:else}
+        <button class="btn-mes-nav" aria-label="Ano anterior" onclick={() => onMudarAno(-1)}>‹</button>
+        <span class="mes-label">{ano}</span>
+        <button class="btn-mes-nav" aria-label="Próximo ano" onclick={() => onMudarAno(1)}>›</button>
+      {/if}
     </div>
   </div>
   <div class="arq-titulo">{@html titulo}</div>

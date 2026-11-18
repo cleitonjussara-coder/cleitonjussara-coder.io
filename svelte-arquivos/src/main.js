@@ -62,7 +62,7 @@ function mostrar(nivel, dados) {
     target: elAlvo,
     props: {
       nivel, dados, ano,
-      onMudarAno: mudarAno, onAbrirColab: abrirColab, onAbrirFaturamento: abrirFaturamento, onAbrirMes: abrirMes,
+      onMudarAno: mudarAno, onAndarMes: andarMes, onAbrirColab: abrirColab, onAbrirFaturamento: abrirFaturamento, onAbrirMes: abrirMes,
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
       onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
@@ -307,8 +307,18 @@ function recarregar() { lista = null; listaAno = null; resumo = null; render(); 
 
 function ver(id) {
   const n = _notaDaLista(id);
-  if (!n || !n.foto_path) return;
+  if (!n) return;
+  /* Lote 2 (17/11/2026): nota sem anexo também abre — dados da nota, histórico e a ficha da pessoa */
+  if (!n.foto_path) { dep.verNotaSemAnexo?.(n, colab); return; }
   dep.verFotoCompartilhado(n);
+}
+/* Lote 2: dentro de um mês, as setas andam de mês (antes trocavam o ano e jogavam para fora do mês) */
+function andarMes(d) {
+  if (!mes) { mudarAno(d); return; }
+  let m = mes + d;
+  if (m < 1 || m > 12) { ano += d; m = d > 0 ? 1 : 12; resumo = null; listaAno = null; filtroAno = null; }
+  mes = m; lista = null; filtroMes = null; abertasMes = {};
+  render();
 }
 
 async function baixarZip(m) {
@@ -403,4 +413,4 @@ function restaurar(e) {
    arquivos.js de antes, não convive com ele. gestor.js chama
    Arquivos.abrirColab(id) direto; switchView() chama Arquivos.reset() ao
    sair e Arquivos.montar(el, deps) ao entrar (ver app.js). */
-window.Arquivos = { montar, desmontar, mudarAno, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset, recarregar, estado, restaurar };
+window.Arquivos = { montar, desmontar, mudarAno, andarMes, abrirColab, abrirFaturamento, abrirMes, voltarMeses, voltarColabs, ver, baixarZip, reset, recarregar, estado, restaurar };

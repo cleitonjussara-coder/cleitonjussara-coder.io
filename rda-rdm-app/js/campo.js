@@ -350,7 +350,7 @@ window.Campo = (() => {
           `<span class="cv-tempo ok">${p.ultima.minutos != null ? hm(p.ultima.minutos) : ''}</span>`,
           `${esc(_faz(p.ultima.fazenda))} · <b>${esc(p.ultima.campo)}</b> · ${horaBR(p.ultima.inicio)} → ${horaBR(p.ultima.fim)}${p.ultima.fim_automatico ? ' (fim automático)' : ''}${loc(p.ultima)}`)).join('')
           : '<p class="campo-sub">Ninguém saiu do campo hoje ainda.</p>')}</div>
-        <p class="campo-sub" style="margin:8px 0 0">Atualizado às ${horaBR(new Date().toISOString())} · toque na pessoa para ver os registros dela.</p>
+        <p class="campo-sub" style="margin:8px 0 0">${_cacheEm ? `Dados das ${horaBR(_cacheEm)}${_atualizando ? ' · atualizando…' : ''}` : `Atualizado às ${horaBR(new Date().toISOString())}`} · toque na pessoa para ver os registros dela.</p>
       </div>`;
   }
 
@@ -401,7 +401,17 @@ window.Campo = (() => {
   function _filtrosHTML() {
     const pessoas = [...new Map(lista.map(a => [a.user_id, a.user_nome || '?'])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
     const fazendas = [...new Set(lista.map(a => _faz(a.fazenda)))].sort((a, b) => a.localeCompare(b));
-    const chipsLista = [
+    /* Lote 2 (17/11/2026): a pessoa ou fazenda filtrada continua na caixa e num chip com ✕ mesmo sem registro no mês aberto —
+       antes a caixa dizia "Todos" e a lista vinha vazia, sem explicação. */
+    const nomeFiltro = _filtroPessoa ? (pessoas.find(([id]) => id === _filtroPessoa)?.[1]
+      || equipe.find(p => p.user_id === _filtroPessoa)?.nome || (typeof equipePorId !== 'undefined' && equipePorId[_filtroPessoa]?.nome) || 'Colaborador') : '';
+    if (_filtroPessoa && !pessoas.some(([id]) => id === _filtroPessoa)) pessoas.unshift([_filtroPessoa, nomeFiltro]);
+    if (_filtroFazenda && !fazendas.includes(_filtroFazenda)) fazendas.unshift(_filtroFazenda);
+    const chipsFiltro = [
+      _filtroPessoa ? `<button class="chip active" onclick="Campo.filtrarPessoa(null)">👤 ${esc(nomeFiltro)} ✕</button>` : '',
+      _filtroFazenda ? `<button class="chip active" onclick="Campo.filtrarFazenda(null)">🌾 ${esc(_filtroFazenda)} ✕</button>` : '',
+    ].join('');
+    const chipsLista = chipsFiltro + [
       _filtroDia ? `<button class="chip active" onclick="Campo.filtrarDia(null)">📅 ${fmtData(_filtroDia)} ✕</button>` : '',
       _filtroPend ? `<button class="chip active" onclick="Campo.filtrarPend(null)">${PEND[_filtroPend].ico} ${esc(PEND[_filtroPend].txt)} ✕</button>` : '',
     ].join('');
@@ -416,7 +426,7 @@ window.Campo = (() => {
           ${fazendas.map(f => `<option value="${_atG(f)}" ${f === _filtroFazenda ? 'selected' : ''}>${esc(f)}</option>`).join('')}
         </select>
       </div>
-      ${_aba === 'registros' && chipsLista ? `<div class="cp-chips">${chipsLista}</div>` : ''}`;
+      ${chipsLista && (_aba === 'registros' || chipsFiltro) ? `<div class="cp-chips">${_aba === 'registros' ? chipsLista : chipsFiltro}</div>` : ''}`;
   }
 
   function _painelHTML(regs) {
