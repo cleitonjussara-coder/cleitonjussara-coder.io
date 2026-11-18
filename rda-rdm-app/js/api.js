@@ -512,6 +512,12 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     visto: id => req('PATCH', `/avisos-correcao/${id}/visto`),
   };
 
+  /* "✓ conferido" (18/11/2026): marcas de nota e repasse conferidos pelo gestor/admin, numa tabela própria do servidor */
+  const conferencias = {
+    list: ({ dono_id, since } = {}) => req('GET', '/conferencias', { query: { dono_id: dono_id || undefined, since: since || undefined }, timeout: 8_000 }),
+    salvar: ({ tipo, registro_id, conferido }) => req('PUT', '/conferencias', { body: { tipo, registro_id, conferido: !!conferido } }),
+  };
+
   /* Manutenção do servidor — só admin (a hospedagem não tem terminal). */
   const admin = {
     status: () => req('GET', '/admin/status'),
@@ -543,5 +549,5 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     set: (c, data) => req('PUT', `/cnpj/${c}`, { body: data }),
   };
 
-  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, busca, backup, admin, frota, ponto, atividadesCampo, relatorio, arquivos, convites, justificativas, avisosCorrecao, fechamento };
+  return { BASE, HOMOLOG, req, hojeDoServidor, horaServidorMs, auth, colaboradores, notas, repasses, push, fotos, cnpj, assistente, busca, backup, admin, frota, ponto, atividadesCampo, relatorio, arquivos, convites, justificativas, avisosCorrecao, conferencias, fechamento };
 })();

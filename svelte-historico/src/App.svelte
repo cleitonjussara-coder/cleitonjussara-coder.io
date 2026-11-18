@@ -6,7 +6,7 @@
 
   const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
   const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'excluiu o colaborador': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'excluiu o colaborador': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'conferiu': '✅', 'desmarcou o conferido de': '↩️', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
 
   let estado = $state('carregando'); // 'carregando' | 'offline' | 'erro' | 'ok'
   let erroMsg = $state('');
@@ -14,8 +14,8 @@
   /* Lote 2 (17/11/2026): filtros por ação e por pessoa, e "ver mais" no lugar do corte calado em 200. Tocar numa linha de
      nota abre o histórico daquela nota (o que mudou, antes → depois). */
   const GRUPO = { 'lançou': 'lancou', 'editou': 'editou', 'apagou': 'apagou', 'apagou em definitivo': 'apagou', 'excluiu o colaborador': 'apagou',
-    'pediu justificativa': 'just', 'respondeu a justificativa': 'just', 'cancelou o pedido de justificativa': 'just', 'trocou o papel': 'papel', 'trocou o regime': 'papel' };
-  const CHIPS = [['todos', 'Todos'], ['lancou', 'Lançou'], ['editou', 'Editou'], ['apagou', 'Apagou'], ['just', 'Justificativa'], ['papel', 'Papel/regime']];
+    'pediu justificativa': 'just', 'respondeu a justificativa': 'just', 'cancelou o pedido de justificativa': 'just', 'trocou o papel': 'papel', 'trocou o regime': 'papel', 'conferiu': 'conf', 'desmarcou o conferido de': 'conf' };
+  const CHIPS = [['todos', 'Todos'], ['lancou', 'Lançou'], ['editou', 'Editou'], ['apagou', 'Apagou'], ['just', 'Justificativa'], ['conf', 'Conferido'], ['papel', 'Papel/regime']];
   const PASSO = 200;
   let fAcao = $state('todos');
   let fPessoa = $state('');
@@ -60,15 +60,17 @@
     if (!sb || !navigator.onLine) { estado = 'offline'; return; }
     estado = 'carregando';
     const sinceIso = new Date(Date.now() - 60 * 86400_000).toISOString();
-    let notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas;
+    let notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas, conferencias;
     try {
-      [notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas] = await Promise.all([
+      [notasMudadas, repassesMudados, apagadasDet, papelRegime, justificativas, conferencias] = await Promise.all([
         sb.notas.list({ since: sinceIso, fields: 'id,user_id,tipo,subtipo,valor,data,razao_social,cnpj,deleted,created_at,updated_at,created_by,updated_by' }),
         sb.repasses.list({ since: sinceIso }),
         sb.notas.apagadasDetalhe(sinceIso),
         sb.colaboradores.historico(sinceIso),
         /* pedidos de justificativa (19/10/2026) — se a API ainda não tem a rota, o Histórico segue sem eles */
         (sb.justificativas ? sb.justificativas.list({ since: sinceIso }) : Promise.resolve([])).catch(() => []),
+        /* "✓ conferido" (18/11/2026): quem conferiu ou desmarcou nota/repasse — sem a rota, segue sem eles */
+        (sb.conferencias ? sb.conferencias.list({ since: sinceIso }) : Promise.resolve([])).catch(() => []),
       ]);
     } catch (e) {
       estado = 'erro'; erroMsg = e?.message || 'erro'; return;
@@ -145,6 +147,13 @@
         resumo: esc(j.motivo),
       });
     });
+    const desde = Date.parse(sinceIso);
+    (conferencias || []).forEach(c => {
+      const item = c.tipo === 'nota' ? 'nota' : 'repasse';
+      const base = { tipoItem: item, id: item === 'nota' ? c.registro_id : null, donoId: c.dono_id, dono: nome(c.dono_id), resumo: '' };
+      if (c.conferido_em && Date.parse(c.conferido_em) >= desde) lista.push({ ...base, quando: instante(c.conferido_em), acao: 'conferiu', quem: c.conferido_por_nome || nome(c.conferido_por), quemId: c.conferido_por });
+      if (c.desmarcado_em && Date.parse(c.desmarcado_em) >= desde) lista.push({ ...base, id: null, frase: `desmarcou o conferido ${item === 'nota' ? 'da nota' : 'do repasse'} de ${base.dono}`, quando: instante(c.desmarcado_em), acao: 'desmarcou o conferido de', quem: c.desmarcado_por_nome || nome(c.desmarcado_por), quemId: c.desmarcado_por });
+    });
     lista.sort((a, b) => (new Date(b.quando).getTime() || 0) - (new Date(a.quando).getTime() || 0));   // pelo instante, não pelo texto
     entradas = lista;
     estado = 'ok';
@@ -154,7 +163,7 @@
 </script>
 
 <div class="page-hd"><div class="mes-nav"><span class="mes-label">Histórico de alterações</span></div></div>
-<p class="sub">Últimos 60 dias · notas, repasses e troca de papel/regime de toda a equipe.</p>
+<p class="sub">Últimos 60 dias · notas, repasses, conferências e troca de papel/regime de toda a equipe.</p>
 
 {#if estado === 'offline'}
   <div class="empty-state"><div class="empty-icon">📡</div><p>Precisa de internet para ver o histórico — é auditoria, então busca sempre no servidor.</p></div>

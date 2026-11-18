@@ -452,7 +452,7 @@ window.Gestor = (() => {
       if (!visiveis.length) {
         txt.textContent = `Nenhum repasse com esse filtro neste mês (${partes.join(' · ')}).`;
       } else if (f.sit) {
-        txt.textContent = `Só ${partes.join(' · ')}: ${visiveis.length} de ${itens.length} · ${brl(soma(visiveis))}`;
+        txt.textContent = `Só ${partes.join(' · ')}: ${visiveis.length} de ${itens.length} · ${brl(soma(visiveis))}${_confTxt(visiveis, false)}`;
       } else {
         /* Situação = Todos: a soma conta só o recebido. O pedido pago já virou recebido (seria dobrar) e o pendente
            ainda não saiu do caixa. */
@@ -461,7 +461,7 @@ window.Gestor = (() => {
         const nPend = visiveis.filter(it => it.dataset.sit === 'pend').length;
         const fora = [nPago ? `${nPago} pedido${nPago > 1 ? 's' : ''} pago${nPago > 1 ? 's' : ''} (já ${nPago > 1 ? 'estão' : 'está'} no recebido)` : '',
           nPend ? `${nPend} pendente${nPend > 1 ? 's' : ''}` : ''].filter(Boolean);
-        txt.innerHTML = `${esc(partes.length ? partes.join(' · ') + ' · ' : '')}${visiveis.length} ite${visiveis.length === 1 ? 'm' : 'ns'} · recebido <b>${brl(soma(rec))}</b>`
+        txt.innerHTML = `${esc(partes.length ? partes.join(' · ') + ' · ' : '')}${visiveis.length} ite${visiveis.length === 1 ? 'm' : 'ns'} · recebido <b>${brl(soma(rec))}</b>${_confTxt(visiveis, false)}`
           + (fora.length ? `<span style="display:block;font-size:12px;opacity:.85">Fora da soma: ${esc(fora.join(' e '))}</span>` : '');
       }
     }
@@ -488,22 +488,74 @@ window.Gestor = (() => {
     _filtroReps = f;
     _aplicarFiltroReps();
   }
+  /* "✓ Conferido" (18/11/2026, Lote 3 da revisão do gestor): marca de nota e repasse conferidos, guardada no servidor
+     (tabela conferencias — não mexe no registro). _conf: 'nota:id' | 'repasse:id' → linha do servidor; _confReg: a mesma
+     chave → updated_at do registro, para "mudou depois de conferida" (o registro foi corrigido depois da marca). */
+  let _conf = new Map(), _confReg = new Map(), _confOk = false;
+  const _confChave = (tipo, id) => `${tipo}:${id}`;
+  function _confEstado(tipo, id) {
+    const c = _conf.get(_confChave(tipo, id));
+    if (!c || !c.conferido) return 'nao';
+    const mudou = Date.parse(_confReg.get(_confChave(tipo, id)) || '') - Date.parse(c.conferido_em || '');
+    return mudou > 5000 ? 'mudou' : 'sim';
+  }
+  const _confQuando = iso => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  function _confHTML(tipo, id) {
+    const est = _confEstado(tipo, id), c = _conf.get(_confChave(tipo, id));
+    const fem = tipo === 'nota';
+    const rot = est === 'sim' ? `✓ Conferid${fem ? 'a' : 'o'}` : est === 'mudou' ? '☐ Conferir de novo' : '☐ Conferir';
+    const quem = est === 'sim' ? `por ${esc(c.conferido_por_nome || 'gestor')} · ${_confQuando(c.conferido_em)}`
+      : est === 'mudou' ? `⚠️ mudou depois de conferid${fem ? 'a' : 'o'} (${esc(c.conferido_por_nome || 'gestor')} · ${_confQuando(c.conferido_em)})` : '';
+    return `<span class="conf-quem">${quem}</span><button type="button" class="conf-bt ${est === 'sim' ? 'ok' : ''}" aria-pressed="${est === 'sim'}" data-tipo="${tipo}" data-id="${_at(id)}" onclick="event.stopPropagation();Gestor.conferir(this.dataset.tipo,this.dataset.id,this)">${rot}</button>`;
+  }
+  /* põe (ou atualiza) a linha do conferido em cada nota e repasse da ficha e o atributo que as faixas contam */
+  function _pintarConferidos() {
+    if (!_confOk) return;
+    document.querySelectorAll('#notas-list .nota-card[data-nid], #cdet-replista .cdet-rep[data-rid]').forEach(card => {
+      const tipo = card.dataset.nid ? 'nota' : 'repasse', id = card.dataset.nid || card.dataset.rid;
+      const est = _confEstado(tipo, id);
+      card.dataset.conf = est === 'sim' ? '1' : '';
+      card.classList.toggle('conferido', est === 'sim');
+      let linha = card.querySelector(':scope > .conf-linha');
+      if (!linha) { linha = document.createElement('div'); linha.className = 'conf-linha'; card.appendChild(linha); }
+      linha.innerHTML = _confHTML(tipo, id);
+    });
+  }
+  const _confTxt = (vis, fem) => (_confOk && vis.length ? ` · ✓ ${vis.filter(c => c.dataset.conf === '1').length} de ${vis.length} conferid${fem ? 'as' : 'os'}` : '');
+  async function conferir(tipo, id, bt) {
+    if (typeof sb === 'undefined' || !sb?.conferencias || !navigator.onLine) { toast('Precisa de internet para marcar o conferido', 'err'); return; }
+    const marcar = _confEstado(tipo, id) !== 'sim';
+    if (!marcar && typeof pedirConfirmacao === 'function'
+      && !(await pedirConfirmacao({ mensagem: `Desmarcar ${tipo === 'nota' ? 'esta nota' : 'este repasse'} como conferid${tipo === 'nota' ? 'a' : 'o'}?`, confirmar: 'Desmarcar' }))) return;
+    if (bt) bt.disabled = true;
+    try {
+      const r = await sb.conferencias.salvar({ tipo, registro_id: id, conferido: marcar });
+      _conf.set(_confChave(tipo, id), r);
+      _pintarConferidos();
+      _aplicarFiltroNotas();
+      _aplicarFiltroReps();
+    } catch (e) {
+      toast('Não deu para marcar: ' + (e?.message || 'erro'), 'err');
+      if (bt) bt.disabled = false;
+    }
+  }
   const _ROT_FILTRO = { cartao: 'Cartão corporativo', carteira: 'Carteira (do bolso)' };
   function _aplicarFiltroNotas() {
     const vale = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual;
     const f = vale ? _filtroNotas.tipo : null;
     const tp = vale ? _filtroNotas.tp || null : null;
-    const ativo = !!(f || tp || (vale && _filtroNotas.pend));   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
+    const ativo = !!(f || tp || (vale && (_filtroNotas.pend || _filtroNotas.falta)));   // regime RDM/RDA filtra só pelo grupo (tp), sem carteira nem cartão
     const semEmp = !!(vale && _filtroNotas.semEmpresa);   // veio do gasto do mês no regime RDM/RDA: o valor não conta o Faturamento
     const pend = !!(vale && _filtroNotas.pend);   // cartão Pendências: só as notas sem foto ou sem valor (Lote 1, 17/11/2026)
-    const rot = pend ? 'pendências (sem foto ou sem valor)'
+    const falta = !!(vale && _filtroNotas.falta);   // "☐ Falta conferir" (18/11/2026)
+    const rot = falta ? 'falta conferir' : pend ? 'pendências (sem foto ou sem valor)'
       : f ? `${tp ? tp + ' ' : ''}${_ROT_FILTRO[f]}` : `${tp || ''}${semEmp ? ' sem Faturamento' : ''}`;
     const cards = [...document.querySelectorAll('#notas-list .nota-card')];
-    cards.forEach(c => { c.style.display = (pend ? c.dataset.pend === '1'
+    cards.forEach(c => { c.style.display = (falta ? c.dataset.conf !== '1' : pend ? c.dataset.pend === '1'
       : ((!f || c.dataset.pag === f) && (!tp || c.dataset.tipo === tp) && (!semEmp || c.dataset.pag !== 'empresa'))) ? '' : 'none'; });
     document.querySelectorAll('.cdet-kpi[data-filtro]').forEach(k => k.classList.toggle('ativo', pend ? k.dataset.filtro === 'pend' : (!tp && k.dataset.filtro === f)));
     document.querySelectorAll('#cdet-filtros-notas [data-fn]').forEach(c => {
-      const on = !semEmp && c.dataset.fn === (ativo ? `${f || ''}:${tp || ''}` : 'todas');
+      const on = !semEmp && c.dataset.fn === (falta ? 'falta' : pend ? '-' : ativo ? `${f || ''}:${tp || ''}` : 'todas');
       c.classList.toggle('btn-primary', on); c.classList.toggle('btn-outline', !on);
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
@@ -516,23 +568,30 @@ window.Gestor = (() => {
       const somaN = arr => arr.reduce((t, c) => t + (Number(c.dataset.val) || 0), 0);
       const qtd = k => `${k} nota${k === 1 ? '' : 's'}`;
       info.querySelector('.txt').textContent = !cards.length ? 'Nenhuma nota neste mês.'
-        : !ativo ? `${qtd(cards.length)} no mês · ${brl(somaN(cards))}`
-        : !vis.length ? `Nenhuma nota de ${rot} neste mês.`
-        : `Só ${rot}: ${vis.length} de ${qtd(cards.length)} · ${brl(somaN(vis))}`;
+        : !ativo ? `${qtd(cards.length)} no mês · ${brl(somaN(cards))}${_confTxt(cards, true)}`
+        : !vis.length ? (falta ? 'Todas as notas do mês já foram conferidas ✓' : `Nenhuma nota de ${rot} neste mês.`)
+        : `Só ${rot}: ${vis.length} de ${qtd(cards.length)} · ${brl(somaN(vis))}${_confTxt(vis, true)}`;
     }
+    const nFalta = document.querySelector('#cdet-filtros-notas .conf-falta-n');
+    if (nFalta) nFalta.textContent = cards.filter(c => c.dataset.conf !== '1').length;
     if (typeof _selNotasAtualizar === 'function') _selNotasAtualizar();   // o que o filtro escondeu sai da seleção
   }
   /* tipo = 'cartao' | 'carteira'; tp = 'RDM' | 'RDA' nos botões da lista (03/11/2026); tocar de novo no mesmo botão
      (ou "Mostrar todas") volta à lista inteira. Os botões já estão na lista: só os cartões do resumo rolam até ela. */
   function filtrarNotas(tipo, tp = null) {
     const atual = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual ? _filtroNotas : null;
+    if (tipo === 'falta') {   // "☐ Falta conferir": tocar de novo volta à lista inteira
+      _filtroNotas = atual && atual.falta ? null : { chave: _chaveFichaAtual, falta: true };
+      _aplicarFiltroNotas();
+      return;
+    }
     if (tipo === 'pend') {   // cartão Pendências: tocar de novo volta à lista inteira
       _filtroNotas = atual && atual.pend ? null : { chave: _chaveFichaAtual, pend: true };
       _aplicarFiltroNotas();
       if (_filtroNotas) irParaNotas();
       return;
     }
-    if ((!tipo && !tp) || (atual && !atual.semEmpresa && !atual.pend && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
+    if ((!tipo && !tp) || (atual && !atual.semEmpresa && !atual.pend && !atual.falta && (atual.tipo || null) === (tipo || null) && (atual.tp || null) === tp)) _filtroNotas = null;
     else _filtroNotas = { chave: _chaveFichaAtual, tipo, tp };
     _aplicarFiltroNotas();
     if (_filtroNotas && !tp) irParaNotas();
@@ -1102,10 +1161,13 @@ window.Gestor = (() => {
         sb.notas.list({ user_id: id, deleted: '0', fields: 'valor,mes,ano,tipo,pagamento,data,subtipo,razao_social' }).catch(() => null),
         sb.repasses.list({ user_id: id, deleted: '0' }).catch(() => null),
         window.Fechamento ? Fechamento.aguardando() : [],
-      ]);
+        (currentUser.role === 'admin' || currentUser.role === 'gestor') && sb.conferencias
+          ? sb.conferencias.list({ dono_id: id }).then(l => ({ ok: true, l })).catch(() => ({ ok: false, l: [] })) : { ok: false, l: [] },
+      ]).then(r => { _conf = new Map((r[7].l || []).map(c => [_confChave(c.tipo, c.registro_id), c])); _confOk = !!r[7].ok; return r; });
       if (seq !== _fichaSeq) return;   // chegou depois de outro redesenho (ou de a ficha ser fechada): não pinta por cima
       if (!colab) { _evoScroll = null; fechar(); return; }
       const notas = ns || [], reps = rs || [];
+      _confReg = new Map([...notas.map(n => [_confChave('nota', n.id), n.updated_at]), ...reps.map(x => [_confChave('repasse', x.id), x.updated_at])]);
       /* 24/09/2026: o app precisa achar o repasse pelo id para corrigir ou
          apagar — a ficha é quem tem a lista mais fresca. */
       window._repassesDaFicha = [...reps, ...(histReps || [])];   // o detalhe da faixa C.V. lista o ano inteiro, não só o mês aberto
@@ -1489,6 +1551,7 @@ window.Gestor = (() => {
           ${ehCVcolab
             ? `${_chipN('carteira', 'RDM', '💵 RDM Carteira')}${_chipN('carteira', 'RDA', '💵 RDA Carteira')}${_chipN('cartao', 'RDM', '💳 RDM Cartão')}${_chipN('cartao', 'RDA', '💳 RDA Cartão')}`
             : ['RDM', 'RDA'].map(t => `<button type="button" class="btn btn-sm btn-outline" data-fn=":${t}" aria-pressed="false" onclick="Gestor.filtrarNotas(null,'${t}')">${t} ${notas.filter(n => n.tipo === t).length}</button>`).join('')}
+          ${_confOk && podeEditar ? `<button type="button" class="btn btn-sm btn-outline" data-fn="falta" aria-pressed="false" onclick="Gestor.filtrarNotas('falta')">☐ Falta conferir <span class="conf-falta-n"></span></button>` : ''}
         </div>`;
       }
       html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
@@ -1498,7 +1561,7 @@ window.Gestor = (() => {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
         if (_podeSelNotas) html += selNotasBarraHTML();
         html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })
-          .replace('<div class="nota-card ', `<div data-val="${Number(n.valor) || 0}" data-pend="${!n.foto_path || Number(n.valor || 0) <= 0 ? '1' : ''}" class="nota-card `)).join('')}</div>`;
+          .replace('<div class="nota-card ', `<div data-nid="${_at(n.id)}" data-val="${Number(n.valor) || 0}" data-pend="${!n.foto_path || Number(n.valor || 0) <= 0 ? '1' : ''}" class="nota-card `)).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
@@ -1558,7 +1621,7 @@ window.Gestor = (() => {
           <button class="btn btn-sm btn-outline" onclick="Gestor.selecionarRepasses(false)">Cancelar</button>
         </div>`;
         html += `<div class="colab-list" id="cdet-replista">${reps.map(x => `
-          <div class="rep-item cdet-rep" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" data-tp="${_at(x.tipo)}" data-sit="${_sit(x)}" data-val="${Number(x.valor) || 0}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
+          <div class="rep-item cdet-rep" data-rid="${_at(x.id)}" data-dest="${ehRecarga(x) ? 'recarga' : 'repasse'}" data-tp="${_at(x.tipo)}" data-sit="${_sit(x)}" data-val="${Number(x.valor) || 0}" onclick="if(event.target.closest('button,input'))return;const c=this.querySelector('.rep-chk');if(c&&c.offsetParent){c.checked=!c.checked;Gestor.marcarRepasse(c.value,c.checked)}">
             ${podeEditar ? `<input type="checkbox" class="rep-chk" value="${_at(x.id)}" onchange="Gestor.marcarRepasse(this.value,this.checked)">` : ''}
             <span class="cdet-rep-ico">${recebido(x) ? '✅' : x.atendido_em ? '💸' : '⏳'}</span>
             <span class="tipo-badge tipo-${_at(x.tipo)}">${esc(x.tipo)}</span>
@@ -1580,6 +1643,7 @@ window.Gestor = (() => {
       _restaurarRolagem(el);
       _selRep.clear();   // ficha nova (outro mês/colaborador): começa sem seleção
       if (typeof _selNotas !== 'undefined') _selNotas.clear();   // idem para as notas (app.js)
+      if (podeEditar) _pintarConferidos(); else _confOk = false;   // a marca é só de gestor/admin
       _aplicarFiltroNotas();   // o filtro por Cartão/Carteira continua depois de corrigir ou excluir uma nota
       _aplicarFiltroReps();    // idem para Repasse/Recarga
       _aplicarPlanAberto();    // o detalhe da faixa C.V. continua aberto depois de corrigir um lançamento
@@ -1996,5 +2060,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, estado, restaurar, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { conferir, saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, estado, restaurar, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

@@ -201,6 +201,10 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/avisos-correcao', [AvisoCorrecaoController::class, 'store'])->middleware('throttle:30,1,aviso-correcao');
     Route::patch('/avisos-correcao/{id}/visto', [AvisoCorrecaoController::class, 'visto']);
 
+    /* "✓ conferido" (18/11/2026): gestor/admin marca nota e repasse já conferidos na ficha da Equipe */
+    Route::get('/conferencias', [\App\Http\Controllers\ConferenciaController::class, 'index']);
+    Route::put('/conferencias', [\App\Http\Controllers\ConferenciaController::class, 'salvar'])->middleware('throttle:120,1,conferencia');
+
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);
     Route::put('/cnpj/{cnpj}', [CnpjController::class, 'upsert']);
 });
