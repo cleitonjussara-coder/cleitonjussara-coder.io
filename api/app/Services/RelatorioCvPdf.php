@@ -124,27 +124,31 @@ class RelatorioCvPdf
         };
         $reembRdm = $reembolsoPor('RDM');
         $reembRda = $reembolsoPor('RDA');
-        $blocoReembolso = fn (string $t, array $b) => '<h3>REEMBOLSO '.$t.' DE: <span class="num">'.$brl($b['deve']).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($b['extrato'] ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+        /* 13/11/2026 (pedido do Cleiton sobre o PDF do Jamil): no BANCO DE DADOS o reembolso passa a se chamar REPASSE, como no
+           app, e a coluna AJUDA DE CUSTOS só aparece quando há ajuda lançada ou gasto pago com ela — vazia, ela só gerava dúvida. */
+        $comAjuda = $ajudas->isNotEmpty() || $notasAjuda->isNotEmpty();
+        $ajudaCel = fn (string $cel) => $comAjuda ? $cel : '';
+        $blocoReembolso = fn (string $t, array $b) => '<h3>REPASSE '.$t.' DE: <span class="num">'.$brl($b['deve']).'</span></h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($b['extrato'] ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
             .'<tr class="tot"><td colspan="2">TOTAL PAGO '.$t.'</td><td class="num">'.$brl($b['pago']).'</td></tr>'
             .'<tr><td colspan="2">'.SaldoAnterior::ROTULO.' '.$t.'</td><td class="num">'.$brl($b['anterior']).'</td></tr></table>';
         $saldoCv = ($ehCv ? $totalRecarga : $recebido) + $antCartao - $gastoTotal;
         $h[] = '<div class="pagina"><h2 class="verde">BANCO DE DADOS — '.$e($nome).'</h2>'.$aguarda
-            .'<table class="resumo"><tr>'
+            .'<table class="resumo'.($comAjuda ? '' : ' dois').'"><tr>'
             .'<td><b>CUSTOS TOTAIS DE C.V. RECEBIDO</b><br><span class="big">'.$brl($ehCv ? $totalRecarga : $recebido).'</span><br>'.$detTipo($ehCv ? $recargas : $reps).'</td>'
-            .'<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>'
-            .'<td><b>REEMBOLSO DE:</b><br><span class="big">'.$brl($reembRdm['deve'] + $reembRda['deve']).'</span><br><span class="det">RDM '.$brl($reembRdm['deve']).' · RDA '.$brl($reembRda['deve']).'</span></td></tr><tr>'
+            .$ajudaCel('<td><b>AJUDA DE CUSTOS RECEBIDA</b><br><span class="big">'.$brl($totalAjuda).'</span></td>')
+            .'<td><b>REPASSE DE:</b><br><span class="big">'.$brl($reembRdm['deve'] + $reembRda['deve']).'</span><br><span class="det">RDM '.$brl($reembRdm['deve']).' · RDA '.$brl($reembRda['deve']).'</span></td></tr><tr>'
             .'<td><b>TOTAL DE GASTO ACUMULADO DE C.V.</b><br><span class="big">'.$brl($gastoTotal).'</span></td>'
-            .'<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>'
+            .$ajudaCel('<td><b>TOTAL DE GASTO ACUMULADO DE AJUDA DE CUSTOS</b><br><span class="big">'.$brl($gastoAjuda).'</span></td>')
             .'<td><b>TOTAL PAGO</b><br><span class="big">'.$brl($ehCv ? $totalReembolso : $recebido).'</span><br>'.$detTipo($ehCv ? $reembolsos : $reps).'</td></tr><tr>'
-            .'<td><b>'.SaldoAnterior::ROTULO.($ehCv ? ' (CARTÃO)' : '').'</b><br><span class="big '.($antCartao < 0 ? 'vermelho' : '').'">'.$brl($antCartao).'</span></td><td></td>'
-            .'<td><b>'.SaldoAnterior::ROTULO.' (REEMBOLSO)</b><br><span class="big '.($antReembolso < 0 ? 'vermelho' : '').'">'.$brl($antReembolso).'</span><br><span class="det">RDM '.$brl($antTipo['RDM']).' · RDA '.$brl($antTipo['RDA']).'</span></td></tr><tr>'
+            .'<td><b>'.SaldoAnterior::ROTULO.($ehCv ? ' (CARTÃO)' : '').'</b><br><span class="big '.($antCartao < 0 ? 'vermelho' : '').'">'.$brl($antCartao).'</span></td>'.$ajudaCel('<td></td>')
+            .'<td><b>'.SaldoAnterior::ROTULO.' (REPASSE)</b><br><span class="big '.($antReembolso < 0 ? 'vermelho' : '').'">'.$brl($antReembolso).'</span><br><span class="det">RDM '.$brl($antTipo['RDM']).' · RDA '.$brl($antTipo['RDA']).'</span></td></tr><tr>'
             .'<td><b>SALDO DE C.V. RECEBIDO</b><br><span class="big '.($saldoCv < 0 ? 'vermelho' : '').'">'.$brl($saldoCv).'</span></td>'
-            .'<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td><td></td></tr></table>'
-            .'<table class="tres"><tr><td class="col">'
+            .$ajudaCel('<td><b>SALDO DE AJUDA DE CUSTOS RECEBIDO</b><br><span class="big '.($totalAjuda - $gastoAjuda < 0 ? 'vermelho' : '').'">'.$brl($totalAjuda - $gastoAjuda).'</span></td>').'<td></td></tr></table>'
+            .'<table class="tres'.($comAjuda ? '' : ' dois').'"><tr><td class="col">'
             .'<h3>'.($ehCv ? 'EXTRATO DE VALOR RECEBIDO/'.RelatorioCv::ROTULO_RECARGA : 'EXTRATO DE VALOR RECEBIDO').'</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoRecarga ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
             .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($ehCv ? $totalRecarga : $recebido).'</td></tr></table></td>'
-            .'<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
-            .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>'
+            .$ajudaCel('<td class="col"><h3>AJUDA DE CUSTO RECEBIDO</h3><table class="grade"><tr><th>DATA</th><th>TIPO</th><th>R$</th></tr>'.($extratoAjuda ?: '<tr><td colspan="3" class="vazio">—</td></tr>')
+            .'<tr class="tot"><td colspan="2">TOTAL</td><td class="num">'.$brl($totalAjuda).'</td></tr></table></td>')
             .'<td class="col">'.$blocoReembolso('RDM', $reembRdm).$blocoReembolso('RDA', $reembRda).'</td></tr></table></div>';
 
         /* ── CARTÃO CORPORATIVO (aba "CV ALELO" do modelo) e CV REEMBOLSO ───────────────────────── */
@@ -156,10 +160,10 @@ class RelatorioCvPdf
         if ($ehCv) {
             $paginas = [
                 [RelatorioCv::ABA_CARTAO, $notas->reject(fn ($n) => $n->pagamento === 'carteira'), $totalRecarga, $recargas, $antCartao],
-                ['CV REEMBOLSO', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso, $reembolsos, $antReembolso],
+                ['REPASSE', $notas->filter(fn ($n) => $n->pagamento === 'carteira'), $totalReembolso, $reembolsos, $antReembolso],
             ];
         } else {
-            $paginas = [['RDM_RDA', $notas, $recebido, $reps, $antCartao], ['CV REEMBOLSO', $notas, $recebido, $reps, $antReembolso]];
+            $paginas = [['RDM_RDA', $notas, $recebido, $reps, $antCartao], ['REPASSE', $notas, $recebido, $reps, $antReembolso]];
         }
         foreach ($paginas as [$aba, $listaDaAba, $recebidoAba, $repsDaAba, $antAba]) {
             $grade = $montarGrade($listaDaAba);
@@ -240,6 +244,7 @@ class RelatorioCvPdf
         .big { font-size: 12pt; font-weight: bold; }
         table.tres { width: 100%; border-collapse: separate; border-spacing: 8px 0; }
         table.tres td.col { width: 33%; vertical-align: top; }
+        table.resumo.dois td, table.tres.dois td.col { width: 50%; }
         table.grade { width: 100%; border-collapse: collapse; }
         table.grade th, table.grade td { border: 1px solid #999; padding: 2px 4px; }
         table.grade th { background: #f2f2f2; }

@@ -76,8 +76,8 @@ class RelatorioCvReembolsoSeparadoTest extends TestCase
         $bd = $ss->getSheetByName('BANCO DE DADOS');
         $calc = fn (string $a) => (float) $bd->getCell($a)->getCalculatedValue();
 
-        $this->assertSame('REEMBOLSO RDM DE:', $bd->getCell('I13')->getValue());
-        $this->assertSame('REEMBOLSO RDA DE:', $bd->getCell('L13')->getValue());
+        $this->assertSame('REPASSE RDM DE:', $bd->getCell('I13')->getValue());
+        $this->assertSame('REPASSE RDA DE:', $bd->getCell('L13')->getValue());
 
         $this->assertEqualsWithDelta(600, (float) $bd->getCell('J15')->getValue(), 0.001);
         $this->assertEmpty($bd->getCell('J16')->getValue(), 'RDA não entra no bloco RDM');
@@ -126,10 +126,28 @@ class RelatorioCvReembolsoSeparadoTest extends TestCase
     {
         $html = app(RelatorioCvPdf::class)->html($this->cenario()->fresh(), self::ANO);
 
-        $this->assertStringContainsString('REEMBOLSO RDM DE: <span class="num">R$ 900,00</span>', $html);
-        $this->assertStringContainsString('REEMBOLSO RDA DE: <span class="num">R$ 150,00</span>', $html);
+        $this->assertStringContainsString('REPASSE RDM DE: <span class="num">R$ 900,00</span>', $html);
+        $this->assertStringContainsString('REPASSE RDA DE: <span class="num">R$ 150,00</span>', $html);
         $this->assertStringContainsString('TOTAL PAGO RDM</td><td class="num">R$ 600,00', $html);
         $this->assertStringContainsString('TOTAL PAGO RDA</td><td class="num">R$ 100,00', $html);
         $this->assertStringContainsString('RDM R$ 900,00 · RDA R$ 150,00', $html);
+        $this->assertStringContainsString('<b>REPASSE DE:</b>', $html);
+        $this->assertStringNotContainsString('REEMBOLSO RDM DE', $html);
+    }
+
+    /* 13/11/2026: sem ajuda de custos lançada, a coluna AJUDA DE CUSTOS some do BANCO DE DADOS; com ajuda, volta */
+    public function test_pdf_so_mostra_ajuda_de_custos_quando_ha_ajuda(): void
+    {
+        $c = $this->cenario()->fresh();
+        $sem = app(RelatorioCvPdf::class)->html($c, self::ANO);
+        $this->assertStringNotContainsString('AJUDA DE CUSTOS RECEBIDA', $sem);
+        $this->assertStringNotContainsString('AJUDA DE CUSTO RECEBIDO', $sem);
+        $this->assertStringContainsString('<table class="resumo dois">', $sem);
+
+        $this->repasse($c, 'RDM', 250, 'ajuda', 3);
+        $com = app(RelatorioCvPdf::class)->html($c->fresh(), self::ANO);
+        $this->assertStringContainsString('AJUDA DE CUSTOS RECEBIDA', $com);
+        $this->assertStringContainsString('AJUDA DE CUSTO RECEBIDO', $com);
+        $this->assertStringContainsString('<table class="resumo">', $com);
     }
 }

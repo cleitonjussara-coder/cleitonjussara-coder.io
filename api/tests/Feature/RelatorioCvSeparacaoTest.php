@@ -105,9 +105,9 @@ class RelatorioCvSeparacaoTest extends TestCase
 
         $this->assertStringNotContainsString('CV ALELO', $html, 'o nome antigo não aparece mais no PDF');
         $ini = strpos($html, '— CARTÃO CORPORATIVO —');
-        $meio = strpos($html, '— CV REEMBOLSO —');
+        $meio = strpos($html, '— REPASSE —');
         $this->assertNotFalse($ini, 'página CARTÃO CORPORATIVO');
-        $this->assertNotFalse($meio, 'página CV REEMBOLSO');
+        $this->assertNotFalse($meio, 'página REPASSE');
         $this->assertLessThan($meio, $ini);
         $alelo = substr($html, $ini, $meio - $ini);
         $reemb = substr($html, $meio);

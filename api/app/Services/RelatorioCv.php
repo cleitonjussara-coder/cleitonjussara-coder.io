@@ -208,10 +208,10 @@ class RelatorioCv
             fn (string $col) => array_map(fn (array $b) => "'CV REEMBOLSO'!$col{$b[1]}", array_values(self::BLOCOS)),
             $colunas
         ))).')';
-        $bd->setCellValue('I13', 'REEMBOLSO RDM DE:');
+        $bd->setCellValue('I13', 'REPASSE RDM DE:');
         /* 04/11/2026: J12/M12 = saldo do ano anterior (recebido − gasto); negativo aumenta o que falta reembolsar */
         $bd->setCellValue('J13', '='.$gasto(['D', 'H', 'P']).'-J95-J12');
-        $bd->setCellValue('L13', 'REEMBOLSO RDA DE:');
+        $bd->setCellValue('L13', 'REPASSE RDA DE:');
         $bd->setCellValue('M13', '='.$gasto(['L']).'-M95-M12');
         $bd->setCellValue('L14', 'DATA');
         $bd->setCellValue('M14', 'R$');

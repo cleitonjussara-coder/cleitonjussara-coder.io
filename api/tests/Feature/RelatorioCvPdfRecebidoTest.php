@@ -58,9 +58,9 @@ class RelatorioCvPdfRecebidoTest extends TestCase
     private function paginas(string $html): array
     {
         $ini = strpos($html, '— CARTÃO CORPORATIVO —');
-        $meio = strpos($html, '— CV REEMBOLSO —');
+        $meio = strpos($html, '— REPASSE —');
         $this->assertNotFalse($ini, 'página CARTÃO CORPORATIVO');
-        $this->assertNotFalse($meio, 'página CV REEMBOLSO');
+        $this->assertNotFalse($meio, 'página REPASSE');
 
         return [substr($html, 0, $ini), substr($html, $ini, $meio - $ini), substr($html, $meio)];
     }

@@ -328,11 +328,11 @@ class SaldoAnteriorTest extends TestCase
         $ss->disconnectWorksheets();
 
         $this->assertStringContainsString('<b>SALDO DO ANO ANTERIOR (CARTÃO)</b><br><span class="big vermelho">R$ -300,00', $html);
-        $this->assertStringContainsString('<b>SALDO DO ANO ANTERIOR (REEMBOLSO)</b><br><span class="big vermelho">R$ -90,00', $html);
+        $this->assertStringContainsString('<b>SALDO DO ANO ANTERIOR (REPASSE)</b><br><span class="big vermelho">R$ -90,00', $html);
         $this->assertStringContainsString('RDM R$ -150,00 · RDA R$ 60,00', $html);
         $this->assertStringContainsString('<b>SALDO DE C.V. RECEBIDO</b><br><span class="big ">R$ 100,00', $html);
-        $this->assertStringContainsString('REEMBOLSO RDM DE: <span class="num">R$ 165,00', $html);
-        $this->assertStringContainsString('REEMBOLSO RDA DE: <span class="num">R$ -35,00', $html);
+        $this->assertStringContainsString('REPASSE RDM DE: <span class="num">R$ 165,00', $html);
+        $this->assertStringContainsString('REPASSE RDA DE: <span class="num">R$ -35,00', $html);
         $this->assertStringContainsString('SALDO DO ANO ANTERIOR RDM</td><td class="num">R$ -150,00', $html);
         $this->assertStringContainsString('<b>SALDO DO ANO ANTERIOR</b> <span class="vermelho">R$ -300,00</span></td><td><b>SALDO</b> <span class="">R$ 100,00', $html);
         $this->assertStringContainsString('<b>SALDO DO ANO ANTERIOR</b> <span class="vermelho">R$ -90,00</span></td><td><b>SALDO</b> <span class="vermelho">R$ -130,00', $html);
