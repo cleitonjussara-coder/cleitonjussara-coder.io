@@ -50,6 +50,25 @@ class Repasse extends Model
         ];
     }
 
+    /* 18/11/2026: o colaborador vê no sino QUEM recusou o pedido dele, e o app dele não tem a lista da equipe.
+       Só busca para linha recusada (poucas); o cache evita repetir a mesma pessoa numa listagem. */
+    protected $appends = ['recusado_por_nome'];
+
+    private static array $nomesRecusa = [];
+
+    public function getRecusadoPorNomeAttribute(): ?string
+    {
+        $id = $this->attributes['recusado_por'] ?? null;
+        if (! $id) {
+            return null;
+        }
+        if (! array_key_exists($id, self::$nomesRecusa)) {
+            self::$nomesRecusa[$id] = Colaborador::whereKey($id)->value('nome');
+        }
+
+        return self::$nomesRecusa[$id];
+    }
+
     public function dono(): BelongsTo
     {
         return $this->belongsTo(Colaborador::class, 'user_id');

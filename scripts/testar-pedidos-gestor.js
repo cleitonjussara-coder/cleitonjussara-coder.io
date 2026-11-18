@@ -146,6 +146,62 @@ const recebidoAvulso = { id: 'r2', user_id: 'u1', tipo: 'RDM', kind: 'received',
     confere(w.eval('_chamadas').length === 0, 'cancelar a janela não recusa nada');
   }
 
+  console.log('Sino do colaborador: pedido recusado (18/11/2026)');
+  {
+    const w = base();
+    const agora = new Date().toISOString();
+    const recusado = { ...pedidoAberto, user_id: 'u2', deleted: true, recusado_em: agora, recusado_por: 'g1', recusado_por_nome: 'Cleiton', motivo_recusa: 'Pedido em dobro' };
+    const semMotivo = { ...pedidoAberto2, id: 'p9', user_id: 'u2', deleted: true, recusado_em: agora, recusado_por: 'g1' };
+    const antigo = { ...pedidoAberto2, id: 'p8', user_id: 'u2', deleted: true, recusado_em: '2026-09-01T10:00:00Z', motivo_recusa: 'velho' };
+    const deOutro = { ...pedidoAberto2, id: 'p7', user_id: 'u1', deleted: true, recusado_em: agora };
+    const apagadoComum = { ...pedidoAberto2, id: 'p6', user_id: 'u2', deleted: true };
+    w.eval(`
+      var user = { id: 'u2', nome: 'José' }; var DEMO_MODE = false;
+      var _ehGestorOuAdmin = () => false; var _veEquipe = () => false; var _ehContabilidade = () => false;
+      var K_NOTIF_VISTOS = 'vistos'; var repasses = []; var repassesEquipe = []; var notas = []; var notasEquipe = [];
+      var justificativasSino = []; var avisosCorrecaoSino = [];
+      var FusoBR = { hora: () => '10:15', hojeISO: d => '2026-11-18', data: () => '18/11' };
+      var DB = { getRepassesUser: async (id, inc) => inc ? ${JSON.stringify([recusado, semMotivo, antigo, deOutro, apagadoComum])} : [] };
+      var _buscarJustificativas = async () => false; var _buscarAvisosCorrecao = async () => false;
+      var _usaCartao = () => false; var _abriuForm = null; var abrirFormRepasse = (...a) => { _abriuForm = a; };
+      var _pintarSinoPush = () => {}; var _pintarSinoEquipe = () => {};
+    `);
+    const memoria = {};   // about:blank do jsdom não tem localStorage
+    Object.defineProperty(w, 'localStorage', { configurable: true, value: { getItem: k => memoria[k] ?? null, setItem: (k, v) => { memoria[k] = String(v); }, removeItem: k => { delete memoria[k]; } } });
+    const pedaco = (de, ate) => trecho(de, ate);
+    w.eval(pedaco('let repassesRecusados = [];', '\nlet repassesEquipe'));
+    w.eval(pedaco('function _notifVistos()', '\nfunction _repassePendente'));
+    w.eval(pedaco('function _notificacoes() {', '\nfunction fmtDataBR'));
+    w.eval(pedaco('function _quandoJust(iso) {', '\nfunction _resumirTexto'));
+    w.eval(pedaco('async function _pintarSino() {', '\n/* esperarJust'));
+    w.eval(pedaco('async function atualizarNotificacoes(', '\n/* filtro ='));
+    w.eval(pedaco('let _sinoFiltro = null;', '/* ═══'));
+    w.eval(pedaco('function dispensarNotificacao(id)', '\nfunction dispensarTodasNotificacoes'));
+    await w.atualizarNotificacoes();
+    const itens = w._notificacoes().filter(i => i.tipo === 'recusado');
+    confere(itens.length === 2, `só as recusas recentes do próprio colaborador: ${itens.map(i => i.id).join(', ')}`);
+    const it = itens.find(i => i.id === 'recusa:p2');
+    confere(it && it.titulo === 'Seu pedido de R$ 300,00 (RDM) foi recusado', `título: "${it && it.titulo}"`);
+    confere(it && /16\/11\/2026 · Combustível · recusado por Cleiton hoje 10:15/.test(it.sub), `quem e quando: "${it && it.sub}"`);
+    const s9 = itens.find(i => i.id === 'recusa:p9');
+    confere(s9 && /recusado pela gestão/.test(s9.sub) && s9.motivo === '', 'sem nome nem motivo: "pela gestão"');
+    w.abrirNotificacoes();
+    const ov = w.document.getElementById('notif-overlay');
+    const card = ov.querySelector('.notif-item.recusado');
+    confere(!!card && /Motivo: “Pedido em dobro”/.test(card.textContent) && /🚫/.test(card.textContent), 'cartão vermelho com o motivo');
+    const bts = [...card.querySelectorAll('button')].map(b => limpa(b.textContent));
+    confere(bts.join(' | ') === '💸 Pedir de novo | OK, vi', `botões: ${bts.join(' | ')}`);
+    const clicar = b => w.eval(`(function(){ ${b.getAttribute('onclick')} })`).call(b);   // onclick inline não roda no jsdom outside-only
+    clicar(card.querySelector('button'));
+    confere(w.eval('_abriuForm') && w.eval('_abriuForm[0]') === 'requested' && !w.document.getElementById('notif-overlay'), 'Pedir de novo abre o pedido de repasse');
+    w.abrirNotificacoes();
+    const ok = [...w.document.querySelectorAll('#notif-overlay .notif-item.recusado button')].find(b => /OK, vi/.test(b.textContent));
+    clicar(ok);
+    await new Promise(r => setTimeout(r, 10));
+    const restam = w._notificacoes().filter(i => i.tipo === 'recusado').map(i => i.id);
+    confere(restam.length === 1 && restam[0] === 'recusa:p9', `OK, vi tira só aquele aviso: ${restam.join(', ')}`);
+  }
+
   console.log(falhas ? `\n${falhas} falha(s)` : '\ntudo ok');
   process.exit(falhas ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

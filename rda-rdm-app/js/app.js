@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 633;
+const APP_BUILD = 634;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2448,6 +2448,7 @@ function _instalarPuxarParaAtualizar() {
    O número aparece no sininho do topo e no ícone do app (Badging API:
    Android direto; iOS só com o app instalado na tela inicial).
 ═══════════════════════════════════════════════════════════ */
+let repassesRecusados = [];   // 18/11/2026: pedidos PRÓPRIOS recusados pela gestão (do store local), para o sino
 let repassesEquipe = [];   // gestor/admin/contabilidade: repasses de todos (do store local)
 const K_NOTIF_VISTOS = 'notif_vistos_v1';
 function _notifVistos() { try { return new Set(JSON.parse(localStorage.getItem(K_NOTIF_VISTOS) || '[]')); } catch (_) { return new Set(); } }
@@ -2615,6 +2616,19 @@ function _notificacoes() {
     });
   }
   const lim = Date.now() - 30 * 86400_000;
+  /* 18/11/2026: pedido recusado pela gestão. O push só chega a quem ligou o aviso no celular; aqui fica no sino até o
+     "OK, vi" ou 30 dias. A recusa vem na sincronização normal (deleted + recusado_em), então funciona sem internet. */
+  repassesRecusados.filter(r => r.user_id === user.id && r.recusado_em && !vistos.has('recusa:' + r.id)
+      && new Date(String(r.recusado_em).replace(' ', 'T')).getTime() > lim)
+    .sort((a, b) => String(b.recusado_em).localeCompare(String(a.recusado_em)))
+    .forEach(r => {
+      out.push({
+        id: 'recusa:' + r.id, tipo: 'recusado', rep: r,
+        titulo: `Seu pedido de ${brl(r.valor)} (${r.tipo}) foi recusado`,
+        sub: `Pedido de ${fmtDataBR(r.data)}${r.descricao ? ' · ' + r.descricao : ''} · recusado ${r.recusado_por_nome ? 'por ' + r.recusado_por_nome : 'pela gestão'} ${_quandoJust(String(r.recusado_em).replace(' ', 'T'))}`,
+        motivo: r.motivo_recusa || '',
+      });
+    });
   repasses.filter(r => _repasseEhPedido(r) && r.atendido_em && !vistos.has(r.id) && new Date(r.atendido_em).getTime() > lim)
     .forEach(r => out.push({
       id: r.id, tipo: 'atendido', rep: r,
@@ -2686,6 +2700,10 @@ async function atualizarNotificacoes({ esperarJust = false } = {}) {
   /* o sino só traz pedido de repasse, cadastro novo e cartão baixo: nada disso é do Contador */
   if (_ehContabilidade()) { const s = $('hdr-sino'); if (s) s.style.display = 'none'; return 0; }
   if (_veEquipe() && !DEMO_MODE) { try { repassesEquipe = await DB.getRepassesTodos(); } catch (_) { repassesEquipe = []; } }
+  if (user && !DEMO_MODE) {
+    try { repassesRecusados = (await DB.getRepassesUser(user.id, true)).filter(r => r.deleted && r.recusado_em && _repasseEhPedido(r)); }
+    catch (_) { repassesRecusados = []; }
+  }
   /* Justificativas (19/10/2026): vêm do servidor. Em segundo plano; quando chegam, o número do sino é repintado. */
   const busca = Promise.all([_buscarJustificativas(), _buscarAvisosCorrecao()]).then(r => r.some(Boolean));
   if (esperarJust) await busca;
@@ -2705,11 +2723,14 @@ function abrirNotificacoes(filtro) {
   ov.id = 'notif-overlay';
   const html = itens.length ? itens.map(it => `
     <div class="notif-item ${it.tipo}">
-      <div class="notif-ico">${it.tipo === 'justificativa' ? '📝' : it.tipo === 'correcao' ? '✏️' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : it.tipo === 'duplicada' ? '🔁' : '✅'}</div>
+      <div class="notif-ico">${it.tipo === 'recusado' ? '🚫' : it.tipo === 'justificativa' ? '📝' : it.tipo === 'correcao' ? '✏️' : it.tipo === 'justresp' ? '💬' : it.tipo === 'pedido' || it.tipo === 'recebido' ? '💸' : it.tipo === 'devedor' ? '⚠️' : it.tipo === 'novo' ? '🙋' : it.tipo === 'cartao' ? '💳' : it.tipo === 'fotobranca' ? '📷' : it.tipo === 'duplicada' ? '🔁' : '✅'}</div>
       <div class="notif-txt">
         <div class="notif-tit">${esc(it.titulo)}</div>
         <div class="notif-sub">${esc(it.sub)}</div>
-        ${it.tipo === 'correcao' ? `<div class="notif-acoes">
+        ${it.tipo === 'recusado' ? `${it.motivo ? `<div class="notif-sub notif-motivo">Motivo: “${esc(it.motivo)}”</div>` : ''}<div class="notif-acoes">
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('notif-overlay')?.remove(); abrirFormRepasse('requested', null, null, _usaCartao() ? 'carteira' : null)">💸 Pedir de novo</button>
+          <button class="btn btn-sm btn-outline" data-notif="${_at(it.id)}" onclick="dispensarNotificacao(this.dataset.notif)">OK, vi</button>
+        </div>` : it.tipo === 'correcao' ? `<div class="notif-acoes">
           <button class="btn btn-sm btn-primary" data-nota="${_at(it.notaId)}" onclick="corrigirPeloAviso(this.dataset.nota)">✏️ Corrigir a nota</button>
           ${(() => { const nn = _notaPorId(it.notaId); return nn && (nn.foto_path || nn.foto_local) ? `<button class="btn btn-sm btn-outline" data-nota="${_at(it.notaId)}" onclick="document.getElementById('notif-overlay')?.remove(); verFoto(this.dataset.nota)">📎 Ver anexo</button>` : ''; })()}
           <button class="btn btn-sm btn-outline" data-aviso="${_at(it.aviso.id)}" onclick="dispensarAvisoCorrecao(this.dataset.aviso, this)">OK, vi</button>

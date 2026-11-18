@@ -129,4 +129,25 @@ class PedidoRecusadoTest extends TestCase
         $this->assertSame('Pedido em dobro', $item['motivo_recusa'] ?? null);
         $this->assertSame($gestor->id, $item['recusado_por'] ?? null);
     }
+
+    /* 18/11/2026: o sino do colaborador mostra a recusa — ela chega na lista normal dele (sem ?deleted), com o nome
+       de quem recusou, porque o app do colaborador não tem a lista da equipe. */
+    public function test_colaborador_recebe_a_recusa_com_o_nome_de_quem_recusou(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $gestor = $this->pessoa('gestor');
+        $p = $this->pedido($colab);
+        Sanctum::actingAs($gestor);
+        $this->patchJson("/api/repasses/{$p->id}/recusar", ['motivo' => 'Valor errado'])->assertOk();
+        Sanctum::actingAs($colab);
+        $lista = $this->getJson('/api/repasses')->assertOk()->json();
+        $item = collect($lista['data'] ?? $lista)->firstWhere('id', $p->id);
+        $this->assertNotNull($item, 'a recusa precisa chegar ao aparelho do colaborador');
+        $this->assertTrue($item['deleted']);
+        $this->assertSame('Valor errado', $item['motivo_recusa']);
+        $this->assertSame($gestor->nome, $item['recusado_por_nome']);
+        $this->assertNotEmpty($item['recusado_em']);
+        $outro = collect($lista['data'] ?? $lista)->firstWhere('recusado_por', null);
+        $this->assertTrue($outro === null || array_key_exists('recusado_por_nome', $outro));
+    }
 }
