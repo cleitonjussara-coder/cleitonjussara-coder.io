@@ -234,6 +234,25 @@ class HistoricoKmTest extends TestCase
         $this->assertNull($j['itens'][1]['alerta']);
     }
 
+    /* 18/11/2026 (Lote 3): contador de leituras para conferir e o filtro que lista só elas */
+    public function test_contador_e_filtro_das_leituras_para_conferir(): void
+    {
+        $this->leitura($this->v1, $this->bia, '2026-10-21', 150000);
+        Sanctum::actingAs($this->gestor);
+        $base = '/api/frota/historico?de=2026-10-21&ate=2026-10-21&veiculo_id='.$this->v1->id;
+        $j = $this->getJson($base)->assertOk()->json();
+        $this->assertSame(1, $j['alertas']);
+        $this->assertGreaterThan(1, $j['total']);
+        $this->assertFalse($j['so_alertas']);
+        $s = $this->getJson($base.'&alertas=1')->assertOk()->json();
+        $this->assertSame(1, $s['total']);
+        $this->assertSame(1, $s['alertas']);
+        $this->assertTrue($s['so_alertas']);
+        $this->assertSame('salto', $s['itens'][0]['alerta']);
+        $p = $this->getJson('/api/frota/painel?modo=dia&ref=2026-10-21')->assertOk()->json();
+        $this->assertSame(1, $p['alertas']);
+    }
+
     public function test_periodo_invertido_e_recusado(): void
     {
         Sanctum::actingAs($this->gestor);

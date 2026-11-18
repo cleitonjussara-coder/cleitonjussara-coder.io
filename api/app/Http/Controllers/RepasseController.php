@@ -342,6 +342,51 @@ class RepasseController extends Controller
         return response()->json(['pedido' => $pedido->fresh(), 'recebido' => $recebido->fresh(), 'ja_estava' => false]);
     }
 
+    /** PATCH /repasses/{id}/recusar {motivo?} — gestor/admin recusa um PEDIDO aberto (18/11/2026).
+     *  O pedido sai do saldo e das pendências como antes (deleted=true), mas guarda quem recusou, quando e o
+     *  motivo, e o colaborador é avisado. Pedido já pago não se recusa (409); já recusado responde ja_estava. */
+    public function recusar(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->gerencia(), 403, 'Só gestor ou admin recusa um pedido');
+        $motivo = trim((string) ($r->validate(['motivo' => ['nullable', 'string', 'max:200']])['motivo'] ?? ''));
+
+        [$pedido, $jaEstava] = DB::transaction(function () use ($id, $u, $motivo) {
+            $this->pegarEscrita($id);
+            $pedido = Repasse::lockForUpdate()->findOrFail($id);
+            abort_unless(in_array(strtolower((string) $pedido->kind), ['requested', 'request', 'pedido', 'solicitado'], true), 422, 'Este repasse não é um pedido');
+            if ($pedido->recusado_em) {
+                return [$pedido, true];
+            }
+            abort_if($pedido->atendido_em, 409, 'Este pedido já foi pago. Para desfazer, corrija o repasse recebido.');
+            abort_if($pedido->deleted, 404, 'Pedido excluído');
+            $pedido->forceFill([
+                'deleted' => true,
+                'recusado_em' => now(),
+                'recusado_por' => $u->id,
+                'motivo_recusa' => $motivo === '' ? null : $motivo,
+                'updated_by' => $u->id,
+            ])->save();
+
+            return [$pedido, false];
+        });
+
+        if (! $jaEstava) {
+            $oque = $pedido->destino === 'recarga' ? 'Pedido de recarga recusado' : 'Pedido de repasse recusado';
+            $this->push->enviar(
+                $pedido->user_id,
+                $oque,
+                $this->emReais($pedido->valor) . ' (' . $pedido->tipo . ') recusado por ' . ($u->nome ?: 'a gestão')
+                    . ($pedido->motivo_recusa ? ': "' . $pedido->motivo_recusa . '"' : '') . '.',
+                '/',
+                'recusado-' . $pedido->id
+            );
+            Log::info('pedido recusado', ['pedido' => $pedido->id, 'por' => $u->email, 'motivo' => $pedido->motivo_recusa]);
+        }
+
+        return response()->json(['pedido' => $pedido->fresh(), 'ja_estava' => $jaEstava]);
+    }
+
     /** PATCH /repasses/{id}/recebi {valor?} — o DONO do pedido confirma que o dinheiro caiu.
      *  `valor` é o que realmente foi depositado (pode ser maior ou menor que o pedido). Idempotente.
      *  05/11/2026: o botão saiu do app. Aparelho antigo ainda chama: pedido já pago responde ja_estava,

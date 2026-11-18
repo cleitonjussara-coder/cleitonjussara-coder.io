@@ -362,6 +362,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     atendido: (id, valor) => req('PATCH', `/repasses/${id}/atendido`, { body: { valor: valor ?? undefined } }),
     /* C.V. (24/10/2026): o próprio colaborador confirma que o pedido caiu; valor = o que foi depositado de fato. */
     recebi: (id, valor) => req('PATCH', `/repasses/${id}/recebi`, { body: { valor: valor ?? undefined } }),
+    /* 18/11/2026: gestor recusa o pedido com motivo; o servidor guarda quem/quando/motivo e avisa o colaborador */
+    recusar: (id, motivo) => req('PATCH', `/repasses/${id}/recusar`, { body: { motivo: motivo || undefined } }),
   };
 
   /* Notificação no celular (24/09/2026) */

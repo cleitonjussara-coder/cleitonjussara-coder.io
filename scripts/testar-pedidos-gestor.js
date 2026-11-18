@@ -121,6 +121,31 @@ const recebidoAvulso = { id: 'r2', user_id: 'u1', tipo: 'RDM', kind: 'received',
     confere(/abrirModalAtenderPedido\(this\.dataset\.pedido\)/.test(linha('José').querySelector('.res-eq-pagar').getAttribute('onclick')), 'o botão abre a janela de pagar o pedido');
   }
 
+  console.log('Recusar com motivo (Lote 3, 18/11/2026)');
+  {
+    const w = base();
+    w.eval(`
+      var equipePorId = { u2: { nome: 'José' } };
+      var _ehGestorOuAdmin = () => true; var toast = () => {};
+      var _repasseDaEquipe = id => (${JSON.stringify(pedidoAberto)});
+      var _recarregarEquipe = async () => {}; var atualizarNotificacoes = async () => {}; var abrirNotificacoes = () => {};
+      var _sinoFiltro = null;
+      var _janela = null;
+      var pedirCampos = async o => { _janela = o; return { motivo: 'Pedido em dobro' }; };
+      var _chamadas = [];
+      var sb = { repasses: { recusar: async (id, motivo) => { _chamadas.push(['recusar', id, motivo]); }, upsert: async r => { _chamadas.push(['upsert', r.id]); } } };
+    `);
+    Object.defineProperty(w.navigator, 'onLine', { value: true, configurable: true });
+    w.eval(trecho('async function _recusarPedido(id, btn) {', '\nfunction dispensarNotificacao'));
+    await w._recusarPedido(pedidoAberto.id, null);
+    const ch = w.eval('_chamadas'), jan = w.eval('_janela');
+    confere(ch.length === 1 && ch[0][0] === 'recusar' && ch[0][1] === pedidoAberto.id && ch[0][2] === 'Pedido em dobro', `chama /recusar com o motivo: ${JSON.stringify(ch)}`);
+    confere(/José/.test(jan.titulo) && jan.campos[0].sugestoes.includes('Já foi pago'), `janela pergunta o motivo com sugestões: "${jan.titulo}"`);
+    w.eval('pedirCampos = async () => null; _chamadas = [];');
+    await w._recusarPedido(pedidoAberto.id, null);
+    confere(w.eval('_chamadas').length === 0, 'cancelar a janela não recusa nada');
+  }
+
   console.log(falhas ? `\n${falhas} falha(s)` : '\ntudo ok');
   process.exit(falhas ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

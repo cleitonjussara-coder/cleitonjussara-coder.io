@@ -6,14 +6,14 @@
 
   const PAPEL_NOME = { colaborador: 'Colaborador', gestor: 'Gestor', admin: 'Administrador', contabilidade: 'Contador' };
   const REGIME_NOME = { rdm_rda: 'RDM/RDA', cv: 'C.V.' };
-  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'excluiu o colaborador': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'conferiu': '✅', 'desmarcou o conferido de': '↩️', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
+  const ICO = { lançou: '✚', editou: '✏️', apagou: '🗑️', 'apagou em definitivo': '⛔', 'excluiu o colaborador': '⛔', 'trocou o papel': '🎭', 'trocou o regime': '🔁', 'recusou': '🚫', 'conferiu': '✅', 'desmarcou o conferido de': '↩️', 'pediu justificativa': '📨', 'respondeu a justificativa': '💬', 'cancelou o pedido de justificativa': '↩️' };
 
   let estado = $state('carregando'); // 'carregando' | 'offline' | 'erro' | 'ok'
   let erroMsg = $state('');
   let entradas = $state([]);
   /* Lote 2 (17/11/2026): filtros por ação e por pessoa, e "ver mais" no lugar do corte calado em 200. Tocar numa linha de
      nota abre o histórico daquela nota (o que mudou, antes → depois). */
-  const GRUPO = { 'lançou': 'lancou', 'editou': 'editou', 'apagou': 'apagou', 'apagou em definitivo': 'apagou', 'excluiu o colaborador': 'apagou',
+  const GRUPO = { 'lançou': 'lancou', 'editou': 'editou', 'apagou': 'apagou', 'apagou em definitivo': 'apagou', 'excluiu o colaborador': 'apagou', 'recusou': 'apagou',
     'pediu justificativa': 'just', 'respondeu a justificativa': 'just', 'cancelou o pedido de justificativa': 'just', 'trocou o papel': 'papel', 'trocou o regime': 'papel', 'conferiu': 'conf', 'desmarcou o conferido de': 'conf' };
   const CHIPS = [['todos', 'Todos'], ['lancou', 'Lançou'], ['editou', 'Editou'], ['apagou', 'Apagou'], ['just', 'Justificativa'], ['conf', 'Conferido'], ['papel', 'Papel/regime']];
   const PASSO = 200;
@@ -86,15 +86,19 @@
       dono: nomeDono(n.user_id),
       resumo: `${esc(n.tipo)}${n.subtipo ? ' · ' + esc(n.subtipo) : ''} · ${esc(n.razao_social || (n.cnpj ? formatarCnpj(n.cnpj) : 'sem empresa'))} · ${Number(n.valor) > 0 ? brl(n.valor) : 'sem valor'}`,
     }));
-    (repassesMudados || []).forEach(r => lista.push({
-      donoId: r.user_id, quemId: r.updated_by,
-      quando: r.updated_at,
-      acao: r.deleted ? 'apagou' : (mesmoInstante(r.created_at, r.updated_at) ? 'lançou' : 'editou'),
-      tipoItem: 'repasse',
-      quem: nomeAutor(r.updated_by),
-      dono: nome(r.user_id),
-      resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}`,
-    }));
+    /* 18/11/2026 (Lote 3): pedido recusado vira "recusou o pedido de", com o motivo, em vez de "apagou repasse" */
+    (repassesMudados || []).forEach(r => {
+      const recusou = r.deleted && r.recusado_em;
+      lista.push({
+        donoId: r.user_id, quemId: recusou ? (r.recusado_por || r.updated_by) : r.updated_by,
+        quando: r.updated_at,
+        acao: recusou ? 'recusou' : r.deleted ? 'apagou' : (mesmoInstante(r.created_at, r.updated_at) ? 'lançou' : 'editou'),
+        tipoItem: recusou ? 'o pedido' : 'repasse',
+        quem: nomeAutor(recusou ? (r.recusado_por || r.updated_by) : r.updated_by),
+        dono: nome(r.user_id),
+        resumo: `${esc(r.tipo)} · ${brl(r.valor)} · ${r.kind === 'requested' ? 'pedido' : 'recebido'}${r.destino === 'recarga' ? ' (recarga do cartão)' : ''}${recusou && r.motivo_recusa ? ` · motivo: ${esc(r.motivo_recusa)}` : ''}`,
+      });
+    });
     /* 04/11/2026: o servidor agrupa as lápides, e uma exclusão de colaborador vira uma linha só. "Não passou pela lixeira" saiu:
        era falso para as que estavam nela. Quem foi excluído já não está na equipe, então o nome costuma não existir. */
     (apagadasDet || []).forEach(a => {

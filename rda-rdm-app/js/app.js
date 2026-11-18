@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 630;
+const APP_BUILD = 631;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -787,6 +787,21 @@ function pedirCampos({ titulo, dica = '', confirmar = 'OK', perigo = false, camp
         + 'border-radius:8px;padding:11px 12px;font-size:16px;margin:0 0 10px' + (c.linhas ? ';font-family:inherit;resize:vertical;line-height:1.4' : '');
       inputs.push(inp);
       caixa.appendChild(inp);
+      /* c.sugestoes (18/11/2026): botões de texto pronto que preenchem o campo (motivo da recusa do pedido) */
+      if (c.sugestoes?.length) {
+        const linha = document.createElement('div');
+        linha.className = 'jan-sugestoes';
+        linha.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px';
+        c.sugestoes.forEach(s => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = s;
+          b.style.cssText = 'background:transparent;color:#eef9f0;border:1px solid #4d7a5a;border-radius:99px;padding:6px 12px;font-size:14px';
+          b.onclick = () => { inp.value = s; inp.focus(); };
+          linha.appendChild(b);
+        });
+        caixa.appendChild(linha);
+      }
     });
     const erro = document.createElement('div');
     erro.setAttribute('role', 'alert');
@@ -3302,7 +3317,7 @@ function abrirSeletorColaborador(titulo, aoEscolher, opts = {}) {
    Cleiton — a lista já passa de 20 nomes e rolar pra achar alguém era
    ruim). Ignora acento pra "jose"/"José" acharem a mesma pessoa. */
 function _filtrarSeletorColab(termo) {
-  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const t = norm(termo);
   const botoes = document.querySelectorAll('#seletor-colab-overlay [data-busca]');
   let algumVisivel = false;
@@ -3495,10 +3510,19 @@ async function _recusarPedido(id, btn) {
   if (!sb || !navigator.onLine) { toast('Precisa de internet para recusar', 'err'); return; }
   const r = _repasseDaEquipe(id);
   const quem = equipePorId[r?.user_id]?.nome || 'o colaborador';
-  if (!(await pedirConfirmacao({ mensagem: `Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?\n\nO pedido some das pendências. Avise a pessoa por fora do app, se precisar.`, confirmar: 'Recusar', perigo: true }))) return;
+  /* 18/11/2026 (Lote 3): recusa com motivo — o colaborador recebe o aviso com ele, e o Histórico e os Apagados mostram quem recusou */
+  const resp = await pedirCampos({
+    titulo: `Recusar o pedido de ${brl(r?.valor || 0)} de ${quem}?`,
+    dica: `O pedido sai das pendências e ${quem} recebe um aviso com o motivo.`,
+    confirmar: 'Recusar', perigo: true,
+    campos: [{ id: 'motivo', rotulo: `Motivo (vai para ${quem})`, placeholder: 'Opcional', maxlength: 200,
+      sugestoes: ['Já foi pago', 'Pedido em dobro', 'Valor errado'] }],
+  });
+  if (!resp) return;
   if (btn) btn.disabled = true;
   try {
-    await sb.repasses.upsert({ ...r, deleted: true });
+    if (sb.repasses.recusar) await sb.repasses.recusar(id, resp.motivo || '');
+    else await sb.repasses.upsert({ ...r, deleted: true });
     toast(`Pedido de ${quem} recusado`);
     document.getElementById('pedido-overlay')?.remove();
     document.getElementById('notif-overlay')?.remove();
@@ -5856,6 +5880,17 @@ async function renderNotasApagadas() {
         .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
     } catch (_) { daEquipe = []; }
   }
+  /* 18/11/2026 (Lote 3): pedidos de repasse/recarga recusados nos últimos 60 dias, com quem recusou e o motivo. O gestor vê
+     os da equipe; o colaborador, os dele (o servidor filtra). Só leitura: pedido recusado não se restaura — faz-se outro. */
+  let recusados = [];
+  if (sb && navigator.onLine && !_ehContabilidade()) {
+    try {
+      const desde = Date.now() - 60 * 864e5;
+      recusados = (await sb.repasses.list({ deleted: '1' }) || [])
+        .filter(x => x && x.recusado_em && Date.parse(x.recusado_em) >= desde)
+        .sort((a, b) => String(b.recusado_em).localeCompare(String(a.recusado_em)));
+    } catch (_) { recusados = []; }
+  }
   const fmtHora = d => {
     try { return new Date(d).toLocaleString('pt-BR', { timeZone: FusoBR.TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return '—'; }
@@ -5877,7 +5912,7 @@ async function renderNotasApagadas() {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
   if (ns.length + daEquipe.length > 3) html += `<div class="lix-busca"><input class="inp" type="search" placeholder="🔍 Buscar empresa, pessoa ou valor" autocomplete="off" aria-label="Buscar nos apagados" oninput="filtrarApagados(this.value)"></div>`;
 
-  if (!ns.length && !daEquipe.length) {
+  if (!ns.length && !daEquipe.length && !recusados.length) {
     html += `<div class="empty-state">
       <div class="empty-icon">🗑️</div>
       <p>Nenhum lançamento apagado por aqui.</p>
@@ -5971,6 +6006,23 @@ async function renderNotasApagadas() {
       <div class="notas-list notas-eq-lista" id="notas-faturamento-apagadas">${doFaturamento.map(cartaoEquipe).join('')}</div>`;
     if (dosColaboradores.length) html += `${tituloSecao('👥 Apagadas pela equipe', dosColaboradores)}
       <div class="notas-list notas-eq-lista" id="notas-equipe-apagadas">${dosColaboradores.map(cartaoEquipe).join('')}</div>`;
+  }
+
+  if (recusados.length) {
+    const nomeR = uid => equipePorId[uid]?.nome || (uid === user.id ? (user.nome || 'você') : 'gestão');
+    html += `${tituloApag('🚫 Pedidos recusados', recusados)}
+      <div class="notas-list" id="pedidos-recusados">${recusados.map(x => `
+      <div class="nota-card" data-tipo="${_at(x.tipo)}" data-busca="${_at([nomeR(x.user_id), nomeR(x.recusado_por), x.motivo_recusa, x.tipo, brl(Number(x.valor) || 0)].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())}">
+        <div class="nota-head">
+          <span class="tipo-badge tipo-${_at(x.tipo)}">${esc(x.tipo)}</span>
+          <span class="subtipo-tag">${x.destino === 'recarga' ? '💳 Pedido de recarga' : '💰 Pedido de repasse'}</span>
+          <span class="nota-data">${fmtHora(x.recusado_em)}</span>
+        </div>
+        <div class="nota-body">
+          <div class="nota-obs">${x.user_id !== user.id ? `👤 Pedido de <b>${esc(nomeR(x.user_id))}</b><br>` : ''}🚫 Recusado por <b>${esc(nomeR(x.recusado_por))}</b>${x.motivo_recusa ? `<br>💬 ${esc(x.motivo_recusa)}` : ''}</div>
+        </div>
+        <div class="nota-foot"><span class="nota-valor">${brl(x.valor)}</span></div>
+      </div>`).join('')}</div>`;
   }
 
   _selNotas.clear();

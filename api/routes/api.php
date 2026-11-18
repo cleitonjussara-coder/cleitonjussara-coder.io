@@ -102,6 +102,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::get('/repasses', [RepasseController::class, 'index']);
     Route::put('/repasses/{id}', [RepasseController::class, 'upsert']);
     Route::patch('/repasses/{id}/atendido', [RepasseController::class, 'atendido']);     // 1ª etapa: gestor marca o pedido como pago (21/09/2026)
+    Route::patch('/repasses/{id}/recusar', [RepasseController::class, 'recusar']);       // gestor recusa o pedido com motivo; o colaborador é avisado (18/11/2026)
     Route::patch('/repasses/{id}/recebi', [RepasseController::class, 'recebi']);         // CV: o próprio colaborador confirma que o pedido caiu, podendo mudar o valor (24/10/2026)
     Route::patch('/repasses/{id}/confirmar', [RepasseController::class, 'confirmar']);   // 2ª etapa: colaborador confirma o recebimento (23/09/2026)
 

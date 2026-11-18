@@ -46,6 +46,7 @@ class Repasse extends Model
             'deleted' => 'boolean',
             'atendido_em' => 'datetime',
             'confirmado_em' => 'datetime',
+            'recusado_em' => 'datetime',   // 18/11/2026: recusado_*/motivo_recusa fora do fillable, só a rota /recusar grava
         ];
     }
 

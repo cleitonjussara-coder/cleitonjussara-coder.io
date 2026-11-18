@@ -51,7 +51,7 @@ window.FrotaPainel = (() => {
   /* ── Estado ─────────────────────────────────────────────── */
   const estadoInicial = () => ({
     modo: 'semana', ref: null, ate: null, painel: null,                     // painel
-    h: { periodo: 'semana', de: null, ate: null, user_id: '', veiculo_id: '' },   // filtros do histórico
+    h: { periodo: 'semana', de: null, ate: null, user_id: '', veiculo_id: '', alertas: false },   // filtros do histórico (alertas: só as leituras para conferir, 18/11/2026)
     hd: null,                                                               // histórico carregado
   });
   let S = estadoInicial();
@@ -136,6 +136,8 @@ window.FrotaPainel = (() => {
       .fq-seta{font-size:20px;color:var(--text2);line-height:1;vertical-align:-1px}
       .fq-item .nota-body{padding-bottom:10px}
       .fq-alerta{font-size:13.5px;font-weight:700;color:#fbbf24}
+      .fq-conferir{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;margin:8px 0;padding:11px 12px;border-radius:10px;border:1px solid #fbbf24;background:rgba(251,191,36,.12);color:#fde68a;font-weight:700;font-size:15px;text-align:left;cursor:pointer}
+      .fq-conferir span:last-child{white-space:nowrap}
       .fq-mes{display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding:10px 2px 6px;border-bottom:1.5px solid rgba(185,226,74,.35);
               color:#fff;font-weight:800;font-size:16px;overflow-wrap:anywhere}
       .fq-mes span:last-child{color:#d9f5a0;flex-shrink:0}
@@ -281,6 +283,7 @@ window.FrotaPainel = (() => {
         <button class="btn-mes-nav" onclick="FrotaPainel.andar(1)" aria-label="Próximo período" ${noFim ? 'disabled' : ''}>›</button>
       </div>
       ${p.periodo.atual ? '' : `<div class="fq-hoje"><button class="btn btn-outline btn-sm" onclick="FrotaPainel.irParaHoje()">Voltar para hoje</button></div>`}
+      ${p.alertas ? `<button type="button" class="fq-conferir" onclick="FrotaPainel.verHistorico({doPainel:true,alertas:true})"><span>⚠️ ${p.alertas} leitura${p.alertas === 1 ? '' : 's'} de KM para conferir</span><span>Ver ›</span></button>` : ''}
       ${_kpisHTML(p, g)}
       ${_serieHTML(p)}`;
 
@@ -325,10 +328,10 @@ window.FrotaPainel = (() => {
 
   /* Abre o histórico filtrado por pessoa ou veículo. Vindo do PAINEL, no mesmo período dele; vindo de outro lugar
      (aba Veículos, detalhe), o período do histórico fica como está. */
-  function verHistorico({ user_id = '', veiculo_id = '', doPainel = false }) {
+  function verHistorico({ user_id = '', veiculo_id = '', doPainel = false, alertas = false }) {
     const p = S.painel;
     if (doPainel && p) { S.h.de = p.periodo.ini; S.h.ate = p.periodo.fim; S.h.periodo = _chaveDoIntervalo(S.h.de, S.h.ate); }
-    S.h.user_id = user_id; S.h.veiculo_id = veiculo_id;
+    S.h.user_id = user_id; S.h.veiculo_id = veiculo_id; S.h.alertas = !!alertas;
     S.hd = null;
     Frota.trocarAba('hist');
   }
@@ -376,7 +379,8 @@ window.FrotaPainel = (() => {
     const g = gestor();
     const tudo = S.h.periodo === 'tudo';
     const q = { de: tudo ? undefined : S.h.de, ate: tudo ? undefined : S.h.ate, tudo: tudo ? 1 : undefined,
-                veiculo_id: S.h.veiculo_id || undefined, user_id: g ? (S.h.user_id || undefined) : undefined, limite, offset: offset || undefined };
+                veiculo_id: S.h.veiculo_id || undefined, user_id: g ? (S.h.user_id || undefined) : undefined, limite, offset: offset || undefined,
+                alertas: S.h.alertas ? 1 : undefined };
     if (offset) {                                    // "carregar mais": sem cópia guardada; se falhar, a lista que já está na tela fica
       try {
         const r = await sb.frota.historico(q);
@@ -389,12 +393,12 @@ window.FrotaPainel = (() => {
       return;
     }
     try {
-      const filtros = { user_id: S.h.user_id, veiculo_id: S.h.veiculo_id, periodo: S.h.periodo };
+      const filtros = { user_id: S.h.user_id, veiculo_id: S.h.veiculo_id, periodo: S.h.periodo, alertas: S.h.alertas };
       const r = await _buscar(_chaveHist(), () => sb.frota.historico(q).then(x => ({ ...x, _f: filtros })));
       if (gen !== _gen) return;
       if (r._off) {                                      // a cópia guardada vale com os filtros dela
         S.h.de = r.de; S.h.ate = r.ate; S.h.periodo = r._f?.periodo === 'tudo' ? 'tudo' : _chaveDoIntervalo(r.de, r.ate);
-        S.h.user_id = g ? (r._f?.user_id || '') : ''; S.h.veiculo_id = r._f?.veiculo_id || '';
+        S.h.user_id = g ? (r._f?.user_id || '') : ''; S.h.veiculo_id = r._f?.veiculo_id || ''; S.h.alertas = !!r._f?.alertas;
       } else if (tudo) {                                 // "Escolher datas…" depois de ver tudo começa do mesmo intervalo
         S.h.de = r.de; S.h.ate = r.ate;
       }
@@ -453,6 +457,9 @@ window.FrotaPainel = (() => {
         <input class="inp" type="date" value="${at(S.h.de)}" max="${at(S.h.ate)}" onchange="FrotaPainel.datas('de', this.value)" aria-label="De">
         <input class="inp" type="date" value="${at(S.h.ate)}" min="${at(S.h.de)}" onchange="FrotaPainel.datas('ate', this.value)" aria-label="Até">
       </div>` : ''}
+      ${S.h.alertas
+        ? `<button type="button" class="fq-conferir" onclick="FrotaPainel.soAlertas(false)"><span>⚠️ Só as leituras para conferir</span><span>✕ Ver todas</span></button>`
+        : d.alertas ? `<button type="button" class="fq-conferir" onclick="FrotaPainel.soAlertas(true)"><span>⚠️ ${d.alertas} leitura${d.alertas === 1 ? '' : 's'} de KM para conferir</span><span>Ver ›</span></button>` : ''}
       <div class="fq-resumo">${d.total} registro${d.total === 1 ? '' : 's'} · <b>${kmFmt(d.total_km)} km</b>${doPeriodo}</div>
       <div class="fq-lista">
         ${pend.length ? `<div class="fq-dia"><span>⏳ Aguardando envio</span><span></span></div>${pend.map(_cartaoPendente).join('')}` : ''}
@@ -551,6 +558,8 @@ window.FrotaPainel = (() => {
     S.hd = null; Frota.trocarAba('hist');
   }
   function filtrar(campo, valor) { S.h[campo] = valor; S.hd = null; Frota.trocarAba('hist'); }
+  /* 18/11/2026 (Lote 3): liga/desliga "só as leituras para conferir" (salto grande ou menor que a anterior) */
+  function soAlertas(on) { S.h.alertas = !!on; S.hd = null; Frota.trocarAba('hist'); }
   function maisHist() { if (S.hd?.tem_mais) _carregarHist(S.hd.itens.length); }
 
   /* Depois de corrigir/excluir uma leitura: refaz o que está na tela SEM voltar ao topo e sem perder as páginas já
@@ -650,7 +659,7 @@ window.FrotaPainel = (() => {
   return {
     painel, historico, abrir, fecharDetalhe, atualizar,
     modo, escolher, andar, irParaHoje, verHistorico, repintarPlanilhas,
-    periodo, datas, filtrar, maisHist, editar, excluir, doDetalhe,
+    periodo, datas, filtrar, soAlertas, maisHist, editar, excluir, doDetalhe,
     registro: id => porId.get(id) || null,
     cancelar() { _gen++; },                                           // trocou de aba: resposta em voo não pinta mais nada
     invalidar() { S.hd = null; S.painel = null; },                    // algo mudou (salvou, excluiu): a próxima abertura busca de novo

@@ -40,6 +40,7 @@ class KmPainelController extends Controller
             'limite' => ['nullable', 'integer', 'min:1', 'max:200'],
             'offset' => ['nullable', 'integer', 'min:0'],
             'tudo' => ['nullable', 'boolean'],
+            'alertas' => ['nullable', 'boolean'],
         ]);
         /* "Todo o histórico" (22/10/2026): da primeira leitura que existe até hoje (ou até a última, se alguma antiga
            tiver ficado à frente); de/ate são ignorados. A página continua sendo `limite` — o app carrega por partes. */
@@ -65,6 +66,12 @@ class KmPainelController extends Controller
         $lista = array_values(array_filter($visiveis, fn ($l) => (! $u->veTudo() || empty($d['user_id']) || $l['user_id'] === $d['user_id'])
             && (empty($d['veiculo_id']) || $l['veiculo_id'] === $d['veiculo_id'])));
         usort($lista, fn ($a, $b) => [$b['data'], $b['odometro'], (string) $b['criado'], $b['id']] <=> [$a['data'], $a['odometro'], (string) $a['criado'], $a['id']]);
+        /* 18/11/2026 (Lote 3): leituras para conferir (salto grande ou menor que a anterior) com os filtros da tela;
+           `alertas=1` lista só elas. Corrigida a leitura, o alerta some sozinho — é recalculado a cada chamada. */
+        $comAlerta = count(array_filter($lista, fn ($l) => ! empty($l['alerta'])));
+        if (! empty($d['alertas'])) {
+            $lista = array_values(array_filter($lista, fn ($l) => ! empty($l['alerta'])));
+        }
 
         $nomes = Colaborador::query()->pluck('nome', 'id');
         $veiculos = Veiculo::query()->orderBy('placa')->get(['id', 'placa', 'modelo', 'ativo'])->keyBy('id');
@@ -75,6 +82,7 @@ class KmPainelController extends Controller
             /* no histórico inteiro, "de" é a leitura mais antiga do que a pessoa vê com esses filtros (o "desde" da tela) */
             'de' => $tudo ? ($lista ? end($lista)['data'] : $ate) : $de, 'ate' => $ate, 'tudo' => $tudo,
             'total' => count($lista), 'total_km' => array_sum(array_column($lista, 'km')),
+            'alertas' => $comAlerta, 'so_alertas' => ! empty($d['alertas']),
             /* km de cada dia do filtro inteiro: o cabeçalho do dia não pode depender de quanto já foi carregado */
             'por_dia' => $this->kmPorDia($lista),
             'tem_mais' => $offset + $limite < count($lista),
@@ -230,6 +238,8 @@ class KmPainelController extends Controller
             'anterior' => $ant, 'comparado_com' => $cmp, 'comparacao_parcial' => $cmp !== $ant,
             'total' => $tot['km'], 'total_anterior' => $totAnt['km'], 'variacao_pct' => KmCalculo::variacao($tot['km'], $totAnt['km']),
             'leituras' => $tot['leituras'], 'dias_decorridos' => $dias,
+            /* 18/11/2026: leituras do período mostrado que pedem conferência (o mesmo alerta do Histórico) */
+            'alertas' => count(array_filter($vis, fn ($l) => ! empty($l['alerta']) && $l['data'] >= $per['ini'] && $l['data'] <= $per['fim'])),
             'veiculos_rodaram' => $veiculosRodaram, 'veiculos_ativos' => $u->veTudo() ? $veiculos->where('ativo', true)->count() : null,
             'contexto' => [
                 'dia' => KmCalculo::somar($vis, $ctx['dia']) + $ctx['dia'],

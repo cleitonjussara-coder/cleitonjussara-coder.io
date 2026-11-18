@@ -1416,12 +1416,12 @@ window.Gestor = (() => {
         + `<div class="cdet-kpi-det-btns">${kpiLancar('recarga')}</div>`) : '';
       const sdMes = t => centavos(r(t) - g(t));
       const sdAcum = t => centavos((t === 'RDM' ? antRDM : antRDA) + r(t) - g(t));
-      const detSaldo = kpiDet('kpi-saldo', `Saldo RDM e RDA · ${MES_TXT}`,
+      const detSaldo = kpiDet('kpi-saldo', `Resultado do mês e saldo acumulado · ${MES_TXT}`,
         `<table class="cdet-plan-meses"><thead><tr><th></th><th>RDM</th><th>RDA</th></tr></thead><tbody>
           ${acumOk ? `<tr><td>Saldo anterior</td><td>${brl(centavos(antRDM))}</td><td>${brl(centavos(antRDA))}</td></tr>` : ''}
           <tr><td>+ Recebido no mês</td><td>${brl(r('RDM'))}</td><td>${brl(r('RDA'))}</td></tr>
           <tr><td>− Gasto no mês</td><td>${brl(g('RDM'))}</td><td>${brl(g('RDA'))}</td></tr>
-          <tr><td><b>= Saldo do mês</b></td><td><b>${brl(sdMes('RDM'))}</b></td><td><b>${brl(sdMes('RDA'))}</b></td></tr>
+          <tr><td><b>= Resultado do mês</b></td><td><b>${brl(sdMes('RDM'))}</b></td><td><b>${brl(sdMes('RDA'))}</b></td></tr>
           ${acumOk ? `<tr><td><b>= Saldo acumulado</b></td><td><b>${brl(sdAcum('RDM'))}</b></td><td><b>${brl(sdAcum('RDA'))}</b></td></tr>` : ''}
         </tbody></table>
         <div class="cdet-kpi-det-sub">${acumOk ? 'Saldo acumulado = saldo anterior + recebido − gasto. Negativo: a empresa ainda deve.' : 'Histórico indisponível: só o mês.'}</div>
@@ -1496,8 +1496,8 @@ window.Gestor = (() => {
             `<span class="cdet-kpi-ico">💰</span><span class="cdet-kpi-lbl">${ehCVcolab ? 'Repasse recebido' : 'Recebido'}</span><span class="cdet-kpi-val">${brl(rec)}</span><span class="cdet-kpi-sub">${pendReps ? pendReps + ' pedido' + (pendReps > 1 ? 's' : '') + ' pendente' + (pendReps > 1 ? 's' : '') : `repasses de ${MESES[mes - 1]}`}</span>${_splitRDMRDA(r('RDM'), r('RDA'))}`)}
           ${ehCVcolab ? kpiToque('kpi-recarga', 'Ver as recargas do cartão do mês',
             `<span class="cdet-kpi-ico">💳</span><span class="cdet-kpi-lbl">Recarga do cartão</span><span class="cdet-kpi-val">${brl(recargaTotal)}</span><span class="cdet-kpi-sub">${recargas.length ? recargas.length + ' recarga' + (recargas.length > 1 ? 's' : '') + ' no mês' : 'nenhuma no mês'}</span>${_splitRDMRDA(soma(recargas.filter(x => x.tipo === 'RDM')), soma(recargas.filter(x => x.tipo === 'RDA')))}`) : ''}
-          ${planilhaCV ? '' : kpiToque('kpi-saldo', 'Ver o saldo RDM e RDA separados',
-            `<span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Saldo do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">${acumOk ? `acumulado ${brl(acumTotal)}` : 'histórico indisponível'}</span>${_splitRDMRDA(sdMes('RDM'), sdMes('RDA'))}`, saldo < 0 ? 'neg' : '')}
+          ${planilhaCV ? '' : kpiToque('kpi-saldo', 'Ver o resultado do mês e o saldo acumulado, RDM e RDA separados',
+            `<span class="cdet-kpi-ico">📊</span><span class="cdet-kpi-lbl">Resultado do mês</span><span class="cdet-kpi-val">${brl(saldo)}</span><span class="cdet-kpi-sub">recebido − gasto em ${MESES[mes - 1]}${acumOk ? ` · saldo acumulado ${brl(acumTotal)}` : ''}</span>${_splitRDMRDA(sdMes('RDM'), sdMes('RDA'))}`, saldo < 0 ? 'neg' : '')}
           ${kpiToque('kpi-fat', 'Ver o faturamento do mês por categoria',
             `<span class="cdet-kpi-ico">🧮</span><span class="cdet-kpi-lbl">Faturamento do mês</span><span class="cdet-kpi-val">${brl(faturamentoMes)}</span><span class="cdet-kpi-sub">${MESES_LONGO[mes - 1]} · todas as despesas</span>${_splitRDMRDA(soma(notas.filter(n => n.tipo === 'RDM')), soma(notas.filter(n => n.tipo === 'RDA')))}`)}
           <div class="cdet-kpi ${semFoto || semValor ? 'warn link' : ''}" ${semFoto || semValor ? `role="button" tabindex="0" data-filtro="pend" title="Listar só as notas sem foto ou sem valor" onclick="Gestor.filtrarNotas('pend')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Gestor.filtrarNotas('pend')}"` : ''}><span class="cdet-kpi-ico">${semFoto || semValor ? '⚠️' : '✅'}</span><span class="cdet-kpi-lbl">Pendências</span><span class="cdet-kpi-val">${semFoto + semValor}</span><span class="cdet-kpi-sub">${semFoto} sem foto · ${semValor} sem valor</span>${semFoto || semValor ? '<span class="cdet-kpi-ver">Ver quais ›</span>' : ''}</div>
