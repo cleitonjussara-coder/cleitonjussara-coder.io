@@ -71,6 +71,7 @@ window.LoteNotas = (() => {
       <div class="form-body">
         ${_ehFaturamento() ? `<div class="lote-quem">🏢 ${esc(_quem())}</div>` : ''}
         <div class="lote-regra"><b>Uma nota por foto.</b> Cada foto (ou arquivo) vira um lançamento. Não junte várias notas na mesma foto.</div>
+        ${_ehFaturamento() ? '' : '<div class="lote-regra lote-regra-dia">📅 <b>Lance as notas todo dia</b>, no dia do gasto. Esta opção é para agilizar, não para juntar notas: evite deixar acumular.</div>'}
         <div class="lote-drop" id="lote-drop" tabindex="0">
           <div class="lote-drop-ico">🗂️</div>
           <div><b>Fotografe as notas uma atrás da outra</b> ou escolha fotos, PDFs e XMLs — vários de uma vez.</div>
