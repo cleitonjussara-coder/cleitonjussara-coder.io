@@ -140,11 +140,13 @@ window.LoteNotas = (() => {
   /* ── câmera do app em sequência ── */
   function fotografar() {
     if (S.itens.length >= MAX) { toast(`Cabem ${MAX} notas por vez`, 'err'); return; }
-    abrirCameraNota(null, {
+    S.camera = true;
+    const soltar = () => { S.camera = false; _pintar(); _lerProximas(); };
+    abrirCameraNota(soltar, {
       sequencia: true, scanner: true, inputReserva: 'lote-cam',
       dica: 'Enquadre a nota — a próxima foto sai quando você trocar de nota',
       aoFoto: f => adicionar([f]),
-      aoConcluir: n => { _pintar(); if (n) toast(`${_plural(n, 'foto guardada', 'fotos guardadas')} — o app está lendo`); },
+      aoConcluir: n => { soltar(); if (n) toast(`${_plural(n, 'foto guardada', 'fotos guardadas')} — o app está lendo`); },
     });
   }
 
@@ -182,6 +184,10 @@ window.LoteNotas = (() => {
   }
 
   function _lerProximas() {
+    /* 21/11/2026: com a câmera em sequência NA TELA a leitura espera — junto, a prévia travava no celular. Só vale enquanto
+       a câmera do app está aberta: se caiu na câmera do sistema (reserva) ou fechou por outro caminho, a leitura segue. */
+    if (S.camera && _el('cam-nota-overlay')?.style.display === 'flex') return;
+    S.camera = false;
     while (S.lendo < LEITURAS) {
       const it = S.itens.find(i => i.status === 'fila');
       if (!it) return;
@@ -306,7 +312,7 @@ window.LoteNotas = (() => {
       ? `<button type="button" class="btn btn-primary btn-full" onclick="LoteNotas.conferir()">🔍 Conferir e enviar (${prontas} pronta${prontas > 1 ? 's' : ''})</button>
          <button type="button" class="btn btn-outline btn-full" style="margin-top:8px" onclick="LoteNotas.comecar()">✍️ Lançar uma por uma (formulário completo)</button>
          ${_lendo() ? '<div class="lote-dica">As outras continuam sendo lidas enquanto você confere.</div>' : ''}`
-      : _lendo() ? '<div class="lote-dica">Lendo as notas…</div>'
+      : _lendo() ? `<div class="lote-dica">${S.camera ? 'As fotos serão lidas quando você concluir a câmera.' : 'Lendo as notas…'}</div>`
       : n && salvas ? `<div class="lote-dica">Pronto: ${_plural(salvas, 'nota lançada', 'notas lançadas')}.</div><button type="button" class="btn btn-outline btn-full" onclick="LoteNotas.fechar(true)">Concluir</button>`
       : '';
   }
