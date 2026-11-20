@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 647;
+const APP_BUILD = 649;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9457,7 +9457,7 @@ let _camNotaOpts = {};
 /* 20/11/2026 (lançamento de várias notas): sequencia = a câmera fica aberta depois de cada foto, com "✔ Concluir (N)".
    O contorno automático só tira a próxima depois que a nota anterior saiu da tela (_camSeqEsperaTroca): sem isso ele
    fotografava de novo a mesma nota, que ainda estava parada na frente da câmera. */
-let _camSeqN = 0, _camSeqEsperaTroca = false;
+let _camSeqN = 0, _camSeqEsperaTroca = false, _camSeqViuParado = false, _camSeqMexeuEm = 0;
 function _pintarConcluirSeq() {
   const b = $('cam-nota-concluir');
   if (b) b.textContent = _camSeqN ? `✔ Concluir (${_camSeqN})` : '✔ Concluir';
@@ -9615,14 +9615,26 @@ function _iniciarScannerNota() {
   _camNotaScanner = Scanner.aoVivo(video, guia, {
     automatico: true,
     aoEstado: e => {
-      if (_camSeqEsperaTroca && !texto[e]) _camSeqEsperaTroca = false;   // a nota anterior saiu da tela: libera o automático
+      /* libera o automático quando a nota anterior sai da tela (procura/cortada) OU quando o contorno, que estava parado
+         sobre ela, volta a se mexer (parado → achou): é a troca feita no mesmo lugar, sem a mesa aparecer vazia (21/11/2026,
+         "a câmera fica travando" — esperava a mesa vazia e não tirava a próxima) */
+      if (_camSeqEsperaTroca) {
+        const soltar = () => { _camSeqEsperaTroca = false; _camSeqViuParado = false; _camSeqMexeuEm = 0; };
+        if (e === 'procura' || e === 'cortada') soltar();                                  // a nota saiu da tela
+        else if (e === 'achou') { if (_camSeqViuParado) _camSeqMexeuEm = Date.now(); }       // parado → mexeu
+        else if (e === 'parado') {
+          /* mexeu por quase 1 s e parou de novo: foi troca de nota. Tremida curta da mão não conta (não repete a mesma nota) */
+          if (_camSeqMexeuEm && Date.now() - _camSeqMexeuEm >= 900) soltar();
+          else { _camSeqViuParado = true; _camSeqMexeuEm = 0; }
+        }
+      }
       if (_camSeqEsperaTroca) return;                                      // mantém "Foto N guardada — troque pela próxima nota"
       if (!dica || _camNotaStream !== stream) return;
       if (texto[e]) { dica.textContent = texto[e]; _camNotaDicaScanner = true; }
       else if (_camNotaDicaScanner) { dica.textContent = _DICA_CAMERA_NOTA; _camNotaDicaScanner = false; }
     },
     aoEstabilizar: () => {
-      if (_camSeqEsperaTroca) return;                                     // ainda é a mesma nota da última foto
+      if (_camSeqEsperaTroca) { _camNotaScanner?.rearmar?.(); return; }  // ainda é a mesma nota da última foto: não gasta o disparo
       const b = $('cam-nota-disparo');
       if (_camNotaStream === stream && b && !b.disabled) dispararCameraNota();
     },
@@ -9761,7 +9773,7 @@ async function dispararCameraNota() {
   if (_camNotaOpts.sequencia) {                // várias notas: guarda a foto e a câmera continua aberta para a próxima
     const f = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
     f.__brancaConferida = true;
-    _camSeqN++; _camSeqEsperaTroca = true; _pintarConcluirSeq();
+    _camSeqN++; _camSeqEsperaTroca = true; _camSeqViuParado = false; _camSeqMexeuEm = 0; _pintarConcluirSeq();
     try { _camNotaOpts.aoFoto(f, { scanner: _camNotaScannerOn }); } catch (_) {}
     const d = $('cam-nota-dica'); if (d) { d.textContent = `📚 Foto ${_camSeqN} guardada — troque pela próxima nota`; _camNotaDicaScanner = true; }
     if (btn) btn.disabled = false; _camNotaScanner?.liberar();

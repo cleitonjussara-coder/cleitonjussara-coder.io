@@ -410,6 +410,9 @@ window.Scanner = (() => {
     return {
       parar() { ativo = false; clearTimeout(timer); try { const g = canvas.getContext('2d'); g.clearRect(0, 0, canvas.width, canvas.height); } catch (_) {} },
       setAutomatico(b) { auto = !!b; },
+      /* 21/11/2026: quem recebeu o aoEstabilizar e NÃO disparou (câmera em sequência esperando a troca de nota) devolve o
+         disparo, sem zerar o contorno — sem isto o automático ficava gasto e a câmera "travava" em "tirando a foto" */
+      rearmar() { disparou = false; },
       /* depois de um disparo que a pessoa recusou (foto borrada): espera um tempo antes de poder disparar sozinho de novo */
       liberar(msEspera = 2500) { disparou = false; desde = Date.now(); ultimo = null; liberaEm = Date.now() + msEspera; },
     };
