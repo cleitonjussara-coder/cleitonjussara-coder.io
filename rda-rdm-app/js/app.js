@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 634;
+const APP_BUILD = 636;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -3382,9 +3382,10 @@ function _janelaOpcoes(titulo, corpo, opcoes) {
 /* Lançar nota de Faturamento (06/11/2026, pedido do Cleiton): mesmo recurso do lançamento comum, QR Code ou sem QR.
    Ver as notas já lançadas ficou no atalho Notas faturadas. */
 const _escolherModoFaturamento = () => _janelaOpcoes('🏢 Lançar nota de Faturamento', 'Como quer lançar?',
-  [['qr', '📷 Nota pelo QR Code'], ['manual', '📝 Nota sem QR']]);
+  [['qr', '📷 Nota pelo QR Code'], ['manual', '📝 Nota sem QR'], ['lote', '📚 Várias notas de uma vez']]);
 
 function _lancarFaturamento(alvo, modo) {
+  if (modo === 'lote') { LoteNotas.abrir(alvo); return; }   // 20/11/2026 (pedido do Paulo)
   if (modo === 'qr') { _faturamentoPreEscolhido = alvo; iniciarQR(); }
   else abrirSeletorTipoLancamento({ ...alvo, _manual: true });
 }
@@ -9261,6 +9262,12 @@ function voltarEscolhaAba() {
   const t = $('tipo-lancamento-titulo'); if (t) t.textContent = 'Selecione a aba para iniciar o lançamento';
   if (_dadosLancamentoPendentes) { delete _dadosLancamentoPendentes._sugestao; delete _dadosLancamentoPendentes.subtipo; delete _dadosLancamentoPendentes._categoriaEscolhida; }
 }
+/* 20/11/2026 (pedido do Paulo): do passo 2 do lançamento comum, várias notas de uma vez com a aba já escolhida */
+function lancarVariasNotas() {
+  const dados = { ...(_dadosLancamentoPendentes || {}) };
+  fecharSeletorTipoLancamento();
+  LoteNotas.abrir(dados);
+}
 function lancarManualComAnexo(modo, opts = {}) {
   const dados = { ...(_dadosLancamentoPendentes || {}) };
   delete dados._manual; delete dados._sugestao; delete dados._direitoParaFoto;
@@ -9701,6 +9708,7 @@ async function abrirFormNota(dados = {}) {
     abrirSeletorTipoLancamento(dados);
     return;
   }
+  window.LoteNotas?.formAberto(dados);   // 20/11/2026: lançamento de várias notas — só a nota aberta pelo lote segue para a próxima
   fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null);
   _fotoAntesDoScanner = null; _fotoAjustada = false; _temFotoOriginal = false;
   _limparPedirFoto();                 // reseta destaque do Passo 2 a cada abertura
@@ -11267,7 +11275,9 @@ async function _salvarNotaInterno() {
     if (sb && navigator.onLine) DB.sync(sb, user.id).then(()=>{}).catch(()=>{});
     /* 30/10/2026 (pedido do Paulo): lançando várias notas de Faturamento, depois de salvar o app oferece lançar a próxima
        para a mesma pessoa (ou sem colaborador), sem voltar ao menu. */
-    if (!_idEdicao && saved.pagamento === 'empresa') {
+    /* 20/11/2026: nota aberta pelo lançamento de várias notas — o lote abre a próxima (sem a pergunta abaixo) */
+    if (!_idEdicao && window.LoteNotas?.salvou(saved)) { /* próxima nota do lote */ }
+    else if (!_idEdicao && saved.pagamento === 'empresa') {
       const dono = saved.user_id || null;
       setTimeout(async () => {
         const mais = await pedirConfirmacao({

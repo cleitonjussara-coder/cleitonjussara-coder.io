@@ -18,9 +18,13 @@ const doApp = [
   "_ehCV", "_ehContabilidade", "_grupoDoRepasse", "_gruposDoRepasse", "_itensMenu", "_mesAnoDaData",
   "_notaDoCartao", "_notasComPendencia", "_repasseNoGrupo", "_veEquipe", "abrirAjuda", "chipDelta", "editarNota",
   "fecharMenu", "irParaNotas", "mudarAnoEquipe", "salvarCorrecaoRepasse", "verCartaoDoColaborador", "verFoto",
+  // 20/11/2026: lote-notas.js (lançar várias notas) usa a leitura e o formulário da nota do app.js
+  "CATEGORIAS_SO_FATURAMENTO", "_cortadoBarra", "_ehImagemExt", "_endireitarNota", "_extDoArquivo", "_lerNota",
+  "_renderPdfPagina1", "_setFotoRender", "abrirFormNota", "atualizarPreviewFoto", "extrairDadosDaFoto",
+  "extrairDadosDoXML", "fecharFormNota",
 ];
 // Também do app.js, mas são `let`: os outros arquivos podem reatribuir.
-const estadoDoApp = ["equipePorId", "filAno", "filMes", "notas", "notasEquipe", "_fotoSeq", "repassesEquipe", "sb", "user", "viewAtual"];
+const estadoDoApp = ["fotoBlob", "fotoExt", "fotoOriginal", "fotoURL", "equipePorId", "filAno", "filMes", "notas", "notasEquipe", "_fotoSeq", "repassesEquipe", "sb", "user", "viewAtual"];
 
 const nomes = (lista, modo) => Object.fromEntries(lista.map(n => [n, modo]));
 
@@ -62,6 +66,7 @@ export default [
         Frota: "readonly",
         Scanner: "readonly",
         Fechamento: "readonly",   // window.Fechamento de fechamento.js
+        LoteNotas: "readonly",    // window.LoteNotas de lote-notas.js (20/11/2026)
         ...nomes(doApp, "readonly"),
         ...nomes(estadoDoApp, "writable"),
       }
