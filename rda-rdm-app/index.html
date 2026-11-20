@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=636">
+  <link rel="manifest" href="manifest.json?v=638">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -314,6 +314,34 @@ body.tem-banner-sync #app-header{padding-top:2px}   /* o banner de envio já cob
 #nf-lote-barra{background:#e8f1fb;border:1px solid #b5d4f4;border-radius:12px;padding:10px 12px;color:#0c447c}
 .nf-lote-tit{font-weight:700;font-size:16px}.nf-lote-sub{font-size:13px;overflow-wrap:anywhere}
 .nf-lote-bts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.cam-nota-alt.cam-nota-concluir{background:#3b6d11;color:#fff;border-color:#3b6d11;font-weight:800}
+.lote-conf{position:absolute;inset:0;z-index:2;background:var(--bg);display:flex;flex-direction:column}
+.lote-conf .form-hdr h3{flex:1;text-align:center}
+.lote-conf-selo{font-size:13px;font-weight:700;padding:3px 9px;border-radius:999px;background:#eaf6e4;color:#27500a}
+.lote-conf-selo.aviso{background:#faeeda;color:#854f0b}
+.lote-conf-corpo{flex:1;overflow-y:auto;display:grid;grid-template-columns:minmax(0,1fr);align-content:start}
+@media (min-width:760px){.lote-conf-corpo{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}.lote-conf-foto{height:calc(100vh - 230px)!important}}
+.lote-conf-foto{position:relative;background:#222;height:42vh;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
+.lote-conf-foto img{max-width:100%;max-height:100%;object-fit:contain}
+.lote-conf-semfoto{color:#ddd;font-size:15px}
+.lote-conf-zoom{position:absolute;right:10px;bottom:8px;color:#ddd;font-size:12.5px;background:rgba(0,0,0,.45);padding:2px 8px;border-radius:8px}
+.lote-conf-dados{padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lote-conf-campo{display:flex;flex-direction:column;gap:2px;font-size:15px;min-width:0}.lote-conf-campo span{font-size:12.5px;color:var(--text2)}
+.lote-conf-arq{font-weight:400;font-size:13.5px;overflow-wrap:anywhere;color:var(--text2)}
+.lote-conf-grade{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lote-conf-grade label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--text2);min-width:0}
+.lote-conf-grade .inp{min-width:0;width:100%}
+.inp.lote-falta{border-color:#ef9f27;background:#fff8ec}
+.lote-conf-bts{display:flex;gap:8px;flex-wrap:wrap}
+.lote-conf-nav{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border)}
+.lote-conf-nav span{font-size:12.5px;color:var(--text2);text-align:center}
+.lote-conf-nav .btn{white-space:nowrap}
+@media (max-width:420px){.lote-conf-nav span{display:none}.lote-conf-foto{height:36vh}}
+.lote-conf-envio{padding:0 14px 14px}
+.lote-zoom{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;overflow:auto}
+.lote-zoom img{max-width:100%;max-height:100%;object-fit:contain}
+.lote-zoom button{position:fixed;top:12px;right:12px}
+.lote-progresso{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.7);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-size:17px;font-weight:700}
 /* 18/11/2026: pedido recusado no sino do colaborador */
 .notif-item.recusado{background:#fcebeb;border:1px solid #f09595;border-radius:10px;padding:10px;margin:6px 0}
 .notif-item.recusado .notif-tit{color:#a32d2d}
@@ -2581,7 +2609,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=636" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=638" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2739,6 +2767,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <button type="button" class="cam-nota-disparo" id="cam-nota-disparo" aria-label="Tirar foto"
             onclick="dispararCameraNota()"></button>
     <div class="cam-nota-alts">
+      <button type="button" class="btn btn-sm cam-nota-alt cam-nota-concluir" id="cam-nota-concluir" style="display:none"
+              onclick="concluirCameraSequencia()">✔ Concluir</button>
       <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-flash" style="display:none"
               onclick="alternarFlashNota()">🔦 Flash: Automático</button>
       <button type="button" class="btn btn-sm cam-nota-alt" id="cam-nota-auto" style="display:none"
@@ -3334,44 +3364,44 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=636"></script>
-<script defer src="js/db.js?v=636"></script>
-<script defer src="js/nfce.js?v=636"></script>
-<script defer src="js/sefaz.js?v=636"></script>
-<script defer src="js/brasilapi.js?v=636"></script>
-<script defer src="js/ocr.js?v=636"></script>
-<script defer src="js/scanner.js?v=636"></script>
-<script defer src="js/foto-branca.js?v=636"></script>
-<script defer src="js/recorte.js?v=636"></script>
-<script defer src="js/editor-foto.js?v=636"></script>
-<script defer src="js/lote-notas.js?v=636"></script>
-<script defer src="js/excel.js?v=636"></script>
-<script defer src="js/gestor.js?v=636"></script>
-<script defer src="js/frota.js?v=636"></script>
-<script defer src="js/frota-painel.js?v=636"></script>
-<script defer src="js/frota-planilha.js?v=636"></script>
-<script defer src="js/ponto.js?v=636"></script>
-<script defer src="js/campo.js?v=636"></script>
-<script defer src="js/rastreio.js?v=636"></script>
-<script defer src="js/repasses-equipe.js?v=636"></script>
-<script defer src="js/fechamento.js?v=636"></script>
-<script defer src="js/busca.js?v=636"></script>
-<script defer src="js/gdrive.js?v=636"></script>
+<script defer src="js/api.js?v=638"></script>
+<script defer src="js/db.js?v=638"></script>
+<script defer src="js/nfce.js?v=638"></script>
+<script defer src="js/sefaz.js?v=638"></script>
+<script defer src="js/brasilapi.js?v=638"></script>
+<script defer src="js/ocr.js?v=638"></script>
+<script defer src="js/scanner.js?v=638"></script>
+<script defer src="js/foto-branca.js?v=638"></script>
+<script defer src="js/recorte.js?v=638"></script>
+<script defer src="js/editor-foto.js?v=638"></script>
+<script defer src="js/lote-notas.js?v=638"></script>
+<script defer src="js/excel.js?v=638"></script>
+<script defer src="js/gestor.js?v=638"></script>
+<script defer src="js/frota.js?v=638"></script>
+<script defer src="js/frota-painel.js?v=638"></script>
+<script defer src="js/frota-planilha.js?v=638"></script>
+<script defer src="js/ponto.js?v=638"></script>
+<script defer src="js/campo.js?v=638"></script>
+<script defer src="js/rastreio.js?v=638"></script>
+<script defer src="js/repasses-equipe.js?v=638"></script>
+<script defer src="js/fechamento.js?v=638"></script>
+<script defer src="js/busca.js?v=638"></script>
+<script defer src="js/gdrive.js?v=638"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=636"></script>
+<script defer src="js/svelte-ajuda.js?v=638"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=636"></script>
+<script defer src="js/svelte-historico.js?v=638"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=636"></script>
+<script defer src="js/svelte-arquivos.js?v=638"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=636"></script>
-<script defer src="js/app.js?v=636"></script>
-<script defer src="js/instalar.js?v=636"></script>
+<script defer src="js/svelte-perfil.js?v=638"></script>
+<script defer src="js/app.js?v=638"></script>
+<script defer src="js/instalar.js?v=638"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=636').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=638').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez

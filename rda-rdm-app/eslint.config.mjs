@@ -21,7 +21,7 @@ const doApp = [
   // 20/11/2026: lote-notas.js (lançar várias notas) usa a leitura e o formulário da nota do app.js
   "CATEGORIAS_SO_FATURAMENTO", "_cortadoBarra", "_ehImagemExt", "_endireitarNota", "_extDoArquivo", "_lerNota",
   "_renderPdfPagina1", "_setFotoRender", "abrirFormNota", "atualizarPreviewFoto", "extrairDadosDaFoto",
-  "extrairDadosDoXML", "fecharFormNota",
+  "extrairDadosDoXML", "fecharFormNota", "abrirCameraNota", "salvarNota", "_at",
 ];
 // Também do app.js, mas são `let`: os outros arquivos podem reatribuir.
 const estadoDoApp = ["fotoBlob", "fotoExt", "fotoOriginal", "fotoURL", "equipePorId", "filAno", "filMes", "notas", "notasEquipe", "_fotoSeq", "repassesEquipe", "sb", "user", "viewAtual"];
