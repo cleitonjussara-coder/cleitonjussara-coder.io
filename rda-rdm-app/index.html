@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PETERMANN - DESPESAS">
-  <link rel="manifest" href="manifest.json?v=636">
+  <link rel="manifest" href="manifest.json?v=637">
   <link rel="apple-touch-icon" href="icon-192.png?v=160">
   <link rel="icon" type="image/png" href="icon-192.png?v=160">
   <title>PETERMANN - DESPESAS</title>
@@ -289,6 +289,31 @@ body.tem-banner-sync #app-header{padding-top:2px}   /* o banner de envio já cob
 .notif-tit{font-weight:700;font-size:15.5px;overflow-wrap:anywhere}
 .notif-sub{font-size:14px;color:var(--text2);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}
 .notif-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* 20/11/2026: lançamento de várias notas (js/lote-notas.js) */
+.lote-quem{font-weight:700;font-size:15px;color:var(--text2)}
+.lote-drop{border:2px dashed var(--border);border-radius:14px;padding:18px 14px;text-align:center;font-size:15px;line-height:1.45;background:var(--surface2)}
+.lote-drop.sobre{border-color:var(--primary);background:#e8f1fb}
+.lote-drop-ico{font-size:30px}
+.lote-drop-sub{font-size:13.5px;color:var(--text2);margin-top:4px}
+.lote-drop-bts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.lote-comum{border:1px solid var(--border);border-radius:12px;padding:12px}
+.lote-comum-tit{font-weight:700;font-size:14.5px;margin-bottom:8px}.lote-comum-tit span{font-weight:400;color:var(--text2);font-size:13px}
+.lote-comum-grade{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lote-comum-grade label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--text2);min-width:0}
+.lote-comum-fixo{font-size:15px}
+.lote-lista-tit{font-weight:700;font-size:15px;margin:2px 0 6px}
+.lote-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.lote-item-ico{font-size:20px;flex:0 0 auto}
+.lote-item-txt{flex:1;min-width:0}
+.lote-item-nome{font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lote-item-sub{font-size:13px;color:var(--text2);overflow-wrap:anywhere}
+.lote-item.erro .lote-item-sub{color:#a32d2d}.lote-item.conferir .lote-item-sub{color:#854f0b}
+.lote-item-val{font-weight:700;font-size:14.5px;white-space:nowrap}
+.lote-item-x{border:0;background:none;font-size:16px;color:var(--text2);padding:4px 6px;cursor:pointer}
+.lote-dica{font-size:13.5px;color:var(--text2);text-align:center;margin:6px 0}
+#nf-lote-barra{background:#e8f1fb;border:1px solid #b5d4f4;border-radius:12px;padding:10px 12px;color:#0c447c}
+.nf-lote-tit{font-weight:700;font-size:16px}.nf-lote-sub{font-size:13px;overflow-wrap:anywhere}
+.nf-lote-bts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 /* 18/11/2026: pedido recusado no sino do colaborador */
 .notif-item.recusado{background:#fcebeb;border:1px solid #f09595;border-radius:10px;padding:10px;margin:6px 0}
 .notif-item.recusado .notif-tit{color:#a32d2d}
@@ -2556,7 +2581,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
     <!-- 20/09/2026: cabeçalho = logomarca da empresa (topo.png). O "‹ Início"
          saiu daqui (fica o botão fixo no rodapé); tocar na logo também volta. -->
     <header id="app-header">
-      <img class="hdr-banner" src="topo.png?v=636" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
+      <img class="hdr-banner" src="topo.png?v=637" alt="Petermann &amp; Morais — Serviços Agronômicos" onclick="switchView('inicio')">
       <div class="sync-indicator hdr-sync">
         <div class="sync-dot online" id="sync-dot"></div>
         <span id="sync-txt">online</span>
@@ -2804,6 +2829,8 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
           <div class="tipo-lancamento-subtitle">PDF, XML ou imagem — lê a nota</div>
         </button>
       </div>
+      <!-- 20/11/2026 (pedido do Paulo): várias notas de uma vez, lidas antes e lançadas uma por uma -->
+      <button type="button" class="btn btn-outline btn-full" style="margin-top:10px" onclick="lancarVariasNotas()">📚 Várias notas de uma vez</button>
       <!-- Caminho secundário: quem está sem a nota na mão preenche à mão e anexa depois (sem leitura automática) -->
       <button type="button" class="tipo-lancamento-sem-nota" onclick="lancarManualComAnexo(null)">
         Estou sem a nota agora — preencher e anexar depois
@@ -2815,7 +2842,7 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- ═══════════ NOTA FORM ═══════════ -->
 <div id="nota-form-overlay" class="full-overlay">
   <div class="form-hdr">
-    <button class="btn-voltar" aria-label="Voltar" onclick="fecharFormNota()">‹ Voltar</button>
+    <button class="btn-voltar" aria-label="Voltar" onclick="fecharFormNota(); window.LoteNotas?.formFechadoPeloUsuario()">‹ Voltar</button>
     <h3 id="nf-titulo">Nova Nota</h3>
     <button class="btn btn-sm" id="nf-btn-salvar"
             style="background:#fff;color:var(--primary);border-color:#fff"
@@ -3307,43 +3334,44 @@ body.tem-voltar-rodape #btn-inicio-rodape:active{transform:scale(.96)}
 <!-- Supabase e jsQR carregados no boot (essenciais) -->
 <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
 <!-- Tesseract, Quagga e SheetJS sao carregados sob demanda (lazy) p/ nao travar a abertura -->
-<script defer src="js/api.js?v=636"></script>
-<script defer src="js/db.js?v=636"></script>
-<script defer src="js/nfce.js?v=636"></script>
-<script defer src="js/sefaz.js?v=636"></script>
-<script defer src="js/brasilapi.js?v=636"></script>
-<script defer src="js/ocr.js?v=636"></script>
-<script defer src="js/scanner.js?v=636"></script>
-<script defer src="js/foto-branca.js?v=636"></script>
-<script defer src="js/recorte.js?v=636"></script>
-<script defer src="js/editor-foto.js?v=636"></script>
-<script defer src="js/excel.js?v=636"></script>
-<script defer src="js/gestor.js?v=636"></script>
-<script defer src="js/frota.js?v=636"></script>
-<script defer src="js/frota-painel.js?v=636"></script>
-<script defer src="js/frota-planilha.js?v=636"></script>
-<script defer src="js/ponto.js?v=636"></script>
-<script defer src="js/campo.js?v=636"></script>
-<script defer src="js/rastreio.js?v=636"></script>
-<script defer src="js/repasses-equipe.js?v=636"></script>
-<script defer src="js/fechamento.js?v=636"></script>
-<script defer src="js/busca.js?v=636"></script>
-<script defer src="js/gdrive.js?v=636"></script>
+<script defer src="js/api.js?v=637"></script>
+<script defer src="js/db.js?v=637"></script>
+<script defer src="js/nfce.js?v=637"></script>
+<script defer src="js/sefaz.js?v=637"></script>
+<script defer src="js/brasilapi.js?v=637"></script>
+<script defer src="js/ocr.js?v=637"></script>
+<script defer src="js/scanner.js?v=637"></script>
+<script defer src="js/foto-branca.js?v=637"></script>
+<script defer src="js/recorte.js?v=637"></script>
+<script defer src="js/editor-foto.js?v=637"></script>
+<script defer src="js/lote-notas.js?v=637"></script>
+<script defer src="js/excel.js?v=637"></script>
+<script defer src="js/gestor.js?v=637"></script>
+<script defer src="js/frota.js?v=637"></script>
+<script defer src="js/frota-painel.js?v=637"></script>
+<script defer src="js/frota-planilha.js?v=637"></script>
+<script defer src="js/ponto.js?v=637"></script>
+<script defer src="js/campo.js?v=637"></script>
+<script defer src="js/rastreio.js?v=637"></script>
+<script defer src="js/repasses-equipe.js?v=637"></script>
+<script defer src="js/fechamento.js?v=637"></script>
+<script defer src="js/busca.js?v=637"></script>
+<script defer src="js/gdrive.js?v=637"></script>
 <!-- 26/09/2026: primeira tela migrada pra componente (Svelte) — Como usar o app -->
-<script defer src="js/svelte-ajuda.js?v=636"></script>
+<script defer src="js/svelte-ajuda.js?v=637"></script>
 <!-- 27/09/2026: segunda tela migrada — Histórico -->
-<script defer src="js/svelte-historico.js?v=636"></script>
+<script defer src="js/svelte-historico.js?v=637"></script>
 <!-- 27/09/2026: terceira tela migrada — Arquivos (substitui js/arquivos.js) -->
-<script defer src="js/svelte-arquivos.js?v=636"></script>
+<script defer src="js/svelte-arquivos.js?v=637"></script>
 <!-- 27/09/2026: quarta tela migrada — topo do Perfil (foto + nome) -->
-<script defer src="js/svelte-perfil.js?v=636"></script>
-<script defer src="js/app.js?v=636"></script>
-<script defer src="js/instalar.js?v=636"></script>
+<script defer src="js/svelte-perfil.js?v=637"></script>
+<script defer src="js/app.js?v=637"></script>
+<script defer src="js/instalar.js?v=637"></script>
 
 <!-- Service Worker — com auto-atualização -->
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=636').then(reg => {
+    navigator.serviceWorker.register('sw.js?v=637').then(reg => {
       // procura atualização assim que carrega e quando volta o foco
       reg.update().catch(() => {});
       // quando um SW novo assume o controle, recarrega a página uma vez
