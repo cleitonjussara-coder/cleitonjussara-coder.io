@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 640;
+const APP_BUILD = 642;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9033,7 +9033,7 @@ async function _lerNota(blob) {
 
 async function onFotoNota(e) {
   let file = e.target.files[0];
-  if (!file) return;
+  if (!file) { _avisoFotoNaoChegou(); return; }   // 20/11/2026: voltou da câmera sem a foto
   if (!(await _anexoUtilizavel(file, e.target))) return;
   if (await _fotoEmBrancoBarrada(file, e.target)) return;   // 21/10/2026
   try { file = await _normalizarOrientacao(file); } catch (_) {}
@@ -9624,13 +9624,24 @@ function fecharCameraNota(cancelou) {
   _camNotaAoCancelar = null;
   if (cancelou && cb) cb();
 }
-/* Reserva: abre a câmera do sistema (o comportamento antigo). */
+/* Reserva: abre a câmera do sistema (o comportamento antigo).
+   20/11/2026 (relato do Cleiton, Nota pelo QR Code no Android): a câmera do celular às vezes volta SEM entregar a foto ao
+   app (falta de memória). O app tratava como "cancelou" e voltava a pedir a foto, calado — parecia que tirou e não salvou.
+   Agora avisa. Quem cancelou de propósito vê o mesmo aviso, que serve igual. */
+function _avisoFotoNaoChegou() {
+  toast('📷 A foto não chegou ao app — a câmera do celular às vezes não devolve a foto. Tente de novo pela câmera do app.', 'err', 7000);
+}
 function cameraNotaDoSistema() {
   const cb = _camNotaAoCancelar;
   _camNotaAoCancelar = null;
   _pararCameraNota();
   const inp = $(_camNotaOpts.inputReserva || 'f-foto-nota');
-  if (cb) inp?.addEventListener('cancel', cb, { once: true });
+  if (inp) {
+    const semFoto = () => { inp.removeEventListener('change', chegou); _avisoFotoNaoChegou(); if (cb) cb(); };
+    const chegou = () => inp.removeEventListener('cancel', semFoto);   // a foto veio: o aviso não vale para a próxima vez
+    inp.addEventListener('cancel', semFoto, { once: true });
+    inp.addEventListener('change', chegou, { once: true });
+  }
   inp?.click();
 }
 async function dispararCameraNota() {
@@ -10197,7 +10208,7 @@ async function buscarRazaoSocial(raw) {
 
 async function onFotoNotaChange(e) {
   let file = e.target.files[0];
-  if (!file) return;
+  if (!file) { _avisoFotoNaoChegou(); _mostrarFormAposLeitura(); return; }   // 20/11/2026: voltou da câmera sem a foto
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }   // o formulário estava escondido esperando o arquivo
   /* 21/10/2026: foto em branco não é anexada (a da câmera do app já foi conferida com a câmera aberta: __brancaConferida) */
   if (await _fotoEmBrancoBarrada(file, e.target, 'camera')) { _mostrarFormAposLeitura(); return; }
