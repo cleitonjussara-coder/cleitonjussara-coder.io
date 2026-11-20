@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 643;
+const APP_BUILD = 645;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -8944,6 +8944,17 @@ function _cortadoBarra(r, chaveQr) {
   const chave = _digitos(chaveQr || '').length === 44 && (!window.SEFAZ?.dvValido || SEFAZ.dvValido(_digitos(chaveQr)));
   return !(chave && r.valor && r.numero);
 }
+/* Várias notas numa foto só (20/11/2026, pedido do Cleiton): cada lançamento é de UMA nota. A IA conta os documentos na
+   foto (quantidade_notas); com 2 ou mais, pergunta. true = descartar a foto (Tirar de novo); "É uma nota só" segue (a IA
+   pode contar a via do cartão grampeada, por exemplo). Sem internet/IA não há contagem: não pergunta. */
+async function _variasNotasNaFoto(r) {
+  if (!(r?.qtd > 1)) return false;
+  return !!(await pedirConfirmacao({
+    titulo: 'Tem mais de uma nota nesta foto',
+    mensagem: `A foto mostra ${r.qtd} notas. Cada lançamento é de uma nota só: fotografe uma de cada vez. Nada foi anexado.`,
+    confirmar: 'Tirar de novo', cancelar: 'É uma nota só',
+  }));
+}
 async function _avisarTextoCortado() {
   await mostrarAviso({
     titulo: 'O texto da nota ficou cortado',
@@ -9008,17 +9019,19 @@ async function _lerNotaPorIa(blob) {
     const r = await sb.notas.lerFotoIa(await _imagemParaIa(blob));
     const d = r?.dados;
     /* 07/11/2026: cortado vem junto dos campos — quem chamou decide (o QR lido no aparelho ainda pode salvar a nota) */
-    if (!d || !(d.valor || d.cnpj || d.chave || d.cortado === true)) return null;
+    if (!d || !(d.valor || d.cnpj || d.chave || d.cortado === true || d.quantidade_notas > 1)) return null;
     _aquecerOcr();
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
              chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', hora: d.hora || '', portal_nfse: d.portal_nfse || '',
-             uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', cortado: d.cortado === true, _ia: true };
+             uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', cortado: d.cortado === true,
+             qtd: Number.isInteger(d.quantidade_notas) ? d.quantidade_notas : null, _ia: true };
   } catch (_) { return null; }
 }
 
 async function _lerNota(blob) {
   const ia = await _lerNotaPorIa(blob);
   if (ia?.cortado) return ia;                                // texto cortado: quem chamou barra a foto (07/11/2026)
+  if (ia?.qtd > 1) return ia;                                // várias notas numa foto: quem chamou avisa (20/11/2026)
   if (ia?.valor) return ia;                                  // IA trouxe o valor: basta
   /* 14/10/2026 (pedido do Cleiton: "com internet, IA no lugar do OCR"): a IA respondeu com parte dos dados e há
      internet — não espera o Tesseract (segundos a mais). O que faltar (o valor, em geral) o aviso da tela diz e a pessoa
@@ -9093,6 +9106,11 @@ async function onFotoNota(e) {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
     const r = await leituraDaNota;
     if (_cortadoBarra(r, dados.chave)) { ov.style.display = 'none'; e.target.value = ''; await _avisarTextoCortado(); return; }   // 07/11/2026 (o QR desta foto já foi lido acima)
+    if (r?.qtd > 1) {                                   // 20/11/2026: várias notas na mesma foto
+      ov.style.display = 'none';
+      if (await _variasNotasNaFoto(r)) { e.target.value = ''; lerFotoNota(); return; }
+      ov.style.display = 'flex';
+    }
     porIa = !!r._ia;
     dados.cnpj         = dados.cnpj         || r.cnpj         || '';
     dados.valor        = dados.valor        || r.valor        || '';
@@ -10490,6 +10508,16 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
         ['f-foto-nota', 'f-foto-ocr'].forEach(id => { const el = $(id); if (el) el.value = ''; });
         await _avisarTextoCortado();
         return;
+      }
+      if (ocr?.qtd > 1) {                                 // 20/11/2026: várias notas na mesma foto — a foto não fica anexada
+        ov.style.display = 'none';
+        if (await _variasNotasNaFoto(ocr)) {
+          if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
+          fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null); atualizarPreviewFoto(null);
+          ['f-foto-nota', 'f-foto-ocr', 'f-arq-nota'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+          return;
+        }
+        ov.style.display = 'flex';
       }
     }
     const qr = await (qrEmCurso || (qrEmCurso = lerQr()));

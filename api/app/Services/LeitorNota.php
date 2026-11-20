@@ -28,14 +28,14 @@ use Illuminate\Support\Facades\Log;
  */
 class LeitorNota
 {
-    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'hora', 'portal_nfse', 'cortado'];
+    private const CAMPOS = ['cnpj', 'razao_social', 'valor', 'data', 'numero', 'serie', 'chave', 'chave_nfse', 'placa', 'hora', 'portal_nfse', 'cortado', 'quantidade_notas'];
 
     private const UFS = ['11', '12', '13', '14', '15', '16', '17', '21', '22', '23', '24', '25', '26', '27', '28', '29',
         '31', '32', '33', '35', '41', '42', '43', '50', '51', '52', '53'];
 
     private const PROMPT = 'Esta é a foto de um documento fiscal brasileiro (cupom NFC-e, DANFE, nota de serviço NFS-e ou recibo). '
         .'Extraia SOMENTE os campos abaixo e responda apenas com JSON, sem texto fora do JSON: '
-        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "hora": "HH:MM:SS", "dfe": "...", "portal": "...", "cortado": false} '
+        .'{"cnpj": "...", "razao_social": "...", "valor": 0.00, "data": "AAAA-MM-DD", "numero": "...", "serie": "...", "chave": "...", "chave_nfse": "...", "placa": "...", "hora": "HH:MM:SS", "dfe": "...", "portal": "...", "cortado": false, "quantidade_notas": 1} '
         .'Regras: '
         .'cnpj = CNPJ do ESTABELECIMENTO EMITENTE (quem vendeu ou prestou o serviço), só os 14 dígitos; nunca o CPF ou CNPJ do consumidor/tomador. '
         .'razao_social = nome do emitente. '
@@ -58,7 +58,11 @@ class LeitorNota
         .'cortado = true somente se a borda da foto cortou (ficou pela metade ou fora da imagem) alguma destas informações: '
         .'a chave de acesso, o valor total/valor pago, ou o número e a série do documento. '
         .'A chave conta como legível se os dígitos impressos OU o QR Code (ou o código de barras) estiverem inteiros na foto: dígito comido pela impressora com o QR inteiro não é corte. '
-        .'Qualquer outro texto cortado (nome, endereço, itens, tributos, margem), o papel encostando na borda ou texto mal impresso pela própria impressora NÃO contam: cortado = false. Na dúvida, false.';
+        .'Qualquer outro texto cortado (nome, endereço, itens, tributos, margem), o papel encostando na borda ou texto mal impresso pela própria impressora NÃO contam: cortado = false. Na dúvida, false. '
+        /* 20/11/2026 (pedido do Cleiton): no lançamento de várias notas a pessoa pode juntar vários cupons numa foto só;
+           cada lançamento é de UM documento. O app avisa quando vem 2 ou mais. */
+        .'quantidade_notas = quantos documentos fiscais DIFERENTES (cupons, notas, recibos de emitentes ou números diferentes) aparecem na foto, como número inteiro. '
+        .'O comprovante do cartão (via do cliente) junto da própria nota, a 2ª via do mesmo documento e as várias páginas ou partes de um mesmo documento contam como 1. Na dúvida, 1.';
 
     public function __construct(private VisaoIa $ia) {}
 
@@ -195,6 +199,9 @@ class LeitorNota
         $out['portal_nfse'] = Nota::portalNormalizado($j['portal'] ?? null);
         /* só true/false de verdade: "sim", 1 ou texto viram null (o app não barra no que não é certeza) */
         $out['cortado'] = is_bool($j['cortado'] ?? null) ? $j['cortado'] : null;
+        /* 20/11/2026: só inteiro de 1 a 20 (texto, decimal ou zero viram null: o app não avisa no que não é certeza) */
+        $q = $j['quantidade_notas'] ?? null;
+        $out['quantidade_notas'] = (is_int($q) && $q >= 1 && $q <= 20) ? $q : null;
         /* a chave conferiu pelo dígito verificador e o valor e o número foram lidos: a nota é achável (2ª via) — não barra */
         if ($out['cortado'] === true && ($out['chave'] !== null || $out['chave_nfse'] !== null) && $out['valor'] !== null && $out['numero'] !== null) {
             $out['cortado'] = false;
