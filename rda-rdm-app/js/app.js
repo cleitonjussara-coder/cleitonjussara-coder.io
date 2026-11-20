@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 637;
+const APP_BUILD = 639;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9413,6 +9413,20 @@ let _fotoAntesDoScanner = null;    // a foto como a câmera tirou, quando o scan
    nota (sem contorno de documento, sem medir papel em branco nem borrão de texto); dica; ladoMax, teto da foto em pixels
    (o odômetro não precisa de 12 MP e cada megapixel é memória num celular fraco); inputReserva, id do input da câmera do sistema. */
 let _camNotaOpts = {};
+/* 20/11/2026 (lançamento de várias notas): sequencia = a câmera fica aberta depois de cada foto, com "✔ Concluir (N)".
+   O contorno automático só tira a próxima depois que a nota anterior saiu da tela (_camSeqEsperaTroca): sem isso ele
+   fotografava de novo a mesma nota, que ainda estava parada na frente da câmera. */
+let _camSeqN = 0, _camSeqEsperaTroca = false;
+function _pintarConcluirSeq() {
+  const b = $('cam-nota-concluir');
+  if (b) b.textContent = _camSeqN ? `✔ Concluir (${_camSeqN})` : '✔ Concluir';
+}
+function concluirCameraSequencia() {
+  const cb = _camNotaOpts.aoConcluir;
+  _camNotaAoCancelar = null;
+  _pararCameraNota();
+  if (typeof cb === 'function') cb(_camSeqN);
+}
 const _dicaCamera = () => _camNotaOpts.dica || _DICA_CAMERA_NOTA;
 let _camNotaPontoFoco = null;      // ponto tocado na prévia: { x, y, em }; vale por alguns segundos, depois volta ao centro
 const _FOCO_TOQUE_MS = 6000;
@@ -9464,6 +9478,8 @@ async function abrirCameraNota(aoCancelar, opts = {}) {
   { const bf = $('cam-nota-flash'); if (bf) bf.style.display = 'none'; }   // só reaparece quando a câmera disser que tem lanterna
   { const ba = $('cam-nota-anexar'); if (ba) ba.style.display = opts.aoFoto ? 'none' : ''; }   // anexar arquivo é só da nota
   { const bs = $('cam-nota-auto'); if (bs) bs.style.display = 'none'; }    // só reaparece na nota, quando a câmera abrir
+  _camSeqN = 0; _camSeqEsperaTroca = false;
+  { const bc = $('cam-nota-concluir'); if (bc) bc.style.display = opts.sequencia ? '' : 'none'; _pintarConcluirSeq(); }
   { const d = $('cam-nota-dica'); if (d) d.textContent = _dicaCamera(); }
   try {
     const pedir = () => navigator.mediaDevices.getUserMedia({
@@ -9558,11 +9574,14 @@ function _iniciarScannerNota() {
   _camNotaScanner = Scanner.aoVivo(video, guia, {
     automatico: true,
     aoEstado: e => {
+      if (_camSeqEsperaTroca && !texto[e]) _camSeqEsperaTroca = false;   // a nota anterior saiu da tela: libera o automático
+      if (_camSeqEsperaTroca) return;                                      // mantém "Foto N guardada — troque pela próxima nota"
       if (!dica || _camNotaStream !== stream) return;
       if (texto[e]) { dica.textContent = texto[e]; _camNotaDicaScanner = true; }
       else if (_camNotaDicaScanner) { dica.textContent = _DICA_CAMERA_NOTA; _camNotaDicaScanner = false; }
     },
     aoEstabilizar: () => {
+      if (_camSeqEsperaTroca) return;                                     // ainda é a mesma nota da última foto
       const b = $('cam-nota-disparo');
       if (_camNotaStream === stream && b && !b.disabled) dispararCameraNota();
     },
@@ -9662,7 +9681,7 @@ async function dispararCameraNota() {
     blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
   }
   if (!blob) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); toast('Não consegui tirar a foto. Tente de novo.', 'err'); return; }
-  if (_camNotaOpts.aoFoto) {                   // foto de outra tela (KM): as conferências abaixo são de nota em papel
+  if (_camNotaOpts.aoFoto && !_camNotaOpts.sequencia) {   // foto de outra tela (KM): as conferências abaixo são de nota em papel
     _camNotaAoCancelar = null;
     _pararCameraNota();
     await _camNotaOpts.aoFoto(new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' }));
@@ -9686,6 +9705,15 @@ async function dispararCameraNota() {
       confirmar: 'Tirar de novo', cancelar: 'Usar assim mesmo',
     });
     if (denovo) { if (btn) btn.disabled = false; _camNotaScanner?.liberar(); return; }
+  }
+  if (_camNotaOpts.sequencia) {                // várias notas: guarda a foto e a câmera continua aberta para a próxima
+    const f = new File([blob], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    f.__brancaConferida = true;
+    _camSeqN++; _camSeqEsperaTroca = true; _pintarConcluirSeq();
+    try { _camNotaOpts.aoFoto(f, { scanner: _camNotaScannerOn }); } catch (_) {}
+    const d = $('cam-nota-dica'); if (d) { d.textContent = `📚 Foto ${_camSeqN} guardada — troque pela próxima nota`; _camNotaDicaScanner = true; }
+    if (btn) btn.disabled = false; _camNotaScanner?.liberar();
+    return;
   }
   _camNotaAoCancelar = null;
   _pararCameraNota();
