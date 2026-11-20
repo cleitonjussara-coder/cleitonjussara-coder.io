@@ -35,6 +35,9 @@ window.LoteNotas = (() => {
     _pintar();
   }
 
+  /* atalho da aba (Despesas → RDA/RDM → 📚 Várias notas): abre o lote e já a câmera em sequência, no mesmo toque */
+  function abrirComCamera(base = {}) { abrir(base); fotografar(); }
+
   function _ehFaturamento() { return S.base?.pagamento === 'empresa'; }
   function _quem() {
     if (!_ehFaturamento()) return '';
@@ -215,6 +218,7 @@ window.LoteNotas = (() => {
       it.render = blob;
       const temTexto = String(texto || '').replace(/\s/g, '').length >= 40;
       it.ocr = temTexto && window.OCR?.parseFiscalText ? OCR.parseFiscalText(texto) : await _lerNota(blob);
+      await _lerQr(it, blob);
       _resumir(it);
       return;
     }
@@ -227,8 +231,17 @@ window.LoteNotas = (() => {
       if (branca === true) { it.status = 'erro'; it.motivo = 'foto em branco'; return; }
     }
     it.original = f;                 // o QR é procurado na foto inteira (fotoOriginal), sem o corte
+    await _lerQr(it, f);
     await _lerImagem(it, await _cantos(f));
   }
+
+  /* QR Code da foto (20/11/2026, "lançar com QR Code em sequência"): lido já na leitura em segundo plano, na foto inteira.
+     Com a chave, o formulário não lê de novo e completa CNPJ, UF e mês pela chave, como no lançamento pelo QR. */
+  async function _lerQr(it, blob) {
+    try { it.qr = (typeof _lerQRdaImagem === 'function') ? await _lerQRdaImagem(blob) : null; } catch (_) { it.qr = null; }
+    if (it.qr && !(it.qr.chave?.length === 44 || it.qr.documento === 'nfse')) it.qr = null;
+  }
+  const _qrTxt = it => it.qr?.chave ? '🔑 QR lido' : it.qr?.documento === 'nfse' ? '🔑 QR da NFS-e' : 'sem QR';
 
   function _resumir(it) {
     const o = it.ocr || {};
@@ -237,7 +250,8 @@ window.LoteNotas = (() => {
     it.multi = false;
     const partes = [o.razao_social || (o.cnpj ? 'CNPJ ' + o.cnpj : ''), o.data ? fmtDataBR(o.data) : ''].filter(Boolean);
     it.valor = Number(o.valor) > 0 ? Number(o.valor) : null;
-    it.resumo = partes.join(' · ') || 'sem fornecedor lido';
+    if (!o.cnpj && it.qr?.cnpj) partes.unshift('CNPJ ' + it.qr.cnpj);
+    it.resumo = [partes.join(' · ') || 'sem fornecedor lido', it.ext === 'xml' ? '' : _qrTxt(it)].filter(Boolean).join(' · ');
     it.status = (it.valor || Number(it.edit.valor) > 0) ? 'lida' : 'conferir';
   }
 
@@ -345,6 +359,7 @@ window.LoteNotas = (() => {
             <label>Valor (R$)<input type="number" inputmode="decimal" step="any" min="0" class="inp${semValor ? ' lote-falta' : ''}" value="${_at(valor)}" placeholder="digite" onchange="LoteNotas._editar('valor', this.value)"></label>
           </div>
           <div class="lote-conf-campo"><span>Aba · Categoria</span><b>${esc(_abaCategoria())}</b></div>
+          ${it.ext === 'xml' ? '' : `<div class="lote-conf-campo"><span>QR Code</span><b class="${it.qr ? 'lote-qr-ok' : 'lote-qr-nao'}">${it.qr?.chave ? '🔑 lido · chave ' + esc(it.qr.chave.replace(/(\d{4})(?=\d)/g, '$1 ')) : it.qr ? '🔑 lido (NFS-e)' : 'não encontrado na foto — os dados vêm da leitura do texto'}</b></div>`}
           <div class="lote-conf-campo"><span>Arquivo</span><b class="lote-conf-arq">${esc(it.nome)}</b></div>
           <div class="lote-conf-bts">
             ${it.ext === 'jpg' ? '<button type="button" class="btn btn-outline btn-sm" onclick="LoteNotas._ajustarCantos()">⬚ Ajustar cantos</button>' : ''}
@@ -428,6 +443,8 @@ window.LoteNotas = (() => {
       _setFotoRender(it.render); atualizarPreviewFoto(fotoURL);
       await extrairDadosDaFoto(it.render, it.ocr || {});
     } else {
+      if (it.qr?.chave) { const k = _el('nf-chave'); if (k) k.value = it.qr.chave; }
+      if (it.qr?.qr_url) { const q = _el('nf-qr-url'); if (q) q.value = it.qr.qr_url; }
       fotoBlob = it.blob; fotoOriginal = it.original || it.blob; fotoExt = 'jpg';
       fotoURL = URL.createObjectURL(it.blob); atualizarPreviewFoto(fotoURL);
       await extrairDadosDaFoto(it.blob, it.ocr || {});
@@ -595,7 +612,7 @@ window.LoteNotas = (() => {
     _limparBarra();
   }
 
-  return { abrir, adicionar, remover, umaSo, fotografar, comecar, conferir, enviar, pular, parar, fechar,
+  return { abrir, abrirComCamera, adicionar, remover, umaSo, fotografar, comecar, conferir, enviar, pular, parar, fechar,
            formAberto, salvou, formFechadoPeloUsuario,
            _comum, _fecharConf, _mover, _editar, _tirarDaConf, _ampliar, _ajustarCantos, _abrirCompleta,
            get ativo() { return S.ativo; }, _estado: S };

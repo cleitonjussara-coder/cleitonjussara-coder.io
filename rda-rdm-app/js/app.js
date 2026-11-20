@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 644;
+const APP_BUILD = 646;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4315,6 +4315,13 @@ function _abaCard(tipo) {
             <span class="aba-acao-sub">Recibo, DANFE ou NFS-e: foto ou arquivo.</span>
           </span>
         </button>
+        <button class="aba-acao" onclick="lancarNaAba('${tipo}','lote')">
+          <span class="aba-acao-ico">📚</span>
+          <span class="aba-acao-txt">
+            <span class="aba-acao-tit">Várias notas de uma vez</span>
+            <span class="aba-acao-sub">Fotografe uma nota atrás da outra (com o QR na foto), confira e envie todas.</span>
+          </span>
+        </button>
       </div>` : ''}
     </div>`;
 }
@@ -4335,6 +4342,11 @@ function lancarNaAba(tipo, modo) {
   _abaPreEscolhida = tipo;
   if (_pagamentoCV) _pagamentoPreEscolhido = _pagamentoCV;   // C.V.: a forma de pagamento já foi escolhida antes da aba
   if (modo === 'qr') iniciarQR();
+  else if (modo === 'lote') {                         // 20/11/2026: várias notas direto da aba, câmera em sequência já aberta
+    const base = { tipo, ...(_pagamentoPreEscolhido ? { pagamento: _pagamentoPreEscolhido } : {}) };
+    _limparPreEscolhas();
+    LoteNotas.abrirComCamera(base);
+  }
   else abrirSeletorTipoLancamento({ _manual: true, tipo });
 }
 
