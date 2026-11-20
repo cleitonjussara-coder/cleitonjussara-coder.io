@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 639;
+const APP_BUILD = 641;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9358,9 +9358,14 @@ function _brilhoDoVideo(video) {
   } catch (_) { return null; }
 }
 
-/* Nitidez da foto: variância do laplaciano numa versão reduzida. Texto nítido tem muitas bordas (valor alto); foto
-   borrada, mexida ou fora de foco fica com pouco (valor baixo). null = não deu para medir (nunca barra a foto). */
-const _NITIDEZ_MIN = 50;
+/* Nitidez da foto. Até 20/11/2026 era a variância do laplaciano da foto INTEIRA, e ela mede contraste junto com foco:
+   cupom térmico desbotado, nítido, dava ~45 (abaixo do limite 50) e virava "A foto saiu borrada", enquanto texto escuro
+   realmente borrado passava (relato do Cleiton: "tirou a foto e voltou para a câmera sem salvar"). Agora: a foto reduzida
+   é dividida em blocos de 16 px; em cada bloco com conteúdo (papel liso e mesa ficam de fora) a variância do laplaciano
+   é DIVIDIDA pela variância do brilho do próprio bloco — some o contraste, fica a nitidez das bordas — e vale o percentil
+   90 (o texto mais nítido da foto). Medido com cupom sintético e ruído: nítido ~6,5 a 7,3 (escuro ou desbotado), borrão
+   de 1 px ~3,7, de 2 px ~1,1 a 1,6, de 3 px ~0,4 a 1,2. null = não deu para medir (nunca barra a foto). */
+const _NITIDEZ_MIN = 1.0;
 async function _nitidezDaFoto(blob) {
   let url;
   try {
@@ -9374,15 +9379,21 @@ async function _nitidezDaFoto(blob) {
     const d = cx.getImageData(0, 0, w, h).data;
     const g = new Float32Array(w * h);
     for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-    let soma = 0, soma2 = 0, n = 0;
-    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x;
-      const lap = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
-      soma += lap; soma2 += lap * lap; n++;
+    const T = 16, razoes = [];
+    for (let ty = 1; ty + T < h; ty += T) for (let tx = 1; tx + T < w; tx += T) {
+      let s = 0, s2 = 0, a = 0, a2 = 0, n = 0;
+      for (let y = ty; y < ty + T; y++) for (let x = tx; x < tx + T; x++) {
+        const i = y * w + x, v = g[i];
+        const lap = 4 * v - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+        s += lap; s2 += lap * lap; a += v; a2 += v * v; n++;
+      }
+      const varBrilho = a2 / n - (a / n) ** 2;
+      if (varBrilho < 20) continue;                  // bloco sem conteúdo: papel liso, mesa, fundo
+      razoes.push((s2 / n - (s / n) ** 2) / varBrilho);
     }
-    if (!n) return null;
-    const m = soma / n;
-    return soma2 / n - m * m;
+    if (razoes.length < 4) return null;
+    razoes.sort((x, y) => x - y);
+    return razoes[Math.floor(razoes.length * 0.9)];
   } catch (_) { return null; }
   finally { if (url) URL.revokeObjectURL(url); }
 }
