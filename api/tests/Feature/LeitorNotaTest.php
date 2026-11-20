@@ -98,6 +98,17 @@ class LeitorNotaTest extends TestCase
         $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70]))['cortado'], 'sem o campo: null');
     }
 
+    /** 20/11/2026: a IA conta quantas notas há na foto (o app avisa quando são 2 ou mais); só inteiro de 1 a 20 passa. */
+    public function test_quantidade_de_notas_na_foto(): void
+    {
+        $this->assertSame(3, $this->leitor()->validar(json_encode(['valor' => 70, 'quantidade_notas' => 3]))['quantidade_notas']);
+        $this->assertSame(1, $this->leitor()->validar(json_encode(['valor' => 70, 'quantidade_notas' => 1]))['quantidade_notas']);
+        foreach (['3', 2.5, 0, -1, 21, true, null] as $v) {
+            $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70, 'quantidade_notas' => $v]))['quantidade_notas'], 'quantidade '.json_encode($v));
+        }
+        $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70]))['quantidade_notas'], 'sem o campo: null');
+    }
+
     /** Regra do dono: com a chave conferida, o valor e o número lidos, a nota é achável (2ª via) — "cortado" da IA não barra. */
     public function test_chave_valor_e_numero_lidos_nao_barram(): void
     {

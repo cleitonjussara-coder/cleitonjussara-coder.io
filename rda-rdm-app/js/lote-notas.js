@@ -70,6 +70,7 @@ window.LoteNotas = (() => {
       </div>
       <div class="form-body">
         ${_ehFaturamento() ? `<div class="lote-quem">🏢 ${esc(_quem())}</div>` : ''}
+        <div class="lote-regra"><b>Uma nota por foto.</b> Cada foto (ou arquivo) vira um lançamento. Não junte várias notas na mesma foto.</div>
         <div class="lote-drop" id="lote-drop" tabindex="0">
           <div class="lote-drop-ico">🗂️</div>
           <div><b>Fotografe as notas uma atrás da outra</b> ou escolha fotos, PDFs e XMLs — vários de uma vez.</div>
@@ -230,6 +231,9 @@ window.LoteNotas = (() => {
 
   function _resumir(it) {
     const o = it.ocr || {};
+    /* 20/11/2026: uma nota por foto. A IA contou 2+ documentos: fica de fora, salvo se a pessoa disser "É uma nota só" */
+    if (o.qtd > 1 && !it.umaSo) { it.status = 'erro'; it.multi = true; it.motivo = `${o.qtd} notas na mesma foto — fotografe cada uma separada`; return; }
+    it.multi = false;
     const partes = [o.razao_social || (o.cnpj ? 'CNPJ ' + o.cnpj : ''), o.data ? fmtDataBR(o.data) : ''].filter(Boolean);
     it.valor = Number(o.valor) > 0 ? Number(o.valor) : null;
     it.resumo = partes.join(' · ') || 'sem fornecedor lido';
@@ -237,6 +241,14 @@ window.LoteNotas = (() => {
   }
 
   function _soltar(it) { if (it?.url) { try { URL.revokeObjectURL(it.url); } catch (_) {} it.url = null; } }
+
+  function umaSo(id) {
+    const it = S.itens.find(x => x.id === id);
+    if (!it || !it.multi) return;           // só a que foi marcada "N notas na mesma foto"
+    it.umaSo = true;
+    _resumir(it);
+    _pintar();
+  }
 
   function remover(id) {
     const i = S.itens.findIndex(x => x.id === id);
@@ -261,6 +273,7 @@ window.LoteNotas = (() => {
       <span class="lote-item-ico">${ICO[it.status]}</span>
       <div class="lote-item-txt"><div class="lote-item-nome">${esc(it.nome)}</div><div class="lote-item-sub">${esc(sub || '')}</div></div>
       <span class="lote-item-val">${v ? esc(brl(v)) : ''}</span>
+      ${it.multi ? `<button type="button" class="btn btn-outline btn-sm lote-item-uma" onclick="LoteNotas.umaSo(${it.id})">É uma nota só</button>` : ''}
       ${tira ? `<button type="button" class="lote-item-x" aria-label="Tirar da lista" onclick="LoteNotas.remover(${it.id})">✕</button>` : ''}
     </div>`;
   }
@@ -581,7 +594,7 @@ window.LoteNotas = (() => {
     _limparBarra();
   }
 
-  return { abrir, adicionar, remover, fotografar, comecar, conferir, enviar, pular, parar, fechar,
+  return { abrir, adicionar, remover, umaSo, fotografar, comecar, conferir, enviar, pular, parar, fechar,
            formAberto, salvou, formFechadoPeloUsuario,
            _comum, _fecharConf, _mover, _editar, _tirarDaConf, _ampliar, _ajustarCantos, _abrirCompleta,
            get ativo() { return S.ativo; }, _estado: S };
