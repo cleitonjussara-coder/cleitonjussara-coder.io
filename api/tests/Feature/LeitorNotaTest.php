@@ -109,6 +109,17 @@ class LeitorNotaTest extends TestCase
         $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70]))['quantidade_notas'], 'sem o campo: null');
     }
 
+    /** 21/11/2026: a IA diz quanto girar a foto (o lote não usa mais o leitor de texto do aparelho para isso). */
+    public function test_rotacao_so_aceita_giros_retos(): void
+    {
+        foreach ([0, 90, 180, 270] as $g) {
+            $this->assertSame($g, $this->leitor()->validar(json_encode(['valor' => 70, 'rotacao' => $g]))['rotacao']);
+        }
+        foreach (['90', 45, -90, 360, 1.5, true, null] as $v) {
+            $this->assertNull($this->leitor()->validar(json_encode(['valor' => 70, 'rotacao' => $v]))['rotacao'], 'rotacao '.json_encode($v));
+        }
+    }
+
     /** Regra do dono: com a chave conferida, o valor e o número lidos, a nota é achável (2ª via) — "cortado" da IA não barra. */
     public function test_chave_valor_e_numero_lidos_nao_barram(): void
     {
