@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 653;
+const APP_BUILD = 654;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4652,6 +4652,7 @@ function renderInicio() {
     </button>` : ''}`}
     <div class="ih-grid ${atalhos.length % 3 === 0 ? 'ih-grid-3' : ''}">${atalhos.map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
     ${_pendInicioHTML(pend)}
+    <div id="ini-aviso-cel" hidden></div>
     ${_cartaoPedidoAbertoHTML()}
     ${_faixaLancamentoDiarioHTML()}
     </div><div class="ih-col">
@@ -4663,6 +4664,66 @@ function renderInicio() {
 
   _pintarEquipeHoje().catch(() => {});
   _pendFechamentoInicio(pend).catch(() => {});
+  _pintarFaixaAvisoCelular().catch(() => {});
+}
+
+/* ── Faixa "avisos desligados" no Início (09/11/2026, pedido do Cleiton) ─────────────────────────────────────────
+   16 de 27 colaboradores ativos estavam sem aviso no celular: pedido de correção e de justificativa só chegavam pelo
+   sino e pelo e-mail. A janela "Deixe o app pronto" aparece uma vez por dia e some para sempre se a pessoa bloqueou;
+   esta faixa fica no Início enquanto o aviso estiver desligado NESTE aparelho e ensina o caminho de cada caso.
+   "✕" esconde por 3 dias. Contador não recebe esses avisos: não vê a faixa. */
+const _AVISO_CEL_ADIA_MS = 3 * 24 * 60 * 60 * 1000;
+const _avisoCelChave = () => 'pm_aviso_cel_adiado_' + (user?.id || '');
+
+async function _estadoAvisoCelular() {
+  if (DEMO_MODE || !user || _ehContabilidade()) return 'ok';
+  if (!_pushDisponivel()) return _ehIOS() && !_jaInstalado() ? 'instalar' : 'ok';   // navegador sem push: não há o que pedir
+  if (Notification.permission === 'denied') return 'bloqueado';
+  if (Notification.permission === 'default') return 'desligado';
+  return (await _inscricaoAtual()) ? 'ok' : 'desligado';    // autorizado mas sem inscrição: liga sem perguntar de novo
+}
+
+async function _pintarFaixaAvisoCelular() {
+  const el = document.getElementById('ini-aviso-cel');
+  if (!el) return;
+  const estado = await _estadoAvisoCelular();
+  let adiado = false;
+  try { adiado = Date.now() - Number(localStorage.getItem(_avisoCelChave()) || 0) < _AVISO_CEL_ADIA_MS; } catch (_) {}
+  if (estado === 'ok' || adiado) { el.hidden = true; el.innerHTML = ''; return; }
+  const txt = {
+    desligado: ['Você pode não ver na hora um pedido de correção, de justificativa ou o repasse que caiu.', '🔔 Ligar', 'ligarAvisoCelularDoInicio(this)'],
+    bloqueado: ['O celular está bloqueando os avisos do app. Dá para liberar nas configurações.', 'Como liberar', 'explicarDesbloqueioAviso()'],
+    instalar: ['No iPhone, os avisos só chegam com o app instalado na Tela de Início.', 'Como instalar', '_modalInstalarIOS()'],
+  }[estado];
+  el.className = 'ih-avisocel';
+  el.hidden = false;
+  el.innerHTML = `<span class="ih-avisocel-ico" aria-hidden="true">🔕</span>
+    <div class="ih-avisocel-t"><b>Seus avisos no celular estão desligados</b><small>${txt[0]}</small></div>
+    <button class="ih-avisocel-bt" onclick="${txt[2]}">${txt[1]}</button>
+    <button class="ih-avisocel-x" onclick="adiarFaixaAvisoCelular()" aria-label="Esconder por 3 dias" title="Esconder por 3 dias">✕</button>`;
+}
+
+/* liberou nas configurações do celular e voltou ao app: a faixa se reavalia sozinha */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && viewAtual === 'inicio') _pintarFaixaAvisoCelular().catch(() => {});
+});
+
+async function ligarAvisoCelularDoInicio(btn) {
+  await ativarNotificacoes(btn);
+  _pintarFaixaAvisoCelular().catch(() => {});
+}
+
+function adiarFaixaAvisoCelular() {
+  try { localStorage.setItem(_avisoCelChave(), String(Date.now())); } catch (_) {}
+  _pintarFaixaAvisoCelular().catch(() => {});
+  toast('Tudo bem — a faixa volta em 3 dias. Dá para ligar a qualquer hora em Perfil.');
+}
+
+function explicarDesbloqueioAviso() {
+  const ios = _ehIOS();
+  mostrarAviso(ios
+    ? `Liberar os avisos no iPhone\n\n1. Abra os Ajustes do iPhone.\n2. Toque em Notificações e procure o app (Petermann).\n3. Ligue "Permitir Notificações".\n\nDepois abra o app pelo ícone da Tela de Início.`
+    : `Liberar os avisos no Android\n\n1. Segure o dedo no ícone do app e toque em "Informações do app" (ou abra Configurações → Apps e procure o app ou o Chrome).\n2. Toque em Notificações e ligue "Permitir".\n3. Volte ao app: a faixa some sozinha e o aviso já chega.\n\nUsando pelo navegador? Toque no cadeado ao lado do endereço → Permissões → Notificações → Permitir.`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -12011,7 +12072,7 @@ function abrirAjuda(opcoes = {}) {
    próprio) abre com a pergunta ao assistente pronta para digitar — só no computador, porque no celular o teclado
    subiria por cima de tudo. O pontinho vermelho aparece quando o Como usar ganhou novidade: suba AJUDA_NOVIDADE
    para o número do build sempre que acrescentar uma seção que valha a pena a equipe ver. */
-const AJUDA_NOVIDADE = 603;
+const AJUDA_NOVIDADE = 654;
 const _AJUDA_VISTA = 'ajuda-vista-build';
 const _SECAO_DA_TELA = {
   notas: 'campos da nota', lixeira: 'lixeira', equipe: 'quem pode corrigir', arquivos: 'arquivos no servidor',

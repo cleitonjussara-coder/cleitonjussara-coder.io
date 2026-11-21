@@ -141,6 +141,23 @@ class RastreioEquipeTest extends TestCase
         $this->assertSame([], $c['recentes']);
     }
 
+    /** 21/11/2026 (build 604 trazido no 654): quem não tem nenhum aparelho com aviso ligado vem com aviso_celular false. */
+    public function test_marca_quem_esta_sem_aviso_no_celular(): void
+    {
+        $gestor = $this->pessoa('Gestor', 'gestor');
+        $ana = $this->pessoa('Ana');
+        $this->pessoa('Bruno');
+        DB::table('push_subscriptions')->insert([
+            'user_id' => $ana->id, 'endpoint' => 'https://push.exemplo/ana', 'endpoint_hash' => hash('sha256', 'https://push.exemplo/ana'),
+            'p256dh' => 'chave', 'auth' => 'segredo', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($gestor);
+        $equipe = collect($this->getJson('/api/colaboradores/atividade')->assertOk()->json('equipe'));
+        $this->assertTrue($equipe->firstWhere('nome', 'Ana')['aviso_celular']);
+        $this->assertFalse($equipe->firstWhere('nome', 'Bruno')['aviso_celular']);
+    }
+
     public function test_exige_login(): void
     {
         $this->getJson('/api/colaboradores/atividade')->assertUnauthorized();

@@ -46,6 +46,10 @@ class RastreioController extends Controller
             ->groupBy('tokenable_id')
             ->pluck('visto', 'tokenable_id');
 
+        /* Aviso no celular (09/11/2026): quem tem ao menos um aparelho inscrito. Sem inscrição, pedido de justificativa e
+           de correção só chegam pelo sino e pelo e-mail — o gestor vê no cartão e cobra. */
+        $comAviso = DB::table('push_subscriptions')->distinct()->pluck('user_id')->flip();
+
         $porPessoa = Nota::query()->whereNotNull('user_id')->where('updated_at', '>=', $desde)
             ->orderByDesc('updated_at')->limit(5000)
             ->get(['id', 'user_id', 'tipo', 'subtipo', 'razao_social', 'cnpj', 'valor', 'deleted', 'created_at', 'updated_at'])
@@ -61,7 +65,7 @@ class RastreioController extends Controller
         }
         $intervaloJust = max(0, (int) config('petermann.justificativa.intervalo_horas', 24));
 
-        $equipe = $pessoas->map(function (Colaborador $p) use ($visto, $porPessoa, $hojeIni, $semanaIni, $mesIni, $ultimaJust, $intervaloJust) {
+        $equipe = $pessoas->map(function (Colaborador $p) use ($visto, $comAviso, $porPessoa, $hojeIni, $semanaIni, $mesIni, $ultimaJust, $intervaloJust) {
             $todas = $porPessoa->get($p->id, collect());
             $vivas = $todas->where('deleted', false);
             $lancadas = fn (Carbon $ini) => $vivas->filter(fn ($n) => $n->created_at >= $ini);
@@ -76,6 +80,7 @@ class RastreioController extends Controller
                 'role' => $p->role,
                 'regime' => $p->regime,
                 'visto_em' => ($v = $visto->get($p->id)) ? Carbon::parse($v, 'UTC')->toIso8601String() : null,
+                'aviso_celular' => $comAviso->has($p->id),
                 'ultimo_lancamento_em' => $ultimoLancamento?->toIso8601String(),
                 'ultima_atividade_em' => $todas->first()?->updated_at?->toIso8601String(),
                 'hoje' => $lancadas($hojeIni)->count(),

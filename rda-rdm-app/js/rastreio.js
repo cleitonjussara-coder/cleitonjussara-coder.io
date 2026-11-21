@@ -75,6 +75,8 @@ window.Rastreio = (() => {
   }
 
   const ativoHoje = p => p.hoje > 0 || (p.visto_em && diaBR(p.visto_em) === diaBR(Date.now()));
+  /* Aviso no celular (09/11/2026): false = nenhum aparelho inscrito. undefined (API antiga) não marca ninguém. */
+  const semAviso = p => p.aviso_celular === false;
 
   function _css() {
     if (document.getElementById('rastreio-css')) return;
@@ -114,6 +116,7 @@ window.Rastreio = (() => {
       .rs-bt:disabled{opacity:.5;border-color:var(--border);color:var(--text2);cursor:default}
       .rs-bt.suave{border-color:var(--border);color:var(--text2);font-weight:600}
       .rs-nota{font-size:12.5px;color:var(--text2)}
+      .rs-k.semaviso{background:rgba(251,191,36,.18);color:#fde68a;font-weight:700}
     `;
     document.head.appendChild(s);
   }
@@ -144,7 +147,7 @@ window.Rastreio = (() => {
       <div class="rs-ln">Visto no app <b>${p.visto_em ? esc(quando(p.visto_em)) : 'sem registro'}</b> · última nota <b>${p.ultimo_lancamento_em ? esc(quando(p.ultimo_lancamento_em)) : '—'}</b></div>
       ${linhaUlt}
       ${sit.txt && sit.parado ? `<div class="rs-warn">${esc(sit.txt)}</div>` : ''}
-      <div class="rs-kp"><span class="rs-k">Hoje: ${Number(p.hoje) || 0}</span><span class="rs-k">Semana: ${Number(p.semana) || 0}</span><span class="rs-k">Mês: ${Number(p.mes) || 0}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span></div>
+      <div class="rs-kp"><span class="rs-k">Hoje: ${Number(p.hoje) || 0}</span><span class="rs-k">Semana: ${Number(p.semana) || 0}</span><span class="rs-k">Mês: ${Number(p.mes) || 0}${p.mes_valor > 0 ? ' · ' + brl(p.mes_valor) : ''}</span>${semAviso(p) ? '<span class="rs-k semaviso" title="Nenhum aparelho com aviso ligado: pedidos chegam só pelo sino e pelo e-mail">🔕 Sem aviso no celular</span>' : ''}</div>
       ${_blocoJustificativa(p, abre)}
       ${abre ? `<div class="rs-rec">${itens || '<div class="rs-ln" style="padding:8px 0">Nenhuma nota nos últimos 60 dias.</div>'}</div>
       <div class="rs-ac">
@@ -162,14 +165,16 @@ window.Rastreio = (() => {
       String(b.ultima_atividade_em || '').localeCompare(String(a.ultima_atividade_em || '')) ||
       String(b.visto_em || '').localeCompare(String(a.visto_em || '')) ||
       String(a.nome).localeCompare(String(b.nome)));
-    const mostra = equipe.filter(p => filtro === 'ativos' ? ativoHoje(p) : filtro === 'parados' ? situacao(p).parado : true);
+    const mostra = equipe.filter(p => filtro === 'ativos' ? ativoHoje(p) : filtro === 'parados' ? situacao(p).parado
+      : filtro === 'semaviso' ? semAviso(p) : true);
+    const qtdSemAviso = equipe.filter(semAviso).length;
     const chip = (k, rot) => `<button class="rs-chip${filtro === k ? ' on' : ''}" onclick="Rastreio.filtrar('${k}')">${rot}</button>`;
     el.innerHTML = `
       <div class="page-hd"><h2>Rastreio da equipe</h2><button class="rs-chip" onclick="Rastreio.atualizar()" aria-label="Atualizar">↻ Atualizar</button></div>
       <p class="rs-sub">Atualizado às ${dados ? hhmm(dados.gerado_em) : '—'} · toque num cartão para ver as últimas notas.</p>
-      <div class="rs-chips">${chip('todos', 'Todos')}${chip('ativos', 'Ativos hoje')}${chip('parados', 'Parados')}</div>
+      <div class="rs-chips">${chip('todos', 'Todos')}${chip('ativos', 'Ativos hoje')}${chip('parados', 'Parados')}${qtdSemAviso ? chip('semaviso', `🔕 Sem aviso (${qtdSemAviso})`) : ''}</div>
       <div class="rs-lista">${mostra.length ? mostra.map(_cartao).join('') : '<div class="empty-state"><div class="empty-icon">🛰️</div><p>Ninguém neste filtro.</p></div>'}</div>
-      <p class="rs-leg">Bolinha: verde lançou hoje · amarelo 1 a ${LIMITE_AMARELO} dias · vermelho mais de ${LIMITE_AMARELO} dias · cinza sem notas em 60 dias.<br>"Visto no app" é o último contato do aparelho com o servidor, mesmo sem lançar nota — inclui o envio em segundo plano de nota que ficou esperando.</p>`;
+      <p class="rs-leg">Bolinha: verde lançou hoje · amarelo 1 a ${LIMITE_AMARELO} dias · vermelho mais de ${LIMITE_AMARELO} dias · cinza sem notas em 60 dias.<br>"Visto no app" é o último contato do aparelho com o servidor, mesmo sem lançar nota — inclui o envio em segundo plano de nota que ficou esperando.<br>🔕 Sem aviso no celular: nenhum aparelho da pessoa com notificação ligada; pedidos chegam só pelo sino e pelo e-mail.</p>`;
     el.scrollTop = rolagem;
   }
 
