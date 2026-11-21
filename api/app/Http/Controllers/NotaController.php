@@ -63,6 +63,10 @@ class NotaController extends Controller
         if ($r->filled('user_id')) {
             $q->where('user_id', $r->query('user_id'));
         }
+        /* 21/11/2026: ✏️ em Arquivos — a lista das pastas traz só parte dos campos; o formulário precisa da nota inteira */
+        if ($r->filled('id')) {
+            $q->where('id', (string) $r->query('id'));
+        }
         if (in_array($r->query('deleted'), ['0', '1'], true)) {
             $q->where('deleted', $r->query('deleted') === '1');
         }

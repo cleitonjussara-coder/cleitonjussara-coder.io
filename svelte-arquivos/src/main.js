@@ -64,7 +64,7 @@ function mostrar(nivel, dados) {
       nivel, dados, ano,
       onMudarAno: mudarAno, onAndarMes: andarMes, onAbrirColab: abrirColab, onAbrirFaturamento: abrirFaturamento, onAbrirMes: abrirMes,
       onVoltarMeses: voltarMeses, onVoltarColabs: voltarColabs,
-      onMoverNota: moverNota, onExcluirNota: excluirNota, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
+      onMoverNota: moverNota, onExcluirNota: excluirNota, onEditarNota: editarNotaArq, onVer: ver, onBaixarZip: baixarZip, onTentarDeNovo: render,
       onBaixarEquipe: baixarEquipe, onBaixarPlanilhas: baixarPlanilhas, onBaixarPlanilhaFat: baixarPlanilhaFat, meses: dep.MESES_LONGO.slice(1),
       onFiltro: guardarFiltro, onCarregarAno: carregarAno, brl: dep.brl,
       onAbertas: a => { abertasMes = a; }, onBaixarRelatorio: baixarRelatorioFat, onMesesAbertos: v => { mesesAbertos = v; },
@@ -303,6 +303,7 @@ function voltarColabs() { colab = null; mes = null; lista = null; limparBuscas()
 const _notaDaLista = id => (lista?.notas || []).find(x => x.id === id) || (listaAno?.notas || []).find(x => x.id === id);
 function moverNota(id) { const n = _notaDaLista(id); if (n) dep.moverNotaFat?.(n); }
 function excluirNota(id) { const n = _notaDaLista(id); if (n) dep.excluirNotaFat?.(n); }
+function editarNotaArq(id) { const n = _notaDaLista(id); if (n) dep.editarNotaFat?.(n); }   // 21/11/2026: ✏️ na lista das pastas
 function recarregar() { lista = null; listaAno = null; resumo = null; render(); }
 
 function ver(id) {

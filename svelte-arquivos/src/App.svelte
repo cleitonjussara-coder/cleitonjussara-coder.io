@@ -9,7 +9,7 @@
   let {
     nivel, dados, ano,
     onMudarAno, onAndarMes = null, onAbrirColab, onAbrirFaturamento, onAbrirMes, onVoltarMeses, onVoltarColabs,
-    onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
+    onVer, onMoverNota = () => {}, onExcluirNota = () => {}, onEditarNota = () => {}, onBaixarZip, onTentarDeNovo, onBaixarEquipe, onBaixarPlanilhas, onBaixarPlanilhaFat, meses = [],
     onFiltro = () => {}, onCarregarAno = null, brl = v => v, onAbertas = () => {}, onBaixarRelatorio = () => {}, onMesesAbertos = () => {},
     mesesCurtos = [], onGraficosAbertos = () => {},
   } = $props();
@@ -127,6 +127,7 @@
           {/if}
           {#if dados.acoes}
             <div class="arq-acoes">
+              <button class="arq-acao arq-acao-edit" onclick={() => onEditarNota(n.id)} title="Editar esta nota" aria-label="Editar esta nota">✏️</button>
               <button class="arq-acao" onclick={() => onMoverNota(n.id)} title="Mudar a categoria desta nota" aria-label="Mudar a categoria desta nota">🔀<span class="arq-acao-txt"> Categoria</span></button>
               {#if dados.podeExcluir}<button class="arq-acao arq-acao-del" onclick={() => onExcluirNota(n.id)} title="Mandar para a lixeira" aria-label="Mandar para a lixeira">🗑</button>{/if}
             </div>

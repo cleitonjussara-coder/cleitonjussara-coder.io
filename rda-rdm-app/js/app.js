@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 652;
+const APP_BUILD = 653;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -6258,7 +6258,7 @@ function _montarArquivos() {
     voltarRodape: _voltarRodape,
     carregarAvatares: () => window.Gestor?.carregarAvatares?.(),
     verFotoCompartilhado: _verArquivoCompartilhado,
-    podeExcluir: _ehGestorOuAdmin, moverNotaFat: faturadaMoverNota, excluirNotaFat: faturadaExcluirNota,
+    podeExcluir: _ehGestorOuAdmin, moverNotaFat: faturadaMoverNota, excluirNotaFat: faturadaExcluirNota, editarNotaFat: arquivosEditarNota,
     verNotaSemAnexo: _verNotaSemAnexo,
   });
 }
@@ -11359,12 +11359,14 @@ async function _salvarNotaInterno() {
        caía na lista de "Minhas notas" (gestor) ou voltava ao topo (Contador). A ficha lê do servidor: manda a fila primeiro. */
     const _naEquipe = viewAtual === 'equipe';
     const _naListaHoje = viewAtual === 'inicio' && _iniEqAberto;   // corrigindo pela lista "Hoje na equipe" (07/11/2026): ela também lê do servidor
-    if (_naEquipe || _naListaHoje) await _enviarFilaAntesDaFicha();
+    const _naArquivos = viewAtual === 'arquivos';                    // ✏️ das pastas (21/11/2026): a lista lê do servidor
+    if (_naEquipe || _naListaHoje || _naArquivos) await _enviarFilaAntesDaFicha();
     if (_naListaHoje) _invalidarEquipeHoje();
     await carregarDadosLocais();
     /* A tela é reconferida DEPOIS da espera (a pessoa pode ter saído da Equipe). Sem rede a ficha não carrega (ela lê do servidor
        e só mostraria "Erro ao carregar"): fica como está, a correção segue na fila e o aviso abaixo diz isso. */
     if (viewAtual === 'equipe') { if (navigator.onLine) renderEquipe(); }
+    else if (_naArquivos) window.Arquivos?.recarregar?.();          // fica na pasta, com a lista atualizada
     /* 30/10/2026 (pedido do Paulo): lançando a partir de Despesas ou do Início, a pessoa FICA nessa tela para lançar a próxima —
        antes caía na lista de Minhas notas a cada nota salva. */
     else if (viewAtual === 'despesas') renderDespesas();
@@ -11524,6 +11526,25 @@ function _modalGrupoNota(n, grupos) {
 function faturadaMoverNota(n) {
   if (!n?.id) return;
   _modalGrupoNota(n, n.pagamento === 'empresa' ? _GRUPOS_FAT : _GRUPOS);   // também nas pastas de colaborador (05/11/2026)
+}
+
+/* ✏️ na lista das pastas de Arquivos (21/11/2026, pedido do Cleiton com print): a lista traz só parte dos campos (sem chave,
+   série, hora…), e salvar o formulário com ela apagaria o resto. Busca a nota inteira no servidor e abre o formulário de
+   sempre; ao salvar, a lista de Arquivos se atualiza no lugar (salvarNota). */
+async function arquivosEditarNota(n) {
+  if (!n?.id) return;
+  if (!sb || !navigator.onLine) { toast('Precisa de internet para editar a nota daqui', 'err'); return; }
+  setLoading(true, 'Abrindo a nota…');
+  let inteira = null;
+  try {
+    const r = await sb.notas.list({ id: n.id });
+    inteira = (Array.isArray(r) ? r : r?.data || []).find(x => x.id === n.id) || null;
+  } catch (_) { inteira = null; }
+  finally { setLoading(false); }
+  if (!inteira) { toast('Não consegui abrir a nota agora. Tente de novo.', 'err'); return; }
+  inteira.server_updated_at = inteira.updated_at || null;
+  _notasDesenhadas.set(inteira.id, inteira);
+  abrirFormNota(inteira);
 }
 
 async function faturadaExcluirNota(n) {
