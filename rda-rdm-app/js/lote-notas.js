@@ -14,7 +14,7 @@
 window.LoteNotas = (() => {
   /* por lote: tudo fica na memória do aparelho até ser salvo. No computador (pasta cheia de notas) cabe mais. */
   const MAX = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 30 : 80;
-  const LEITURAS = 2;        // leituras ao mesmo tempo (a IA do servidor tem limite por minuto)
+  const LEITURAS = 3;        // leituras ao mesmo tempo: quase toda a espera é a rede da IA (21/11/2026: eram 2)
   /* modo: '' (lista), 'seq' (uma por uma), 'conf' (abriu completa pela conferência), 'envio' (Enviar todas) */
   const S = { base: null, comum: {}, itens: [], ativo: false, noForm: false, lendo: 0, seq: 0, modo: '', conf: 0, parado: false };
 
@@ -198,10 +198,52 @@ window.LoteNotas = (() => {
     }
   }
 
-  /* localizador de cantos do scanner (o do "Ajuste os cantos"): acha a nota, endireita a perspectiva e corta */
+  /* Ajuste de cantos (21/11/2026, pedido do Cleiton: "o recorte de canto está muito preciso, use só ele"): o MESMO método do
+     "Achar a nota" do editor — acha os 4 cantos numa cópia de 320 px e estica a nota para um retângulo na foto. Sem as recusas
+     do recorte automático (papel que parece continuar para fora da foto, nota encostando na borda), que guardavam a foto
+     inteira, e sem realce de cor. Sem cantos achados (ou nota pequena demais na foto), fica a foto como veio. */
+  function _ordenar(q) {
+    const s2 = [...q].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    const tl = s2[0], br = s2[3], [m1, m2] = [s2[1], s2[2]];
+    const tr = (m1.x - m1.y) > (m2.x - m2.y) ? m1 : m2, bl = tr === m1 ? m2 : m1;
+    return [tl, tr, br, bl];
+  }
   async function _cantos(blob) {
-    if (!window.Scanner?.endireitar) return blob;
-    try { const r = await Scanner.endireitar(blob); return r?.endireitou && r.blob ? r.blob : blob; } catch (_) { return blob; }
+    if (!window.Scanner?.achar || !Scanner.aplanar) return blob;
+    try {
+      const img = await _blobToImg(blob);
+      /* uma decodificação só (21/11/2026): a foto vai direto para o tamanho em que é guardada, sem JPEG intermediário */
+      const kk = Math.min(1, 2600 / Math.max(img.width, img.height));
+      const W = Math.max(1, Math.round(img.width * kk)), H = Math.max(1, Math.round(img.height * kk));
+      const mw = 320, mh = Math.max(1, Math.round(H * mw / W));
+      const mini = document.createElement('canvas'); mini.width = mw; mini.height = mh;
+      const mg = mini.getContext('2d', { willReadFrequently: true });
+      mg.drawImage(img, 0, 0, mw, mh);
+      const r = Scanner.achar(mg.getImageData(0, 0, mw, mh).data, mw, mh);
+      mini.width = mini.height = 0;
+      if (!r?.quad || r.quad.length !== 4) return blob;
+      const qn = _ordenar(r.quad.map(c => ({ x: Math.min(1, Math.max(0, c.x)), y: Math.min(1, Math.max(0, c.y)) })));
+      const area = Math.abs(qn.reduce((a, c, k) => { const d = qn[(k + 1) % 4]; return a + c.x * d.y - d.x * c.y; }, 0)) / 2;
+      if (area < 0.08) return blob;                                   // "nota" pequena demais: provavelmente outra coisa
+      const q = qn.map(c => ({ x: c.x * W, y: c.y * H }));
+      const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      const topo = dist(q[0], q[1]), base = dist(q[3], q[2]), esq = dist(q[0], q[3]), dir = dist(q[1], q[2]);
+      const amplia = Math.max(2 * Math.max(topo, base) / (topo + base || 1), 2 * Math.max(esq, dir) / (esq + dir || 1));
+      let dw = Math.round((topo + base) / 2 * amplia), dh = Math.round((esq + dir) / 2 * amplia);
+      const k = Math.min(1, 2600 / Math.max(dw, dh));
+      dw = Math.max(1, Math.round(dw * k)); dh = Math.max(1, Math.round(dh * k));
+      if (dw < 200 || dh < 200) return blob;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const cg = cv.getContext('2d', { willReadFrequently: true }); cg.drawImage(img, 0, 0, W, H);
+      const px = Scanner.aplanar(cg.getImageData(0, 0, W, H).data, W, H, q, dw, dh);
+      cv.width = cv.height = 0;
+      if (!px) return blob;
+      const out = document.createElement('canvas'); out.width = dw; out.height = dh;
+      out.getContext('2d').putImageData(new ImageData(px, dw, dh), 0, 0);
+      const b = await new Promise(res => out.toBlob(res, 'image/jpeg', 0.92));
+      out.width = out.height = 0;
+      return b && b.size > 5000 ? new File([b], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' }) : blob;
+    } catch (_) { return blob; }
   }
 
   async function _lerImagem(it, blob) {
@@ -209,6 +251,11 @@ window.LoteNotas = (() => {
     if (it.url) { try { URL.revokeObjectURL(it.url); } catch (_) {} it.url = null; }
     it.ocr = await _lerNota(blob);
     if (it.ocr?.cortado && _cortadoBarra(it.ocr, it.ocr.chave)) { it.status = 'erro'; it.motivo = 'texto cortado na foto — fotografe de novo'; return; }
+    /* 21/11/2026: a IA diz quanto girar (o QR, quando achado, já deixou em pé). A foto guardada e a inteira giram juntas. */
+    const rot = it.ocr?.rotacao;
+    if ([90, 180, 270].includes(rot)) {
+      it.blob = await _girar(it.blob, rot);   // a foto inteira não gira: só serve para o QR e o "Ajustar cantos" (que gira)
+    }
     _resumir(it);
   }
 
@@ -230,15 +277,18 @@ window.LoteNotas = (() => {
     }
     it.ext = 'jpg';
     try { f = await _normalizarOrientacao(f); } catch (_) {}
-    try { f = await _endireitarNota(f); } catch (_) {}
     if (window.FotoBranca && !f.__brancaConferida) {
       let branca = null;
       try { branca = await FotoBranca.emBranco(f); } catch (_) {}
       if (branca === true) { it.status = 'erro'; it.motivo = 'foto em branco'; return; }
     }
-    it.original = f;                 // o QR é procurado na foto inteira (fotoOriginal), sem o corte
-    await _lerQr(it, f);
-    await _lerImagem(it, await _cantos(f));
+    it.original = f;
+    /* só o ajuste de cantos; o giro vem da IA (rotacao) e o QR é procurado na nota recortada, enquanto a IA lê */
+    const nota = await _cantos(f);
+    const pQr = _lerQr(it, nota);
+    await _lerImagem(it, nota);
+    await pQr;
+    if (!(it.status === 'erro' && !it.multi)) _resumir(it);   // atualiza com o QR; foto barrada (cortada/em branco) continua barrada
   }
 
   /* QR Code da foto (20/11/2026, "lançar com QR Code em sequência"): lido já na leitura em segundo plano, na foto inteira.
@@ -259,6 +309,15 @@ window.LoteNotas = (() => {
     if (!o.cnpj && it.qr?.cnpj) partes.unshift('CNPJ ' + it.qr.cnpj);
     it.resumo = [partes.join(' · ') || 'sem fornecedor lido', it.ext === 'xml' ? '' : _qrTxt(it)].filter(Boolean).join(' · ');
     it.status = (it.valor || Number(it.edit.valor) > 0) ? 'lida' : 'conferir';
+  }
+
+  async function _girar(blob, graus) {
+    try {
+      const img = await _blobToImg(blob);
+      const c = _girarImagem(img, graus);
+      const out = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      return out && out.size ? new File([out], `nota-${Date.now()}.jpg`, { type: 'image/jpeg' }) : blob;
+    } catch (_) { return blob; }
   }
 
   function _soltar(it) { if (it?.url) { try { URL.revokeObjectURL(it.url); } catch (_) {} it.url = null; } }

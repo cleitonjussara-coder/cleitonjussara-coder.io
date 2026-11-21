@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 649;
+const APP_BUILD = 651;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -8723,7 +8723,7 @@ function _girarImagem(img, graus, maxLado = 0) {
 }
 
 /* Quanto girar (horário) para a nota ficar em pé. 0 = já está. */
-async function _giroParaEmPe(img, saida) {
+async function _giroParaEmPe(img, saida, opts = {}) {
   const ang = await _anguloDoQR(img, saida);
   if (ang !== null) {
     let g = -ang;                                   // desfaz o giro do QR
@@ -8733,7 +8733,9 @@ async function _giroParaEmPe(img, saida) {
     // inclinação pequena (2° a 20°) também é corrigida: linhas retas
     return Math.abs(resto) >= 2 && Math.abs(resto) <= 20 ? g : quarto;
   }
-  if (!window.OCR?.pontuarLeitura) return 0;
+  /* semOcr (21/11/2026, várias notas): sem o QR, não roda o leitor de texto até 4 vezes (8 s ou mais por foto no celular);
+     quem chamou gira depois pelo que a IA disser (rotacao) */
+  if (opts.semOcr || !window.OCR?.pontuarLeitura) return 0;
   const deitada = img.width > img.height * 1.1;    // nota é em pé; deitada = quase certo de lado
   const giros = deitada ? [0, 90, 270, 180] : [0, 180];
   let melhor = 0, notaMelhor = -1, nota0 = 0;
@@ -8763,12 +8765,12 @@ async function _endireitarComAviso(blob) {
 /* QR já decodificado ao endireitar, por foto (WeakMap: some junto com a foto; nunca vale para outra imagem) */
 const _qrDaFoto = new WeakMap();
 
-async function _endireitarNota(blob) {
+async function _endireitarNota(blob, opts = {}) {
   try {
     if (!blob || !/^image\//i.test(blob.type || 'image/jpeg')) return blob;
     const img = await _blobToImg(blob);
     const saida = {};
-    const g = await _giroParaEmPe(img, saida);
+    const g = await _giroParaEmPe(img, saida, opts);
     let resultado = blob;
     if (g) {
       const c = _girarImagem(img, g);
@@ -9036,7 +9038,8 @@ async function _lerNotaPorIa(blob) {
     return { cnpj: d.cnpj || '', valor: d.valor || null, data: d.data || '', razao_social: d.razao_social || '',
              chave: d.chave || '', chaveNfse: d.chave_nfse || '', numero: d.numero || '', serie: d.serie || '', placa: d.placa || '', hora: d.hora || '', portal_nfse: d.portal_nfse || '',
              uf: (d.chave && window.SEFAZ?.UF_MAP?.[String(d.chave).slice(0, 2)]) || '', cortado: d.cortado === true,
-             qtd: Number.isInteger(d.quantidade_notas) ? d.quantidade_notas : null, _ia: true };
+             qtd: Number.isInteger(d.quantidade_notas) ? d.quantidade_notas : null,
+             rotacao: [0, 90, 180, 270].includes(d.rotacao) ? d.rotacao : null, _ia: true };
   } catch (_) { return null; }
 }
 
@@ -10399,7 +10402,7 @@ async function extrairDadosDoXML(file) {
 /* Lê um QR Code dentro de uma imagem (foto do cupom) usando o leitor robusto
    (BarcodeDetector nativo → jsQR). Devolve os campos da chave NFC-e. */
 async function _lerQRdaImagem(file) {
-  const data = await _qrStringFromBlob(file);
+  const data = _qrDaFoto.get(file) || await _qrStringFromBlob(file);   // 21/11/2026: o QR lido ao endireitar não é lido de novo
   if (!data) return null;
   let p = NFCE.fromScan(data);
   if (!(p?.chave)) {
