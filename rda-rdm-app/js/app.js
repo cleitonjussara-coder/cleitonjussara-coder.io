@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 650;
+const APP_BUILD = 652;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1201,6 +1201,8 @@ function _itensMenu() {
   if (_ehGestorOuAdmin()) {
     itens.push({ g:'equipe', view:'rastreio', ico:'🛰️', lbl:'Rastreio da equipe', sub:'quem lançou e usou o app, e quando' });
     itens.push({ g:'controle', view:'historico', ico:'🕓', lbl:'Histórico', sub:'quem editou ou apagou o quê' });
+    /* 20/11/2026: o Cleiton não achou onde reabrir o mês (o quadro fica no fim de Equipe → Relatórios). Atalho aqui, e a busca do menu passa a achar "reabrir". */
+    itens.push({ g:'controle', acao:'abrirFechamentoPeloMenu()', ico:'🔒', lbl:'Fechamento de mês', sub:'fechar e reabrir meses' });
   }
   if (!_ehContabilidade()) itens.push({ g: _ehGestorOuAdmin() ? 'controle' : 'dia', view:'lixeira', ico:'🗑', lbl:'Apagados', sub:'restaurar o que foi excluído' });
   if (_veFrota()) itens.push({ g:'dia', view:'frota', ico:'🚗', lbl:'Frota / KM', sub:'odômetro dos veículos' });
@@ -1277,7 +1279,7 @@ async function _pendFechamentoInicio(base) {
 }
 
 function abrirFechamentoPeloMenu() {
-  window.Fechamento?.abrirQuadro();
+  window.Fechamento?.abrirQuadro(true);
   window.Gestor?.definirAba('rel');
   switchView('equipe');
 }

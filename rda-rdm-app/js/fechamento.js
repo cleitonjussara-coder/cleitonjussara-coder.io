@@ -26,6 +26,7 @@ window.Fechamento = (() => {
   let conferidoEm = 0;
   let painel = null;              // última resposta do servidor para o quadro da Equipe
   let quadroAberto = false;       // sobrevive ao redesenho da Equipe
+  let rolarAteQuadro = false;     // 20/11/2026: só quando o quadro é aberto pelo menu ☰
   let form = { id: null, data: null };   // nota aberta no formulário: id e a data com que abriu
 
   const chave = (ano, mes) => `${ano}-${String(mes).padStart(2, '0')}`;
@@ -286,6 +287,8 @@ window.Fechamento = (() => {
   async function pintar() {
     await atualizar(true);
     _pintarQuadro();
+    /* 20/11/2026: vindo do menu ☰, o quadro fica no fim de Relatórios: leva a tela até ele */
+    if (rolarAteQuadro) { rolarAteQuadro = false; $('fech-quadro')?.scrollIntoView?.({ block: 'start' }); }
   }
 
   document.addEventListener('input', e => { if (e.target?.id === 'nf-data') aplicarNoFormulario(); });
@@ -293,7 +296,7 @@ window.Fechamento = (() => {
 
   return {
     atualizar, estaFechado, abrirForm, aplicarNoFormulario, conferirAoSalvar, barrarNotas, pintar, fechar, reabrir, conferir, aguardando, avisos, frase,
-    abrirQuadro: () => { quadroAberto = true; },
+    abrirQuadro: (rolar = false) => { quadroAberto = true; rolarAteQuadro = rolar; },
     lembrar: aberto => { quadroAberto = aberto; },
   };
 })();
