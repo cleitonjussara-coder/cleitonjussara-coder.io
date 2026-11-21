@@ -353,17 +353,33 @@ window.Scanner = (() => {
   function aoVivo(video, canvas, opts = {}) {
     const mini = document.createElement('canvas');
     const mctx = mini.getContext('2d', { willReadFrequently: true });
-    let ativo = true, timer = null, ultimo = null, desde = 0, estado = '', disparou = false, auto = opts.automatico !== false, liberaEm = 0;
+    let suave = null, ativo = true, timer = null, ultimo = null, desde = 0, estado = '', disparou = false, auto = opts.automatico !== false, liberaEm = 0;
 
+    /* contorno curvo só se for uma forma sã: sem laço, sem fugir muito dos 4 cantos; senão desenha os 4 cantos (o "desformatado") */
+    const _areaPoly = p => Math.abs(p.reduce((a, c, k) => { const d = p[(k + 1) % p.length]; return a + c.x * d.y - d.x * c.y; }, 0)) / 2;
+    function _formaSegura(r) {
+      const c = r.contorno;
+      if (!c || c.length < 4) return r.quad;
+      const ok = c.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x > -0.02 && p.x < 1.02 && p.y > -0.02 && p.y < 1.02);
+      const aq = _areaPoly(r.quad), ac = _areaPoly(c);
+      return ok && aq > 0 && ac / aq > 0.8 && ac / aq < 1.2 ? c : r.quad;
+    }
     function _estado(e) { if (e !== estado) { estado = e; try { opts.aoEstado && opts.aoEstado(e); } catch (_) {} } }
 
     function _desenhar(quad, cor) {                           // quad = polígono em frações 0..1 (contorno curvo, ou os 4 cantos)
       const g = canvas.getContext('2d');
       const cw = canvas.clientWidth, ch = canvas.clientHeight;
-      if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+      const dpr = Math.min(2, window.devicePixelRatio || 1);          // linha nítida no celular, sem estourar memória
+      const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr);
+      if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, cw, ch);
-      if (!quad) return;
+      if (!quad) { suave = null; return; }
       const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh || !cw || !ch) return;                         // vídeo ainda sem tamanho / tela escondida: nada de desenho torto
+      /* o contorno anda em direção ao novo (metade do caminho por quadro): sem tremer nem pular; troca de forma recomeça */
+      if (suave && suave.length === quad.length) quad = quad.map((c, i) => ({ x: suave[i].x + (c.x - suave[i].x) * 0.55, y: suave[i].y + (c.y - suave[i].y) * 0.55 }));
+      suave = quad;
       const k = Math.min(cw / vw, ch / vh);                  // object-fit: contain (prévia mostra a foto inteira)
       const ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2;
       g.beginPath();
@@ -389,9 +405,9 @@ window.Scanner = (() => {
         const parou = ultimo && r.quad.every((c, i) => Math.hypot(c.x - ultimo[i].x, c.y - ultimo[i].y) < MOVE_MAX);
         if (!parou) { desde = agora; }
         ultimo = r.quad;
-        if (r.cortada) { desde = agora; _desenhar(r.contorno || r.quad, 'azul'); _estado('cortada'); return; }
+        if (r.cortada) { desde = agora; _desenhar(_formaSegura(r), 'azul'); _estado('cortada'); return; }
         const firme = parou && agora - desde >= PARADO_MS;
-        _desenhar(r.contorno || r.quad, firme ? 'verde' : 'azul');
+        _desenhar(_formaSegura(r), firme ? 'verde' : 'azul');
         _estado(firme ? 'parado' : 'achou');
         if (firme && auto && !disparou && agora >= liberaEm) { disparou = true; try { opts.aoEstabilizar && opts.aoEstabilizar(); } catch (_) {} }
       } catch (_) { /* quadro falhou (vídeo trocando de resolução, memória): tenta no próximo */ }

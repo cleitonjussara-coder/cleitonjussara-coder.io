@@ -854,6 +854,7 @@ window.Recorte = (() => {
      importa. */
   const MAX_ANEXO = 3000;
   function _cortar(maxAnexo = MAX_ANEXO) {
+    _remedir();   // 21/11/2026: reconfere onde a foto está na tela agora — o corte é exatamente o que a caixa mostra
     const c = _caixaImg;
     const fx = (_rect.x - c.x) / c.w;
     const fy = (_rect.y - c.y) / c.h;
@@ -862,10 +863,11 @@ window.Recorte = (() => {
 
     const img = $('crop-img');
     const W = img.naturalWidth, H = img.naturalHeight;
-    const sx = Math.round(fx * W);
-    const sy = Math.round(fy * H);
-    const sw = Math.max(1, Math.round(fw * W));
-    const sh = Math.max(1, Math.round(fh * H));
+    /* arredonda para FORA: o corte nunca come a borda do que a caixa mostra (antes, round podia perder 1 px de cada lado) */
+    const sx = Math.max(0, Math.floor(fx * W - 0.01));
+    const sy = Math.max(0, Math.floor(fy * H - 0.01));
+    const sw = Math.max(1, Math.min(W - sx, Math.ceil((fx + fw) * W + 0.01) - sx));
+    const sh = Math.max(1, Math.min(H - sy, Math.ceil((fy + fh) * H + 0.01) - sy));
 
     const escala = Math.min(1, maxAnexo / Math.max(sw, sh));
     const dw = Math.max(1, Math.round(sw * escala));

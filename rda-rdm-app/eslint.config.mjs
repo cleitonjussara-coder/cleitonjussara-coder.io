@@ -22,7 +22,7 @@ const doApp = [
   "CATEGORIAS_SO_FATURAMENTO", "_cortadoBarra", "_ehImagemExt", "_endireitarNota", "_extDoArquivo", "_lerNota",
   "_renderPdfPagina1", "_setFotoRender", "abrirFormNota", "atualizarPreviewFoto", "extrairDadosDaFoto",
   "extrairDadosDoXML", "fecharFormNota", "abrirCameraNota", "salvarNota", "_at", "_lerQRdaImagem",
-  "_girarImagem", "_blobToImg",
+  "_girarImagem", "_blobToImg", "_anguloDoQR",
 ];
 // Também do app.js, mas são `let`: os outros arquivos podem reatribuir.
 const estadoDoApp = ["fotoBlob", "fotoExt", "fotoOriginal", "fotoURL", "equipePorId", "filAno", "filMes", "notas", "notasEquipe", "_fotoSeq", "repassesEquipe", "sb", "user", "viewAtual"];

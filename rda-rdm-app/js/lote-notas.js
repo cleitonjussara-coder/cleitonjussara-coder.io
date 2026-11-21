@@ -285,9 +285,10 @@ window.LoteNotas = (() => {
     it.original = f;
     /* só o ajuste de cantos; o giro vem da IA (rotacao) e o QR é procurado na nota recortada, enquanto a IA lê */
     const nota = await _cantos(f);
-    const pQr = _lerQr(it, nota);
+    const pQr = _lerQr(it, nota).then(() => _giroDoQr(it, nota));   // o giro do QR sai junto, enquanto a IA lê (rede)
     await _lerImagem(it, nota);
     await pQr;
+    await _conciliarGiro(it, nota);
     if (!(it.status === 'erro' && !it.multi)) _resumir(it);   // atualiza com o QR; foto barrada (cortada/em branco) continua barrada
   }
 
@@ -309,6 +310,29 @@ window.LoteNotas = (() => {
     if (!o.cnpj && it.qr?.cnpj) partes.unshift('CNPJ ' + it.qr.cnpj);
     it.resumo = [partes.join(' · ') || 'sem fornecedor lido', it.ext === 'xml' ? '' : _qrTxt(it)].filter(Boolean).join(' · ');
     it.status = (it.valor || Number(it.edit.valor) > 0) ? 'lida' : 'conferir';
+  }
+
+  /* Foto sempre em pé (21/11/2026): o QR é impresso em pé na nota, então a posição dele diz o giro exato — mais confiável que
+     a IA. Só roda quando o QR foi lido (uma decodificação a mais, ~0,2 s, em paralelo com a espera da IA). */
+  async function _giroDoQr(it, nota) {
+    it.giroQr = null;
+    try {
+      if (!it.qr || typeof _anguloDoQR !== 'function') return;
+      const img = await _blobToImg(nota);
+      const ang = await _anguloDoQR(img);
+      if (ang === null) return;
+      let g = ((-ang % 360) + 540) % 360 - 180;
+      const quarto = Math.round(g / 90) * 90;
+      if (Math.abs(g - quarto) > 25) return;                // QR muito torto: não confia
+      it.giroQr = ((quarto % 360) + 360) % 360;
+    } catch (_) {}
+  }
+  /* A IA já girou it.blob pelo que ela viu; se o QR discorda, vale o QR (gira a partir da nota sem giro, sem girar duas vezes) */
+  async function _conciliarGiro(it, nota) {
+    if (it.giroQr == null || it.status === 'erro') return;
+    const ia = [90, 180, 270].includes(it.ocr?.rotacao) ? it.ocr.rotacao : 0;
+    if (it.giroQr === ia) return;
+    it.blob = it.giroQr ? await _girar(nota, it.giroQr) : nota;
   }
 
   async function _girar(blob, graus) {

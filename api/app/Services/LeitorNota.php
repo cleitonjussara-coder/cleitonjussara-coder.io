@@ -65,7 +65,8 @@ class LeitorNota
         .'O comprovante do cartão (via do cliente) junto da própria nota, a 2ª via do mesmo documento e as várias páginas ou partes de um mesmo documento contam como 1. Na dúvida, 1. '
         /* 21/11/2026: no lançamento de várias notas o app deixou de descobrir o lado da nota pelo leitor de texto do
            aparelho (segundos por foto); a IA, que já lê a nota, diz quanto girar */
-        .'rotacao = quantos graus a FOTO precisa girar no sentido horário para o texto do documento ficar em pé, de cima para baixo: 0, 90, 180 ou 270. Foto já em pé: 0.';
+        .'rotacao = quantos graus a FOTO precisa girar no sentido horário para o texto do documento ficar em pé, de cima para baixo: 0, 90, 180 ou 270. Foto já em pé: 0. '
+        .'Olhe o sentido do texto antes de responder: se o cabeçalho (nome da empresa, CNPJ) está embaixo e de cabeça para baixo, é 180; se as linhas correm na vertical, é 90 (topo do texto à esquerda da foto) ou 270 (topo à direita). Não responda 0 por padrão.';
 
     public function __construct(private VisaoIa $ia) {}
 
