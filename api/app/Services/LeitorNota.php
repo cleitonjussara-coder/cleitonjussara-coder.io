@@ -62,7 +62,8 @@ class LeitorNota
         /* 20/11/2026 (pedido do Cleiton): no lançamento de várias notas a pessoa pode juntar vários cupons numa foto só;
            cada lançamento é de UM documento. O app avisa quando vem 2 ou mais. */
         .'quantidade_notas = quantos documentos fiscais DIFERENTES (cupons, notas, recibos de emitentes ou números diferentes) aparecem na foto, como número inteiro. '
-        .'O comprovante do cartão (via do cliente) junto da própria nota, a 2ª via do mesmo documento e as várias páginas ou partes de um mesmo documento contam como 1. Na dúvida, 1. '
+        .'O comprovante do cartão (via do cliente) junto da própria nota, a 2ª via do mesmo documento e as várias páginas ou partes de um mesmo documento contam como 1. '
+        .'Mas um recibo/nota fiscal de bloco (manuscrito ou impresso) junto de um cupom fiscal de OUTRO estabelecimento, ou dois cupons de emitentes, números ou datas diferentes, mesmo um sobre o outro ou dobrados, são 2 ou mais. Na dúvida entre a via do mesmo documento e outro documento, conte pelo emitente: emitentes diferentes = documentos diferentes. '
         /* 21/11/2026: no lançamento de várias notas o app deixou de descobrir o lado da nota pelo leitor de texto do
            aparelho (segundos por foto); a IA, que já lê a nota, diz quanto girar */
         .'rotacao = quantos graus a FOTO precisa girar no sentido horário para o texto do documento ficar em pé, de cima para baixo: 0, 90, 180 ou 270. Foto já em pé: 0. '

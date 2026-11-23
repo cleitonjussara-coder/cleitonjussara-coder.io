@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 655;
+const APP_BUILD = 656;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9020,15 +9020,18 @@ function _cortadoBarra(r, chaveQr) {
   return !(chave && r.valor && r.numero);
 }
 /* Várias notas numa foto só (20/11/2026, pedido do Cleiton): cada lançamento é de UMA nota. A IA conta os documentos na
-   foto (quantidade_notas); com 2 ou mais, pergunta. true = descartar a foto (Tirar de novo); "É uma nota só" segue (a IA
-   pode contar a via do cartão grampeada, por exemplo). Sem internet/IA não há contagem: não pergunta. */
+   foto (quantidade_notas); com 2 ou mais, BLOQUEIA: avisa e descarta a foto (sem "É uma nota só" desde 23/11/2026 — um
+   colaborador lançou duas notas na mesma foto). Sem internet/IA não há contagem: não barra. Sempre devolve true. */
 async function _variasNotasNaFoto(r) {
   if (!(r?.qtd > 1)) return false;
-  return !!(await pedirConfirmacao({
-    titulo: 'Tem mais de uma nota nesta foto',
-    mensagem: `A foto mostra ${r.qtd} notas. Cada lançamento é de uma nota só: fotografe uma de cada vez. Nada foi anexado.`,
-    confirmar: 'Tirar de novo', cancelar: 'É uma nota só',
-  }));
+  await mostrarAviso({
+    titulo: '⛔ Tem mais de uma nota nesta foto',
+    mensagem: `A foto mostra ${r.qtd} notas. Cada lançamento é de UMA nota só — não dá para lançar duas notas juntas.
+
+Fotografe cada nota separada, uma por lançamento. Nada foi anexado.`,
+    botao: 'Tirar de novo',
+  });
+  return true;
 }
 async function _avisarTextoCortado() {
   await mostrarAviso({
