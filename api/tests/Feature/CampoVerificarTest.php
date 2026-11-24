@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 /**
  * 11/11/2026 — acompanhamento de trabalho solitário: quem está em campo há muitas horas sem finalizar gera aviso no celular de
- * quem acompanha (gestor, admin e focal), uma vez por atividade. Desde 12/11/2026: com 2h30, todos juntos.
+ * quem acompanha (gestor, admin e focal), uma vez por atividade. Desde 12/11/2026: todos juntos; desde 24/11/2026: com 3 h.
  */
 class CampoVerificarTest extends TestCase
 {
@@ -53,8 +53,8 @@ class CampoVerificarTest extends TestCase
             'campo' => $campo, 'inicio' => Carbon::parse($inicio), 'fim' => $fim ? Carbon::parse($fim) : null]);
     }
 
-    /* 12/11/2026 — decisão do Cleiton: com 2h30, um aviso só, ao mesmo tempo para o focal e o gestor */
-    public function test_com_2h30_avisa_focal_e_gestor_juntos_uma_vez(): void
+    /* 24/11/2026 — pedido do Paulo: com 3 h (era 2h30), um aviso só, ao mesmo tempo para o focal e o gestor */
+    public function test_com_3h_avisa_focal_e_gestor_juntos_uma_vez(): void
     {
         $this->pessoa('Paulo', 'gestor');
         $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
@@ -63,12 +63,15 @@ class CampoVerificarTest extends TestCase
         $this->campo($romario, '2026-11-11 12:40:00');               // 2h20: ainda não
         $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertSame([], $this->pushes);
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:30:00-03:00'));   // 2h50: antes já avisava
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertSame([], $this->pushes);
 
-        Carbon::setTestNow(Carbon::parse('2026-11-11T15:10:00-03:00'));   // 2h30
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:40:00-03:00'));   // 3h
         $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertCount(1, $this->pushes, 'um aviso só, para todos');
         $this->assertSame(['Focal', 'Paulo'], $this->pushes[0]['para']);
-        $this->assertSame('⚠️ Romario em campo há 2h30', $this->pushes[0]['titulo']);
+        $this->assertSame('⚠️ Romario em campo há 3h', $this->pushes[0]['titulo']);
         $this->assertStringContainsString('Faz. São José · campo BRCB147, desde 12:40', $this->pushes[0]['corpo']);
         $this->assertSame('./?abrir=campo', $this->pushes[0]['url']);
 
@@ -129,8 +132,8 @@ class CampoVerificarTest extends TestCase
         $this->assertSame(['Bia', 'Paulo'], $this->pushes[0]['para']);
     }
 
-    /* 13/11/2026 — pedido do Cleiton: depois do aviso das 2h30, a saída registrada manda outro aviso, com a mesma tag
-       (troca o "sem fim registrado" no celular). Sem o aviso das 2h30, a saída não avisa ninguém. */
+    /* 13/11/2026 — pedido do Cleiton: depois do aviso das 3 h, a saída registrada manda outro aviso, com a mesma tag
+       (troca o "sem fim registrado" no celular). Sem o aviso das 3 h, a saída não avisa ninguém. */
     public function test_saida_depois_do_aviso_manda_outro_com_a_mesma_tag(): void
     {
         $this->pessoa('Paulo', 'gestor');
@@ -156,7 +159,7 @@ class CampoVerificarTest extends TestCase
         $this->assertCount(2, $this->pushes);
 
         \Laravel\Sanctum\Sanctum::actingAs($curto->colaborador);
-        $this->postJson("/api/atividades-campo/{$curto->id}/finalizar")->assertOk();   // não teve aviso das 2h30
+        $this->postJson("/api/atividades-campo/{$curto->id}/finalizar")->assertOk();   // não teve aviso das 3 h
         $this->assertCount(2, $this->pushes);
     }
 

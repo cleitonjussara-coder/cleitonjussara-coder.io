@@ -136,7 +136,7 @@ class AtividadeCampoController extends Controller
             'lat_fim' => $d['lat'] ?? null, 'lng_fim' => $d['lng'] ?? null,
             'precisao_fim' => isset($d['precisao']) ? (int) round($d['precisao']) : null,
         ]);
-        app(CampoAviso::class)->saidaRegistrada($a);   // já tinha ido o aviso das 2h30? avisa que saiu
+        app(CampoAviso::class)->saidaRegistrada($a);   // já tinha ido o aviso das 3 h? avisa que saiu
 
         return response()->json($this->json($a->fresh('colaborador:id,nome')));
     }

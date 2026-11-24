@@ -56,35 +56,65 @@ window.Campo = (() => {
   const _meu = it => !!user?.id && it.uid === user.id;
   async function _minhas() { return (await _fila()).filter(_meu); }
   async function _salvarFila(f) { try { await DB.setMeta(KEY_FILA, f); } catch (_) {} }
-  async function _enfileirar(item) { const f = await _fila(); f.push({ ...item, uid: user?.id, erro: null }); await _salvarFila(f); }
+  /* 24/11/2026: toda mudança na fila passa por aqui, uma de cada vez e sempre sobre a fila ATUAL. O envio regravava a cópia
+     que leu no começo: um "Fim" tocado enquanto outro registro subia era apagado por essa cópia velha. */
+  let _trava = Promise.resolve();
+  function _mudarFila(fn) {
+    const p = _trava.then(async () => { const f = fn(await _fila()); await _salvarFila(f); return f; });
+    _trava = p.catch(() => {});
+    return p;
+  }
+  const _mesmo = (a, b) => a.qid ? a.qid === b.qid
+    : a.tipo === b.tipo && a.uid === b.uid && (a.id || a.dados?.id) === (b.id || b.dados?.id) && a.dados?.hora === b.dados?.hora;   // itens de antes do qid
+  async function _enfileirar(item) { await _mudarFila(f => [...f, { ...item, qid: crypto.randomUUID(), uid: user?.id, erro: null }]); }
 
+  /* Recusa de verdade (regra do servidor) fica na fila com o motivo. 401, 408, 429 e 5xx passam: servidor fora do ar não é
+     recusa, e o registro não pode aparecer com "Descartar". */
+  const _passageiro = e => !e?.status || [401, 408, 425, 429].includes(e.status) || e.status >= 500;
   let _subindo = false;
-  async function subirFila() {
+  /* auto: envio sozinho (abrir o app, voltar a ele, a cada minuto) — não insiste no que o servidor já recusou */
+  async function subirFila({ auto = false } = {}) {
     if (_subindo || !sb || !user?.id || !navigator.onLine) return 0;
     _subindo = true; let ok = 0;
     try {
-      const todos = await _fila();
-      const f = todos.filter(_meu);
-      if (!f.length) return 0;
-      const outros = todos.filter(it => !_meu(it));
-      const resto = [];
-      for (let i = 0; i < f.length; i++) {
-        const it = f[i];
+      const uid = user.id;
+      const f = (await _minhas()).filter(it => !(auto && it.erro));
+      for (const it of f) {
+        if (user?.id !== uid) break;                                  // trocou de conta no meio: o resto é de quem saiu
         try {
           if (it.tipo === 'iniciar') await sb.atividadesCampo.iniciar(it.dados);
           else await sb.atividadesCampo.finalizar(it.id, it.dados);
           ok++;
+          await _mudarFila(x => x.filter(y => !_mesmo(it, y)));
         } catch (e) {
-          if (!e?.status) { resto.push(...f.slice(i)); break; }      // sem rede: tenta depois, na mesma ordem
-          resto.push({ ...it, erro: e.message || 'falhou' });         // recusado pelo servidor: fica visível com o motivo
+          if (_passageiro(e)) break;                                  // sem rede ou servidor fora: tenta depois, na mesma ordem
+          await _mudarFila(x => x.map(y => _mesmo(it, y) ? { ...y, erro: e.message || 'falhou' } : y));   // recusado: fica visível com o motivo
         }
       }
-      await _salvarFila([...outros, ...resto]);
       if (ok) toast(`${ok} registro${ok > 1 ? 's' : ''} de campo enviado${ok > 1 ? 's' : ''} ✅`);
     } finally { _subindo = false; }
     return ok;
   }
-  window.addEventListener('online', () => { subirFila().then(n => { if (n && viewAtual === 'campo') render(); }).catch(() => {}); });
+  /* 24/11/2026 (caso Romário): a fila só subia ao abrir ESTA tela ou no instante em que a rede voltava com o app aberto. Quem
+     registrava a saída sem sinal e depois abria o app para outra coisa (pedir repasse, lançar nota) deixava a saída presa.
+     Agora sobe nas mesmas horas das notas: ao abrir o app, ao voltar a ele, quando a rede muda e a cada minuto. */
+  let _ultimaAuto = 0, _contaRevista = null;
+  async function _subirSozinho() {
+    if (!user?.id || !sb || !navigator.onLine || Date.now() - _ultimaAuto < 3000) return;
+    _ultimaAuto = Date.now();
+    const primeira = _contaRevista !== user.id;                        // uma vez por abertura, tenta também o que foi recusado
+    _contaRevista = user.id;
+    const n = await subirFila({ auto: !primeira });
+    if (n && viewAtual === 'campo') render();
+  }
+  const _disparar = () => { _subirSozinho().catch(() => {}); };
+  window.addEventListener('online', _disparar);
+  window.addEventListener('focus', _disparar);
+  window.addEventListener('pageshow', _disparar);
+  window.addEventListener('db-synced', _disparar);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _disparar(); });
+  setTimeout(_disparar, 4000);          // abriu o app
+  setInterval(_disparar, 60_000);
 
   /* ── Localização no toque ──────────────────────────────── */
   function localizar() {
@@ -308,9 +338,9 @@ window.Campo = (() => {
   }
 
   /* Painel de verificação (12/11/2026, pedido do Cleiton): no topo, quem está em campo agora, quem ainda não deu
-     entrada hoje e quem já saiu, para monitorar a equipe; os registros ficam embaixo. Passou de 2h30 em campo sem
+     entrada hoje e quem já saiu, para monitorar a equipe; os registros ficam embaixo. Passou de 3h em campo sem
      fim (o mesmo prazo do aviso no celular, campo:verificar) fica em destaque. Tocar na pessoa mostra os registros dela. */
-  const ALERTA_MIN = 150;
+  const ALERTA_MIN = 180;       // 24/11/2026 (Paulo e Cleiton): era 2h30
   function _equipeHTML() {
     if (!equipe.length) return `
       <div class="ini-titulo">Verificação da equipe</div>
@@ -337,7 +367,7 @@ window.Campo = (() => {
         ${kpi('⚪', semEntrada.length, 'sem entrada hoje', 'sem')}
         ${kpi('✅', sairam.length, 'já saíram hoje', 'saiu')}
       </div>
-      ${alertas ? `<div class="ini-dica cv-alerta">⚠️ <b>${alertas} ${alertas === 1 ? 'pessoa' : 'pessoas'} há mais de 2h30 em campo</b> sem registrar o fim. Ligue para confirmar se está tudo bem.</div>` : ''}
+      ${alertas ? `<div class="ini-dica cv-alerta">⚠️ <b>${alertas} ${alertas === 1 ? 'pessoa' : 'pessoas'} há mais de 3h em campo</b> sem registrar o fim. Ligue para confirmar se está tudo bem.</div>` : ''}
       <div class="db-card cv-painel">
         <div id="cv-campo">${grupo('🟢 Em campo agora', emCampo.length, emCampo.length ? emCampo.map(p => linha(p, p.min >= ALERTA_MIN ? 'cv-longo' : '',
           `<span class="cv-tempo">${p.min >= ALERTA_MIN ? '⚠️ ' : ''}${hm(p.min)}</span>`,
@@ -712,7 +742,7 @@ window.Campo = (() => {
     const recusados = (await _minhas()).filter(x => x.erro);
     if (!recusados.length) return;
     if (!(await pedirConfirmacao({ mensagem: `Descartar ${recusados.length} registro${recusados.length > 1 ? 's' : ''} recusado${recusados.length > 1 ? 's' : ''} pelo servidor?\nEles não serão enviados.`, confirmar: 'Descartar', perigo: true }))) return;
-    await _salvarFila((await _fila()).filter(x => !(_meu(x) && x.erro)));
+    await _mudarFila(f => f.filter(x => !(_meu(x) && x.erro)));
     render();
   }
 

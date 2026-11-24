@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Acompanhamento de trabalho solitário — quem recebe os avisos e o aviso de "saída registrada" (13/11/2026, pedido do
- * Cleiton): depois do aviso das 2h30, quando a pessoa registra a saída, vai outro aviso para os mesmos (focal, gestor e
+ * Cleiton): depois do aviso das 3 h, quando a pessoa registra a saída, vai outro aviso para os mesmos (focal, gestor e
  * admin). Usa a mesma tag do aviso de campo longo, então no celular o "ainda sem fim registrado" é trocado pelo
  * "registrou a saída" e não fica para trás uma mensagem que já não vale.
  */
@@ -34,7 +34,7 @@ class CampoAviso
         return 'campo-longo-'.$a->id;
     }
 
-    /** Só avisa se o aviso das 2h30 saiu para esta atividade; e uma vez só. Nunca derruba o registro da saída. */
+    /** Só avisa se o aviso das 3 h saiu para esta atividade; e uma vez só. Nunca derruba o registro da saída. */
     public function saidaRegistrada(AtividadeCampo $a): void
     {
         try {

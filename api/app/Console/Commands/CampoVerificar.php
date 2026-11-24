@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Cache;
  * colaborador se ele passar mal dentro do campo. Quem iniciou um campo e está há muitas horas sem finalizar gera
  * aviso no celular, para alguém ligar e confirmar que está tudo bem.
  *
- * Quem recebe (decisão do Cleiton, 12/11/2026): com 2h30 em campo sem finalizar, UM aviso só, ao mesmo tempo para o
+ * Quem recebe (decisão do Cleiton, 12/11/2026): com 3 h em campo sem finalizar (era 2h30 até 24/11/2026), UM aviso só, ao mesmo tempo para o
  * focal, o gestor e o admin. (Antes: focal com 4 h e gestor com 6 h.) Avisa uma vez por atividade (marca no cache por
  * 3 dias). Só olha início das últimas 24 h: campo esquecido aberto há dias não é emergência e viraria ruído. Quem está
  * em campo não recebe aviso sobre si mesmo.
@@ -30,7 +30,7 @@ class CampoVerificar extends Command
     private const TZ = 'America/Sao_Paulo';
 
     protected $signature = 'campo:verificar
-        {--horas=2.5 : em campo há mais que isto, sem finalizar, avisa o focal e o gestor juntos}';
+        {--horas=3 : em campo há mais que isto, sem finalizar, avisa o focal e o gestor juntos}';
 
     protected $description = 'Acompanhamento de trabalho solitário: avisa o focal e o gestor juntos quando alguém está em campo há muito tempo';
 
