@@ -246,10 +246,12 @@ window.LoteNotas = (() => {
     } catch (_) { return blob; }
   }
 
-  async function _lerImagem(it, blob) {
+  /* `leitura` (23/11/2026): a IA lê a foto INTEIRA e não só o recorte — o ajuste de cantos fica com o maior papel e esconderia
+     o segundo cupom da mesma foto, que precisa ser barrado. O que se guarda continua sendo o recorte (`blob`). */
+  async function _lerImagem(it, blob, leitura) {
     it.blob = blob;
     if (it.url) { try { URL.revokeObjectURL(it.url); } catch (_) {} it.url = null; }
-    it.ocr = await _lerNota(blob);
+    it.ocr = await _lerNota(leitura || blob);
     if (it.ocr?.cortado && _cortadoBarra(it.ocr, it.ocr.chave)) { it.status = 'erro'; it.motivo = 'texto cortado na foto — fotografe de novo'; return; }
     /* 21/11/2026: a IA diz quanto girar (o QR, quando achado, já deixou em pé). A foto guardada e a inteira giram juntas. */
     const rot = it.ocr?.rotacao;
@@ -286,7 +288,7 @@ window.LoteNotas = (() => {
     /* só o ajuste de cantos; o giro vem da IA (rotacao) e o QR é procurado na nota recortada, enquanto a IA lê */
     const nota = await _cantos(f);
     const pQr = _lerQr(it, nota).then(() => _giroDoQr(it, nota));   // o giro do QR sai junto, enquanto a IA lê (rede)
-    await _lerImagem(it, nota);
+    await _lerImagem(it, nota, f);
     await pQr;
     await _conciliarGiro(it, nota);
     if (!(it.status === 'erro' && !it.multi)) _resumir(it);   // atualiza com o QR; foto barrada (cortada/em branco) continua barrada
