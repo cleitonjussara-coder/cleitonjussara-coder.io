@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 656;
+const APP_BUILD = 657;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -9033,6 +9033,27 @@ Fotografe cada nota separada, uma por lançamento. Nada foi anexado.`,
   });
   return true;
 }
+/* 23/11/2026: foto barrada por ter mais de uma nota — NÃO abre o formulário de dados (a pessoa lançaria a nota mesmo assim).
+   Lançamento novo: fecha tudo e volta. Edição de nota já existente: o formulário segue (já tem os dados da nota). */
+let _fotoBloqueadaPorVarias = false;
+/* QR lido numa foto que saiu cortada: fica guardado (provisório) para a foto seguinte da mesma nota não decodificar de novo.
+   Zera ao usar, ao cancelar a câmera e em 10 min — nunca vale para outra nota. */
+let _qrProvisorio = null;
+/* 23/11/2026: texto cortado → depois do aviso a câmera abre de novo para tirar a foto outra vez (sem abrir o formulário) */
+let _fotoCortadaVoltaCamera = false;
+function _voltarCameraAposCorte() {
+  if (!_fotoCortadaVoltaCamera) return false;
+  _fotoCortadaVoltaCamera = false;
+  abrirCameraNota(_mostrarFormAposLeitura, _camNotaOpts || {});   // o formulário (se escondido) segue esperando; cancelar a câmera o mostra
+  return true;
+}
+function _fotoBarradaFechaForm() {
+  if (!_fotoBloqueadaPorVarias) return false;
+  _fotoBloqueadaPorVarias = false;
+  if ($('nf-id')?.value) return false;
+  fecharFormNota();
+  return true;
+}
 async function _avisarTextoCortado() {
   await mostrarAviso({
     titulo: 'O texto da nota ficou cortado',
@@ -9164,9 +9185,13 @@ async function onFotoNota(e) {
   const leituraDaNota = _lerNota(file).catch(() => ({}));
 
   // 1) tenta ler o QR Code da própria foto (chave NFC-e)
+  /* 23/11/2026: QR já lido na foto anterior (que saiu cortada): vem guardado de lá, sem decodificar de novo. Vale uma vez só. */
+  let qrTxt = null;
   try {
+    const prov = _qrProvisorio; _qrProvisorio = null;
+    if (prov && Date.now() - prov.em < 10 * 60 * 1000) qrTxt = prov.txt;
     await _ensureJsQR().catch(() => {});
-    const qrTxt = await _lerQRDeImagem(inteira);
+    if (!qrTxt) qrTxt = await _lerQRDeImagem(inteira);
     if (qrTxt) {
       let parsed = NFCE.fromScan(qrTxt);
       if (!(parsed?.chave)) {
@@ -9184,7 +9209,11 @@ async function onFotoNota(e) {
   try {
     $('ocr-progress').textContent = 'Lendo o texto da nota…';
     const r = await leituraDaNota;
-    if (_cortadoBarra(r, dados.chave)) { ov.style.display = 'none'; e.target.value = ''; await _avisarTextoCortado(); return; }   // 07/11/2026 (o QR desta foto já foi lido acima)
+    if (_cortadoBarra(r, dados.chave)) {
+      ov.style.display = 'none'; e.target.value = '';
+      if (dados.chave && qrTxt) _qrProvisorio = { txt: qrTxt, em: Date.now() };   // guarda o QR já lido para a próxima foto
+      await _avisarTextoCortado(); lerFotoNota(); return;
+    }   // 07/11/2026 (o QR desta foto já foi lido acima); 23/11/2026: volta para a câmera
     if (r?.qtd > 1) {                                   // 20/11/2026: várias notas na mesma foto
       ov.style.display = 'none';
       if (await _variasNotasNaFoto(r)) { e.target.value = ''; lerFotoNota(); return; }
@@ -9730,6 +9759,7 @@ function _pararCameraNota() {
   document.body.classList.remove('camera-aberta');
 }
 function fecharCameraNota(cancelou) {
+  if (cancelou) _qrProvisorio = null;   // desistiu: o QR guardado não vale para outra nota
   _pararCameraNota();
   const cb = _camNotaAoCancelar;
   _camNotaAoCancelar = null;
@@ -10348,8 +10378,9 @@ async function onFotoNotaChange(e) {
   fotoURL  = URL.createObjectURL(file);
   atualizarPreviewFoto(fotoURL);
   // lê a própria foto anexada (OCR) e preenche os campos vazios
+  _fotoBloqueadaPorVarias = false; _fotoCortadaVoltaCamera = false;
   try { await extrairDadosDaFoto(file); }
-  finally { _mostrarFormAposLeitura(); }
+  finally { if (!_voltarCameraAposCorte() && !_fotoBarradaFechaForm()) _mostrarFormAposLeitura(); }
 }
 
 /* Anexar arquivo já existente no aparelho: imagem, PDF ou XML da NF-e.
@@ -10362,7 +10393,7 @@ async function onArquivoNotaChange(e) {
   if (!(await _anexoUtilizavel(file, e.target))) { _mostrarFormAposLeitura(); return; }
   if (await _fotoEmBrancoBarrada(file, e.target, 'arquivo')) { _mostrarFormAposLeitura(); return; }   // 21/10/2026
   try { file = await _normalizarOrientacao(file); } catch (_) {}   // 23/09/2026
-  _fotoAntesDoScanner = null; _fotoAjustada = false;
+  _fotoAntesDoScanner = null; _fotoAjustada = false; _fotoBloqueadaPorVarias = false;
   if (_ehImagemExt(_extDoArquivo(file))) file = await _endireitarComAviso(file);   // 08/10/2026
   _limparPedirFoto();               // arquivo anexado → tira o destaque do Passo 2
   fotoBlob = file;
@@ -10374,7 +10405,7 @@ async function onArquivoNotaChange(e) {
     if (_ehImagemExt(fotoExt))      await extrairDadosDaFoto(file);
     else if (fotoExt === 'xml')     await extrairDadosDoXML(file);
     else /* pdf */                  await extrairDadosDoPDF(file);
-  } finally { _mostrarFormAposLeitura(); }
+  } finally { _fotoCortadaVoltaCamera = false; if (!_fotoBarradaFechaForm()) _mostrarFormAposLeitura(); }
 }
 
 /* PDF anexado → renderiza a 1ª página como imagem (vira o preview)
@@ -10597,12 +10628,21 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
         if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
         fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null); atualizarPreviewFoto(null);
         ['f-foto-nota', 'f-foto-ocr'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+        /* QR já lido nesta foto: vai para o formulário (escondido) — a foto seguinte vê a chave pronta e não lê o QR de novo */
+        try {
+          const qrLido = await (qrEmCurso || (qrEmCurso = lerQr()));
+          if (qrLido?.chave?.length === 44 && !$('nf-chave').value) $('nf-chave').value = qrLido.chave;
+          if (qrLido?.documento === 'nfse' && qrLido.qr_url && !$('nf-qr-url').value) $('nf-qr-url').value = qrLido.qr_url;
+          if (qrLido?.qr_url && qrLido.chave && !$('nf-qr-url').value) $('nf-qr-url').value = qrLido.qr_url;
+        } catch (_) {}
         await _avisarTextoCortado();
+        _fotoCortadaVoltaCamera = true;
         return;
       }
       if (ocr?.qtd > 1) {                                 // 20/11/2026: várias notas na mesma foto — a foto não fica anexada
         ov.style.display = 'none';
         if (await _variasNotasNaFoto(ocr)) {
+          _fotoBloqueadaPorVarias = true;
           if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
           fotoBlob = null; fotoOriginal = null; fotoURL = null; fotoExt = null; _setFotoRender(null); atualizarPreviewFoto(null);
           ['f-foto-nota', 'f-foto-ocr', 'f-arq-nota'].forEach(id => { const el = $(id); if (el) el.value = ''; });
