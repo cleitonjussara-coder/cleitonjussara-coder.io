@@ -94,12 +94,12 @@ class AtividadeCampoTest extends TestCase
         $this->iniciar(['hora' => Carbon::now()->addHour()->toIso8601String()])->assertStatus(422);
     }
 
-    /* Auditoria 09/11, item 3: a hora do aparelho vale até 24 h para trás; o gestor/focal corrige qualquer hora */
-    public function test_hora_do_aparelho_vale_ate_24_horas_para_tras(): void
+    /* 24/11/2026: a hora do aparelho vale até 7 dias para trás (era 24 h); o gestor/focal corrige qualquer hora */
+    public function test_hora_do_aparelho_vale_ate_7_dias_para_tras(): void
     {
         Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
-        $this->iniciar(['hora' => Carbon::now()->subHours(25)->toIso8601String()])->assertStatus(422)
-            ->assertJsonPath('message', 'Registro de mais de 24 horas atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
+        $this->iniciar(['hora' => Carbon::now()->subHours(169)->toIso8601String()])->assertStatus(422)
+            ->assertJsonPath('message', 'Registro de mais de 7 dias atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
         $this->assertSame(0, AtividadeCampo::count());
 
         $id = (string) Str::uuid();
@@ -118,6 +118,21 @@ class AtividadeCampoTest extends TestCase
         $this->iniciar(['campo' => 'BRCB148', 'hora' => Carbon::now()->subMinutes(5)->toIso8601String()])->assertCreated()
             ->assertJsonPath('registrado_depois_min', null);
         $this->iniciar(['campo' => 'BRCB149'])->assertCreated()->assertJsonPath('registrado_depois_min', null);
+    }
+
+    /* 24/11/2026 — caso Romário: a saída presa no celular entra com a hora REAL do toque e o selo de quanto demorou */
+    public function test_saida_presa_mais_de_um_dia_entra_com_a_hora_real_e_o_selo(): void
+    {
+        Sanctum::actingAs($this->pessoa('Romario', 'colaborador', true));
+        $id = (string) Str::uuid();
+        $this->iniciar(['id' => $id, 'hora' => Carbon::now()->subHours(32)->toIso8601String()])->assertCreated();
+        $fim = Carbon::now('America/Sao_Paulo')->subHours(30)->startOfSecond();
+        $this->postJson("/api/atividades-campo/{$id}/finalizar", ['hora' => $fim->toIso8601String()])->assertOk()
+            ->assertJsonPath('fim', $fim->toIso8601String())->assertJsonPath('minutos', 120)->assertJsonPath('saida_depois_min', 1800);
+
+        $id2 = (string) Str::uuid();
+        $this->iniciar(['id' => $id2])->assertCreated();
+        $this->postJson("/api/atividades-campo/{$id2}/finalizar")->assertOk()->assertJsonPath('saida_depois_min', null);
     }
 
     public function test_fim_antes_do_inicio_e_recusado(): void

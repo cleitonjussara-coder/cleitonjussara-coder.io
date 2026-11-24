@@ -31,8 +31,9 @@ class AtividadeCampoController extends Controller
     /** Tolerância para relógio de aparelho adiantado. */
     private const FUTURO_MAX_MIN = 5;
 
-    /** Até quanto tempo para trás vale a hora do aparelho (fila sem internet). Auditoria 09/11, item 3 — decisão do Cleiton: 24 h. */
-    private const PASSADO_MAX_H = 24;
+    /** Até quanto tempo para trás vale a hora do aparelho (fila sem internet). Era 24 h (auditoria 09/11); em 24/11/2026 o
+        Cleiton pediu que o registro não fique preso e entre com a hora real: 7 dias, com o selo de "depois" para o gestor. */
+    private const PASSADO_MAX_H = 168;
 
     /** Diferença entre o toque e a chegada ao servidor a partir da qual o gestor vê "registrado depois". */
     private const ATRASO_SELO_MIN = 15;
@@ -63,7 +64,7 @@ class AtividadeCampoController extends Controller
         $h = Carbon::parse($iso)->setTimezone(self::TZ);
         abort_if($h->gt($agora->copy()->addMinutes(self::FUTURO_MAX_MIN)), 422, 'Hora no futuro. Confira o relógio do aparelho.');
         abort_if($doAparelho && $h->lt($agora->copy()->subHours(self::PASSADO_MAX_H)), 422,
-            'Registro de mais de '.self::PASSADO_MAX_H.' horas atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
+            'Registro de mais de '.intdiv(self::PASSADO_MAX_H, 24).' dias atrás. Peça ao gestor ou ao focal para lançar a hora certa.');
 
         return $h;
     }
@@ -135,7 +136,7 @@ class AtividadeCampoController extends Controller
             'fim' => $hora, 'fim_automatico' => false,
             'lat_fim' => $d['lat'] ?? null, 'lng_fim' => $d['lng'] ?? null,
             'precisao_fim' => isset($d['precisao']) ? (int) round($d['precisao']) : null,
-        ]);
+        ] + (AtividadeCampo::temChegadaFim() ? ['fim_recebido_em' => now()] : []));
         app(CampoAviso::class)->saidaRegistrada($a);   // já tinha ido o aviso das 3 h? avisa que saiu
 
         return response()->json($this->json($a->fresh('colaborador:id,nome')));
@@ -550,6 +551,9 @@ class AtividadeCampoController extends Controller
         /* "registrado depois": o toque foi feito sem internet e chegou ao servidor bem mais tarde. created_at é a chegada
            (instante real); o início é a hora de parede de Brasília, por isso passa pelo br(). Corrigido pelo gestor não conta. */
         $atrasoIni = $a->created_at && ! $a->editado_em ? (int) floor(($a->created_at->getTimestamp() - $this->br($a->inicio)->getTimestamp()) / 60) : 0;
+        /* 24/11/2026: o mesmo para a saída — fim é a hora do toque; fim_recebido_em, a chegada ao servidor */
+        $atrasoFim = $a->fim && $a->fim_recebido_em && ! $a->fim_automatico && ! $a->editado_em
+            ? (int) floor(($a->fim_recebido_em->getTimestamp() - $this->br($a->fim)->getTimestamp()) / 60) : 0;
 
         return [
             'id' => $a->id, 'user_id' => $a->user_id, 'user_nome' => $a->colaborador?->nome,
@@ -557,6 +561,7 @@ class AtividadeCampoController extends Controller
             'inicio' => $iso($a->inicio), 'fim' => $iso($a->fim), 'em_campo' => $a->fim === null,
             'fim_automatico' => (bool) $a->fim_automatico, 'minutos' => $min,
             'registrado_depois_min' => $atrasoIni >= self::ATRASO_SELO_MIN ? $atrasoIni : null,
+            'saida_depois_min' => $atrasoFim >= self::ATRASO_SELO_MIN ? $atrasoFim : null,
             'lat_inicio' => $a->lat_inicio, 'lng_inicio' => $a->lng_inicio, 'precisao_inicio' => $a->precisao_inicio,
             'lat_fim' => $a->lat_fim, 'lng_fim' => $a->lng_fim, 'precisao_fim' => $a->precisao_fim,
             'observacao' => $a->observacao,

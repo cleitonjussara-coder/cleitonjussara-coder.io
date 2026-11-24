@@ -6,6 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require(process.env.JSDOM_DIR || path.join(__dirname, '..', 'rda-rdm-app', 'node_modules', 'jsdom'));
 const fonte = fs.readFileSync(path.join(__dirname, '..', 'rda-rdm-app', 'js', 'campo.js'), 'utf8');
+const db = fs.readFileSync(path.join(__dirname, '..', 'rda-rdm-app', 'js', 'db.js'), 'utf8').split(String.fromCharCode(13)).join('');
+const ini = db.indexOf('  function criarFilaCampo('), fimFn = db.indexOf('  const _campoMudar =');
+if (ini < 0 || fimFn < 0) throw new Error('criarFilaCampo nao encontrada');
+const fabrica = db.slice(ini, fimFn);
 let falhas = 0;
 const confere = (ok, t) => { console.log(`${ok ? '  ok ' : 'FALHOU'} ${t}`); if (!ok) falhas++; };
 const espera = ms => new Promise(r => setTimeout(r, ms));
@@ -22,11 +26,20 @@ function abrir(fila, { online = true } = {}) {
     var toast = t => __toasts.push(t);
     var FusoBR = { TZ: 'America/Sao_Paulo', hora: () => '' };
     var _acompanhaCampo = () => false, _registraCampo = () => true, pedirCampos = async () => null, pedirConfirmacao = async () => true;
-    var DB = { getMeta: async k => JSON.parse(JSON.stringify(__meta[k] || null)), setMeta: async (k, v) => { __meta[k] = JSON.parse(JSON.stringify(v)); } };
+    var __avisos = 0, syncBadge = () => { __avisos++; }, __fundo = 0;
+    var DB = { registrarEnvioFundo: () => { __fundo++; }, getMeta: async k => JSON.parse(JSON.stringify(__meta[k] || null)), setMeta: async (k, v) => { __meta[k] = JSON.parse(JSON.stringify(v)); } };
     var sb = { atividadesCampo: {
       iniciar: async d => { __env.push('iniciar:' + d.id); return __responde('iniciar', d.id); },
       finalizar: async id => { __env.push('finalizar:' + id); return __responde('finalizar', id); } } };
   `);
+  w.eval(fabrica + `
+    var __livre = true;
+    DB.campo = criarFilaCampo({
+      mudar: async fn => { __meta.campo_fila = JSON.parse(JSON.stringify(fn(__meta.campo_fila || []))); return __meta.campo_fila; },
+      ler: async () => JSON.parse(JSON.stringify(__meta.campo_fila || [])),
+      travar: async fn => { if (!__livre) return null; __livre = false; try { return await fn(); } finally { __livre = true; } },
+      depois: r => window.dispatchEvent(new CustomEvent('campo-enviado', { detail: r })),
+    });`);
   w.eval(fonte);
   return w;
 }
@@ -59,7 +72,7 @@ const erro = (status, message) => Object.assign(new Error(message || 'erro'), { 
     const p = w.Campo.subirFila();
     await espera(20);
     /* enquanto a 1ª sobe, a pessoa registra outra: entra na fila */
-    w.__meta.campo_fila.push(fim('a2', { qid: 'q2' }));
+    await w.eval(`DB.campo.mudar(f => [...f, ${JSON.stringify(fim('a2', { qid: 'q2' }))}])`);
     solta({}); await p;
     confere(w.__meta.campo_fila.length === 1 && w.__meta.campo_fila[0].id === 'a2', 'registro feito durante o envio não é apagado');
     w.close();
@@ -81,6 +94,22 @@ const erro = (status, message) => Object.assign(new Error(message || 'erro'), { 
     const w = abrir([fim('a1', { qid: 'q1' }), fim('b1', { uid: 'outro', qid: 'q9' })]);
     await w.Campo.subirFila();
     confere(w.__env.join() === 'finalizar:a1' && w.__meta.campo_fila.length === 1 && w.__meta.campo_fila[0].uid === 'outro', 'registro de outra conta do aparelho fica guardado');
+    w.close();
+  }
+  {
+    const w = abrir([{ tipo: 'iniciar', dados: { id: 'a1', hora: '2026-11-23T11:00:00Z' }, uid: 'u1', qid: 'q0' }, fim('a1', { qid: 'q1' })]);
+    const antes = await w.eval("DB.campo.resumo('u1')");
+    confere(antes.n === 2 && antes.saida === '2026-11-23T14:00:00Z', 'a faixa sabe que a saida esta presa e a hora real do toque');
+    await w.Campo.subirFila();
+    confere(w.__env.join() === 'iniciar:a1,finalizar:a1', 'entrada sobe antes da saida');
+    confere(w.eval('__toasts').some(t => /Saída de campo enviada/.test(t)) && w.eval('__avisos') > 0, 'a pessoa e avisada quando a saida sobe');
+    w.close();
+  }
+  {
+    const w = abrir([fim('a1', { qid: 'q1' })]);
+    w.__responde = async () => { const e = new Error('rede'); throw e; };
+    await w.Campo.subirFila();
+    confere(w.__meta.campo_fila.length === 1 && !w.__meta.campo_fila[0].erro, 'queda de rede no meio nao perde nem marca erro');
     w.close();
   }
   console.log(falhas ? `\n${falhas} falha(s)` : '\nTudo certo');

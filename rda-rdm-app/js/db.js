@@ -1321,6 +1321,8 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
   /* Uma rodada: sobe o que está na fila e (se não for "leve") baixa novidades e repara anexos órfãos.
      A rodada LEVE é a do reenvio rápido: só envia, sem puxar tudo do servidor a cada 3 s. */
   async function _rodada(sb, userId, leve) {
+    /* 24/11/2026: registro de campo é segurança da pessoa — sobe antes das notas e fotos, com trava própria (não espera upload) */
+    await campo.enviar(sb, userId, { auto: true, viva: () => _contaViva(userId) }).catch(() => {});
     if (!leve) { try { await repararQrUrls(userId); } catch (_) {} }
     /* o envio é um só por vez ENTRE contextos: se o service worker está enviando em segundo plano, a página espera a
        vez (_esperaTravaMs: 8 s; 30 s no "Enviar agora") em vez de mandar a mesma fila em dobro; sem a vez, pula o envio
@@ -1504,6 +1506,84 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     } finally { clearTimeout(t); }
   }
 
+  /* ── FILA DA ATIVIDADE EM CAMPO (24/11/2026, caso Romário) ─────────────────────────────────────────────────────
+     Fica em meta 'campo_fila'. Um envio só para a página e para o service worker (app fechado). Toda mudança é uma
+     transação só sobre a fila ATUAL: um "Fim" tocado durante um envio não é apagado pela cópia velha.
+     mudar(fn) aplica fn à fila e grava; ler() devolve a fila; travar(fn) roda fn se ninguém estiver enviando. */
+  function criarFilaCampo({ mudar, ler, travar, depois = () => {} }) {
+    const mesmo = (a, b) => a.qid ? a.qid === b.qid
+      : a.tipo === b.tipo && a.uid === b.uid && (a.id || a.dados?.id) === (b.id || b.dados?.id) && a.dados?.hora === b.dados?.hora;   // itens de antes do qid
+    /* recusa de verdade (regra do servidor) fica na fila com o motivo; sem rede, 401, 408, 425, 429 e 5xx passam */
+    const passageiro = e => !e?.status || [401, 408, 425, 429].includes(e.status) || e.status >= 500;
+    const minhas = async uid => (await ler()).filter(it => !!uid && it.uid === uid);
+    /* auto: não insiste no que o servidor já recusou */
+    function enviar(sb, uid, { auto = false, viva = () => true } = {}) {
+      const nada = { ok: 0, enviados: [], recusados: [], ocupado: false };
+      if (!sb?.atividadesCampo || !uid || globalThis.navigator?.onLine === false) return Promise.resolve(nada);
+      return travar(async () => {
+        const r = { ok: 0, enviados: [], recusados: [], ocupado: false };
+        for (const it of (await minhas(uid)).filter(x => !(auto && x.erro))) {
+          if (!viva()) break;                                         // trocou de conta no meio: o resto é de quem saiu
+          try {
+            if (it.tipo === 'iniciar') await sb.atividadesCampo.iniciar(it.dados);
+            else await sb.atividadesCampo.finalizar(it.id, it.dados);
+            r.ok++; r.enviados.push(it);
+            await mudar(f => f.filter(y => !mesmo(it, y)));
+          } catch (e) {
+            if (passageiro(e)) break;                                 // tenta depois, na mesma ordem (iniciar antes de finalizar)
+            const erro = e.message || 'falhou';
+            if (it.erro !== erro) r.recusados.push({ ...it, erro });
+            await mudar(f => f.map(y => mesmo(it, y) ? { ...y, erro } : y));
+          }
+        }
+        if (r.ok || r.recusados.length) depois(r);
+        return r;
+      }).then(v => v || { ...nada, ocupado: true });
+    }
+    /* o que a pessoa precisa saber: quantos esperam, quantos foram recusados e a hora da saída presa */
+    async function resumo(uid) {
+      const f = await minhas(uid);
+      const fim = f.filter(x => x.tipo === 'finalizar').pop();
+      return { n: f.length, recusados: f.filter(x => x.erro).length, saida: fim ? fim.dados?.hora || null : null };
+    }
+    return { mudar, minhas, enviar, resumo };
+  }
+  const _campoMudar = fn => _tx(['meta'], 'readwrite', (t, res, rej) => {
+    const s = t.objectStore('meta'), g = s.get('campo_fila');
+    g.onerror = e => rej(e.target.error);
+    g.onsuccess = () => {
+      let f; try { f = fn((g.result && g.result.v) || []); } catch (e) { rej(e); return; }
+      const p = s.put({ k: 'campo_fila', v: f });
+      p.onsuccess = () => res(f);
+      p.onerror = e => rej(e.target.error);
+    };
+  });
+  let _campoEmVoo = false;
+  const campo = criarFilaCampo({
+    mudar: _campoMudar,
+    ler: async () => (await getMeta('campo_fila', [])) || [],
+    travar: async fn => {
+      const rodar = async () => { if (_campoEmVoo) return null; _campoEmVoo = true; try { return await fn(); } finally { _campoEmVoo = false; } };
+      const locks = globalThis.navigator?.locks;
+      if (!locks?.request) return rodar();
+      let dentro = false;
+      try { return await locks.request('petermann-campo', { ifAvailable: true }, l => { dentro = true; return l ? rodar() : null; }); }
+      catch (e) { if (dentro) throw e; return rodar(); }              // trava indisponível: envia sem ela
+    },
+    depois: r => { try { globalThis.window?.dispatchEvent(new CustomEvent('campo-enviado', { detail: r })); } catch (_) {} },
+  });
+  /* no service worker (app fechado): manda a fila de campo da conta espelhada, sem esperar a trava das notas */
+  async function enviarCampoEmFundo() {
+    const reg = await _get('meta', 'sessao_fundo').catch(() => null);
+    const s = reg && reg.v, api = globalThis.API;
+    if (!s || !s.token || !s.uid || !api?.auth?.usarToken) return { ok: 0, enviados: [], recusados: [], restam: 0 };
+    _fundoUid = s.uid;
+    api.auth.usarToken(s.token);
+    const r = await campo.enviar(api, s.uid, { auto: true, viva: () => _fundoUid === s.uid });
+    const sum = await campo.resumo(s.uid);
+    return { ...r, restam: sum.n - sum.recusados };
+  }
+
   let _fundoUid = null;               // no service worker: a conta que está enviando AGORA (null = sessão encerrada)
   let _espelhoFila = Promise.resolve();   // grava/apaga o espelho NA ORDEM em que foi pedido
 
@@ -1666,5 +1746,6 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
     sync, aguardarSync, forcarEnvio, setupAutoSync, getMeta, setMeta, getSyncQueueSummary, idsNaFila, repararQrUrls,
     espelharSessao, encerrarSessaoFundo, registrarEnvioFundo, enviarEmFundo,
     garantirAno, anosSincronizados, getNotasEquipe,
+    campo, enviarCampoEmFundo,
   };
 })();

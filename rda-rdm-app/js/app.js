@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 659;
+const APP_BUILD = 660;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -962,6 +962,9 @@ async function enviarAgora() {
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
   const txt = $('offline-banner-text'); if (txt) txt.textContent = '⏳ Enviando as pendências…';
   try {
+    await window.Campo?.subirFila();                         // campo primeiro (24/11/2026)
+    const preso = await DB.campo.resumo(user.id).catch(() => ({ recusados: 0 }));
+    if (preso.recusados && _registraCampo()) switchView('campo');   // recusado: a tela do campo mostra o motivo
     const r = await DB.forcarEnvio(sb, user.id);
     await carregarDadosLocais();
     if (viewAtual === 'notas') renderNotas();
@@ -995,12 +998,17 @@ async function syncBadge(syncing) {
   if (DB?.getSyncQueueSummary) {
     try { summary = await DB.getSyncQueueSummary(); } catch (_) {}
   }
+  /* registro de campo preso (24/11/2026): vem antes das notas e diz a hora do toque, para a pessoa saber que NÃO foi */
+  let campo = { n: 0, recusados: 0, saida: null };
+  if (user && DB?.campo) { try { campo = await DB.campo.resumo(user.id); } catch (_) {} }
+  const campoTxt = !campo.n ? '' : campo.recusados ? '⚠️ Registro de campo não aceito pelo servidor. Toque para ver'
+    : `📍 ${campo.saida ? `Saída de campo das ${FusoBR.hora(new Date(campo.saida), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Entrada em campo'} ainda NÃO foi enviada`;
 
   if (!navigator.onLine) {
     dot.className = 'sync-dot offline';
     txt.textContent = 'offline';
     if (banner && bannerText) {
-      bannerText.textContent = summary.count
+      bannerText.textContent = campoTxt ? `📡 ${campoTxt.replace(/^📍 /, '')}. Envia sozinha quando a internet voltar.` : summary.count
         ? `📡 Offline — ${summary.count} item${summary.count === 1 ? '' : 's'} aguardando sincronização`
         : '📡 Você está offline. As alterações ficam salvas no celular e sincronizam quando a rede voltar.';
       banner.style.display = 'flex';
@@ -1013,7 +1021,12 @@ async function syncBadge(syncing) {
   dot.className = 'sync-dot online';
   txt.textContent = 'online';
   if (banner && bannerText) {
-    if (summary.count) {
+    if (campoTxt) {
+      bannerText.textContent = campoTxt + (summary.count ? ` · mais ${summary.count} pendente${summary.count === 1 ? '' : 's'}` : '');
+      banner.style.display = 'flex';
+      document.body.classList.add('tem-banner-sync');
+      if (bannerBtn && !_enviandoAgora) { bannerBtn.style.display = 'inline-block'; bannerBtn.disabled = false; bannerBtn.textContent = campo.recusados ? 'Ver' : 'Enviar agora'; }
+    } else if (summary.count) {
       const suffix = summary.failedCount ? ` · ${summary.failedCount} com falha` : '';
       const seg = summary.nextAttemptAt ? Math.round((summary.nextAttemptAt - Date.now()) / 1000) : 0;
       const retryText = !summary.scheduledCount ? '' : (seg <= 90 ? ' · tentando de novo em instantes' : ' · toque em Enviar agora para tentar já');
@@ -3053,7 +3066,7 @@ function _abrirSinoPelaUrl(urlDoAviso) {
     }
     /* ./?abrir=campo (11/11/2026): alguém está em campo há muitas horas sem finalizar (campo:verificar no servidor) */
     if (alvo === 'campo') {
-      if (user && _acompanhaCampo()) { document.getElementById('notif-overlay')?.remove(); switchView('campo'); }
+      if (user && _veCampo()) { document.getElementById('notif-overlay')?.remove(); switchView('campo'); }   // 24/11/2026: também quem está em campo (lembrete)
       return;
     }
     if (alvo === 'fechamento') {

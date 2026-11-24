@@ -20,7 +20,6 @@
 ───────────────────────────────────────────────────────────── */
 window.Campo = (() => {
 
-  const KEY_FILA = 'campo_fila';
   const KEY_CACHE = () => `campo_cache_${filAno}_${filMes}`;
   /* Histórico de fazenda + campo (08/11/2026, pedido do Cleiton): cada início guarda o par no aparelho, por conta, para
      escolher na próxima visita em vez de digitar. Mais recente primeiro; os registros do mês vindos do servidor
@@ -52,69 +51,54 @@ window.Campo = (() => {
   /* ── Fila offline ──────────────────────────────────────────
      Igual à do ponto: a fila é do aparelho e cada item guarda a conta (uid).
      Só sobem os de quem está logado. A ordem importa (iniciar antes de finalizar). */
-  async function _fila() { try { return (await DB.getMeta(KEY_FILA)) || []; } catch (_) { return []; } }
   const _meu = it => !!user?.id && it.uid === user.id;
-  async function _minhas() { return (await _fila()).filter(_meu); }
-  async function _salvarFila(f) { try { await DB.setMeta(KEY_FILA, f); } catch (_) {} }
-  /* 24/11/2026: toda mudança na fila passa por aqui, uma de cada vez e sempre sobre a fila ATUAL. O envio regravava a cópia
-     que leu no começo: um "Fim" tocado enquanto outro registro subia era apagado por essa cópia velha. */
-  let _trava = Promise.resolve();
-  function _mudarFila(fn) {
-    const p = _trava.then(async () => { const f = fn(await _fila()); await _salvarFila(f); return f; });
-    _trava = p.catch(() => {});
-    return p;
+  async function _minhas() { try { return await DB.campo.minhas(user?.id); } catch (_) { return []; } }
+  /* 24/11/2026: a fila e o envio moram no db.js (DB.campo): o mesmo código sobe pela página e, no Android, com o app fechado. */
+  async function _enfileirar(item) {
+    await DB.campo.mudar(f => [...f, { ...item, qid: crypto.randomUUID(), uid: user?.id, erro: null }]);
+    try { DB.registrarEnvioFundo?.(true); } catch (_) {}        // pede ao navegador para enviar assim que houver rede
+    _avisarFila();
   }
-  const _mesmo = (a, b) => a.qid ? a.qid === b.qid
-    : a.tipo === b.tipo && a.uid === b.uid && (a.id || a.dados?.id) === (b.id || b.dados?.id) && a.dados?.hora === b.dados?.hora;   // itens de antes do qid
-  async function _enfileirar(item) { await _mudarFila(f => [...f, { ...item, qid: crypto.randomUUID(), uid: user?.id, erro: null }]); }
+  const _avisarFila = () => { try { window.syncBadge?.(false); } catch (_) {} };
 
-  /* Recusa de verdade (regra do servidor) fica na fila com o motivo. 401, 408, 429 e 5xx passam: servidor fora do ar não é
-     recusa, e o registro não pode aparecer com "Descartar". */
-  const _passageiro = e => !e?.status || [401, 408, 425, 429].includes(e.status) || e.status >= 500;
-  let _subindo = false;
-  /* auto: envio sozinho (abrir o app, voltar a ele, a cada minuto) — não insiste no que o servidor já recusou */
   async function subirFila({ auto = false } = {}) {
-    if (_subindo || !sb || !user?.id || !navigator.onLine) return 0;
-    _subindo = true; let ok = 0;
-    try {
-      const uid = user.id;
-      const f = (await _minhas()).filter(it => !(auto && it.erro));
-      for (const it of f) {
-        if (user?.id !== uid) break;                                  // trocou de conta no meio: o resto é de quem saiu
-        try {
-          if (it.tipo === 'iniciar') await sb.atividadesCampo.iniciar(it.dados);
-          else await sb.atividadesCampo.finalizar(it.id, it.dados);
-          ok++;
-          await _mudarFila(x => x.filter(y => !_mesmo(it, y)));
-        } catch (e) {
-          if (_passageiro(e)) break;                                  // sem rede ou servidor fora: tenta depois, na mesma ordem
-          await _mudarFila(x => x.map(y => _mesmo(it, y) ? { ...y, erro: e.message || 'falhou' } : y));   // recusado: fica visível com o motivo
-        }
-      }
-      if (ok) toast(`${ok} registro${ok > 1 ? 's' : ''} de campo enviado${ok > 1 ? 's' : ''} ✅`);
-    } finally { _subindo = false; }
-    return ok;
+    if (!sb || !user?.id || !navigator.onLine) return 0;
+    const uid = user.id;
+    const r = await DB.campo.enviar(sb, uid, { auto, viva: () => user?.id === uid });
+    return r.ok;
   }
-  /* 24/11/2026 (caso Romário): a fila só subia ao abrir ESTA tela ou no instante em que a rede voltava com o app aberto. Quem
-     registrava a saída sem sinal e depois abria o app para outra coisa (pedir repasse, lançar nota) deixava a saída presa.
-     Agora sobe nas mesmas horas das notas: ao abrir o app, ao voltar a ele, quando a rede muda e a cada minuto. */
+  /* Sobe ao abrir o app, ao voltar a ele, quando a rede muda e a cada minuto, em qualquer tela (antes só ao abrir ESTA tela). */
   let _ultimaAuto = 0, _contaRevista = null;
   async function _subirSozinho() {
     if (!user?.id || !sb || !navigator.onLine || Date.now() - _ultimaAuto < 3000) return;
     _ultimaAuto = Date.now();
     const primeira = _contaRevista !== user.id;                        // uma vez por abertura, tenta também o que foi recusado
     _contaRevista = user.id;
-    const n = await subirFila({ auto: !primeira });
-    if (n && viewAtual === 'campo') render();
+    await subirFila({ auto: !primeira });
   }
   const _disparar = () => { _subirSozinho().catch(() => {}); };
-  window.addEventListener('online', _disparar);
+  window.addEventListener('online', () => { _ultimaAuto = 0; _disparar(); });
   window.addEventListener('focus', _disparar);
   window.addEventListener('pageshow', _disparar);
-  window.addEventListener('db-synced', _disparar);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) _disparar(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { _disparar(); return; }
+    _minhas().then(f => { if (f.some(x => !x.erro)) DB.registrarEnvioFundo?.(true); }).catch(() => {});   // saiu do app com registro preso
+  });
   setTimeout(_disparar, 4000);          // abriu o app
   setInterval(_disparar, 60_000);
+  /* enviou (ou foi recusado): conta à pessoa, com a hora real do toque */
+  window.addEventListener('campo-enviado', e => {
+    const r = e.detail || {};
+    (r.enviados || []).forEach(it => toast(`✅ ${it.tipo === 'iniciar' ? 'Entrada' : 'Saída'} de campo enviada · registrada às ${horaBR(it.dados?.hora)}`));
+    (r.recusados || []).forEach(it => toast(`⚠️ Registro de campo não aceito: ${it.erro}`, 'err', 8000));
+    _avisarFila();
+    if (viewAtual === 'campo') render();
+  });
+  try {
+    navigator.serviceWorker?.addEventListener('message', e => {
+      if (e.data?.tipo === 'campo-enviado') { _avisarFila(); if (viewAtual === 'campo') render(); }
+    });
+  } catch (_) {}
 
   /* ── Localização no toque ──────────────────────────────── */
   function localizar() {
@@ -287,6 +271,7 @@ window.Campo = (() => {
             ${a.em_campo && !naLixeira ? '<span class="sync-pill pending">🟢 em campo</span>' : ''}
             ${a.fim_automatico ? '<span class="doc-tag outro" title="Fechada quando outro campo foi iniciado">fim automático</span>' : ''}
             ${a.registrado_depois_min ? `<span class="doc-tag outro" title="O início foi tocado sem internet e chegou ao servidor ${a.registrado_depois_min >= 120 ? Math.floor(a.registrado_depois_min / 60) + ' h' : a.registrado_depois_min + ' min'} depois">📶 registrado depois</span>` : ''}
+            ${a.saida_depois_min ? `<span class="doc-tag outro" title="A saída foi tocada sem internet e chegou ao servidor ${a.saida_depois_min >= 120 ? Math.floor(a.saida_depois_min / 60) + ' h' : a.saida_depois_min + ' min'} depois. A hora mostrada é a do toque.">📶 saída enviada depois</span>` : ''}
             ${a.editado_em ? `<span class="doc-tag outro" title="Corrigido em ${_atG(dataBR(a.editado_em))} às ${_atG(horaBR(a.editado_em))}${a.editado_por_nome ? ` por ${_atG(a.editado_por_nome)}` : ''}">✏️ editado</span>` : ''}
           </div>
           <div class="nota-body">
@@ -742,7 +727,8 @@ window.Campo = (() => {
     const recusados = (await _minhas()).filter(x => x.erro);
     if (!recusados.length) return;
     if (!(await pedirConfirmacao({ mensagem: `Descartar ${recusados.length} registro${recusados.length > 1 ? 's' : ''} recusado${recusados.length > 1 ? 's' : ''} pelo servidor?\nEles não serão enviados.`, confirmar: 'Descartar', perigo: true }))) return;
-    await _mudarFila(f => f.filter(x => !(_meu(x) && x.erro)));
+    await DB.campo.mudar(f => f.filter(x => !(_meu(x) && x.erro)));
+    _avisarFila();
     render();
   }
 
@@ -862,7 +848,7 @@ window.Campo = (() => {
       const dados = { id: crypto.randomUUID(), fazenda: r.fazenda.trim(), campo: r.campo.trim().toUpperCase(), hora: new Date().toISOString() };
       if (!loc.erro) Object.assign(dados, { lat: loc.lat, lng: loc.lng, precisao: Math.round(loc.precisao) });
       /* Iniciar sem fechar: o servidor fecha o anterior sozinho; na fila, o fim automático acontece quando subir. */
-      await _registrar({ tipo: 'iniciar', dados }, () => sb.atividadesCampo.iniciar(dados));
+      await _registrar({ tipo: 'iniciar', dados, rotulo: `${_faz(dados.fazenda)} · ${dados.campo}` }, () => sb.atividadesCampo.iniciar(dados));
       await _guardarNoHistorico(dados.fazenda, dados.campo);
       if (loc.erro) toast('Registrado sem localização: ' + loc.erro, 'err', 6000);
       await render();
@@ -882,7 +868,7 @@ window.Campo = (() => {
       const loc = await localizar();
       const dados = { hora: new Date().toISOString() };
       if (!loc.erro) Object.assign(dados, { lat: loc.lat, lng: loc.lng, precisao: Math.round(loc.precisao) });
-      await _registrar({ tipo: 'finalizar', id: aberta.id, dados }, () => sb.atividadesCampo.finalizar(aberta.id, dados));
+      await _registrar({ tipo: 'finalizar', id: aberta.id, dados, rotulo: `${_faz(aberta.fazenda)} · ${aberta.campo}` }, () => sb.atividadesCampo.finalizar(aberta.id, dados));
       if (loc.erro) toast('Registrado sem localização: ' + loc.erro, 'err', 6000);
       await render();
       depois = { ...aberta, fim: dados.hora, lat_fim: dados.lat, lng_fim: dados.lng };
@@ -903,7 +889,8 @@ window.Campo = (() => {
     }
     try { await enviar(); toast(item.tipo === 'iniciar' ? 'Início registrado ✅' : 'Fim registrado ✅'); }
     catch (e) {
-      if (!e?.status) { await _enfileirar(item); toast('📴 Conexão falhou: registro guardado no aparelho'); }
+      /* servidor fora do ar (5xx) também guarda: a hora do toque não pode se perder */
+      if (!e?.status || e.status >= 500 || e.status === 429) { await _enfileirar(item); toast('📴 Conexão falhou: registro guardado no aparelho e será enviado sozinho'); }
       else throw e;
     }
   }

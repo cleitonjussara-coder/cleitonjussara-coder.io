@@ -19,12 +19,18 @@ class CampoVerificarTest extends TestCase
     use RefreshDatabase;
 
     private array $pushes = [];
+    private array $lembretes = [];
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->mock(PushService::class, function ($m) {
             $m->shouldReceive('enviar')->andReturnUsing(function ($destino, $titulo, $corpo, $url, $tag) {
+                if (str_starts_with((string) $tag, 'campo-eu-')) {
+                    $this->lembretes[] = ['para' => $destino->nome, 'titulo' => $titulo, 'corpo' => $corpo, 'url' => $url, 'tag' => $tag];
+
+                    return 1;
+                }
                 $this->pushes[] = ['para' => collect($destino)->pluck('nome')->sort()->values()->all(), 'titulo' => $titulo, 'corpo' => $corpo, 'url' => $url, 'tag' => $tag];
 
                 return 1;
@@ -51,6 +57,37 @@ class CampoVerificarTest extends TestCase
     {
         return AtividadeCampo::create(['id' => (string) Str::uuid(), 'user_id' => $c->id, 'fazenda' => 'Faz. São José',
             'campo' => $campo, 'inicio' => Carbon::parse($inicio), 'fim' => $fim ? Carbon::parse($fim) : null]);
+    }
+
+    /* 24/11/2026 — caso Romário: quem está em campo também é lembrado, com 3 h e de novo a cada 2 h */
+    public function test_lembra_a_propria_pessoa_com_3h_e_a_cada_2h(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $a = $this->campo($romario, '2026-11-11 12:10:00');           // 2h50
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertSame([], $this->lembretes);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:10:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(1, $this->lembretes);
+        $this->assertSame('Romario', $this->lembretes[0]['para']);
+        $this->assertSame('⏰ Você está em campo há 3h', $this->lembretes[0]['titulo']);
+        $this->assertSame('./?abrir=campo', $this->lembretes[0]['url']);
+        $this->assertSame('campo-eu-'.$a->id, $this->lembretes[0]['tag']);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T16:40:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(1, $this->lembretes, 'ainda não passaram 2 h');
+        Carbon::setTestNow(Carbon::parse('2026-11-11T17:10:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->lembretes);
+        $this->assertCount(1, $this->pushes, 'a gestão continua recebendo um aviso só');
+
+        $a->update(['fim' => Carbon::parse('2026-11-11 17:20:00')]);
+        Carbon::setTestNow(Carbon::parse('2026-11-11T20:10:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->lembretes, 'registrou a saída: para de lembrar');
     }
 
     /* 24/11/2026 — pedido do Paulo: com 3 h (era 2h30), um aviso só, ao mesmo tempo para o focal e o gestor */

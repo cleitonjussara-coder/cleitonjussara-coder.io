@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Cache;
  * Quem recebe (decisão do Cleiton, 12/11/2026): com 3 h em campo sem finalizar (era 2h30 até 24/11/2026), UM aviso só, ao mesmo tempo para o
  * focal, o gestor e o admin. (Antes: focal com 4 h e gestor com 6 h.) Avisa uma vez por atividade (marca no cache por
  * 3 dias). Só olha início das últimas 24 h: campo esquecido aberto há dias não é emergência e viraria ruído. Quem está
- * em campo não recebe aviso sobre si mesmo.
+ * em campo não recebe o aviso da gestão; recebe um lembrete próprio (24/11/2026): com 3 h e de novo a cada 2 h, até 24 h.
  */
 class CampoVerificar extends Command
 {
@@ -52,6 +52,7 @@ class CampoVerificar extends Command
         foreach ($abertas as $a) {
             $inicio = Carbon::parse($a->inicio->format('Y-m-d H:i:s'), self::TZ);
             $min = (int) $inicio->diffInMinutes($agora, true);
+            $this->lembrar($push, $a, $inicio, $min);
             /* a marca "gestor" também vale: atividade que no sistema antigo só avisou o focal ainda avisa o gestor uma vez */
             if (Cache::has('campo-alerta-gestor-'.$a->id)) {
                 continue;
@@ -67,6 +68,21 @@ class CampoVerificar extends Command
         $this->info($avisos ? $avisos.' aviso(s) de campo longo enviado(s).' : 'Nenhum aviso novo de campo longo.');
 
         return self::SUCCESS;
+    }
+
+    /* A própria pessoa (24/11/2026, caso Romário: saída de campo presa no celular e ninguém lembrava quem estava em campo).
+       Tocar abre a tela do campo; o aviso também acorda o app e manda o registro que ficou guardado sem sinal. */
+    private function lembrar(PushService $push, AtividadeCampo $a, Carbon $inicio, int $min): void
+    {
+        $chave = 'campo-lembrete-'.$a->id;
+        if (Cache::has($chave)) {
+            return;
+        }
+        Cache::put($chave, 1, now()->addMinutes(115));   // o cron roda a cada 30 min: repete a cada 2 h
+        $m = $min % 60;
+        $push->enviar($a->colaborador, '⏰ Você está em campo há '.intdiv($min, 60).'h'.($m ? sprintf('%02d', $m) : ''),
+            "{$a->fazenda} · campo {$a->campo}, desde ".$inicio->format('H:i').'. Já saiu? Registre o fim das atividades. Se já registrou, abra o app com internet para enviar.',
+            './?abrir=campo', 'campo-eu-'.$a->id);
     }
 
     private function avisar(PushService $push, AtividadeCampo $a, Carbon $inicio, int $min, Collection $destino): void

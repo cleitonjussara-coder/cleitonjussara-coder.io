@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v659';
+const CACHE   = 'petermann-v660';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -69,7 +69,7 @@ const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
    db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
    normal e só o envio em segundo plano fica de fora. */
 let _importErro = null;
-try { importScripts('./js/api.js?v=659', './js/db.js?v=659'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
+try { importScripts('./js/api.js?v=660', './js/db.js?v=660'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
@@ -125,8 +125,31 @@ self.addEventListener('push', e => {
     silent: false,
     vibrate: [200, 100, 200],
   };
-  e.waitUntil(self.registration.showNotification(titulo, opcoes));
+  /* 24/11/2026: o aviso acordou o app fechado e há rede — aproveita para mandar o registro de campo que ficou guardado */
+  e.waitUntil(self.registration.showNotification(titulo, opcoes).then(() => campoEmFundo()).catch(() => {}));
 });
+
+/* Registro de campo guardado sem sinal (24/11/2026): sobe com o app fechado e conta à pessoa o que aconteceu. A tag é a do
+   lembrete "você está em campo": a saída enviada troca o lembrete no celular. Com o app na tela, quem avisa é a página. */
+async function campoEmFundo() {
+  if (typeof DB === 'undefined' || !DB.enviarCampoEmFundo) return null;
+  const r = await DB.enviarCampoEmFundo();
+  const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  if (r.ok) for (const j of janelas) j.postMessage({ tipo: 'campo-enviado' });
+  if (janelas.some(j => j.visibilityState === 'visible')) return r;
+  const base = { icon: './icon-192.png?v=160', badge: './icon-192.png?v=160', lang: 'pt-BR', data: { url: './?abrir=campo' } };
+  const hora = h => { try { return new Date(h).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } };
+  for (const it of r.enviados) {
+    const fim = it.tipo === 'finalizar';
+    await self.registration.showNotification(fim ? '✅ Saída de campo enviada' : '✅ Entrada em campo enviada',
+      { ...base, body: `${it.rotulo ? it.rotulo + ' · ' : ''}registrada às ${hora(it.dados && it.dados.hora)}.`, tag: 'campo-eu-' + (it.id || (it.dados && it.dados.id)) });
+  }
+  for (const it of r.recusados) {
+    await self.registration.showNotification('⚠️ Registro de campo não foi aceito',
+      { ...base, body: `${it.erro} Abra o app ou fale com o gestor.`, tag: 'campo-eu-' + (it.id || (it.dados && it.dados.id)) });
+  }
+  return r;
+}
 
 /* Tocar no aviso: traz a janela que já existe para a frente; se não houver
    nenhuma, abre o app. */
@@ -154,12 +177,13 @@ self.addEventListener('notificationclick', e => {
    sobrou algo que vale tentar de novo, e nunca na última chance. */
 async function envioEmFundo(ultimaChance) {
   if (typeof DB === 'undefined' || !DB.enviarEmFundo) return null;      // db.js não carregou: nada a fazer
+  const c = await campoEmFundo().catch(() => null);                     // campo primeiro: antes das notas e das fotos
   const r = await DB.enviarEmFundo();
   if (r.ok || r.fotosOk) {
     const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const j of janelas) j.postMessage({ tipo: 'envio-fundo', ok: r.ok, fail: r.fail, fotosOk: r.fotosOk, fotosFail: r.fotosFail, restam: r.restam });
   }
-  if (r.repetir && !ultimaChance) throw new Error('envio em segundo plano: sobrou fila, tentar de novo');
+  if ((r.repetir || (c && (c.restam > 0 || c.ocupado))) && !ultimaChance) throw new Error('envio em segundo plano: sobrou fila, tentar de novo');
   return r;
 }
 
