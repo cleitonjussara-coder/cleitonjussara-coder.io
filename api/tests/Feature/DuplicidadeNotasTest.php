@@ -426,6 +426,22 @@ class DuplicidadeNotasTest extends TestCase
         $this->assertNull(\App\Services\LeitorNota::hora('9h44'));
     }
 
+    /* 25/11/2026 (Cleiton): várias antenas Starlink, mesmo valor e mesmo dia; quem separa é a fatura INV. */
+    public function test_recibos_starlink_de_antenas_diferentes_nao_sao_duplicata(): void
+    {
+        $colab = $this->pessoa('colaborador');
+        $recibo = ['tipo' => 'RDM', 'subtipo' => 'Outros', 'valor' => 245, 'data' => '2026-10-21',
+            'cnpj' => null, 'razao_social' => 'STARLINK BRAZIL SERVICOS DE INTERNET LTDA'];
+        $this->nota($colab, $recibo + ['numero' => 'INV-DF-BRA-24033363-67467-46', 'documento' => 'outro']);
+        Sanctum::actingAs($colab);
+
+        $this->postJson('/api/notas/duplicada', $recibo + ['numero' => 'INV-DF-BRA-24033364-11111-40'])
+            ->assertOk()->assertJsonPath('existe', false);
+        // o mesmo recibo de novo, mesmo em outro dia de lançamento: é o mesmo número
+        $this->postJson('/api/notas/duplicada', ['data' => '2026-10-22'] + $recibo + ['numero' => 'INV-DF-BRA-24033363-67467-46'])
+            ->assertOk()->assertJsonPath('existe', true)->assertJsonPath('motivo', 'numero');
+    }
+
     /* 09/11/2026 (Cleiton): Casa das Balanças nº 31703 e 31704, R$ 70 no mesmo dia; a foto da 31704 cortou o fim da chave.
        Antes, fora do pedágio, número diferente ainda perguntava por dia e valor. */
     public function test_numero_diferente_separa_em_qualquer_categoria_mesmo_com_chave_cortada(): void

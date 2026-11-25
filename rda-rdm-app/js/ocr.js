@@ -143,6 +143,13 @@ window.OCR = (() => {
                || oneLine.match(/\bRecibo\s*[:;]\s*((?=[0-9A-Z]*[A-Z])(?=[0-9A-Z]*[0-9])[0-9A-Z]{8,20})\b/i);
       if (dfe) r.numero = dfe[1].toUpperCase();
     }
+    /* Starlink (25/11/2026, pedido do Cleiton): a empresa tem várias antenas e cada uma gera o seu recibo, com o mesmo valor e
+       às vezes no mesmo dia. O número é a fatura "INV-DF-BRA-24033363-67467-46"; a conta "ACC-…" se repete todo mês e não serve. */
+    const starlink = /STARLINK/i.test(oneLine);
+    if (starlink && !r.numero) {
+      const inv = oneLine.match(/(?<![0-9A-Z])[I1l|]NV\s?-\s?((?:[A-Z]{2,4}\s?-\s?){0,3})(\d{4,12})\s?-\s?(\d{3,8})\s?-\s?(\d{1,4})(?!\d)/i);
+      if (inv) r.numero = `INV-${inv[1].replace(/\s/g, '').toUpperCase()}${inv[2]}-${inv[3]}-${inv[4]}`;
+    }
     /* Placa do veículo no recibo de pedágio ("Placa: REM8H68"): antiga (ABC1234) ou Mercosul (ABC1D23). */
     /* EPR Triângulo (09/11/2026): o OCR lê a placa TXI1F14 como "TX11F14". Nas 3 primeiras posições só cabe letra,
        então 0/1/5/8 voltam a ser O/I/S/B (exige ao menos uma letra de verdade ali). */
@@ -164,7 +171,7 @@ window.OCR = (() => {
       const achado = oneLine.replace(/\s*\.\s+(?=[a-z0-9-]+\.)/gi, '.').match(site) || raw.replace(/\r?\n\s*/g, '').match(site);
       if (achado) r.portal_nfse = 'https://' + achado[0].replace(/^h?t+ps?:\/+/i, '').replace(/[./]+$/, '');
     }
-    for (const p of r.numero ? [] : numPats) {
+    for (const p of r.numero || starlink ? [] : numPats) {
       const m = oneLine.match(p);
       if (m) { const n = _d(m[1]).replace(/^0+/, ''); if (n) { r.numero = n; break; } }
     }
@@ -219,6 +226,12 @@ window.OCR = (() => {
       }
     }
 
+    if (starlink) {
+      const rs = oneLine.match(/STARLINK\s+BRA[ZS]IL\s+SERVI[CÇ]OS\s+DE\s+INTERNET\s+LTDA/i);
+      if (rs) r.razao_social = 'STARLINK BRAZIL SERVICOS DE INTERNET LTDA';
+      r.cnpj = r.cnpj === '17117768000142' ? null : r.cnpj;        // "ID do IVA" é o CNPJ do CLIENTE (a própria empresa)
+    }
+
     // 4. Valor — cascata
     const valorPats = [
       /VALOR\s+DA\s+OPERA\S*\s*\/?\s*SERVI\S*[\s\S]{0,160}?R\$\s*(\d{1,3}(?:\.\d{3})+,\d{2}|[0-9]{1,7}[.,][0-9]{2})/i,   // NFS-e: o valor do serviço
@@ -245,6 +258,12 @@ window.OCR = (() => {
         if (v !== null && v > 0) { r.valor = v; break; }
       }
     }
+    /* Starlink: o "Subtotal" vem antes dos impostos e "Total devido" é zero depois de pago; vale "Pagamento" (ou "Custos totais") */
+    if (starlink) {
+      const dinheiro = rot => _pf((oneLine.match(new RegExp(rot + '\\s*R\\$\\s*(\\d{1,3}(?:\\.\\d{3})*,\\d{2})', 'i')) || [])[1] || '');
+      const pago = dinheiro('Pagamento') || dinheiro('Custos\\s+totais');
+      if (pago > 0) r.valor = pago;
+    }
     if (!r.valor) {
       const allVals = [...oneLine.matchAll(/([0-9]{1,7}[.,][0-9]{2})/g)]
         .map(m => _pf(m[1])).filter(v => v !== null && v > 0 && v < 1000000);
@@ -260,6 +279,13 @@ window.OCR = (() => {
     for (const p of dataPats) {
       const m = oneLine.match(p);
       if (m) { r.data = `${m[3]}-${m[2]}-${m[1]}`; break; }
+    }
+    /* Starlink escreve a data por extenso: "Data da fatura: quarta-feira, 21 de outubro de 2026" */
+    if (starlink) {
+      const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+      const m = oneLine.match(/Data\s+da\s+fatura\s*[:;]?[^0-9]{0,30}(\d{1,2})\s+de\s+([a-zç]{3,9})\s+de\s[^]{0,60}?\b(20\d{2})\b/i);   // o ano pode cair na linha de baixo, depois da coluna ao lado
+      const i = m ? MES.indexOf(m[2].slice(0, 3).toLowerCase()) : -1;
+      if (i >= 0) r.data = `${m[3]}-${String(i + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
     }
 
     return r;

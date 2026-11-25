@@ -258,6 +258,19 @@ class LeitorNotaTest extends TestCase
         $this->assertNull($this->leitor()->validar(json_encode(["numero" => "ZZZZZZZZ-C253-4255-A77E-50FBEBA7105F"]))["numero"]);
     }
 
+    /** 25/11/2026: várias antenas Starlink, um recibo por antena — o número é a fatura INV, nunca a conta ACC. */
+    public function test_fatura_da_starlink_vira_o_numero(): void
+    {
+        $ler = fn (array $c) => $this->leitor()->validar(json_encode($c + ['razao_social' => 'STARLINK BRAZIL SERVICOS DE INTERNET LTDA', 'valor' => 245]));
+        $r = $ler(['numero' => 'INV-DF-BRA-24033363-67467-46', 'cnpj' => self::CNPJ]);
+        $this->assertSame('INV-DF-BRA-24033363-67467-46', $r['numero']);
+        $this->assertNull($r['cnpj'], 'ID do IVA é o CNPJ do cliente');
+        $this->assertSame('INV-BRA-123456-12345-7', $ler(['numero' => ' inv-bra-123456-12345-7 '])['numero']);
+        foreach (['ACC-DF-12111550-42610-25', 'INV-DF-BRA', 'INV-', 'INV-DF-BRA-24033363-67467-46; DROP'] as $ruim) {
+            $this->assertNull($ler(['numero' => $ruim])['numero'], $ruim);
+        }
+    }
+
     /** Recibo da WAY 153: o DFE vira o número, mas letras no campo numero continuam recusadas. */
     public function test_dfe_do_recibo_de_pedagio_vira_o_numero(): void
     {

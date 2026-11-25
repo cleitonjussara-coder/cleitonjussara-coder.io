@@ -46,6 +46,9 @@ class LeitorNota
         .'numero e serie = somente o número e a série do documento, um único número cada. '
         .'Exceção: em recibo de pedágio o numero é o código "SEQ No" (8-4-4-4-12 caracteres hexadecimais com hífens), copie-o inteiro. '
         .'dfe = somente em recibo de pedágio que traga "DFE N:" ou "ID RECIBO/DFE:" (ex.: "DFE N: JLEE546J82JK", "ID RECIBO/DFE:PKPM242B8334/" → "PKPM242B8334", "Recibo:NLOLUCVB828M"): copie o código inteiro, com letras e números; nesse caso deixe numero null (DOC, NSU e autorização "A:" do cartão não são o número). '
+        /* 25/11/2026 (pedido do Cleiton): a empresa tem várias antenas Starlink e cada uma gera um recibo igual no valor */
+        .'Recibo da Starlink: numero = o código da fatura que começa com "INV-" (ex.: "INV-DF-BRA-24033363-67467-46"), copiado inteiro com letras e hífens; '
+        .'a "Conta do cliente" ("ACC-...") NÃO é o número; "ID do IVA" é o CNPJ do cliente, NÃO o do emitente; valor = a linha "Pagamento" (não o "Subtotal" nem o "Total devido"); data = "Data da fatura". '
         .'placa = placa do veículo, somente se o documento trouxer (recibo de pedágio: "Placa: ABC1D23"), 7 caracteres sem hífen. '
         .'hora = o horário impresso ao lado da data em recibo, comprovante de cartão ou recibo de pedágio (ex.: "04.11.2026 09:44:18" → "09:44:18", "14/11/2026 · 16:10" → "16:10"), formato HH:MM:SS (ou HH:MM se não houver segundos). '
         .'portal = somente em recibo de pedágio: o site impresso para gerar a NFS-e ou o documento fiscal (ex.: "https://nfsevia.ecorodovias.com.br", "WWW.WAY153.COM.BR"), copiado inteiro; se estiver partido em duas linhas, junte. '
@@ -186,7 +189,11 @@ class LeitorNota
         $seq = is_string($j['numero'] ?? null) ? strtoupper(trim($j['numero'])) : '';
         $out['numero'] = preg_match('/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/', $seq)
             ? $seq
-            : $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
+            : self::faturaStarlink($seq) ?? $this->grupoDeDigitos($j['numero'] ?? null, 9, true);
+        /* Starlink: "ID do IVA" é o CNPJ do cliente (a própria empresa), nunca o do emitente */
+        if ($out['cnpj'] === Nota::CNPJ_EMPRESA && (self::faturaStarlink($seq) !== null || stripos((string) $out['razao_social'], 'starlink') !== false)) {
+            $out['cnpj'] = null;
+        }
         /* recibo da WAY 153: o "DFE N:" vem em campo próprio, para o numero seguir recusando letras nas outras notas */
         /* Rota dos Grãos imprime "ID RECIBO/DFE:PKPM242B8334/": a barra do fim não faz parte do código */
         $dfe = is_string($j['dfe'] ?? null) ? strtoupper(trim($j['dfe'], " \t\n\r\0\x0B/")) : '';
@@ -216,6 +223,14 @@ class LeitorNota
         }
 
         return $out;
+    }
+
+    /** Número da fatura da Starlink: "INV-DF-BRA-24033363-67467-46" (25/11/2026). A conta "ACC-…" se repete todo mês e não passa. */
+    private static function faturaStarlink(string $v): ?string
+    {
+        $v = preg_replace('/\s+/', '', $v);
+
+        return preg_match('/^INV-(?:[A-Z]{2,4}-){0,3}\d{4,12}-\d{3,8}-\d{1,4}$/', $v) && strlen($v) <= 40 ? $v : null;
     }
 
     /** Hora do recibo de pedágio: "09:44:18" ou "09:44"; qualquer outra coisa vira null. */
