@@ -82,7 +82,7 @@ class CampoVerificarTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-11-11T17:10:00-03:00'));
         $this->artisan('campo:verificar')->assertSuccessful();
         $this->assertCount(2, $this->lembretes);
-        $this->assertCount(1, $this->pushes, 'a gestão continua recebendo um aviso só');
+        $this->assertCount(2, $this->pushes, 'a gestão: primeiro aviso e, sem confirmação, o segundo (26/11/2026)');
 
         $a->update(['fim' => Carbon::parse('2026-11-11 17:20:00')]);
         Carbon::setTestNow(Carbon::parse('2026-11-11T20:10:00-03:00'));
@@ -112,9 +112,12 @@ class CampoVerificarTest extends TestCase
         $this->assertStringContainsString('Faz. São José · campo BRCB147, desde 12:40', $this->pushes[0]['corpo']);
         $this->assertSame('./?abrir=campo', $this->pushes[0]['url']);
 
-        Carbon::setTestNow(Carbon::parse('2026-11-11T19:00:00-03:00'));   // não repete mais tarde
+        Carbon::setTestNow(Carbon::parse('2026-11-11T19:00:00-03:00'));   // sem confirmação: o segundo aviso (26/11/2026)
         $this->artisan('campo:verificar')->assertSuccessful();
-        $this->assertCount(1, $this->pushes);
+        $this->assertCount(2, $this->pushes);
+        Carbon::setTestNow(Carbon::parse('2026-11-11T21:00:00-03:00'));   // e não repete mais
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->pushes);
     }
 
     public function test_sem_focal_o_gestor_recebe_sozinho(): void
@@ -223,5 +226,89 @@ class CampoVerificarTest extends TestCase
         $this->artisan('campo:verificar', ['--horas' => 5])->assertSuccessful();
         $this->assertSame(['Ana'], $this->pushes[0]['para']);
         $this->assertSame('⚠️ Focal em campo há 6h', $this->pushes[0]['titulo']);
+    }
+
+    /* 26/11/2026 — pedido do Cleiton: sem "Liguei, está tudo bem" e ainda sem saída 1 h depois, sai UM segundo aviso */
+    public function test_segundo_aviso_uma_hora_depois_sem_confirmacao(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $this->campo($romario, '2026-11-11 12:00:00');
+        $this->artisan('campo:verificar')->assertSuccessful();                    // 15:00, 3h: primeiro aviso
+        $this->assertCount(1, $this->pushes);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:50:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(1, $this->pushes, 'ainda não passou 1 h do primeiro');
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T16:00:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->pushes);
+        $this->assertSame(['Focal', 'Paulo'], $this->pushes[1]['para']);
+        $this->assertSame('⚠️ Ainda sem resposta: Romario em campo há 4h', $this->pushes[1]['titulo']);
+        $this->assertStringContainsString('Liguei, está tudo bem', $this->pushes[1]['corpo']);
+        $this->assertSame($this->pushes[0]['tag'], $this->pushes[1]['tag']);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T18:00:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->pushes, 'não passa de dois avisos');
+    }
+
+    public function test_liguei_esta_tudo_bem_avisa_os_outros_e_cancela_o_segundo_aviso(): void
+    {
+        $paulo = $this->pessoa('Paulo', 'gestor');
+        $this->pessoa('Focal', 'colaborador', ['focal_campo' => true]);
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $a = $this->campo($romario, '2026-11-11 12:00:00');
+        $this->artisan('campo:verificar')->assertSuccessful();
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T15:20:00-03:00'));
+        \Laravel\Sanctum\Sanctum::actingAs($romario);
+        $this->postJson("/api/atividades-campo/{$a->id}/verificar")->assertForbidden();   // colaborador comum não confirma
+
+        \Laravel\Sanctum\Sanctum::actingAs($paulo);
+        $r = $this->postJson("/api/atividades-campo/{$a->id}/verificar")->assertOk();
+        $this->assertNotNull($r->json('verificado_em'));
+        $this->assertSame('Paulo', $r->json('verificado_por_nome'));
+        $this->assertCount(2, $this->pushes);
+        $this->assertSame(['Focal'], $this->pushes[1]['para'], 'quem ligou não recebe o próprio aviso');
+        $this->assertSame('✅ Romario está bem', $this->pushes[1]['titulo']);
+        $this->assertStringContainsString('Paulo ligou às 15:20', $this->pushes[1]['corpo']);
+        $this->assertSame('campo-longo-'.$a->id, $this->pushes[1]['tag']);
+
+        $this->postJson("/api/atividades-campo/{$a->id}/verificar")->assertOk();          // de novo: não repete
+        $this->assertCount(2, $this->pushes);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-11T16:30:00-03:00'));
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertCount(2, $this->pushes, 'confirmado: sem segundo aviso');
+
+        $eq = $this->getJson('/api/atividades-campo/equipe')->assertOk()->json();
+        $rom = collect($eq)->firstWhere('nome', 'Romario');
+        $this->assertSame('Paulo', $rom['ultima']['verificado_por_nome']);
+        $this->assertArrayHasKey('visto_em', $rom);
+    }
+
+    public function test_nao_confirma_quem_ja_saiu(): void
+    {
+        $paulo = $this->pessoa('Paulo', 'gestor');
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $a = $this->campo($romario, '2026-11-11 10:00:00', '2026-11-11 14:00:00');
+        \Laravel\Sanctum\Sanctum::actingAs($paulo);
+        $this->postJson("/api/atividades-campo/{$a->id}/verificar")->assertStatus(409);
+        $this->assertNull($a->fresh()->verificado_em);
+    }
+
+    public function test_aviso_diz_quando_o_celular_falou_com_o_servidor(): void
+    {
+        $this->pessoa('Paulo', 'gestor');
+        $romario = $this->pessoa('Romario', 'colaborador', ['atividade_campo' => true]);
+        $tok = $romario->createToken('app');
+        $tok->accessToken->forceFill(['last_used_at' => Carbon::parse('2026-11-11T12:35:00-03:00')->utc()])->save();
+        $this->campo($romario, '2026-11-11 12:00:00');
+
+        $this->artisan('campo:verificar')->assertSuccessful();
+        $this->assertStringContainsString('Celular falou com o servidor às 12:35.', $this->pushes[0]['corpo']);
     }
 }

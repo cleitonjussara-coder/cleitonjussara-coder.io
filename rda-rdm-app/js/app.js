@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 661;
+const APP_BUILD = 662;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -4664,6 +4664,7 @@ function renderInicio() {
       <em aria-hidden="true">›</em>
     </button>` : ''}`}
     <div class="ih-grid ${atalhos.length % 3 === 0 ? 'ih-grid-3' : ''}">${atalhos.map(x => `<button onclick="${x.acao}"><span aria-hidden="true">${x.ico}</span>${esc(x.rot)}</button>`).join('')}</div>
+    <div id="ini-campo-alerta" hidden></div>
     ${_pendInicioHTML(pend)}
     <div id="ini-aviso-cel" hidden></div>
     ${_cartaoPedidoAbertoHTML()}
@@ -4678,6 +4679,7 @@ function renderInicio() {
   _pintarEquipeHoje().catch(() => {});
   _pendFechamentoInicio(pend).catch(() => {});
   _pintarFaixaAvisoCelular().catch(() => {});
+  window.Campo?.pintarAlertaInicio?.().catch(() => {});   // 26/11/2026: alguém há mais de 3h em campo sem saída
 }
 
 /* ── Faixa "avisos desligados" no Início (09/11/2026, pedido do Cleiton) ─────────────────────────────────────────
@@ -4718,7 +4720,10 @@ async function _pintarFaixaAvisoCelular() {
 
 /* liberou nas configurações do celular e voltou ao app: a faixa se reavalia sozinha */
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && viewAtual === 'inicio') _pintarFaixaAvisoCelular().catch(() => {});
+  if (document.visibilityState === 'visible' && viewAtual === 'inicio') {
+    _pintarFaixaAvisoCelular().catch(() => {});
+    window.Campo?.pintarAlertaInicio?.().catch(() => {});   // 26/11/2026: voltou ao app, o aviso de campo se reavalia
+  }
 });
 
 async function ligarAvisoCelularDoInicio(btn) {
