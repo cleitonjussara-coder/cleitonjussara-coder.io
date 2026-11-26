@@ -111,6 +111,22 @@ window.SEFAZ = (() => {
     };
   }
 
+  /* ── Data de uma nota com chave (26/11/2026) ────────────────
+     A chave só diz mês e ano; o "dia 01" que sai dela é provisório e não
+     passa por cima de um dia conhecido. Ordem: o dia lido na nota, o que já
+     está no campo (o "hoje" que o formulário pôs sozinho vale menos que um
+     01 lido) e, sem nada dentro do mês da chave, o dia 01. Chave inválida: null. */
+  function dataPelaChave(chave, lida, noCampo, hojeISO) {
+    if (!dvValido(chave)) return null;
+    const c = digits(chave);
+    const dia01 = `20${c.slice(2,4)}-${c.slice(4,6)}-01`;
+    const cabe = d => String(d || '').slice(0, 8) === dia01.slice(0, 8);
+    if (cabe(lida) && lida !== dia01) return lida;
+    if (cabe(noCampo) && noCampo !== hojeISO) return noCampo;
+    if (cabe(lida)) return lida;
+    return cabe(noCampo) ? noCampo : dia01;
+  }
+
   /* ── Link de consulta a partir da chave ─────────────────────
      Best-effort: leva ao portal nacional com a chave preenchida. Quem
      chama deve preferir a URL real do QR (notas.qr_url) quando existir —
@@ -134,5 +150,5 @@ window.SEFAZ = (() => {
     return { url: linkConsulta(c), colarChave: false, uf: UF_MAP[c.slice(0, 2)] || '' };
   }
 
-  return { consultarChave, linkConsulta, destinoConsulta, dvValido, UF_MAP, CONSULTA_NFCE_UF };
+  return { consultarChave, dataPelaChave, linkConsulta, destinoConsulta, dvValido, UF_MAP, CONSULTA_NFCE_UF };
 })();
