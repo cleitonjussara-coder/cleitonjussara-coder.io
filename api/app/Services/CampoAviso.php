@@ -7,6 +7,7 @@ use App\Models\Colaborador;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -29,9 +30,64 @@ class CampoAviso
             ->reject(fn (Colaborador $c) => $c->id === $userId)->values();
     }
 
+    /**
+     * Última vez que cada pessoa usou o app com internet (o token do aparelho registra cada chamada ao servidor), em ISO.
+     * 26/11/2026: a saída tocada sem sinal fica no celular até o sinal voltar, então "sem saída" pode ser só falta de
+     * sinal; esta hora entra no aviso e na tela de verificação para quem vai ligar.
+     */
+    public static function vistoEm(iterable $ids): Collection
+    {
+        try {
+            return DB::table('personal_access_tokens')
+                ->where('tokenable_type', (new Colaborador)->getMorphClass())
+                ->whereIn('tokenable_id', collect($ids)->all())
+                ->selectRaw('tokenable_id, max(last_used_at) as visto')
+                ->groupBy('tokenable_id')->pluck('visto', 'tokenable_id')
+                ->map(fn ($v) => $v ? Carbon::parse($v, 'UTC')->toIso8601String() : null);
+        } catch (\Throwable) {
+            return collect();
+        }
+    }
+
+    /** "celular falou com o servidor às 09:10" (ou "ontem, 17:40"); vazio se nunca falou. */
+    public static function vistoTexto(?string $iso): string
+    {
+        if (! $iso) {
+            return '';
+        }
+        $v = Carbon::parse($iso)->setTimezone(self::TZ);
+        $hoje = Carbon::now(self::TZ)->isSameDay($v);
+
+        return ' Celular falou com o servidor '.($hoje ? 'às '.$v->format('H:i') : 'em '.$v->format('d/m H:i')).'.';
+    }
+
     public static function tag(AtividadeCampo $a): string
     {
         return 'campo-longo-'.$a->id;
+    }
+
+    /**
+     * "Liguei, está tudo bem" (26/11/2026): avisa os outros que acompanham (com a mesma tag, troca o aviso de campo longo
+     * no celular) para ninguém ligar de novo. Nunca derruba a confirmação.
+     */
+    public function verificado(AtividadeCampo $a, Colaborador $quem): void
+    {
+        try {
+            $a->loadMissing('colaborador:id,nome,email');
+            $nome = $a->colaborador?->nome ?: ($a->colaborador?->email ?: 'Colaborador');
+            $por = $quem->nome ?: $quem->email;
+            $destino = self::destinatarios($a->user_id)->reject(fn (Colaborador $c) => $c->id === $quem->id)->values();
+            if ($destino->isNotEmpty()) {
+                $this->push->enviar($destino,
+                    "✅ {$nome} está bem",
+                    "{$por} ligou às ".Carbon::now(self::TZ)->format('H:i')." e confirmou ({$a->fazenda} · campo {$a->campo}). Não precisa ligar de novo.",
+                    './?abrir=campo',
+                    self::tag($a),
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::warning('campo.aviso_verificado_falhou', ['id' => $a->id, 'erro' => $e->getMessage()]);
+        }
     }
 
     /** Só avisa se o aviso das 3 h saiu para esta atividade; e uma vez só. Nunca derruba o registro da saída. */

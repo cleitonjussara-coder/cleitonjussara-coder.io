@@ -355,6 +355,31 @@ class AtividadeCampoController extends Controller
         return response()->json(['fazenda' => $fazenda, 'campo' => $campo, 'cadastrado' => true, 'registros_corrigidos' => $corrigidos]);
     }
 
+    /**
+     * POST /atividades-campo/{id}/verificar — "Liguei, está tudo bem" (26/11/2026, pedido do Cleiton). Quem acompanha a
+     * equipe (focal, gestor, admin) confirma que falou com a pessoa que está em campo há muito tempo. Os outros recebem
+     * o aviso de que já foi atendido, e o segundo aviso das 3 h não sai. Vale uma vez por atividade e só com ela aberta.
+     */
+    public function verificar(Request $r, string $id): JsonResponse
+    {
+        $u = $r->user();
+        abort_unless($u->acompanhaCampo(), 403, 'Só gestor, administrador ou focal confirma o acompanhamento.');
+        abort_unless(AtividadeCampo::temVerificacao(), 409, 'O servidor ainda está sendo atualizado. Tente de novo em alguns minutos.');
+        $a = AtividadeCampo::findOrFail($id);
+        abort_if(AtividadeCampo::temLixeira() && $a->apagado_em, 409, 'Este registro foi apagado.');
+        abort_if($a->user_id === $u->id, 403, 'Quem está em campo não confirma o próprio acompanhamento.');
+        if ($a->fim) {
+            return response()->json(['message' => 'A pessoa já registrou a saída deste campo.'] + $this->json($a->load('colaborador:id,nome')), 409);
+        }
+        if (! $a->verificado_em) {
+            $a->update(['verificado_em' => now(), 'verificado_por' => $u->id]);
+            Log::info('campo.verificado', ['id' => $a->id, 'por' => $u->id]);
+            app(CampoAviso::class)->verificado($a, $u);
+        }
+
+        return response()->json($this->json($a->fresh('colaborador:id,nome')));
+    }
+
     /** GET /atividades-campo/equipe — último registro de cada pessoa com a função ligada. */
     public function equipe(Request $r): JsonResponse
     {
@@ -369,10 +394,15 @@ class AtividadeCampoController extends Controller
             ->joinSub($maior, 'u', fn ($j) => $j->on('atividades_campo.user_id', '=', 'u.uid')->on('atividades_campo.inicio', '=', 'u.ultimo'))
             ->select('atividades_campo.*')->orderByDesc('atividades_campo.inicio')->get()->groupBy('user_id')->map->first();
 
-        return response()->json($pessoas->map(function (Colaborador $p) use ($ultimas) {
+        /* 26/11/2026: a última vez que o celular da pessoa falou com o servidor. A saída tocada sem sinal fica na fila do
+           aparelho até o sinal voltar; ver "falou com o servidor às 09:10" ajuda quem vai ligar a entender o atraso. */
+        $visto = CampoAviso::vistoEm($ids);
+
+        return response()->json($pessoas->map(function (Colaborador $p) use ($ultimas, $visto) {
             $a = $ultimas->get($p->id);
 
-            return ['user_id' => $p->id, 'nome' => $p->nome, 'ultima' => $a ? $this->json($a->setRelation('colaborador', $p)) : null];
+            return ['user_id' => $p->id, 'nome' => $p->nome, 'visto_em' => $visto->get($p->id),
+                'ultima' => $a ? $this->json($a->setRelation('colaborador', $p)) : null];
         })->values());
     }
 
@@ -569,6 +599,8 @@ class AtividadeCampoController extends Controller
             'editado_por_nome' => $a->editado_por ? ($a->relationLoaded('editor') ? $a->editor : $a->editor()->first(['id', 'nome']))?->nome : null,
             'apagado_em' => AtividadeCampo::temLixeira() ? $iso($a->apagado_em) : null,
             'apagado_por_nome' => AtividadeCampo::temLixeira() && $a->apagado_por ? ($a->relationLoaded('apagador') ? $a->apagador : $a->apagador()->first(['id', 'nome']))?->nome : null,
+            'verificado_em' => AtividadeCampo::temVerificacao() ? $a->verificado_em?->toIso8601String() : null,
+            'verificado_por_nome' => AtividadeCampo::temVerificacao() && $a->verificado_por ? ($a->relationLoaded('verificador') ? $a->verificador : $a->verificador()->first(['id', 'nome']))?->nome : null,
             'updated_at' => $a->updated_at?->toIso8601String(),
         ];
     }
