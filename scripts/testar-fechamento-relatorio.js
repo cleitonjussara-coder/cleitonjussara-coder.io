@@ -138,7 +138,7 @@ const textoDe = ws => Object.values(ws).filter(c => c && c.t === 's').map(c => c
   console.log('Excel da equipe');
   {
     const { w, arquivos } = montar({ aguardando: [presa, presaCv, deSetembro].map(reter) });
-    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs } };
+    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs, listTodos: async () => colabs } };
     await w.Gestor.exportEquipeExcel(local, { nome: 'Gestor' }, 10, 2026);
     const ws = arquivos[0].wb.abas.EQUIPE;
     const t = textoDe(ws);
@@ -153,13 +153,13 @@ const textoDe = ws => Object.values(ws).filter(c => c && c.t === 's').map(c => c
   }
   {
     const { w, arquivos } = montar({ aguardando: [reter(presa)] });
-    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs } };
+    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs, listTodos: async () => colabs } };
     await w.Gestor.exportEquipeExcel(local, { nome: 'Gestor' }, 10, 2026, ['c1']);
     confere(!/aguarda/.test(textoDe(arquivos[0].wb.abas.EQUIPE)), 'quem não foi marcado no seletor não entra no aviso');
   }
   {
     const { w, arquivos } = montar();
-    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs } };
+    const local = { notas: { list: async () => todas }, repasses: { list: async () => [] }, colaboradores: { list: async () => colabs, listTodos: async () => colabs } };
     await w.Gestor.exportEquipeExcel(local, { nome: 'Gestor' }, 10, 2026);
     const ws = arquivos[0].wb.abas.EQUIPE;
     confere(!/aguarda/.test(textoDe(ws)), 'sem pendência não há aviso');
