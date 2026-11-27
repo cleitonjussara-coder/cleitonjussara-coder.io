@@ -12905,11 +12905,25 @@ async function _buildPublicado() {
   return m ? Number(m[1]) : null;
 }
 
+/* Enquanto uma foto ou arquivo é tratado há instantes sem nenhuma tela por cima (26/11/2026): o contador segura a
+   atualização do começo ao fim, mesmo que a leitura dê erro. */
+let _lendoFoto = 0;
+const _segurandoRecarga = fn => async (...args) => {
+  _lendoFoto++;
+  try { return await fn(...args); } finally { _lendoFoto--; }
+};
+/* pelo window: troca a função global que os campos de foto chamam */
+window.onFotoNota          = _segurandoRecarga(onFotoNota);
+window.onFotoNotaChange    = _segurandoRecarga(onFotoNotaChange);
+window.onArquivoNotaChange = _segurandoRecarga(onArquivoNotaChange);
+
 /* Recarregar no meio de um lançamento apagaria o que a pessoa digitou. */
 function _momentoBomParaRecarregar() {
-  if (_salvandoRepasse || window._salvandoNota) return false;
-  /* câmera e recorte contam: com o formulário escondido atrás deles, a foto em andamento se perderia */
-  const abertos = [...document.querySelectorAll('.full-overlay, .modal-overlay, #cam-nota-overlay, #crop-overlay')]
+  /* escondido: a câmera do celular pode estar aberta, e a foto ainda não chegou ao app */
+  if (document.hidden) return false;
+  if (_salvandoRepasse || _salvandoNota || _lendoFoto || _formEsperandoLeitura || window.LoteNotas?.ativo) return false;
+  /* câmera, recorte, leitura e editor contam: com o formulário escondido atrás deles, a foto em andamento se perderia */
+  const abertos = [...document.querySelectorAll('.full-overlay, .modal-overlay, #cam-nota-overlay, #crop-overlay, #ocr-overlay, #qr-overlay, #ef-ov')]
     .filter(e => getComputedStyle(e).display !== 'none' && !e.classList.contains('fechado'));
   return abertos.length === 0;
 }
@@ -12965,7 +12979,8 @@ document.addEventListener('DOMContentLoaded', () => {
   init();
   setTimeout(verificarVersao, 4000);
   setInterval(verificarVersao, VERSAO_INTERVALO_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
+  /* 3 s de folga (26/11/2026): na volta da câmera do celular a foto chega logo depois deste evento */
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(verificarVersao, 3000); });
   window.addEventListener('online', () => verificarVersao());   // voltou o sinal no campo (25/09/2026)
   renderAuth('login');
   document.addEventListener('keydown', e => {
