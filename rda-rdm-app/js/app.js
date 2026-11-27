@@ -12907,9 +12907,10 @@ const _segurandoRecarga = fn => async (...args) => {
   _lendoFoto++;
   try { return await fn(...args); } finally { _lendoFoto--; }
 };
-onFotoNota        = _segurandoRecarga(onFotoNota);
-onFotoNotaChange  = _segurandoRecarga(onFotoNotaChange);
-onArquivoNotaChange = _segurandoRecarga(onArquivoNotaChange);
+/* pelo window: troca a função global que os campos de foto chamam */
+window.onFotoNota          = _segurandoRecarga(onFotoNota);
+window.onFotoNotaChange    = _segurandoRecarga(onFotoNotaChange);
+window.onArquivoNotaChange = _segurandoRecarga(onArquivoNotaChange);
 
 /* Recarregar no meio de um lançamento apagaria o que a pessoa digitou. */
 function _momentoBomParaRecarregar() {
