@@ -56,6 +56,13 @@ class PontoController extends Controller
         ]);
         $hora = ($d['hora'] ?? null) ? Carbon::parse($d['hora'])->setTimezone(PontoCalculo::TZ) : Carbon::now(PontoCalculo::TZ);
         $data = $hora->format('Y-m-d');
+        /* 27/11/2026 (verificação de 26/11, item 2.3): a hora vem do aparelho (fila offline) e era aceita sem limite.
+           Vale a mesma regra da correção: hoje e ontem; hora no futuro não entra. Gestão continua livre. */
+        if (! $u->gerencia()) {
+            $agora = Carbon::now(PontoCalculo::TZ);
+            abort_if($hora->gt($agora->copy()->addMinutes(10)), 422, 'Hora da marcação está no futuro. Confira o relógio do aparelho.');
+            abort_if($data < $agora->copy()->subDays(1)->format('Y-m-d'), 422, 'Marcação de mais de um dia atrás não entra pelo relógio; peça ao gestor para corrigir o dia.');
+        }
 
         $p = Ponto::firstOrNew(['user_id' => $u->id, 'data' => $data]);
         if (! $p->exists) {
@@ -70,6 +77,14 @@ class PontoController extends Controller
         }
         if (! $marc) {
             return response()->json(['message' => 'As quatro marcações de hoje já foram feitas. Para corrigir, edite o dia.'], 422);
+        }
+        /* 27/11/2026: marcação já feita não é trocada pelo relógio — reenvio da mesma hora (fila offline) só confirma */
+        if ($p->{$marc}) {
+            $feita = $p->{$marc};                                          // gravada como hora de Brasília (sem fuso)
+            if ($feita->format('Y-m-d H:i') === $hora->format('Y-m-d H:i')) {
+                return response()->json(['marcacao' => $marc] + $this->json($p->fresh('colaborador')));
+            }
+            return response()->json(['message' => 'Essa marcação já foi feita às '.$feita->format('H:i').'. Para corrigir, edite o dia.'], 422);
         }
         /* nunca deixa uma marcação anterior à precedente (relógio errado / offline atrasado) */
         $ordem = array_search($marc, Ponto::MARCACOES, true);
@@ -109,6 +124,11 @@ class PontoController extends Controller
         $p = Ponto::find($id) ?? Ponto::where('user_id', $dono)->where('data', $d['data'])->first();
         if ($p) {
             $dono = $p->user_id;
+            /* 27/11/2026 (item 2.3): o limite olhava só a data enviada; mandar a data de hoje com o id de um dia antigo
+               reescrevia o dia antigo (com as horas de hoje). O dia do registro não muda pela edição. */
+            if ($p->data->format('Y-m-d') !== $d['data']) {
+                return response()->json(['message' => 'A data não confere com o registro de ponto.'], 422);
+            }
         }
         $ehDono = $dono === $u->id;
         abort_unless($ehDono || $u->gerencia(), 403, 'Sem permissão para este ponto');
