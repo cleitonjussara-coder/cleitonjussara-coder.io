@@ -260,9 +260,11 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
     if (r.exato) return;
     if (r.colarChave) {
       const ok = await copiou;
-      toast(r.login
-        ? `A consulta da SEFAZ-${r.uf} pede login gov.br${ok ? ' — a chave foi copiada, cole de novo se precisar' : ''}`
-        : r.preenchida
+      if (r.login) {   // o login apaga a chave (testado em 27/11/2026): o 🔗 de novo copia outra vez
+        toast(`SEFAZ-${r.uf}: o login gov.br apaga a chave. Depois de entrar, ${ok ? 'toque no 🔗 de novo e cole a chave.' : 'digite os 44 dígitos.'}`, 'ok', 10000);
+        return;
+      }
+      toast(r.preenchida
         ? `Abrindo a consulta da SEFAZ-${r.uf} com a chave preenchida — é só pesquisar`
         : ok
           ? `Chave copiada — cole no campo "Chave de acesso" da SEFAZ-${r.uf} e resolva o captcha`

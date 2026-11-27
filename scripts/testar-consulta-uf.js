@@ -37,6 +37,7 @@ const de = app.indexOf('async function resolverLinkConsulta(');
 const ate = app.indexOf('/* ── Aba/categoria automática', de);
 if (de < 0 || ate < 0) throw new Error('trecho da consulta não encontrado no app.js');
 
+let tempo = 0;   // quanto o último aviso fica na tela (ms)
 const aviso = async (c, copia) => {
   let texto = '';
   const tela = {
@@ -44,7 +45,7 @@ const aviso = async (c, copia) => {
     SEFAZ: S,
     DB: { getMeta: async () => null },
     navigator: { clipboard: copia ? { writeText: async () => {} } : undefined },
-    toast: t => { texto = t; },
+    toast: (t, tipo, ms) => { texto = t; tempo = ms || 3000; },
     _digitos: s => String(s || '').replace(/\D/g, ''),
     _qrUrlSegura: u => u,
   };
@@ -57,10 +58,11 @@ const aviso = async (c, copia) => {
 (async () => {
   console.log('Aviso na tela');
   const comCopia = await aviso(chave('43', '65'), true);
-  confere('RS avisa que a consulta pede login gov.br', comCopia.includes('login gov.br'), true);
-  confere('RS lembra que a chave foi copiada', comCopia.includes('copiada'), true);
+  // 27/11/2026, testado com cupom real: o login gov.br apaga a chave; o segundo toque no 🔗 copia de novo
+  confere('RS ensina o passo a passo', comCopia, 'SEFAZ-RS: o login gov.br apaga a chave. Depois de entrar, toque no 🔗 de novo e cole a chave.');
   const semCopia = await aviso(chave('43', '65'), false);
-  confere('RS sem cópia não diz que copiou', semCopia.includes('login gov.br') && !semCopia.includes('copiada'), true);
+  confere('RS sem cópia não manda colar', semCopia, 'SEFAZ-RS: o login gov.br apaga a chave. Depois de entrar, digite os 44 dígitos.');
+  confere('RS fica tempo de ler', tempo >= 8000, true);
   confere('GO não fala em login', (await aviso(chave('52', '65'), true)), 'Abrindo a consulta da SEFAZ-GO com a chave preenchida — é só pesquisar');
 
   console.log(falhas ? `\n${falhas} caso(s) falharam.` : '\nTudo certo.');
