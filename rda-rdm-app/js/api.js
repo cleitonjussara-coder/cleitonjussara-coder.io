@@ -222,12 +222,21 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
       if (q.get('convite')) out.convite = q.get('convite');
 
       if (_token) {
-        try { _setUser(await req('GET', '/me')); out.user = _user; }
-        catch (e) {
+        /* 27/11/2026 (verificação de 26/11, fase 2 item 1): com sinal fraco o /me podia segurar a tela de login até 30 s.
+           Com perfil guardado, espera no máximo 2,5 s e abre com ele; o /me segue sozinho e, se der 401, o req() derruba
+           a sessão como sempre (SIGNED_OUT). Sem perfil guardado (1º acesso), espera a resposta como antes. */
+        const me = req('GET', '/me').then(u => { _setUser(u); return _user; });
+        const guardado = _user;
+        try {
+          out.user = guardado
+            ? await Promise.race([me, new Promise(r => setTimeout(() => r(guardado), 2500))])
+            : await me;
+        } catch (e) {
           /* sem rede: mantém o token e abre com o perfil em cache;
              401 já derrubou tudo no req() */
           out.user = e.status === 401 ? null : _user;
         }
+        me.catch(() => {});                      // a resposta que chegar depois do prazo não vira erro solto
       }
       return out;
     },

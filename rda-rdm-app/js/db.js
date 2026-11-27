@@ -895,13 +895,26 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
        ainda não existe lá. Se a foto falhar, a nota cai no catch (422) e as
        duas tentam de novo juntas. O getAll devolve pelo id (UUID, aleatório),
        por isso a ordenação explícita. */
+    /* 27/11/2026 (verificação de 26/11, fase 2 item 6): antes subiam TODAS as fotos e só depois as notas — com 10 notas
+       e sinal fraco, nenhuma aparecia no servidor até a última foto, e a rodada podia acabar o tempo antes das notas.
+       Agora cada nota vai logo depois da sua foto, na ordem em que foram lançadas. */
+    const inicioDoGrupo = new Map();
+    for (const it of dueItems) {
+      const k = (it.entity === 'foto' || it.entity === 'nota') ? 'n:' + it.entity_id : 'i:' + it.id;
+      const c = String(it.created_at || '');
+      if (!inicioDoGrupo.has(k) || c < inicioDoGrupo.get(k)) inicioDoGrupo.set(k, c);
+    }
+    const grupo = it => inicioDoGrupo.get((it.entity === 'foto' || it.entity === 'nota') ? 'n:' + it.entity_id : 'i:' + it.id);
     dueItems.sort((a, b) =>
+      grupo(a).localeCompare(grupo(b)) ||
+      String(a.entity_id || '').localeCompare(String(b.entity_id || '')) ||
       ((b.entity === 'foto') - (a.entity === 'foto')) ||
       String(a.created_at || '').localeCompare(String(b.created_at || '')));
     let ok = 0, fail = 0;
     let fotosOk = 0, fotosFail = 0, erroFoto = null;
     let descartadas = 0;      // itens que saíram da fila por 409 de conflito ou 410: nem enviados, nem falha
     const falhou = m => { fotosFail++; erroFoto = erroFoto || m; };
+    let quedasDeRede = 0;     // 27/11/2026: duas quedas de rede na mesma rodada param a rodada (o resto tenta na próxima)
 
     for (const item0 of dueItems) {
       if (opts?.ate && Date.now() > opts.ate) break;      // sem tempo para começar mais um: o resto vai no próximo evento
@@ -1084,6 +1097,9 @@ globalThis.DB = (() => {      // globalThis: este arquivo também roda no servic
           }
           fail++;
         }
+        /* sem resposta nenhuma (sem rede, tempo esgotado): insistir item por item só gasta bateria e dados, e cada um
+           esperaria o prazo inteiro. O que não foi tentado fica como estava, para a próxima rodada. */
+        if (!e?.status && ++quedasDeRede >= 2) break;
       }
     }
 
