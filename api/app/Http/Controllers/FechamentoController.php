@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Conferencia;
 use App\Models\Nota;
+use App\Models\Repasse;
+use App\Services\DuplicataNota;
 use App\Services\FechamentoMes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Fechamento de mês (06/11/2026). Só gestor e admin fecham e reabrem. Contador lê o estado: a escrita dele para no
@@ -70,6 +74,43 @@ class FechamentoController extends Controller
         $this->fechamento->conferir($nota, $u);
 
         return response()->json(['ok' => true] + $this->fechamento->painel($u));
+    }
+
+    /**
+     * GET /fechamento/resumo?ano=&mes= (27/11/2026, verificação de 26/11, fase 3 item 3) — o que falta olhar antes de fechar:
+     * notas do mês (empresa inteira), conferidas, sem anexo, sem valor, possíveis duplicatas (mesma regra do aviso da gestão,
+     * contada só na nota mais nova do par) e pedidos de repasse abertos. Só informa: fechar continua livre.
+     */
+    public function resumo(Request $r, DuplicataNota $dup): JsonResponse
+    {
+        abort_unless($r->user()->gerencia(), 403, 'Só gestor ou admin veem o resumo do fechamento');
+        $d = $this->periodo($r);
+        $notas = Nota::where('deleted', false)->where('ano', $d['ano'])->where('mes', $d['mes'])->get();
+        $conferidas = Conferencia::tabelaExiste()
+            ? Conferencia::where('tipo', 'nota')->whereIn('registro_id', $notas->pluck('id'))->get()->filter->conferida()->count()
+            : null;
+        $duplicatas = 0;
+        foreach ($notas as $n) {
+            $achou = $dup->achar(DuplicataNota::dadosDe($n), $n->id);
+            if ($achou && ($achou[0]->created_at <= $n->created_at)) {
+                $duplicatas++;   // só a mais nova do par conta: duas notas iguais no mês são 1 duplicata
+            }
+        }
+        $pedidos = Repasse::where('deleted', false)->where('ano', $d['ano'])->where('mes', $d['mes'])
+            ->whereIn('kind', ['requested', 'request', 'pedido', 'solicitado'])->whereNull('atendido_em')
+            ->when(Schema::hasColumn('repasses', 'recusado_em'), fn ($q) => $q->whereNull('recusado_em'))
+            ->get(['valor']);
+
+        return response()->json([
+            'ano' => $d['ano'], 'mes' => $d['mes'],
+            'notas' => $notas->count(),
+            'conferidas' => $conferidas,
+            'sem_anexo' => $notas->filter(fn ($n) => ! $n->foto_path)->count(),
+            'sem_valor' => $notas->filter(fn ($n) => (float) $n->valor <= 0)->count(),
+            'duplicatas' => $duplicatas,
+            'pedidos_abertos' => $pedidos->count(),
+            'pedidos_valor' => round((float) $pedidos->sum('valor'), 2),
+        ]);
     }
 
     private function periodo(Request $r): array

@@ -109,6 +109,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     /* fechamento de mês (06/11/2026): gestor/admin fecham e reabrem; Contador lê (SomenteLeitura barra a escrita dele) */
     Route::get('/fechamento', [FechamentoController::class, 'index']);
     Route::get('/fechamento/aguardando', [FechamentoController::class, 'aguardando']);
+    Route::get('/fechamento/resumo', [FechamentoController::class, 'resumo']);   // 27/11/2026: o que falta olhar antes de fechar
     Route::post('/fechamento/fechar', [FechamentoController::class, 'fechar']);
     Route::post('/fechamento/reabrir', [FechamentoController::class, 'reabrir']);
     Route::post('/fechamento/fora/{id}/conferir', [FechamentoController::class, 'conferir']);
@@ -205,7 +206,9 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
 
     /* "✓ conferido" (18/11/2026): gestor/admin marca nota e repasse já conferidos na ficha da Equipe */
     Route::get('/conferencias', [\App\Http\Controllers\ConferenciaController::class, 'index']);
+    Route::get('/conferencias/faltam', [\App\Http\Controllers\ConferenciaController::class, 'faltam']);
     Route::put('/conferencias', [\App\Http\Controllers\ConferenciaController::class, 'salvar'])->middleware('throttle:120,1,conferencia');
+    Route::put('/conferencias/lote', [\App\Http\Controllers\ConferenciaController::class, 'lote'])->middleware('throttle:20,1,conferencia-lote');
 
     Route::get('/cnpj/{cnpj}', [CnpjController::class, 'show']);
     Route::put('/cnpj/{cnpj}', [CnpjController::class, 'upsert']);

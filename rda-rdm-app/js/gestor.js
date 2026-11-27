@@ -392,6 +392,12 @@ window.Gestor = (() => {
   }
   /* Entrada direta (20/10/2026): marca o colaborador ANTES de a tela da Equipe desenhar, então ela já nasce na ficha dele —
      sem passar pela lista (o abrir() com atraso brigava com o carregamento da lista e podia cair nela). */
+  /* Fila de decisões (27/11/2026): a ficha abre no mês das notas, com "☐ Falta conferir" ligado e rolada até a lista */
+  function abrirParaConferir(id, ano, mes) {
+    _evoScroll = null; _detalheId = id;
+    _filtroNotas = { chave: `${id}|${ano}|${mes}`, falta: true };
+    _rolarParaNotas = true;
+  }
   function abrirDireto(id) { if (id !== _detalheId) { _evoScroll = null; _rolarParaNotas = false; } _detalheId = id; }
   function fechar()   { _detalheId = null; _fichaSeq++; _desarmarFicha(); _ctx?.onRebuild?.(); }   // a rolagem guardada era da ficha: a lista começa do topo
 
@@ -539,6 +545,38 @@ window.Gestor = (() => {
       if (bt) bt.disabled = false;
     }
   }
+  /* Conferir em lote (27/11/2026, fase 3 item 2): as notas que a caixa verde contou. O servidor confere a regra de novo e devolve
+     as que pulou (apagada, sem anexo ou sem valor); desmarcar continua uma a uma. */
+  async function conferirLote() {
+    if (typeof sb === 'undefined' || !sb?.conferencias?.lote || !navigator.onLine) { toast('Precisa de internet para marcar o conferido', 'err'); return; }
+    const vao = [...document.querySelectorAll('#notas-list .nota-card[data-nid]')]
+      .filter(c => c.style.display !== 'none' && c.dataset.lote === '1' && c.dataset.conf !== '1');
+    if (!vao.length) return;
+    const soma = vao.reduce((t, c) => t + (Number(c.dataset.val) || 0), 0);
+    const um = vao.length === 1;
+    if (typeof pedirConfirmacao === 'function' && !(await pedirConfirmacao({
+      titulo: 'Conferir em lote',
+      mensagem: `Marcar ${um ? '1 nota' : `${vao.length} notas`} como conferid${um ? 'a' : 'as'} (${brl(soma)})?
+
+Dá para desmarcar uma por uma depois.`,
+      confirmar: um ? 'Conferir' : `Conferir as ${vao.length}`,
+    }))) return;
+    if (typeof setLoading === 'function') setLoading(true, 'Marcando…');
+    try {
+      const ids = vao.map(c => c.dataset.nid);
+      let ok = 0, pulados = 0;
+      for (let i = 0; i < ids.length; i += 500) {
+        const r = await sb.conferencias.lote(ids.slice(i, i + 500));
+        (r?.conferidas || []).forEach(c => { _conf.set(_confChave('nota', c.registro_id), c); ok++; });
+        pulados += (r?.pulados || []).length;
+      }
+      _pintarConferidos();
+      _aplicarFiltroNotas();
+      toast(`✓ ${ok} nota${ok === 1 ? ' conferida' : 's conferidas'}${pulados ? ` · ${pulados} ficou${pulados === 1 ? '' : 'aram'} de fora (sem anexo ou sem valor no servidor)` : ''}`, 'ok', 5000);
+    } catch (e) {
+      toast('Não deu para marcar: ' + (e?.message || 'erro'), 'err');
+    } finally { if (typeof setLoading === 'function') setLoading(false); }
+  }
   const _ROT_FILTRO = { cartao: 'Cartão corporativo', carteira: 'Carteira (do bolso)' };
   function _aplicarFiltroNotas() {
     const vale = _filtroNotas && _filtroNotas.chave === _chaveFichaAtual;
@@ -574,6 +612,19 @@ window.Gestor = (() => {
     }
     const nFalta = document.querySelector('#cdet-filtros-notas .conf-falta-n');
     if (nFalta) nFalta.textContent = cards.filter(c => c.dataset.conf !== '1').length;
+    const caixa = document.getElementById('cdet-lote');
+    if (caixa) {
+      const vao = falta ? cards.filter(c => c.style.display !== 'none' && c.dataset.lote === '1' && c.dataset.conf !== '1') : [];
+      const resto = falta ? cards.filter(c => c.style.display !== 'none' && c.dataset.conf !== '1').length - vao.length : 0;
+      caixa.hidden = !vao.length;
+      if (vao.length) {
+        const soma = vao.reduce((t, c) => t + (Number(c.dataset.val) || 0), 0);
+        caixa.innerHTML = `<b>${vao.length} nota${vao.length === 1 ? '' : 's'} sem pendência</b>
+          <span>com foto, valor e sem duplicata · ${brl(soma)}</span>
+          <button type="button" class="btn btn-sm btn-primary" onclick="Gestor.conferirLote()">✓ Conferir ${vao.length === 1 ? 'esta' : `as ${vao.length}`}</button>
+          ${resto ? `<small>${resto === 1 ? 'A 1 com pendência fica' : `As ${resto} com pendência ficam`} na lista para olhar uma a uma.</small>` : ''}`;
+      }
+    }
     if (typeof _selNotasAtualizar === 'function') _selNotasAtualizar();   // o que o filtro escondeu sai da seleção
   }
   /* tipo = 'cartao' | 'carteira'; tp = 'RDM' | 'RDA' nos botões da lista (03/11/2026); tocar de novo no mesmo botão
@@ -731,10 +782,19 @@ window.Gestor = (() => {
     const p2 = v => String(v).padStart(2, '0');
     const limite = emAndamento ? `${alvoAno}-${p2(anual ? hoje.mes : alvoMes)}-${p2(hoje.dia)}` : null;
     const fonteAnt = alvoAno === ano ? nsAno : hist?.notas;   // sem o histórico não dá para comparar com o ano anterior
-    const anterior = fonteAnt
-      ? _eqSoma(fonteAnt.filter(n => !n.deleted && Number(n.ano) === alvoAno && (alvoMes === null || Number(n.mes) === alvoMes)
-        && (!limite || String(n.data || '').slice(0, 10) <= limite) && _eqPassaTudo(n)))
-      : null;
+    const doAnt = fonteAnt ? fonteAnt.filter(n => !n.deleted && Number(n.ano) === alvoAno && (alvoMes === null || Number(n.mes) === alvoMes)
+        && (!limite || String(n.data || '').slice(0, 10) <= limite)) : null;
+    const anterior = doAnt ? _eqSoma(doAnt.filter(_eqPassaTudo)) : null;
+    /* Comparativo (27/11/2026, fase 3 item 4): categoria e pessoa contra o mesmo trecho do período anterior, com os mesmos filtros
+       de cada quadro. null = sem o histórico para comparar (o chip não aparece). */
+    const antCat = doAnt ? new Map() : null, antPessoa = doAnt ? new Map() : null;
+    if (doAnt) {
+      doAnt.forEach(n => {
+        const v = Number(n.valor || 0);
+        if (_eqPassaPessoa(n) && _eqPassaPag(n)) { const k = _chaveCategoriaDetalhe(n); antCat.set(k, (antCat.get(k) || 0) + v); }
+        if (_eqPassaTudo(n)) { const k = n.user_id || null; antPessoa.set(k, (antPessoa.get(k) || 0) + v); }
+      });
+    }
     const nomeAnt = anual ? String(alvoAno) : MESES_LONGO[alvoMes - 1].toLowerCase();
     const comparacao = !emAndamento ? `vs. ${nomeAnt}`
       : anual ? `vs. mesmo período de ${alvoAno}`
@@ -751,7 +811,7 @@ window.Gestor = (() => {
     const comDono = ranking.filter(p => p.id);
     const tipos = new Map();
     lista.forEach(n => { const t = _tipoEvo(n); tipos.set(t, (tipos.get(t) || 0) + Number(n.valor || 0)); });
-    return { lista, total, empresa, colaboradores, anterior, comparacao, cats, totalCats, ranking, nPessoas: comDono.length,
+    return { lista, total, empresa, colaboradores, anterior, antCat, antPessoa, comparacao, cats, totalCats, ranking, nPessoas: comDono.length,
       media: comDono.length ? _eqSoma(comDono.map(p => ({ valor: p.val }))) / comDono.length : 0,
       tipos: [...tipos].sort((a, b) => b[1] - a[1]), evo: nsAno.filter(_eqPassaTudo) };
   }
@@ -827,9 +887,9 @@ window.Gestor = (() => {
         </div>
       </div>
       <div class="db-card">
-        <div class="db-card-title"><span>Por categoria</span><span class="eqp-dica">toque para filtrar</span></div>
+        <div class="db-card-title"><span>Por categoria</span><span class="eqp-dica">${c.antCat ? esc(c.comparacao) + ' · ' : ''}toque para filtrar</span></div>
         ${c.cats.length ? c.cats.map(k => `<button class="eqp-cat ${_eqF.cat === k.chave ? 'on' : ''} ${_eqF.cat && _eqF.cat !== k.chave ? 'off' : ''}" aria-pressed="${_eqF.cat === k.chave}" onclick="Gestor.eqFiltro('cat','${k.chave}')">
-            <span class="eqp-cat-l"><span>${k.ico} ${esc(k.nome)}</span><b>${brl(k.val)} <small>${c.totalCats > 0 ? Math.round(k.val / c.totalCats * 100) : 0}%</small></b></span>
+            <span class="eqp-cat-l"><span>${k.ico} ${esc(k.nome)}</span><b>${brl(k.val)} <small>${c.totalCats > 0 ? Math.round(k.val / c.totalCats * 100) : 0}%</small>${c.antCat ? ' ' + chipDelta(k.val, _r2(c.antCat.get(k.chave) || 0), false) : ''}</b></span>
             <span class="eqp-track"><span style="width:${Math.max(3, Math.round(k.val / maxCat * 100))}%;background:${k.cor}"></span></span>
           </button>`).join('') : '<p class="muted-p">Nenhuma despesa com esses filtros.</p>'}
       </div>
@@ -842,7 +902,7 @@ window.Gestor = (() => {
               <div class="db-rank-meta">
                 <span class="db-rank-pos">${i + 1}º</span>
                 <span class="db-rank-name">${esc(p.nome)}</span>
-                <span class="db-rank-val">${brl(p.val)}</span>
+                <span class="db-rank-val">${brl(p.val)}${c.antPessoa ? ' ' + chipDelta(p.val, _r2(c.antPessoa.get(p.id) || 0), false) : ''}</span>
               </div>
               <div class="db-rank-track"><div class="db-rank-fill" style="width:${Math.max(4, Math.round(p.val / maxTop * 100))}%"></div></div>
             </div>`).join('') : '<p class="muted-p">Nenhum gasto com esses filtros.</p>'}
@@ -1555,13 +1615,21 @@ window.Gestor = (() => {
         </div>`;
       }
       html += '<div id="cdet-filtro-info" class="cdet-filtro-info" style="display:none"><span class="txt"></span><button class="btn btn-sm btn-outline" onclick="Gestor.filtrarNotas(null)">Mostrar todas</button></div>';
+      /* Conferir em lote (27/11/2026, fase 3 item 2): aparece com "☐ Falta conferir" ligado; _aplicarFiltroNotas conta e mostra */
+      if (_confOk && podeEditar && notas.length) html += '<div id="cdet-lote" class="cdet-lote" hidden></div>';
       if (!notas.length) {
         html += '<div class="empty-state" style="padding:24px 14px">Nenhuma nota neste mês.</div>';
       } else if (typeof cardNotaHTML === 'function') {
         if (typeof garantirNotasNaLista === 'function') garantirNotasNaLista(notas);
         if (_podeSelNotas) html += selNotasBarraHTML();
+        /* data-lote (27/11/2026): pode entrar no "Conferir em lote" — com foto, com valor, sem duplicata e sem foto em branco.
+           Duplicata pela mesma regra do sino, contra as notas da equipe inteira. */
+        const _dups = typeof window._mapaDuplicatas === 'function'
+          ? window._mapaDuplicatas((typeof notasEquipe !== 'undefined' && notasEquipe ? notasEquipe : []).concat(notas)) : new Map();
+        const _branca = n => typeof window._fotoMarcadaEmBranco === 'function' && window._fotoMarcadaEmBranco(n);
+        const _lote = n => !!n.foto_path && Number(n.valor || 0) > 0 && !_dups.has(n.id) && !_branca(n);
         html += `<div class="notas-list" id="notas-list">${notas.map(n => cardNotaHTML(n, 'eqthumb-', { semDono: true, cv: ehCVcolab })
-          .replace('<div class="nota-card ', `<div data-nid="${_at(n.id)}" data-val="${Number(n.valor) || 0}" data-pend="${!n.foto_path || Number(n.valor || 0) <= 0 ? '1' : ''}" class="nota-card `)).join('')}</div>`;
+          .replace('<div class="nota-card ', `<div data-nid="${_at(n.id)}" data-val="${Number(n.valor) || 0}" data-pend="${!n.foto_path || Number(n.valor || 0) <= 0 ? '1' : ''}" data-lote="${_lote(n) ? '1' : ''}" class="nota-card `)).join('')}</div>`;
       }
 
       /* 01/10/2026: a lista de repasses mostra de QUE MÊS é e tem a própria
@@ -2064,5 +2132,5 @@ window.Gestor = (() => {
     $('foto-viewer-overlay').style.display = 'flex';
   }
 
-  return { conferir, saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, estado, restaurar, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
+  return { conferir, conferirLote, abrirParaConferir, saldoAnoAnterior, saldoCvDoAno, sentidoSaldo, brlInteiro, abrirDireto, filtrarRepasses, filtrarReps, filtrarNotas, irParaNotas, irParaNotasDoMes, irParaRepasses, irParaTopoFicha, verNotasFaturamento, tocarBarra, alternarPrevia, alternarAcoes, alternarKpis, alternarPlanilha, filtrarGastos, limparFiltroGastos, renderDashboard, eqFiltro, eqLimpar, eqAba, definirAba, mudarPeriodo, showEditModal, exportEquipeExcel, renderForExcel, abrir, fechar, reset, estado, restaurar, carregarAvatares: _carregarAvatares, verFoto, filtrar, abrirCvEquipe, abrirExcelEquipe, abrirPdfEquipe, abrirConvite, mesRepasses, selecionarRepasses, marcarRepasse, marcarTodosRepasses, excluirSelecionados, saldoAnteriorPorUsuario, aberturaAnual };
 })();

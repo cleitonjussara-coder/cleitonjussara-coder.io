@@ -92,6 +92,18 @@ class DuplicataNota
         return $achada ? [$achada, $motivo] : null;
     }
 
+    /** Os campos de uma nota gravada no formato que achar() recebe (também usado no resumo do fechamento, 27/11/2026). */
+    public static function dadosDe(Nota $nota): array
+    {
+        return [
+            'chave' => $nota->chave_nfce, 'qr_url' => $nota->qr_url, 'tipo' => $nota->tipo,
+            'cnpj' => $nota->cnpj, 'razao_social' => $nota->razao_social, 'valor' => $nota->valor,
+            'data' => $nota->data?->format('Y-m-d'), 'numero' => $nota->numero, 'serie' => $nota->serie,
+            'subtipo' => $nota->subtipo, 'hora' => $nota->hora, 'placa' => $nota->placa,
+            'user_id' => $nota->user_id,
+        ];
+    }
+
     /**
      * Nota acabou de entrar (nova, ou restaurada da lixeira) — se ela repete outra nota viva, avisa gestor e admin
      * no celular. Quem gravou não recebe o próprio aviso. Nunca lança exceção.
@@ -102,13 +114,7 @@ class DuplicataNota
             if ($nota->deleted) {
                 return;
             }
-            $achou = $this->achar([
-                'chave' => $nota->chave_nfce, 'qr_url' => $nota->qr_url, 'tipo' => $nota->tipo,
-                'cnpj' => $nota->cnpj, 'razao_social' => $nota->razao_social, 'valor' => $nota->valor,
-                'data' => $nota->data?->format('Y-m-d'), 'numero' => $nota->numero, 'serie' => $nota->serie,
-                'subtipo' => $nota->subtipo, 'hora' => $nota->hora, 'placa' => $nota->placa,
-                'user_id' => $nota->user_id,
-            ], $nota->id);
+            $achou = $this->achar(self::dadosDe($nota), $nota->id);
             if (! $achou) {
                 return;
             }
