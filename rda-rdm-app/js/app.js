@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 667;
+const APP_BUILD = 668;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -10589,6 +10589,53 @@ function _descartarFotoCancelada() {
   toast('Foto descartada — tire outra quando quiser');
 }
 
+/* 27/11/2026 (verificação de 26/11, fase 2 item 4; aprovado pelo Cleiton pela imagem): com sinal fraco a leitura da foto
+   segurava a tela "Lendo a nota…" até ~45 s, sem saída. Depois de 8 s aparece "✏️ Digitar agora": a foto fica anexada,
+   o formulário abre e a pessoa digita. A leitura segue por trás e, quando terminar, preenche SÓ os campos ainda vazios
+   (nunca troca o que a pessoa digitou). Devolve o resultado da leitura, ou { _digitar: true } quando a pessoa escolheu digitar. */
+async function _lerNotaComDigitarAgora(alvo) {
+  const leitura = _lerNota(alvo);
+  const ov = $('ocr-overlay');
+  let caixa = null, timer = null, escolheu;
+  const digitou = new Promise(ok => { escolheu = ok; });
+  timer = setTimeout(() => {
+    if (!ov || ov.style.display !== 'flex') return;
+    caixa = document.createElement('div');
+    caixa.id = 'ocr-digitar';
+    caixa.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:8px;padding:0 24px;text-align:center';
+    caixa.innerHTML = '<div style="color:rgba(255,255,255,.85);font-size:14px">Está demorando (sinal fraco?)</div>'
+      + '<button type="button" class="btn" style="background:#fff;color:#1a5c3a;font-size:16px;font-weight:600;padding:12px 22px;border-radius:10px;border:0">✏️ Digitar agora</button>'
+      + '<div style="color:rgba(255,255,255,.75);font-size:12.5px;line-height:1.5;max-width:300px">a foto fica anexada; o que a leitura achar depois preenche só os campos vazios</div>';
+    caixa.querySelector('button').onclick = () => escolheu(true);
+    ov.appendChild(caixa);
+  }, 8000);
+  try {
+    const r = await Promise.race([leitura.then(x => ({ x })), digitou.then(() => null)]);
+    if (r) return r.x || {};
+    leitura.then(tarde => _preencherVaziosDaLeitura(tarde)).catch(() => {});
+    return { _digitar: true };
+  } finally {
+    clearTimeout(timer);
+    if (caixa) caixa.remove();
+  }
+}
+/* leitura que terminou depois do "Digitar agora": só campos vazios; foto cortada ou com várias notas vira aviso */
+function _preencherVaziosDaLeitura(o) {
+  if (!o || !$('nf-valor')) return;
+  if (o.cortado || o.qtd > 1) {
+    toast(o.qtd > 1 ? '⚠️ A leitura viu mais de uma nota na foto: confira antes de salvar' : '⚠️ A leitura achou a foto cortada: confira antes de salvar', 'err', 7000);
+    return;
+  }
+  const feitos = [];
+  if (o.valor && !$('nf-valor').value) { $('nf-valor').value = o.valor; feitos.push('valor'); }
+  const cnpj = _digitos(o.cnpj);
+  if (cnpj.length === 14 && !_digitos($('nf-cnpj').value)) { $('nf-cnpj').value = BrasilAPI.formatar(cnpj); buscarRazaoSocial(cnpj); feitos.push('CNPJ'); }
+  if (o.razao_social && !$('nf-razao').value) $('nf-razao').value = o.razao_social;
+  if (o.numero && !$('nf-numero').value) { _preencherNumeroSerie(o.numero, o.serie); feitos.push('número'); }
+  if (o.placa && $('nf-placa') && !$('nf-placa').value) { $('nf-placa').value = _placaLimpa(o.placa) || ''; }
+  if (feitos.length) toast(`A leitura terminou e preencheu o que estava vazio: ${feitos.join(', ')}. Confira.`, 'ok', 5000);
+}
+
 /* Foto anexada → múltiplos buscadores (QR + OCR + CNPJ + SEFAZ).
    Combina os resultados e preenche só os campos vazios.
    ocrPronto: resultado de parse já extraído (ex.: texto embutido de PDF) — pula o OCR. */
@@ -10643,7 +10690,7 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
         }
       }
       $('ocr-progress').textContent = 'Lendo a nota…';
-      ocr = await _lerNota(alvo);
+      ocr = await _lerNotaComDigitarAgora(alvo);   // 27/11/2026: depois de 8 s aparece "Digitar agora"
       if (ocr?.cortado && _cortadoBarra(ocr, (await (qrEmCurso || (qrEmCurso = lerQr())))?.chave || _digitos($('nf-chave').value))) {   // 07/11/2026: chave/valor/número cortados — a foto não fica anexada
         ov.style.display = 'none';
         if (fotoURL) { try { URL.revokeObjectURL(fotoURL); } catch (_) {} }
@@ -10740,7 +10787,8 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
     /* 14/10/2026: com internet a IA lê no lugar do Tesseract e, quando traz só parte, o valor pode ficar em branco —
        a mensagem diz isso (a consulta oficial da SEFAZ ainda tenta o valor em segundo plano, logo acima/abaixo). */
     const semValor = !$('nf-valor').value;
-    toast(preencheu.length
+    if (ocr._digitar && !preencheu.length) toast('Digite os dados — a leitura continua e preenche o que ficar vazio', 'ok', 5000);
+    else toast(preencheu.length
       ? `Preenchido${ocr._ia ? ' pela IA' : ''}: ${preencheu.join(', ')}. ${semValor ? 'Não li o valor: digite-o (ou aguarde a consulta oficial).' : 'Confira o valor e o tipo.'}`
       : 'Confira os campos manualmente', preencheu.length && !semValor ? 'ok' : 'err', semValor ? 6000 : undefined);
 
@@ -11091,12 +11139,14 @@ function _candidataDeNota(n) {
   };
 }
 /* null = sem duplicata, ou sem como conferir agora (offline, lento, erro): a checagem local já valeu e nada é barrado às cegas */
+let _dupEquipeSemResposta = false;     // 27/11/2026: a última conferência na equipe não teve resposta (rede/servidor)
 async function _duplicadaNaEquipe(cand, ignoreId) {
+  _dupEquipeSemResposta = false;
   if (!sb || DEMO_MODE || !navigator.onLine) return null;
   try {
     const r = await sb.notas.duplicada({ ...cand, ignore_id: ignoreId || null });
     return r?.existe ? r : null;
-  } catch (_) { return null; }
+  } catch (_) { _dupEquipeSemResposta = true; return null; }
 }
 /* chave de 44 dígitos e NFS-e identificam a nota sem dúvida: barram. Número e dia+valor podem ser coincidência: perguntam. */
 const _dupEquipeBarra = r => r?.motivo === 'chave' || r?.motivo === 'nfse';
@@ -11370,7 +11420,13 @@ async function _salvarNotaInterno() {
   /* TRAVA de EQUIPE (online, 21/10/2026): a mesma nota já existe em QUALQUER pessoa ou no Faturamento (sem dono)?
      As conferências acima só enxergam as notas deste aparelho. Chave e NFS-e barram; número e dia+valor perguntam
      (sem rede ou com erro não bloqueia — ver _duplicadaNaEquipe). */
-  const _dupEq = await _duplicadaNaEquipe(_candidataDoFormulario(), _idEdicao);
+  /* 27/11/2026 (verificação de 26/11, fase 2 item 5): com sinal fraco esta conferência espera até 8 s e a tela ficava
+     parada, sem sinal de vida — a pessoa tocava de novo ou achava que travou. Agora mostra o que está fazendo. */
+  setLoading(true, 'Conferindo se a nota já foi lançada…');
+  let _dupEq;
+  try { _dupEq = await _duplicadaNaEquipe(_candidataDoFormulario(), _idEdicao); }
+  finally { setLoading(false); }
+  if (_dupEquipeSemResposta) toast('Sem resposta do servidor para conferir notas repetidas — a nota segue; se for repetida, o gestor é avisado quando ela subir', 'ok', 5000);
   if (_dupEq) {
     if (_dupEquipeBarra(_dupEq)) { await _barrarDuplicataEquipe(_dupEq); return; }
     if (!(_confirmouSemelhante && _dupEq.origem === 'sua')) {
