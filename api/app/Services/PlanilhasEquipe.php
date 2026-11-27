@@ -19,7 +19,7 @@ class PlanilhasEquipe
 {
     public function __construct(private RelatorioCv $cv, private RelatorioRdmRda $rdmRda, private SaldoAnterior $saldo) {}
 
-    /** `ids` é quem o gestor marcou. Sem `ids`: todo ativo com nota ou repasse no ano, ou que carrega saldo de ano anterior. */
+    /** `ids` é quem o gestor marcou. Sem `ids`: todo mundo com nota ou repasse no ano (desativado também) e o ativo que carrega saldo de ano anterior. */
     public function colaboradores(int $ano, array $ids): Collection
     {
         $q = Colaborador::query()->orderBy('nome');
@@ -30,7 +30,12 @@ class PlanilhasEquipe
         $comRep = Repasse::query()->where('deleted', false)->where('ano', $ano)->distinct()->pluck('user_id');
         $carregam = $this->saldo->quemCarrega($ano);
 
-        return $q->where('ativo', true)->whereIn('id', $comNota->merge($comRep)->merge($carregam)->unique())->get();
+        /* 27/11/2026 (pedido do Cleiton): desativado com nota ou repasse no ano continua na planilha da equipe — o contador
+           precisa das contas de quem saiu. Só o saldo que vem de anos anteriores, sem movimento no ano, segue valendo só para ativos. */
+        $movimento = $comNota->merge($comRep)->filter()->unique();
+
+        return $q->where(fn ($w) => $w->whereIn('id', $movimento)
+            ->orWhere(fn ($a) => $a->where('ativo', true)->whereIn('id', collect($carregam)->unique())))->get();
     }
 
     public function nome(string $modo, int $ano): string

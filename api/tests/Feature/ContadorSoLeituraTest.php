@@ -96,6 +96,25 @@ class ContadorSoLeituraTest extends TestCase
         $this->getJson('/api/me')->assertOk();
     }
 
+    /** 27/11/2026 (Cleiton): desativar o colaborador não tira do contador a pasta, as notas e a planilha dele. */
+    public function test_contador_continua_vendo_quem_foi_desativado(): void
+    {
+        $saiu = $this->pessoa('colaborador');
+        $nota = $this->nota($saiu);
+        $saiu->forceFill(['ativo' => false, 'desativado_em' => now()])->save();
+        Sanctum::actingAs($this->pessoa('contabilidade'));
+
+        $this->getJson('/api/colaboradores?todos=1')->assertOk()->assertJsonFragment(['id' => $saiu->id]);
+        $this->getJson('/api/notas')->assertOk()->assertJsonFragment(['id' => $nota->id]);
+        $pasta = collect($this->getJson('/api/arquivos/resumo?ano='.$nota->ano)->assertOk()->json('colaboradores'))
+            ->firstWhere('user_id', $saiu->id);
+        $this->assertNotNull($pasta, 'a pasta do desativado continua em Arquivos');
+        $this->assertSame(1, $pasta['qtd']);
+
+        $planilha = app(\App\Services\PlanilhasEquipe::class)->colaboradores((int) $nota->ano, []);
+        $this->assertTrue($planilha->contains('id', $saiu->id), 'quem saiu com nota no ano entra na planilha da equipe');
+    }
+
     public function test_contador_edita_so_o_proprio_perfil(): void
     {
         $outro = $this->pessoa('colaborador');
