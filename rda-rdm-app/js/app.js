@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 672;
+const APP_BUILD = 673;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1212,6 +1212,7 @@ function _itensMenu() {
     itens.push({ g:'equipe', view:'equipe', ico:'👥', lbl:'Equipe', sub:'gastos, pessoas e relatórios', fixaSub:true });
   }
   if (_ehGestorOuAdmin()) {
+    itens.push({ g:'equipe', acao:'abrirDecisoes()', ico:'📋', lbl:'Fila de decisões', sub:'tudo o que espera por você, do mais antigo ao mais novo' });
     itens.push({ g:'equipe', view:'repasses', ico:'💸', lbl:'Repasses e recargas', sub:'corrigir, vendo saldo e lançamentos' });
   }
   if (_veEquipe()) itens.push({ g:'equipe', view:'arquivos', ico:'📁', lbl:'Arquivos', sub:'pastas e ZIP do mês' });
@@ -1252,13 +1253,15 @@ function _pendenciasMenu() {
 function _pendMenuHTML(lista) {
   if (!lista.length) return '<li id="menu-pend" hidden></li>';
   return `<li class="menu-pend" id="menu-pend"><div class="menu-grupo-tit">Precisa de você</div>${lista.map(p => `
-    <button onclick="fecharMenu();${p.acao}"><b>${p.n}</b>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</li>`;
+    <button onclick="fecharMenu();${p.acao}"><b>${p.n}</b>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}${_ehGestorOuAdmin() ? `
+    <button class="pend-fila" onclick="fecharMenu();abrirDecisoes()">📋 Ver tudo em uma fila ›</button>` : ''}</li>`;
 }
 
 function _pendInicioHTML(lista) {
   if (!lista.length) return '<div id="ini-pend" hidden></div>';
   return `<div class="ih-pend" id="ini-pend"><b>⚠️ Precisa de você</b><div>${lista.map(p => `
-    <button onclick="${p.acao}"><strong>${p.n}</strong>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}</div></div>`;
+    <button onclick="${p.acao}"><strong>${p.n}</strong>${esc(p.n === 1 ? p.um : p.varios)}</button>`).join('')}${_ehGestorOuAdmin() ? `
+    <button class="pend-fila" onclick="abrirDecisoes()">📋 Ver tudo em uma fila ›</button>` : ''}</div></div>`;
 }
 
 function _repintarPendInicio() {
@@ -1267,6 +1270,117 @@ function _repintarPendInicio() {
   const lista = _pendenciasMenu();
   alvo.outerHTML = _pendInicioHTML(lista);
   _pendFechamentoInicio(lista).catch(() => {});
+}
+
+/* ── Fila de decisões (27/11/2026, verificação de 26/11, fase 3 item 1; aprovada pelo Cleiton pela imagem) ──────────
+   Tudo o que espera o gestor numa lista só, da mais antiga para a mais nova, com valor e idade. Nada é decidido aqui: cada
+   botão abre o lugar que já resolve (o sino filtrado, as pendências ou a ficha com "Falta conferir"). As notas a conferir vêm
+   do servidor (GET /conferencias/faltam), por pessoa e mês; o resto sai das mesmas contas do sino. */
+let _decFiltro = 'tudo', _decFaltam = null, _decLista = [];
+const _DEC_SINO = ['pedido', 'justresp', 'duplicada', 'fotobranca', 'cartao', 'devedor', 'novo'];
+const _DEC_BOTAO = { pedido: 'Pagar', justresp: 'Ler e dar OK', duplicada: 'Ver as duas', fotobranca: 'Ver a nota', cartao: 'Recarregar',
+  devedor: 'Ver colaborador', novo: 'Liberar', corrigir: 'Ver o que falta', conferir: 'Abrir ficha' };
+const _DEC_ICO = { pedido: '💸', justresp: '💬', duplicada: '⚠️', fotobranca: '📄', cartao: '💳', devedor: '💰', novo: '🙋', corrigir: '✏️', conferir: '☐' };
+const _DEC_GRUPOS = [['tudo', 'Tudo'], ['pedidos', 'Pedidos'], ['conferir', 'Conferir'], ['duplicatas', 'Duplicatas'], ['outros', 'Outros']];
+const _decGrupo = t => (t === 'pedido' ? 'pedidos' : t === 'conferir' ? 'conferir' : t === 'duplicada' ? 'duplicatas' : 'outros');
+function _decDias(iso) {
+  const t = Date.parse(String(iso || '').replace(' ', 'T'));
+  if (!t) return null;
+  return Math.max(0, Math.round((Date.parse(FusoBR.hojeISO(new Date())) - Date.parse(FusoBR.hojeISO(new Date(t)))) / 86400_000));
+}
+function _decIdadeHTML(d) {
+  if (d === null) return '<span class="dec-idade">agora</span>';
+  const txt = d === 0 ? 'hoje' : d === 1 ? 'ontem' : `há ${d} dias`;
+  return `<span class="dec-idade ${d >= 5 ? 'velho' : d >= 2 ? 'medio' : ''}">${txt}</span>`;
+}
+function _decItens() {
+  const out = [];
+  _notificacoes().filter(it => _DEC_SINO.includes(it.tipo)).forEach(it => {
+    const n = it.notaId ? _notaPorId(it.notaId) : null;
+    const quando = it.tipo === 'pedido' ? (it.rep.created_at || it.rep.data)
+      : it.tipo === 'justresp' ? (it.just.respondido_em || it.just.pedido_em)
+      : n ? (n.created_at || n.data)
+      : it.tipo === 'novo' ? equipePorId[it.userId]?.created_at : null;
+    out.push({ tipo: it.tipo, titulo: it.titulo, sub: it.sub, quando,
+      valor: it.tipo === 'pedido' ? Number(it.rep.valor) || 0 : n ? Number(n.valor) || 0 : null });
+  });
+  /* notas com o que corrigir, uma linha por pessoa (a lista "O que falta corrigir" mostra nota por nota) */
+  const porPessoa = new Map();
+  _notasComPendencia().forEach(({ nota: n }) => {
+    const k = n.user_id || '';
+    const g = porPessoa.get(k) || { n: 0, valor: 0, quando: null };
+    g.n++; g.valor += Number(n.valor) || 0;
+    const q = n.created_at || n.data;
+    if (q && (!g.quando || String(q) < String(g.quando))) g.quando = q;
+    porPessoa.set(k, g);
+  });
+  porPessoa.forEach((g, k) => out.push({ tipo: 'corrigir', quando: g.quando, valor: g.valor,
+    titulo: `${k === user?.id ? 'Você' : k ? (equipePorId[k]?.nome || 'Colaborador') : 'Faturamento'}: ${g.n} ${g.n === 1 ? 'nota para corrigir' : 'notas para corrigir'}`,
+    sub: 'Sem foto, sem valor ou com outro dado faltando' }));
+  (_decFaltam || []).forEach(f => out.push({ tipo: 'conferir', quando: f.mais_antiga, valor: Number(f.valor) || 0, conf: f,
+    titulo: `${f.nome || equipePorId[f.dono_id]?.nome || 'Colaborador'}: ${f.notas} ${f.notas === 1 ? 'nota a conferir' : 'notas a conferir'}`,
+    sub: `${MESES[f.mes - 1]}/${f.ano}${f.sem_pendencia ? ` · ${f.sem_pendencia} sem pendência` : ''}` }));
+  const t = x => Date.parse(String(x.quando || '').replace(' ', 'T')) || Date.now();
+  return out.sort((a, b) => t(a) - t(b));
+}
+function _decPintar() {
+  const ov = $('dec-overlay');
+  if (!ov) return;
+  const todos = _decItens();
+  _decLista = _decFiltro === 'tudo' ? todos : todos.filter(x => _decGrupo(x.tipo) === _decFiltro);
+  const conta = g => (g === 'tudo' ? todos.length : todos.filter(x => _decGrupo(x.tipo) === g).length);
+  ov.querySelector('.dec-tit').textContent = `📋 Fila de decisões · ${todos.length} ${todos.length === 1 ? 'item' : 'itens'}`;
+  ov.querySelector('.dec-chips').innerHTML = _DEC_GRUPOS.filter(([g]) => g === 'tudo' || conta(g))
+    .map(([g, rot]) => `<button type="button" class="chip ${_decFiltro === g ? 'active' : ''}" onclick="_decFiltro='${g}';_decPintar()">${rot} ${conta(g)}</button>`).join('');
+  const aviso = _decFaltam === null ? `<div class="dec-aviso">${navigator.onLine ? 'Buscando as notas a conferir…' : 'Sem internet: as notas a conferir aparecem quando a conexão voltar.'}</div>` : '';
+  ov.querySelector('.dec-lista').innerHTML = aviso + (_decLista.length ? _decLista.map((x, i) => `
+    <div class="dec-item">
+      <div class="dec-ico" aria-hidden="true">${_DEC_ICO[x.tipo] || '•'}</div>
+      <div class="dec-txt">
+        <div class="dec-linha"><b>${esc(x.titulo)}</b>${_decIdadeHTML(_decDias(x.quando))}</div>
+        <div class="dec-sub">${x.valor !== null && x.valor > 0 ? `<span class="dec-val">${brl(x.valor)}</span> · ` : ''}${esc(_resumirTexto(x.sub, 160))}</div>
+        <button type="button" class="btn btn-sm ${x.tipo === 'pedido' ? 'btn-primary' : 'btn-outline'}" onclick="agirDecisao(${i})">${_DEC_BOTAO[x.tipo] || 'Abrir'} ›</button>
+      </div>
+    </div>`).join('') : '<div class="empty-state" style="padding:24px 8px">Nada esperando por você aqui. 🎉</div>');
+}
+async function abrirDecisoes() {
+  if (!_ehGestorOuAdmin()) return;
+  $('dec-overlay')?.remove();
+  _decFiltro = 'tudo';
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.id = 'dec-overlay';
+  ov.innerHTML = `<div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3 class="dec-tit">📋 Fila de decisões</h3><button class="btn-close-modal" aria-label="Fechar" onclick="this.closest('.modal-overlay').remove()">✕</button></div>
+      <div class="modal-bd" style="max-height:74vh;overflow:auto">
+        <div class="dec-dica">Da mais antiga para a mais nova. Cada botão abre o lugar de resolver.</div>
+        <div class="dec-chips"></div>
+        <div class="dec-lista"></div>
+      </div></div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+  _decPintar();
+  if (sb?.conferencias?.faltam && navigator.onLine) {
+    try { _decFaltam = (await sb.conferencias.faltam()) || []; } catch (_) { _decFaltam = _decFaltam || []; }
+  } else if (_decFaltam === null && !navigator.onLine) { /* fica o aviso de sem internet */ }
+  _decPintar();
+}
+function agirDecisao(i) {
+  const x = _decLista[i];
+  if (!x) return;
+  $('dec-overlay')?.remove();
+  if (x.tipo === 'corrigir') { abrirPendencias(); return; }
+  if (x.tipo === 'conferir') { abrirConferirDaFila(x.conf.dono_id, x.conf.ano, x.conf.mes); return; }
+  abrirNotificacoes(x.tipo);
+}
+/* abre a ficha da pessoa no mês das notas, já com "☐ Falta conferir" ligado e rolada até a lista */
+function abrirConferirDaFila(uid, ano, mes) {
+  if (!uid || !window.Gestor?.abrirParaConferir) return;
+  Gestor.abrirParaConferir(uid, Number(ano), Number(mes));
+  filMes = Number(mes);
+  filAno = Number(ano);
+  if (viewAtual === 'equipe') renderEquipe(); else switchView('equipe');
+  _garantirAnoEmFoco();
 }
 
 /* O aviso de RDM acima do limite saiu do Início (06/11/2026, pedido do Cleiton): lá fica o número, e o toque abre esta janela. */

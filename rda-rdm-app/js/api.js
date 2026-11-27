@@ -527,6 +527,8 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
   const conferencias = {
     list: ({ dono_id, since } = {}) => req('GET', '/conferencias', { query: { dono_id: dono_id || undefined, since: since || undefined }, timeout: 8_000 }),
     salvar: ({ tipo, registro_id, conferido }) => req('PUT', '/conferencias', { body: { tipo, registro_id, conferido: !!conferido } }),
+    faltam: () => req('GET', '/conferencias/faltam', { timeout: 10_000 }),   // notas a conferir por pessoa e mês (fila de decisões, 27/11/2026)
+    lote: registro_ids => req('PUT', '/conferencias/lote', { body: { registro_ids }, timeout: 30_000 }),   // conferir em lote (27/11/2026)
   };
 
   /* Manutenção do servidor — só admin (a hospedagem não tem terminal). */
@@ -545,6 +547,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
   const fechamento = {
     lista: () => req('GET', '/fechamento'),
     aguardando: () => req('GET', '/fechamento/aguardando'),
+    resumo: (ano, mes) => req('GET', '/fechamento/resumo', { query: { ano, mes }, timeout: 8_000 }),   // o que falta olhar antes de fechar (27/11/2026)
     fechar: (ano, mes) => req('POST', '/fechamento/fechar', { body: { ano, mes } }),
     reabrir: (ano, mes, motivo) => req('POST', '/fechamento/reabrir', { body: { ano, mes, motivo } }),
     conferir: id => req('POST', `/fechamento/fora/${encodeURIComponent(id)}/conferir`),

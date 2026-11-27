@@ -177,15 +177,34 @@ window.Fechamento = (() => {
     aplicarNoFormulario();
   }
 
+  const _resumoTemAviso = r => !!(r.sem_anexo || r.sem_valor || r.duplicatas || r.pedidos_abertos || (r.conferidas !== null && r.conferidas < r.notas));
+  function _resumoTexto(r) {
+    const n = (k, um, varios) => `${k} ${k === 1 ? um : varios}`;
+    const linhas = [`📋 ${n(r.notas, 'nota', 'notas')} no mês`];
+    if (r.conferidas !== null && r.conferidas !== undefined) linhas.push(`${r.conferidas >= r.notas ? '✓' : '⚠️'} Conferidas: ${r.conferidas} de ${r.notas}`);
+    linhas.push(`${r.sem_anexo ? '⚠️' : '✓'} Sem anexo: ${r.sem_anexo}`);
+    linhas.push(`${r.sem_valor ? '⚠️' : '✓'} Sem valor: ${r.sem_valor}`);
+    linhas.push(`${r.duplicatas ? '⚠️' : '✓'} Possíveis duplicatas: ${r.duplicatas}`);
+    linhas.push(`${r.pedidos_abertos ? '⚠️' : '✓'} Pedidos de repasse abertos: ${r.pedidos_abertos}${r.pedidos_abertos ? ` · ${brl(r.pedidos_valor)}` : ''}`);
+    return linhas.join('\n') + (_resumoTemAviso(r) ? '\n\nNada disso impede o fechamento. Só avisa antes.' : '');
+  }
+
   async function fechar(d) {
     const rotulo = rotuloDe(chave(d.ano, d.mes));
     /* fechar de novo com nota a conferir: ela volta a sair da planilha (ver Nota::noRelatorio); melhor saber antes */
     const aConferir = Number((painel?.meses || []).find(m => Number(m.ano) === Number(d.ano) && Number(m.mes) === Number(d.mes))?.fora || 0);
+    /* Resumo antes de fechar (27/11/2026, verificação de 26/11, fase 3 item 3): o que falta olhar no mês. Só informa; sem resposta
+       do servidor em 8 s, a janela abre sem ele. */
+    setLoading(true, 'Conferindo o mês…');
+    const res = await (sb?.fechamento?.resumo ? sb.fechamento.resumo(Number(d.ano), Number(d.mes)).catch(() => null) : null);
+    setLoading(false);
     const ok = await pedirConfirmacao({
       titulo: `Fechar ${rotulo}?`,
-      mensagem: 'Vale para a empresa inteira. Ninguém altera nem apaga nota ou repasse deste mês até ele ser reaberto, nem o gestor.\n\nNota nova que ainda estiver em algum aparelho entra mesmo assim e aparece aqui para conferir. Ela só vai para a planilha depois de conferida.'
+      mensagem: (res ? `${_resumoTexto(res)}\n\n` : '')
+        + 'Vale para a empresa inteira. Ninguém altera nem apaga nota ou repasse deste mês até ele ser reaberto, nem o gestor.\n\nNota nova que ainda estiver em algum aparelho entra mesmo assim e aparece aqui para conferir. Ela só vai para a planilha depois de conferida.'
         + (aConferir ? `\n\n${aConferir === 1 ? '1 nota deste mês ainda está a conferir e vai sair' : `${aConferir} notas deste mês ainda estão a conferir e vão sair`} da planilha até a conferência.` : ''),
-      confirmar: 'Fechar mês',
+      cancelar: res && _resumoTemAviso(res) ? 'Voltar e resolver' : 'Cancelar',
+      confirmar: res && _resumoTemAviso(res) ? 'Fechar mesmo assim' : 'Fechar mês',
     });
     if (!ok) return;
     setLoading(true, 'Fechando…');
