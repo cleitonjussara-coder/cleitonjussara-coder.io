@@ -1669,7 +1669,9 @@ window.Gestor = (() => {
   }
 
   async function renderForExcel(sb, currentUser, mes, ano) {
-    const collabs = await sb.colaboradores.list();
+    /* 27/11/2026 (pedido do Cleiton): quem foi desativado continua na planilha do mês em que tem nota ou repasse —
+       antes vinha só a lista dos ativos e as notas dele ficavam sem dono na planilha do contador. */
+    let collabs = await sb.colaboradores.listTodos();
     /* histórico completo: o mês sai dele e o saldo ANTERIOR de cada colaborador também
        (01/10/2026). Sem histórico (offline/erro), cai no mês só — `anterior` fica null. */
     const hist = await _historico(sb);
@@ -1689,6 +1691,8 @@ window.Gestor = (() => {
       ]);
       notas = (notas || []).filter(n => !fora.has(n.id));
     }
+    const comMov = new Set([...(notas || []).filter(n => !n.deleted), ...(repasses || [])].map(o => o.user_id));
+    collabs = (collabs || []).filter(c => c.ativo !== false || comMov.has(c.id));
     const anterior = hist ? Object.fromEntries(saldoAnteriorPorUsuario(hist.notas, hist.repasses, mes, ano)) : null;
     /* C.V. no Excel (04/11/2026, decisão do dono): cartão e reembolso até o fim do mês, os números do PDF da equipe; null sem histórico */
     const cv = hist ? Object.fromEntries((collabs||[]).filter(c => c.regime === 'cv').map(c => [c.id, saldoCvAteMes(hist.notas.filter(n => n.user_id === c.id), hist.repasses.filter(r => r.user_id === c.id), mes, ano)])) : null;

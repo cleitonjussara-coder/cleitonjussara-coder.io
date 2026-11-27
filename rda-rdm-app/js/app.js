@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 662;
+const APP_BUILD = 663;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -2323,7 +2323,7 @@ async function migrarPastasDrive() {
        só com o próprio, e as pastas dos outros seguem intactas. */
     const nomePorUserId = {};
     if (sb && !DEMO_MODE) {
-      const collabs = await sb.colaboradores.list().catch(() => []);
+      const collabs = await sb.colaboradores.listTodos().catch(() => []);   // 27/11/2026: com os desativados, a pasta deles no Drive mantém o nome
       (collabs || []).forEach(c => { if (c.nome) nomePorUserId[c.id] = c.nome; });
     }
     if (user.nome) nomePorUserId[user.id] = user.nome;   // o próprio perfil manda
@@ -7314,7 +7314,7 @@ async function enviarFotosEquipeDrive() {
   try {
     // 1) mapa user_id -> {nome,email} p/ nomear a pasta do colaborador
     let collabs;
-    try { collabs = await sb.colaboradores.list(); }
+    try { collabs = await sb.colaboradores.listTodos(); }   // 27/11/2026: desativado também, senão a nota dele ia para o Drive sem nome de pasta
     catch (e) { throw new Error('colaboradores: ' + e.message, { cause: e }); }
     const mapa = {};
     (collabs || []).forEach(c => { mapa[c.id] = c; });
@@ -7429,7 +7429,7 @@ async function _autoConsolidarFotosDrive() {
 
   // 2) mapa de colaboradores + todas as notas com foto
   const [collabs, notas] = await Promise.all([
-    sb.colaboradores.list(),
+    sb.colaboradores.listTodos(),   // 27/11/2026: com os desativados (pasta com o nome certo)
     sb.notas.list({ fields: 'id,user_id,tipo,subtipo,mes,ano,data,foto_path,deleted' }),
   ]);
   const mapa = {};
