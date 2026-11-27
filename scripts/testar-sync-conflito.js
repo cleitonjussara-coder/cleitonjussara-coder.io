@@ -630,6 +630,30 @@ async function notaEnviada(a, id, x) {
     confere((await a.DB.getMeta('avisos_conflito', [])).length === 1, 'aviso fica guardado para a página mostrar');
   }
 
+  console.log('Ordem da fila e queda de rede (27/11/2026)');
+  {
+    const a = aparelho();
+    await a.DB.open();
+    for (const id of ['n20', 'n21', 'n22']) {
+      await a.DB.saveNota(notaBase(id), UID);
+      await a.DB.saveFotoLocal(id, new Blob(['abc'], { type: 'image/jpeg' }), 'jpg');
+      await espera(5);
+    }
+    await a.DB.sync(a.API, UID, true);
+    const ordem = a.rede.chamadas.filter(c => c.metodo !== 'GET')
+      .map(c => (c.metodo === 'PUT' ? 'nota:' : 'foto:') + c.caminho.split('/')[2]);
+    confere(ordem.join() === 'foto:n20,nota:n20,foto:n21,nota:n21,foto:n22,nota:n22', 'cada nota sobe logo depois da sua foto, na ordem do lançamento (' + ordem.join() + ')');
+  }
+  {
+    const a = aparelho();
+    await a.DB.open();
+    for (const id of ['n30', 'n31', 'n32', 'n33']) { await a.DB.saveNota(notaBase(id), UID); await espera(5); }
+    a.rede.put = () => { throw new TypeError('Failed to fetch'); };
+    await a.DB.sync(a.API, UID, true);
+    confere(a.puts().length === 2, 'duas quedas de rede param a rodada (' + a.puts().length + ' tentativas de 4)');
+    confere(a.fila().length === 4 && a.fila().every(q => q.status === 'pending'), 'nada se perde: as 4 continuam na fila para a próxima');
+  }
+
   console.log(falhas ? `\n${falhas} caso(s) FALHARAM` : '\nTudo certo');
   process.exit(falhas ? 1 : 0);
 })().catch(e => { console.error('ERRO NO TESTE:', e); process.exit(1); });

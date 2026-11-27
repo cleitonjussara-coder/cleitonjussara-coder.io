@@ -5,7 +5,7 @@
      • CDN externos (Tesseract, SheetJS, jsQR) → Stale-While-Revalidate
      • Petermann API (outra origem) → Network Only (não faz sentido cachear)
 ───────────────────────────────────────────────────────────── */
-const CACHE   = 'petermann-v663';
+const CACHE   = 'petermann-v667';
 /* Caminhos RELATIVOS ao sw.js — não comece com "/".
    Com "/index.html" o service worker procurava na raiz do domínio, mas o app
    é servido em /rda-rdm-app/: guardava a página de redirecionamento da raiz
@@ -51,6 +51,7 @@ const SHELL   = [
   './js/svelte-arquivos.js',
   './js/svelte-perfil.js',
   './js/instalar.js',
+  './js/vendor/jsQR-1.4.0.js',   // 27/11/2026: antes vinha da CDN
 ];
 
 const RUNTIME_CACHE = [
@@ -69,7 +70,7 @@ const LOCAL_ASSET_PATHS = RUNTIME_CACHE.map(path => path.replace('./', '/'));
    db.js velho do cache HTTP ao atualizar o worker. Se o carregamento falhar, o resto do worker (push, cache) segue
    normal e só o envio em segundo plano fica de fora. */
 let _importErro = null;
-try { importScripts('./js/api.js?v=663', './js/db.js?v=663'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
+try { importScripts('./js/api.js?v=667', './js/db.js?v=667'); } catch (err) { _importErro = err; /* sem envio em segundo plano */ }
 
 const CDN = [
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
@@ -240,18 +241,24 @@ self.addEventListener('fetch', e => {
     || pathWithoutScope.startsWith('/js/');
 
   if (isLocalAsset) {
-    e.respondWith(
-      fetch(e.request)
-        .then(r => {
-          const copy = r.clone();
-          if (r.ok) {
-            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-          }
-          return r;
-        })
-        .catch(() => caches.match(e.request, { ignoreSearch: true })
-          .then(r => r || caches.match('./index.html')))
-    );
+    /* 27/11/2026 (verificação de 26/11, fase 2 item 2): com sinal fraco o fetch não falha, só demora — e o app ficava
+       em branco esperando. Agora: rede primeiro, mas se ela não responder em 3 s usa a cópia guardada (a rede segue e
+       atualiza o cache para a próxima vez). Sem cópia guardada, espera a rede como antes. */
+    const rede = fetch(e.request).then(r => {
+      if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {}); }
+      return r;
+    });
+    e.waitUntil(rede.then(() => {}, () => {}));
+    e.respondWith((async () => {
+      const guardado = () => caches.match(e.request, { ignoreSearch: true });
+      try {
+        const r = await Promise.race([rede, new Promise(ok => setTimeout(() => ok(null), 3000))]);
+        if (r) return r;
+        return (await guardado()) || await rede;
+      } catch (_) {
+        return (await guardado()) || caches.match('./index.html');
+      }
+    })());
     return;
   }
 

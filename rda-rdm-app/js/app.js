@@ -79,7 +79,7 @@ const APP_VERSION = 'v4';
    permite verificar o que está no ar de verdade (com "v1" fixo não daria
    para distinguir uma publicação da outra). Aparece só no diagnóstico e
    nas telas técnicas, para suporte. */
-const APP_BUILD = 663;
+const APP_BUILD = 667;
 /* Ponto: visível SÓ para gestor/admin (decisão de 19/09/2026). Frota/KM: todos menos o Contador (21/10/2026,
    ver _veFrota). false = os dois somem para todos. */
 const MODULOS_EXTRAS = true;
@@ -1102,7 +1102,7 @@ function _ensureJsQR() {
   if (typeof jsQR !== 'undefined') return Promise.resolve();
   if (!_jsqrPromise) {
     _jsqrPromise = _loadScript(
-      'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+      'js/vendor/jsQR-1.4.0.js',                    // 27/11/2026: cópia local (mesmo arquivo da CDN, mesmo sha384)
       'Falha ao carregar leitor QR');
   }
   return _jsqrPromise;
