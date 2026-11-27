@@ -236,7 +236,7 @@ async function resolverLinkConsulta(chaveRaw, qrUrlDaNota) {
 
   // sem QR: página de NFC-e da UF (chave colada pelo usuário) ou portal nacional
   const d = window.SEFAZ?.destinoConsulta ? SEFAZ.destinoConsulta(chave) : null;
-  if (d?.url) return { url: d.url, exato: false, colarChave: d.colarChave, preenchida: d.preenchida, uf: d.uf };
+  if (d?.url) return { url: d.url, exato: false, colarChave: d.colarChave, preenchida: d.preenchida, login: d.login, uf: d.uf };
   const fallback = window.SEFAZ?.linkConsulta ? SEFAZ.linkConsulta(chave) : null;
   return fallback ? { url: fallback, exato: false } : null;
 }
@@ -260,7 +260,9 @@ function abrirConsultaChave(chaveRaw, qrUrlDaNota) {
     if (r.exato) return;
     if (r.colarChave) {
       const ok = await copiou;
-      toast(r.preenchida
+      toast(r.login
+        ? `A consulta da SEFAZ-${r.uf} pede login gov.br${ok ? ' — a chave foi copiada, cole de novo se precisar' : ''}`
+        : r.preenchida
         ? `Abrindo a consulta da SEFAZ-${r.uf} com a chave preenchida — é só pesquisar`
         : ok
           ? `Chave copiada — cole no campo "Chave de acesso" da SEFAZ-${r.uf} e resolva o captcha`

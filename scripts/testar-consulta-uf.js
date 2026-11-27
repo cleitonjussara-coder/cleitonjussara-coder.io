@@ -31,5 +31,38 @@ confere('NF-e (55) do RS segue no portal nacional', S.destinoConsulta(chave('43'
 confere('NFC-e de GO segue preenchida', S.destinoConsulta(chave('52', '65')).url.includes('?chaveAcesso=' + chave('52', '65')), true);
 confere('UF sem página segue no portal nacional', S.destinoConsulta(chave('50', '65')).colarChave, false);
 
-console.log(falhas ? `\n${falhas} caso(s) falharam.` : '\nTudo certo.');
-process.exit(falhas ? 1 : 0);
+// O aviso que a pessoa lê, tirado do próprio app.js
+const app = fs.readFileSync(path.join(__dirname, '..', 'rda-rdm-app', 'js', 'app.js'), 'utf8').replace(/\r/g, '');
+const de = app.indexOf('async function resolverLinkConsulta(');
+const ate = app.indexOf('/* ── Aba/categoria automática', de);
+if (de < 0 || ate < 0) throw new Error('trecho da consulta não encontrado no app.js');
+
+const aviso = async (c, copia) => {
+  let texto = '';
+  const tela = {
+    window: { SEFAZ: S, open: () => ({ location: {}, close() {} }) },
+    SEFAZ: S,
+    DB: { getMeta: async () => null },
+    navigator: { clipboard: copia ? { writeText: async () => {} } : undefined },
+    toast: t => { texto = t; },
+    _digitos: s => String(s || '').replace(/\D/g, ''),
+    _qrUrlSegura: u => u,
+  };
+  vm.runInNewContext(app.slice(de, ate), tela);
+  tela.abrirConsultaChave(c, null);
+  await new Promise(r => setTimeout(r, 20));
+  return texto;
+};
+
+(async () => {
+  console.log('Aviso na tela');
+  const comCopia = await aviso(chave('43', '65'), true);
+  confere('RS avisa que a consulta pede login gov.br', comCopia.includes('login gov.br'), true);
+  confere('RS lembra que a chave foi copiada', comCopia.includes('copiada'), true);
+  const semCopia = await aviso(chave('43', '65'), false);
+  confere('RS sem cópia não diz que copiou', semCopia.includes('login gov.br') && !semCopia.includes('copiada'), true);
+  confere('GO não fala em login', (await aviso(chave('52', '65'), true)), 'Abrindo a consulta da SEFAZ-GO com a chave preenchida — é só pesquisar');
+
+  console.log(falhas ? `\n${falhas} caso(s) falharam.` : '\nTudo certo.');
+  process.exit(falhas ? 1 : 0);
+})();
