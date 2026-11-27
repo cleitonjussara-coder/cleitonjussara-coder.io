@@ -17,12 +17,12 @@ class AtividadeCampo extends Model
     public $incrementing = false;
 
     protected $fillable = ['id', 'user_id', 'fazenda', 'campo', 'inicio', 'fim', 'fim_automatico', 'fim_recebido_em',
-        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao', 'editado_em', 'editado_por', 'apagado_em', 'apagado_por'];
+        'lat_inicio', 'lng_inicio', 'precisao_inicio', 'lat_fim', 'lng_fim', 'precisao_fim', 'observacao', 'editado_em', 'editado_por', 'apagado_em', 'apagado_por', 'verificado_em', 'verificado_por'];
 
     protected function casts(): array
     {
         return [
-            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_recebido_em' => 'datetime', 'fim_automatico' => 'boolean', 'editado_em' => 'datetime', 'apagado_em' => 'datetime',
+            'inicio' => 'datetime', 'fim' => 'datetime', 'fim_recebido_em' => 'datetime', 'fim_automatico' => 'boolean', 'editado_em' => 'datetime', 'apagado_em' => 'datetime', 'verificado_em' => 'datetime',
             'lat_inicio' => 'float', 'lng_inicio' => 'float', 'lat_fim' => 'float', 'lng_fim' => 'float',
             'precisao_inicio' => 'integer', 'precisao_fim' => 'integer',
         ];
@@ -74,6 +74,21 @@ class AtividadeCampo extends Model
         return $tem;
     }
 
+    /** 26/11/2026: "Liguei, está tudo bem" (verificado_em/verificado_por). Antes da migração a coluna não existe. */
+    public static function temVerificacao(): bool
+    {
+        static $tem = null;
+        if ($tem === null) {
+            try {
+                $tem = Schema::hasColumn('atividades_campo', 'verificado_em');
+            } catch (\Throwable) {
+                $tem = false;
+            }
+        }
+
+        return $tem;
+    }
+
     public static function temLixeira(): bool
     {
         static $tem = null;
@@ -102,6 +117,11 @@ class AtividadeCampo extends Model
     public function apagador(): BelongsTo
     {
         return $this->belongsTo(Colaborador::class, 'apagado_por');
+    }
+
+    public function verificador(): BelongsTo
+    {
+        return $this->belongsTo(Colaborador::class, 'verificado_por');
     }
 
     public function colaborador(): BelongsTo

@@ -127,6 +127,7 @@ window.Campo = (() => {
       sb.atividadesCampo.lixeira().catch(() => []),                                    // lixeira (09/11/2026): API antiga devolve erro → vazia
       gestor ? sb.atividadesCampo.lixeiraCampos().catch(() => []) : Promise.resolve([])]);
     lista = l || []; equipe = e || []; lixeira = lx || []; lixeiraCampos = lxc || [];
+    if (gestor) { _alerta = { em: Date.now(), equipe }; try { await DB.setMeta(KEY_ALERTA, _alerta); } catch (_) {} }
     if (c) await _guardarCampos(c);   // guardado para buscar sem internet
     _offline = false; _cacheEm = new Date().toISOString();
     try { await DB.setMeta(KEY_CACHE(), { lista, equipe, lixeira, lixeiraCampos, em: _cacheEm }); } catch (_) {}
@@ -337,7 +338,16 @@ window.Campo = (() => {
       .sort((x, y) => y.min - x.min);
     const sairam = equipe.filter(p => !p.ultima?.em_campo && p.ultima?.fim && _diaDe(p.ultima.inicio) === hoje).sort(nome);
     const semEntrada = equipe.filter(p => !p.ultima?.em_campo && !(p.ultima && _diaDe(p.ultima.inicio) === hoje)).sort(nome);
-    const alertas = emCampo.filter(p => p.min >= ALERTA_MIN).length;
+    /* 26/11/2026: quem já foi confirmado ("Liguei, está tudo bem") sai da conta do alerta */
+    const alertas = emCampo.filter(p => p.min >= ALERTA_MIN && !p.ultima.verificado_em).length;
+    /* a saída tocada sem sinal só chega quando o celular pega rede: a hora do último contato ajuda quem vai ligar */
+    const visto = p => p.visto_em ? `<br>📶 celular falou com o servidor ${_diaDe(p.visto_em) === hoje ? 'às ' : 'em ' + dataBR(p.visto_em) + ' '}${horaBR(p.visto_em)}` : '';
+    const confirmado = p => {
+      if (p.min < ALERTA_MIN) return '';
+      const v = p.ultima;
+      if (v.verificado_em) return `<br>✅ <b>${esc(v.verificado_por_nome || 'Alguém')}</b> ligou às ${horaBR(v.verificado_em)}: está tudo bem`;
+      return `<br><button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="event.stopPropagation();Campo.verificar('${_atG(v.id)}')">📞 Liguei, está tudo bem</button>`;
+    };
     const loc = u => { const m = u.em_campo || !mapa(u.lat_fim, u.lng_fim) ? mapa(u.lat_inicio, u.lng_inicio) : mapa(u.lat_fim, u.lng_fim);
       return m ? ` · <a class="link" href="${_atG(m)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 localização</a>` : ''; };
     const linha = (p, cls, topo, info) => `<div class="campo-pessoa ${cls}" data-uid="${_atG(p.user_id)}" onclick="Campo.verPessoa(this.dataset.uid)">
@@ -352,11 +362,11 @@ window.Campo = (() => {
         ${kpi('⚪', semEntrada.length, 'sem entrada hoje', 'sem')}
         ${kpi('✅', sairam.length, 'já saíram hoje', 'saiu')}
       </div>
-      ${alertas ? `<div class="ini-dica cv-alerta">⚠️ <b>${alertas} ${alertas === 1 ? 'pessoa' : 'pessoas'} há mais de 3h em campo</b> sem registrar o fim. Ligue para confirmar se está tudo bem.</div>` : ''}
+      ${alertas ? `<div class="ini-dica cv-alerta">⚠️ <b>${alertas} ${alertas === 1 ? 'pessoa' : 'pessoas'} há mais de 3h em campo</b> sem registrar o fim. Ligue para confirmar se está tudo bem e toque em <b>📞 Liguei, está tudo bem</b>, para os outros não ligarem de novo. Saída tocada sem sinal só chega quando o celular pega rede: veja a hora do último sinal.</div>` : ''}
       <div class="db-card cv-painel">
         <div id="cv-campo">${grupo('🟢 Em campo agora', emCampo.length, emCampo.length ? emCampo.map(p => linha(p, p.min >= ALERTA_MIN ? 'cv-longo' : '',
           `<span class="cv-tempo">${p.min >= ALERTA_MIN ? '⚠️ ' : ''}${hm(p.min)}</span>`,
-          `${esc(_faz(p.ultima.fazenda))} · <b>${esc(p.ultima.campo)}</b><br>desde ${_diaDe(p.ultima.inicio) === hoje ? '' : dataBR(p.ultima.inicio) + ' '}${horaBR(p.ultima.inicio)}${loc(p.ultima)}`)).join('')
+          `${esc(_faz(p.ultima.fazenda))} · <b>${esc(p.ultima.campo)}</b><br>desde ${_diaDe(p.ultima.inicio) === hoje ? '' : dataBR(p.ultima.inicio) + ' '}${horaBR(p.ultima.inicio)}${loc(p.ultima)}${p.min >= ALERTA_MIN ? visto(p) : ''}${confirmado(p)}`)).join('')
           : '<p class="campo-sub">Ninguém em campo agora.</p>')}</div>
         <div id="cv-sem">${grupo('⚪ Ainda não deram entrada hoje', semEntrada.length, semEntrada.length ? semEntrada.map(p => linha(p, 'cv-compacto', '',
           p.ultima ? `último: ${dataBR(p.ultima.inicio)} · ${esc(_faz(p.ultima.fazenda))} · ${esc(p.ultima.campo)}` : 'sem registro ainda')).join('')
@@ -1002,6 +1012,57 @@ window.Campo = (() => {
     finally { setLoading(false); }
   }
 
-  return { render, iniciar, finalizar, mudarMes, filtrarPessoa, verPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto,
+  /* "Liguei, está tudo bem" (26/11/2026, pedido do Cleiton): quem acompanha confirma que falou com a pessoa. O servidor
+     avisa os outros (o aviso de campo longo no celular é trocado) e o segundo aviso não sai. */
+  async function verificar(id) {
+    const p = equipe.find(x => x.ultima?.id === id);
+    if (!p || !_online()) return;
+    if (!(await pedirConfirmacao({ titulo: '📞 Liguei, está tudo bem', mensagem: `Você falou com ${p.nome} e está tudo bem?\n${_faz(p.ultima.fazenda)} · ${p.ultima.campo}, desde ${horaBR(p.ultima.inicio)}\n\nOs outros que acompanham recebem o aviso de que já foi atendido.`, confirmar: 'Sim, está tudo bem' }))) return;
+    setLoading(true, 'Confirmando…');
+    try {
+      p.ultima = await sb.atividadesCampo.verificar(id);
+      toast('Confirmado ✅ Os outros foram avisados.');
+      try { const c = await DB.getMeta(KEY_CACHE()); if (c) await DB.setMeta(KEY_CACHE(), { ...c, equipe }); } catch (_) {}
+      _alerta = { em: Date.now(), equipe };
+    } catch (e) {
+      toast(e.message || 'Não foi possível confirmar', 'err', 6000);
+      if (e.status === 409) { try { await carregar(); } catch (_) {} }
+    } finally { setLoading(false); }
+    if (viewAtual === 'campo') await _desenhar();
+  }
+
+  /* Aviso no Início de quem acompanha (26/11/2026, pedido do Cleiton): antes o destaque de "mais de 3h em campo" só
+     aparecia dentro desta tela. Desenha na hora com a última lista guardada e atualiza por trás, no máximo a cada minuto. */
+  const KEY_ALERTA = 'campo_alerta_inicio';
+  let _alerta = null;
+  function _alertaHTML(eq) {
+    const agora = Date.now(), dia = 86400000;
+    const longos = (eq || []).filter(p => p.ultima?.em_campo && !p.ultima.verificado_em)
+      .map(p => ({ p, min: Math.round((agora - new Date(p.ultima.inicio)) / 60000) }))
+      .filter(x => x.min >= ALERTA_MIN && x.min * 60000 < dia)    // como o servidor: só início das últimas 24 h
+      .sort((a, b) => b.min - a.min);
+    if (!longos.length) return '';
+    const um = longos[0];
+    const txt = longos.length === 1
+      ? `<b>${esc(um.p.nome)}</b> está há <b>${hm(um.min)}</b> em campo sem registrar a saída`
+      : `<b>${longos.length} pessoas</b> estão há mais de 3h em campo sem registrar a saída (${longos.map(x => esc(x.p.nome)).join(', ')})`;
+    return `<div class="ini-dica cv-alerta" style="cursor:pointer" onclick="switchView('campo')">⚠️ ${txt}. Ligue para confirmar se está tudo bem. <b>Toque para ver</b>.</div>`;
+  }
+  async function pintarAlertaInicio() {
+    const el = () => document.getElementById('ini-campo-alerta');
+    if (!el() || !_acompanhaCampo()) return;
+    const pintar = eq => { const e = el(); if (!e) return; const h = _alertaHTML(eq); e.innerHTML = h; e.hidden = !h; };
+    if (!_alerta) { try { _alerta = (await DB.getMeta(KEY_ALERTA)) || null; } catch (_) {} }
+    if (_alerta?.equipe) pintar(_alerta.equipe);
+    if (!sb || !navigator.onLine || (_alerta && Date.now() - _alerta.em < 60000)) return;
+    try {
+      const eq = await sb.atividadesCampo.equipe();
+      _alerta = { em: Date.now(), equipe: eq || [] };
+      try { await DB.setMeta(KEY_ALERTA, _alerta); } catch (_) {}
+      if (viewAtual === 'inicio') pintar(_alerta.equipe);
+    } catch (_) {}
+  }
+
+  return { render, iniciar, finalizar, verificar, pintarAlertaInicio, mudarMes, filtrarPessoa, verPessoa, filtrarFazenda, filtrarDia, filtrarPend, aba, agregar, reenviar, descartarRecusados, subirFila, compartilharId, editar, exportarExcel, novoCampoCadastro, editarCampo, filtrarCampos, _texto,
     apagar, restaurar, apagarDeVez, apagarCampo, restaurarCampo, apagarCampoDeVez };
 })();

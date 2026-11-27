@@ -449,6 +449,7 @@ globalThis.API = (() => {      // globalThis: o mesmo arquivo roda na página e 
     iniciar: item => req('POST', '/atividades-campo/iniciar', { body: item }),
     finalizar: (id, item) => req('POST', `/atividades-campo/${id}/finalizar`, { body: item }),
     editar: (id, item) => req('PATCH', `/atividades-campo/${encodeURIComponent(id)}`, { body: item }),   // corrigir registro (09/11/2026)
+    verificar: id => req('POST', `/atividades-campo/${encodeURIComponent(id)}/verificar`),   // "Liguei, está tudo bem" (26/11/2026)
   };
 
   /* Backup do banco (SQLite) — só admin. Devolve o arquivo como Blob. */

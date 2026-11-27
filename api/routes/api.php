@@ -176,6 +176,7 @@ Route::middleware(['auth:sanctum', ExigeConfirmacao::class, SomenteLeitura::clas
     Route::post('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'cadastrarCampo'])->middleware('throttle:30,1,campo');
     Route::put('/atividades-campo/campos', [\App\Http\Controllers\AtividadeCampoController::class, 'editarCampo'])->middleware('throttle:30,1,campo');
     Route::post('/atividades-campo/iniciar', [\App\Http\Controllers\AtividadeCampoController::class, 'iniciar'])->middleware('throttle:30,1,campo');
+    Route::post('/atividades-campo/{id}/verificar', [\App\Http\Controllers\AtividadeCampoController::class, 'verificar'])->middleware('throttle:30,1,campo');   // "Liguei, está tudo bem" (26/11/2026)
     Route::post('/atividades-campo/{id}/finalizar', [\App\Http\Controllers\AtividadeCampoController::class, 'finalizar'])->middleware('throttle:30,1,campo');
     Route::patch('/atividades-campo/{id}', [\App\Http\Controllers\AtividadeCampoController::class, 'editar'])->middleware('throttle:30,1,campo');   // corrigir registro (09/11/2026)
     /* lixeira (09/11/2026): apagar/restaurar registro e campo; apagar de vez só gestor e admin */
