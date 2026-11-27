@@ -98,7 +98,7 @@ class RelatorioController extends Controller
      * (modelo da empresa) de vários colaboradores (21/09/2026). Gestor/admin.
      *   modo=unico (padrão): UM xlsx com as 4 abas de cada um (Ana_RDM_RDA…).
      *   modo=zip: um xlsx completo por colaborador, num ZIP.
-     * `ids` = quem o gestor marcou na tela; sem `ids`, todo colaborador ativo
+     * `ids` = quem o gestor marcou na tela; sem `ids`, todo colaborador (desativado também)
      * que tem nota ou repasse no ano (planilha vazia não ajuda e custa segundos)
      * ou que carrega saldo de ano anterior (04/11/2026: sem ele o RESUMO sai menor que a dívida real).
      */
@@ -119,7 +119,7 @@ class RelatorioController extends Controller
         $planilhas = app(\App\Services\PlanilhasEquipe::class);
         $ids = array_values(array_filter(array_map('trim', explode(',', (string) ($d['ids'] ?? '')))));
         $colabs = $planilhas->colaboradores($ano, $ids);
-        abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador ativo com lançamento em {$ano}");
+        abort_if($colabs->isEmpty(), 404, $ids ? 'Nenhum dos colaboradores marcados foi encontrado' : "Nenhum colaborador com lançamento em {$ano}");
 
         @ini_set('memory_limit', '1024M');
         @set_time_limit(900);   // modelo RDM/RDA leva ~20 s por pessoa
