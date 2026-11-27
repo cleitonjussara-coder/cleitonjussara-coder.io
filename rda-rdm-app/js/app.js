@@ -9244,6 +9244,8 @@ async function onFotoNota(e) {
     dados.razao_social = dados.razao_social || r.razao_social || '';
     dados.chave        = dados.chave        || r.chave        || '';
     dados.uf           = dados.uf           || r.uf           || '';
+    /* 26/11/2026: o "dia 01" que veio do QR não vence o dia que a leitura achou no mesmo mês */
+    dados.data         = SEFAZ.dataPelaChave(dados.chave, r.data, null, hoje()) || dados.data;
   } catch (_) {}
 
   ov.style.display = 'none';
@@ -10223,7 +10225,8 @@ async function enriquecerViaSefaz(chave) {
       enriquecido = true;
     }
     if (result.data) {
-      $('nf-data').value = result.data;
+      /* 26/11/2026: a data que vem só da chave é sempre o dia 01 — apagava o dia já lido na nota */
+      $('nf-data').value = SEFAZ.dataPelaChave(result.chave, result.fonte === 'chave' ? null : result.data, $('nf-data').value, hoje()) || result.data;
       $('nf-mes').value = result.mes;
       $('nf-ano').value = result.ano;
       enriquecido = true;
@@ -10693,10 +10696,9 @@ async function extrairDadosDaFoto(file, ocrPronto = null) {
       buscarRazaoSocial(daChave.cnpj);                            // razão social confiável (BrasilAPI)
       preencheu.push('CNPJ/empresa');
 
-      // data: dia exato do OCR só se cair no MESMO mês/ano da chave; senão, dia 01
-      let dataFinal = `${daChave.ano}-${String(daChave.mes).padStart(2,'0')}-01`;
-      if (ocr.data && ocr.data.slice(0,7) === dataFinal.slice(0,7)) dataFinal = ocr.data;
-      $('nf-data').value = dataFinal; preencheu.push('data');
+      // data: o dia lido (se cair no mês da chave), senão o que já está no campo; sem nenhum dos dois, dia 01
+      const dataFinal = SEFAZ.dataPelaChave(chave, ocr.data, $('nf-data').value, hoje());
+      if (dataFinal && dataFinal !== $('nf-data').value) { $('nf-data').value = dataFinal; preencheu.push('data'); }
     } else {
       // NFS-e nacional (chave de 50 dígitos lida no arquivo): a chave dá CNPJ, UF, número e o link do portal
       const daNfse = NFCE.parseChaveNfse50(qr?.chaveNfse || ocr.chaveNfse || '');   // QR primeiro (não erra dígito), depois o texto
