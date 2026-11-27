@@ -114,7 +114,12 @@ Sem a Locaweb, tudo sai do Drive.
 10 4 * * * /usr/bin/php84 <api>/artisan armazenamento:verificar
 40 4 * * * /usr/bin/php84 <api>/artisan tokens:limpar
 20 7 * * * /usr/bin/php84 <api>/artisan cartoes:verificar
+* * * * * /usr/bin/php84 <api>/artisan relatorios:processar
+7,17,27,37,47,57 * * * * /usr/bin/php84 <api>/artisan fechamento:avisar
+0,30 * * * * /usr/bin/php84 <api>/artisan campo:verificar
 ```
+
+Sem os três últimos: `relatorios:processar` deixa os PDFs e planilhas da equipe parados na fila, `fechamento:avisar` não avisa sobre o fechamento do mês e `campo:verificar` não lembra quem ficou muito tempo em campo. Na Locaweb a homologação tem a própria linha de `relatorios:processar`, apontando para `~/api-teste`. Lista conferida com o `crontab -l` da produção em 25/11/2026.
 
 ## Chaves do sistema (.env)
 
