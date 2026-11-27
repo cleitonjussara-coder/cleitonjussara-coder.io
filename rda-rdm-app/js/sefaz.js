@@ -58,13 +58,18 @@ window.SEFAZ = (() => {
        29 BA  só em http (https recusa a conexão); captcha de imagem.
               O endereço impresso no cupom (sefaz.ba.gov.br/nfce/consulta)
               hoje cai numa notícia, por isso vai direto na página.
-     DF fica no portal nacional: o endereço oficial pede login gov.br. */
+     DF fica no portal nacional: o endereço oficial pede login gov.br.
+     43 RS  conferida em 27/11/2026: o endereço do cupom
+            (sefaz.rs.gov.br/nfce/consulta) e o /DFE/consulta caem no login
+            gov.br; a "Consulta Pública DFe" da SVRS abre sem login e aceita
+            a chave pela URL. */
   const CONSULTA_NFCE_UF = {
     '31': { url: 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/consultaarg.xhtml' },
     '52': { url: 'https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfe/consulta-completa', param: 'chaveAcesso' },
     '51': { url: 'https://www.sefaz.mt.gov.br/nfce/consultanfce' },
     '41': { url: 'https://sped.fazenda.pr.gov.br/NFCe/webservices/sped/nfce/completa' },
     '35': { url: 'https://www.nfce.fazenda.sp.gov.br/NFCeConsultaPublica/Paginas/ConsultaPublica.aspx' },
+    '43': { url: 'https://dfe-portal.svrs.rs.gov.br/Dfe/ConsultaPublicaDfe', param: 'ChaveAcessoDfe' },
     '29': { url: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/Modulos/Geral/NFCEC_consulta_chave_acesso.aspx' },
   };
 
